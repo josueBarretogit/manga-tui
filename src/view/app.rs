@@ -1,26 +1,30 @@
-use std::borrow::Borrow;
-use std::error::Error;
-use std::io::Cursor;
-use std::time::Duration;
-use std::usize;
-
-use crossterm::event::{poll, Event, KeyCode, KeyEventKind};
-use ratatui::backend::Backend;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{self, Constraint, Layout, Rect};
 use ratatui::style::Color;
-use ratatui::widgets::{Tabs, Widget};
+use ratatui::widgets::{Block, Tabs, Widget, WidgetRef};
 use ratatui::{Frame, Terminal};
 use ratatui_image::picker::Picker;
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::StatefulImage;
 use strum::IntoEnumIterator;
+use tokio::sync::mpsc::UnboundedSender;
 
 use crate::backend::tui::Action;
 use crate::view::pages::*;
 
+use self::search::SearchPage;
+
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+pub enum AppState {
+    Runnning,
+    Done,
+}
+
 pub struct App {
-    pub pages: Pages,
+    pub current_tab: SelectedTabs,
+    pub search_page: SearchPage,
+    pub action_tx: UnboundedSender<Action>,
+    pub state: AppState,
 }
 
 impl Widget for &mut App {
@@ -30,7 +34,7 @@ impl Widget for &mut App {
     {
         let main_layout = Layout::default()
             .direction(layout::Direction::Vertical)
-            .constraints([Constraint::Percentage(15), Constraint::Percentage(85)]);
+            .constraints([Constraint::Percentage(10), Constraint::Percentage(90)]);
 
         let [top_tabs_area, page_are] = main_layout.areas(area);
 
@@ -41,7 +45,7 @@ impl Widget for &mut App {
 }
 
 impl App {
-    pub fn new() -> Self {
+    pub fn new(action_tx: UnboundedSender<Action>) -> Self {
         // let mut picker = Picker::from_termios().unwrap();
         // // Guess the protocol.
         // picker.guess_protocol();
@@ -56,17 +60,23 @@ impl App {
         // let image = picker.new_resize_protocol(dyn_img.decode().unwrap());
 
         App {
-            pages: Pages::default(),
+            current_tab: SelectedTabs::default(),
+            search_page: SearchPage::new(),
+            action_tx,
+            state: AppState::Runnning,
         }
     }
 
     pub fn render_top_tabs(&self, area: Rect, buf: &mut Buffer) {
-        let titles: Vec<String> = Pages::iter().map(|page| page.to_string()).collect();
+        let titles: Vec<String> = SelectedTabs::iter().map(|page| page.to_string()).collect();
 
-        let current_page = self.pages.clone() as usize;
+        let tabs_block = Block::bordered();
+
+        let current_page = self.current_tab.clone() as usize;
 
         Tabs::new(titles)
-            .highlight_style(Color::Red)
+            .block(tabs_block)
+            .highlight_style(Color::Yellow)
             .select(current_page)
             .padding("", "")
             .divider(" | ")
@@ -74,68 +84,26 @@ impl App {
     }
 
     pub fn render_pages(&self, area: Rect, buf: &mut Buffer) {
-        match self.pages {
-            Pages::Home => {}
-            Pages::Search => self.render_search_page(area, buf),
-            Pages::MangaPage => {}
+        match self.current_tab {
+            SelectedTabs::Home => {}
+            SelectedTabs::Search => self.render_search_page(area, buf),
         }
     }
 
-    pub fn render_search_page(&self, area: Rect, buf: &mut Buffer) {}
+    pub fn render_search_page(&self, area: Rect, buf: &mut Buffer) {
+        WidgetRef::render_ref(&self.search_page, area, buf);
+    }
 
     pub fn render_home_page(&self, area: Rect, buf: &mut Buffer) {}
 
     pub fn render_manga_page(&self, area: Rect, buf: &mut Buffer) {}
-}
 
-fn render_ui(f: &mut Frame<'_>, app: &mut App) {
-    // let image = StatefulImage::new(None).resize(ratatui_image::Resize::Fit(None));
-    // let inner = f.size().inner(&ratatui::layout::Margin {
-    //     horizontal: 4,
-    //     vertical: 4,
-    // });
-
-    // Render with the protocol state.
-    f.render_widget(app, f.size());
-}
-
-fn user_actions(tick_rate: Duration) -> Action {
-    if poll(tick_rate).unwrap() {
-        if let Event::Key(key) = crossterm::event::read().unwrap() {
-            if key.kind == KeyEventKind::Press {
-                match key.code {
-                    KeyCode::Char('q') => Action::Quit,
-                    KeyCode::Up => Action::ZoomIn,
-                    KeyCode::Down => Action::ZoomOut,
-                    _ => Action::Tick,
-                }
-            } else {
-                Action::Tick
-            }
-        } else {
-            Action::Tick
-        }
-    } else {
-        Action::Tick
-    }
-}
-
-///Start app's main loop
-pub async fn run_app<B: Backend>(backend: B) -> Result<(), Box<dyn Error>> {
-    let mut terminal = Terminal::new(backend)?;
-
-    let mut app = App::new();
-    loop {
-        terminal.draw(|f| {
-            render_ui(f, &mut app);
-        })?;
-
-        let action = user_actions(Duration::from_millis(250));
-
+    pub fn update_state(&mut self, action: Action) {
         match action {
-            Action::Quit => break,
-            _ => continue,
+            Action::Quit => {
+                self.state = AppState::Done;
+            }
+            _ => {}
         }
     }
-    Ok(())
 }
