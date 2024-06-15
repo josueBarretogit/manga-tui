@@ -21,10 +21,10 @@ pub enum AppState {
 }
 
 pub struct App {
-    pub current_tab: SelectedTabs,
-    pub search_page: SearchPage,
     pub action_tx: UnboundedSender<Action>,
     pub state: AppState,
+    pub current_tab: SelectedTabs,
+    pub search_page: SearchPage,
 }
 
 impl Widget for &mut App {
@@ -98,12 +98,25 @@ impl App {
 
     pub fn render_manga_page(&self, area: Rect, buf: &mut Buffer) {}
 
-    pub fn update_state(&mut self, action: Action) {
+    pub fn update(&mut self, action: Action) {
         match action {
             Action::Quit => {
                 self.state = AppState::Done;
             }
+            Action::PreviousTab => self.previous_tab(),
+            Action::NextTab => self.next_tab(),
+            Action::SearchPageActions(search_page_actions) => {
+                self.search_page.update(search_page_actions)
+            }
             _ => {}
         }
+    }
+
+    pub fn next_tab(&mut self) {
+        self.current_tab = self.current_tab.next();
+    }
+
+    pub fn previous_tab(&mut self) {
+        self.current_tab = self.current_tab.previous();
     }
 }

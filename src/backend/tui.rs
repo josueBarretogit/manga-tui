@@ -13,10 +13,16 @@ use tokio::sync::mpsc::UnboundedSender;
 
 use crate::view::app::{App, AppState};
 
+pub enum SearchPageActions {
+    SearchManga
+}
+
 pub enum Action {
     Quit,
     Tick,
-    SearchManga,
+    NextTab,
+    PreviousTab,
+    SearchPageActions(SearchPageActions),
 }
 
 /// Initialize the terminal
@@ -64,6 +70,8 @@ fn user_actions(tick_rate: Duration) -> Action {
             if key.kind == KeyEventKind::Press {
                 match key.code {
                     KeyCode::Char('q') => Action::Quit,
+                    KeyCode::Tab => Action::NextTab,
+                    KeyCode::BackTab => Action::PreviousTab,
                     _ => Action::Tick,
                 }
             } else {
@@ -105,9 +113,8 @@ pub async fn run_app<B: Backend>(backend: B) -> Result<(), Box<dyn Error>> {
         })?;
 
         if let Some(action) = action_rx.recv().await {
-            app.update_state(action);
+            app.update(action);
         }
-
     }
     events.abort();
 

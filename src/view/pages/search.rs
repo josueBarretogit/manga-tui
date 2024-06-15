@@ -3,12 +3,19 @@ use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::widgets::{Widget, WidgetRef};
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::backend::tui::Action;
+use crate::backend::tui::{Action, SearchPageActions};
 
+#[derive(Default)]
+enum InputMode {
+    Typing,
+    #[default]
+    Idle,
+}
 
 ///This is the "page" where the user can search for a manga
 pub struct SearchPage {
     search_term: String,
+    input_mode: InputMode,
 }
 
 impl WidgetRef for SearchPage {
@@ -25,9 +32,13 @@ impl WidgetRef for SearchPage {
     }
 }
 
+#[allow(clippy::new_without_default)]
 impl SearchPage {
     pub fn new() -> Self {
-        Self { search_term: String::default() }
+        Self {
+            search_term: String::default(),
+            input_mode: InputMode::default(),
+        }
     }
 
     pub fn render_input_area(&self, area: Rect, buf: &mut Buffer) {}
@@ -36,19 +47,13 @@ impl SearchPage {
 }
 
 impl SearchPage {
+    pub fn handle_events(tx: UnboundedSender<Action>) {}
 
-    pub fn handle_events(tx : UnboundedSender<Action>) {
-
-    }
-
-    pub fn handle_key_events(action : Action) {
+    pub fn update(&mut self, action: SearchPageActions) {
         match action {
-            Action::SearchManga => {
+            SearchPageActions::SearchManga => {
 
-            }
-        _ => {}
-            
+            },
         }
     }
-    
 }
