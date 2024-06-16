@@ -20,11 +20,11 @@ include = [
 
 [dependencies]
 anyhow = "1.0.86"
-crossterm = "0.27.0"
+crossterm = { version = "0.27.0", features = ["event-stream"] }
 directories = "5.0.1"
 image = "0.25.1"
 ratatui = { version = "0.26.3", features = ["all-widgets", "unstable-widget-ref"] }
-ratatui-image = {version = "1.0.1", features = ["crossterm", "serde"]}
+ratatui-image = {version = "1.0.1", features = [ "serde"]}
 reqwest = { version = "0.12.4", features = ["json"] }
 serde = { version = "1.0.203", features = ["derive"] }
 tokio = { version = "1.38.0", features = ["full"] }
@@ -33,3 +33,4 @@ strum = "0.26.2"
 strum_macros = "0.26"
 color-eyre = "0.6.2"
 tui-input = "0.8.0"
+futures = "0.3.28"

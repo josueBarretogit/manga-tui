@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use crossterm::event::{poll, Event, KeyCode, KeyEventKind};
+use ::crossterm::event::{EventStream, KeyCode, KeyEventKind};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{self, Constraint, Layout, Rect};
 use ratatui::style::Color;
@@ -11,8 +11,9 @@ use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::StatefulImage;
 use strum::IntoEnumIterator;
 use tokio::sync::mpsc::UnboundedSender;
+use tui_input::backend::crossterm;
 
-use crate::backend::tui::Action;
+use crate::backend::tui::{Action, Events};
 use crate::view::pages::*;
 
 use self::search::SearchPage;
@@ -107,9 +108,6 @@ impl App {
             }
             Action::PreviousTab => self.previous_tab(),
             Action::NextTab => self.next_tab(),
-            Action::SearchPageActions(search_page_actions) => {
-                self.search_page.update(search_page_actions)
-            }
             _ => {}
         }
     }
@@ -124,34 +122,15 @@ impl App {
 }
 
 impl App {
-    pub fn handle_event(tx: UnboundedSender<Action>) -> tokio::task::JoinHandle<()> {
-        let tick_rate = std::time::Duration::from_millis(250);
-        tokio::spawn(async move {
-            loop {
-                let action = if poll(tick_rate).unwrap() {
-                    if let Event::Key(key) = crossterm::event::read().unwrap() {
-                        if key.kind == KeyEventKind::Press {
-                            
-                            match key.code {
-                                KeyCode::Char('q') => Action::Quit,
-                                KeyCode::Tab => Action::NextTab,
-                                KeyCode::BackTab => Action::PreviousTab,
-                                _ => Action::Tick,
-                            }
-                        } else {
-                            Action::Tick
-                        }
-                    } else {
-                        Action::Tick
-                    }
-                } else {
-                    Action::Tick
-                };
-
-                if tx.send(action).is_err() {
-                    break;
+    pub fn handle_event(&mut self, events: Events) {
+        if let Events::Key(key_event) = events {
+            if key_event.kind == KeyEventKind::Press {
+                match key_event.code {
+                    KeyCode::Char('q') => self.state = AppState::Done,
+                    KeyCode::Tab => self.next_tab(),
+                    _ => {}
                 }
             }
-        })
+        }
     }
 }
