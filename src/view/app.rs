@@ -1,3 +1,6 @@
+use std::time::Duration;
+
+use crossterm::event::{poll, Event, KeyCode, KeyEventKind};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{self, Constraint, Layout, Rect};
 use ratatui::style::Color;
@@ -61,7 +64,7 @@ impl App {
 
         App {
             current_tab: SelectedTabs::default(),
-            search_page: SearchPage::new(),
+            search_page: SearchPage::init(),
             action_tx,
             state: AppState::Runnning,
         }
@@ -72,7 +75,7 @@ impl App {
 
         let tabs_block = Block::bordered();
 
-        let current_page = self.current_tab.clone() as usize;
+        let current_page = self.current_tab as usize;
 
         Tabs::new(titles)
             .block(tabs_block)
@@ -85,7 +88,6 @@ impl App {
 
     pub fn render_pages(&self, area: Rect, buf: &mut Buffer) {
         match self.current_tab {
-            SelectedTabs::Home => {}
             SelectedTabs::Search => self.render_search_page(area, buf),
         }
     }
@@ -118,5 +120,38 @@ impl App {
 
     pub fn previous_tab(&mut self) {
         self.current_tab = self.current_tab.previous();
+    }
+}
+
+impl App {
+    pub fn handle_event(tx: UnboundedSender<Action>) -> tokio::task::JoinHandle<()> {
+        let tick_rate = std::time::Duration::from_millis(250);
+        tokio::spawn(async move {
+            loop {
+                let action = if poll(tick_rate).unwrap() {
+                    if let Event::Key(key) = crossterm::event::read().unwrap() {
+                        if key.kind == KeyEventKind::Press {
+                            
+                            match key.code {
+                                KeyCode::Char('q') => Action::Quit,
+                                KeyCode::Tab => Action::NextTab,
+                                KeyCode::BackTab => Action::PreviousTab,
+                                _ => Action::Tick,
+                            }
+                        } else {
+                            Action::Tick
+                        }
+                    } else {
+                        Action::Tick
+                    }
+                } else {
+                    Action::Tick
+                };
+
+                if tx.send(action).is_err() {
+                    break;
+                }
+            }
+        })
     }
 }

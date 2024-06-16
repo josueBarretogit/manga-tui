@@ -64,38 +64,8 @@ fn render_ui(f: &mut Frame<'_>, app: &mut App) {
     f.render_widget(app, f.size());
 }
 
-fn user_actions(tick_rate: Duration) -> Action {
-    if poll(tick_rate).unwrap() {
-        if let Event::Key(key) = crossterm::event::read().unwrap() {
-            if key.kind == KeyEventKind::Press {
-                match key.code {
-                    KeyCode::Char('q') => Action::Quit,
-                    KeyCode::Tab => Action::NextTab,
-                    KeyCode::BackTab => Action::PreviousTab,
-                    _ => Action::Tick,
-                }
-            } else {
-                Action::Tick
-            }
-        } else {
-            Action::Tick
-        }
-    } else {
-        Action::Tick
-    }
-}
 
-fn handle_event(tx: UnboundedSender<Action>) -> tokio::task::JoinHandle<()> {
-    let tick_rate = std::time::Duration::from_millis(250);
-    tokio::spawn(async move {
-        loop {
-            let action = user_actions(tick_rate);
-            if tx.send(action).is_err() {
-                break;
-            }
-        }
-    })
-}
+
 
 ///Start app's main loop
 pub async fn run_app<B: Backend>(backend: B) -> Result<(), Box<dyn Error>> {
