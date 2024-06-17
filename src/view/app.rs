@@ -16,7 +16,7 @@ use tui_input::backend::crossterm;
 use crate::backend::tui::{Action, Events};
 use crate::view::pages::*;
 
-use self::search::SearchPage;
+use self::search::{InputMode, SearchPage};
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
 pub enum AppState {
@@ -40,11 +40,11 @@ impl Widget for &mut App {
             .direction(layout::Direction::Vertical)
             .constraints([Constraint::Percentage(10), Constraint::Percentage(90)]);
 
-        let [top_tabs_area, page_are] = main_layout.areas(area);
+        let [top_tabs_area, page_area] = main_layout.areas(area);
 
         self.render_top_tabs(top_tabs_area, buf);
 
-        self.render_pages(page_are, buf);
+        self.render_pages(page_area, buf);
     }
 }
 
@@ -101,6 +101,16 @@ impl App {
 
     pub fn render_manga_page(&self, area: Rect, buf: &mut Buffer) {}
 
+    pub fn next_tab(&mut self) {
+        self.current_tab = self.current_tab.next();
+    }
+
+    pub fn previous_tab(&mut self) {
+        self.current_tab = self.current_tab.previous();
+    }
+}
+
+impl App {
     pub fn update(&mut self, action: Action) {
         match action {
             Action::Quit => {
@@ -112,24 +122,17 @@ impl App {
         }
     }
 
-    pub fn next_tab(&mut self) {
-        self.current_tab = self.current_tab.next();
-    }
-
-    pub fn previous_tab(&mut self) {
-        self.current_tab = self.current_tab.previous();
-    }
-}
-
-impl App {
     pub fn handle_event(&mut self, events: Events) {
         if let Events::Key(key_event) = events {
-            if key_event.kind == KeyEventKind::Press {
-                match key_event.code {
-                    KeyCode::Char('q') => self.state = AppState::Done,
-                    KeyCode::Tab => self.next_tab(),
-                    _ => {}
+            match key_event.code {
+                KeyCode::Char('q') => {
+                    if self.current_tab == SelectedTabs::Search
+                        && self.search_page.input_mode != InputMode::Typing
+                    {
+                        self.action_tx.send(Action::Quit).unwrap();
+                    }
                 }
+                _ => {}
             }
         }
     }

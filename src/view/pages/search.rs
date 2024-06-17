@@ -1,24 +1,32 @@
-use crossterm::event::{KeyCode, KeyEventKind};
+use crossterm::event::{self, KeyCode, KeyEventKind};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Direction, Layout, Offset, Rect};
 use ratatui::widgets::{Block, Paragraph, Widget, WidgetRef};
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
 
-use crate::backend::tui::{Action, Events, SearchPageActions};
+use crate::backend::tui::{Action, Events};
 
-#[derive(Default)]
-enum InputMode {
+pub enum SearchPageActions {
+    StartTyping,
+    Search,
+    Load,
+}
+
+#[derive(Default, PartialEq, Eq, PartialOrd, Ord)]
+pub enum InputMode {
     Typing,
     #[default]
     Idle,
 }
 
 ///This is the "page" where the user can search for a manga
-#[derive(Default)]
 pub struct SearchPage {
+    action_tx: UnboundedSender<SearchPageActions>,
+    pub action_rx: UnboundedReceiver<SearchPageActions>,
     search_term: String,
-    input_mode: InputMode,
+    pub input_mode: InputMode,
     search_bar: Input,
 }
 
@@ -26,7 +34,7 @@ impl WidgetRef for SearchPage {
     fn render_ref(&self, area: ratatui::prelude::Rect, buf: &mut ratatui::prelude::Buffer) {
         let search_page_layout = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Max(10), Constraint::Min(20)]);
+            .constraints([Constraint::Max(5), Constraint::Min(20)]);
 
         let [input_area, manga_area] = search_page_layout.areas(area);
 
@@ -38,17 +46,25 @@ impl WidgetRef for SearchPage {
 
 impl SearchPage {
     pub fn init() -> Self {
-        Self::default()
+        let (action_tx, action_rx) = mpsc::unbounded_channel::<SearchPageActions>();
+
+        Self {
+            action_tx,
+            action_rx,
+            search_term: String::default(),
+            input_mode: InputMode::default(),
+            search_bar: Input::default(),
+        }
     }
 
-    pub fn render_input_area(&self, area: Rect, buf: &mut Buffer) {
+    fn render_input_area(&self, area: Rect, buf: &mut Buffer) {
         let layout = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Percentage(10), Constraint::Percentage(90)])
+            .constraints([Constraint::Max(2), Constraint::Max(5)])
             .split(area);
 
         let parag = Paragraph::new(match self.input_mode {
-            InputMode::Idle => "Press s to to type".to_string(),
+            InputMode::Idle => "Press s to start searching".to_string(),
             InputMode::Typing => self.search_term.clone(),
         });
 
@@ -59,28 +75,31 @@ impl SearchPage {
         input_bar.render(layout[1], buf);
     }
 
-    pub fn render_manga_area(&self, area: Rect, buf: &mut Buffer) {}
+    fn render_manga_area(&self, area: Rect, buf: &mut Buffer) {}
 }
 
 impl SearchPage {
-
-
     pub fn focus_search_bar(&mut self) {
         self.input_mode = InputMode::Typing;
-        self.search_term = String::from("typing mode");
     }
 
     pub fn update(&mut self, action: SearchPageActions) {
         match action {
-            SearchPageActions::SearchManga => {}
+            SearchPageActions::StartTyping => self.input_mode = InputMode::Typing,
+            SearchPageActions::Search => {}
+            SearchPageActions::Load => {}
         }
     }
 
     pub fn handle_events(&mut self, events: Events) {
         if let Events::Key(key_event) = events {
-            if key_event.kind == KeyEventKind::Press {
-                if let KeyCode::Up = key_event.code {
-                    self.focus_search_bar();
+            match self.input_mode {
+                InputMode::Idle => match key_event.code {
+                    KeyCode::Up => self.action_tx.send(SearchPageActions::StartTyping).unwrap(),
+                    _ => {}
+                },
+                InputMode::Typing => {
+                    self.search_bar.handle_event(&event::Event::Key(key_event));
                 }
             }
         }

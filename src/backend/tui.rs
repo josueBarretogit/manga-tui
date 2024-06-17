@@ -16,10 +16,7 @@ use ratatui::{Frame, Terminal};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 
 use crate::view::app::{App, AppState};
-
-pub enum SearchPageActions {
-    SearchManga,
-}
+use crate::view::pages::SelectedTabs;
 
 pub enum Action {
     Quit,
@@ -96,8 +93,20 @@ pub async fn run_app<B: Backend>(backend: B) -> Result<(), Box<dyn Error>> {
 
         if let Some(event) = event_rx.recv().await {
             app.handle_event(event.clone());
-            app.search_page.handle_events(event);
+            if app.current_tab == SelectedTabs::Search {
+                app.search_page.handle_events(event);
+            }
         }
+
+        if let Ok(app_action) = action_rx.try_recv() {
+            app.update(app_action);
+        }
+
+        if let Ok(search_page_action) = app.search_page.action_rx.try_recv() {
+            app.search_page.update(search_page_action);
+        }
+
+        
     }
 
     Ok(())
@@ -138,7 +147,7 @@ pub fn handle_events(tick_rate: Duration, event_tx: UnboundedSender<Events>) {
 
                 }
                     _ = delay => {
-
+                        event_tx.send(Events::Tick).unwrap();
                     }
             }
         }
