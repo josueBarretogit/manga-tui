@@ -1,3 +1,6 @@
+use core::panic;
+
+use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
 use crate::view::widgets::search::*;
 use crate::view::widgets::Component;
@@ -18,7 +21,7 @@ struct MangasFound {
     title: String,
     tags: Vec<String>,
     description: Vec<String>,
-    img_url : String,
+    img_url: String,
 }
 
 #[derive(Default)]
@@ -45,6 +48,7 @@ pub struct SearchPage {
     pub input_mode: InputMode,
     search_bar: Input,
     mangas_found: Mangas,
+    fetch_client: MangadexClient,
 }
 
 impl Component<SearchPageActions> for SearchPage {
@@ -65,10 +69,20 @@ impl Component<SearchPageActions> for SearchPage {
             SearchPageActions::StopTyping => self.input_mode = InputMode::Idle,
             SearchPageActions::Search => {
                 let tx = self.action_tx.clone();
+                let client = self.fetch_client.clone();
+                let manga_to_search = self.search_bar.value().to_string();
                 tokio::spawn(async move {
+                    let search_response = client.search_mangas(&manga_to_search).await;
 
-                    tx.send(SearchPageActions::LoadMangasFound).unwrap();
-
+                    match search_response {
+                        Ok(mangas_found) => {
+                            println!("{:#?}", mangas_found);
+                            tx.send(SearchPageActions::LoadMangasFound).unwrap();
+                        }
+                        Err(err) => {
+                            panic!("{err}");
+                        }
+                    }
                 });
             }
             SearchPageActions::LoadMangasFound => {}
@@ -99,7 +113,7 @@ impl Component<SearchPageActions> for SearchPage {
 }
 
 impl SearchPage {
-    pub fn init() -> Self {
+    pub fn init(client: MangadexClient) -> Self {
         let (action_tx, action_rx) = mpsc::unbounded_channel::<SearchPageActions>();
 
         Self {
@@ -108,6 +122,7 @@ impl SearchPage {
             input_mode: InputMode::default(),
             mangas_found: Mangas::default(),
             search_bar: Input::default(),
+            fetch_client: client,
         }
     }
 

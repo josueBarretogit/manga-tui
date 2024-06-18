@@ -34,3 +34,4 @@ strum_macros = "0.26"
 color-eyre = "0.6.2"
 tui-input = "0.8.0"
 futures = "0.3.28"
+bytes = { version = "1", features = ["serde"] }

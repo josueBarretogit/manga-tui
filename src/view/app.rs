@@ -7,9 +7,11 @@ use ratatui::{Frame, Terminal};
 use ratatui_image::picker::Picker;
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::StatefulImage;
+use reqwest::Client;
 use strum::IntoEnumIterator;
 use tokio::sync::mpsc::UnboundedSender;
 
+use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::{Action, Events};
 use crate::view::pages::*;
 
@@ -28,6 +30,7 @@ pub struct App {
     pub state: AppState,
     pub current_tab: SelectedTabs,
     pub search_page: SearchPage,
+    fetch_client : MangadexClient,
 }
 
 impl Component<Action> for App {
@@ -84,12 +87,17 @@ impl App {
         //
         // // Create the Protocol which will be used by the widget.
         // let image = picker.new_resize_protocol(dyn_img.decode().unwrap());
+        let mangadex_client = MangadexClient::new(Client::new());
+
+        
 
         App {
             current_tab: SelectedTabs::default(),
-            search_page: SearchPage::init(),
+            search_page: SearchPage::init(mangadex_client.clone()),
             action_tx,
             state: AppState::Runnning,
+            fetch_client: mangadex_client,
+
         }
     }
 

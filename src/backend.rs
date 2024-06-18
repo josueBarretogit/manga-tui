@@ -51,7 +51,7 @@ pub struct Description {
 #[serde(rename_all = "camelCase")]
 pub struct CoverImgMetadata {
     id : String,
-    attributes :  CoverImgAttributes
+    attributes :  Option<CoverImgAttributes>
 }
 
 
