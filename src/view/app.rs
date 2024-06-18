@@ -73,6 +73,7 @@ impl Component<Action> for App {
 
 impl App {
     pub fn new(action_tx: UnboundedSender<Action>) -> Self {
+
         // let mut picker = Picker::from_termios().unwrap();
         // // Guess the protocol.
         // picker.guess_protocol();

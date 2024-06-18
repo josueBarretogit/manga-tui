@@ -3,7 +3,7 @@ use ratatui::Frame;
 
 use crate::backend::tui::Events;
 
-pub mod manga_list;
+pub mod search;
 
 pub trait Component<A> {
     ///Handles the logic for drawing to the screen

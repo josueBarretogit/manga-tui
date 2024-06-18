@@ -1,14 +1,25 @@
+use crate::backend::tui::Events;
+use crate::view::widgets::search::*;
+use crate::view::widgets::Component;
 use crossterm::event::{self, KeyCode, KeyEventKind};
 use ratatui::buffer::Buffer;
-use ratatui::layout::{Constraint, Direction, Layout, Offset, Rect};
+use ratatui::layout::{self, Constraint, Direction, Layout, Offset, Rect};
+use ratatui::widgets::ListState;
+use ratatui::widgets::StatefulWidget;
 use ratatui::widgets::{Block, Paragraph, Widget, WidgetRef};
 use ratatui::Frame;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
 
-use crate::backend::tui::Events;
-use crate::view::widgets::Component;
+struct MangasFound {
+    id: String,
+    title: String,
+    tags: Vec<String>,
+    description: Vec<String>,
+}
+
+struct Mangas(Vec<MangasFound>);
 
 pub enum SearchPageActions {
     StartTyping,
@@ -94,14 +105,12 @@ impl SearchPage {
             .constraints([Constraint::Max(1), Constraint::Max(5)])
             .split(area);
 
-        let helper = Paragraph::new(match self.input_mode {
-            InputMode::Idle => "Press s to type",
-            InputMode::Typing => "Press <esc> to stop typing",
-        });
-
-        helper.render(layout[0], frame.buffer_mut());
-
-        let input_bar = Paragraph::new(self.search_bar.value()).block(Block::bordered());
+        let input_bar = Paragraph::new(self.search_bar.value()).block(Block::bordered().title(
+            match self.input_mode {
+                InputMode::Idle => "Press <s> to type ",
+                InputMode::Typing => "Press <enter> to search,<esc> to stop typing",
+            },
+        ));
 
         input_bar.render(layout[1], frame.buffer_mut());
 
@@ -118,7 +127,29 @@ impl SearchPage {
         }
     }
 
-    fn render_manga_area(&self, area: Rect, buf: &mut Buffer) {}
+    fn render_manga_area(&self, area: Rect, buf: &mut Buffer) {
+        let layout = layout::Layout::default()
+            .margin(1)
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)]);
+
+        let [list_mangas_found_area, manga_preview_area] = layout.areas(area);
+
+        let list_mangas_widget = ListMangasFoundWidget::new(vec![
+            MangaItem::new("a manga".to_string(), false),
+            MangaItem::new("another".to_string(), true),
+        ]);
+
+        StatefulWidget::render(list_mangas_widget, list_mangas_found_area, buf, &mut ListState::default());
+
+        let preview = MangaPreview::new(
+            "a preview".to_string(),
+            "a description".to_string(),
+            &[1, 2, 3, 4, 5],
+        );
+
+        preview.render(manga_preview_area, buf);
+    }
 
     fn focus_search_bar(&mut self) {
         self.input_mode = InputMode::Typing;
