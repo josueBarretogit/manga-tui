@@ -17,6 +17,7 @@ use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 
 use crate::view::app::{App, AppState};
 use crate::view::pages::SelectedTabs;
+use crate::view::widgets::Component;
 
 pub enum Action {
     Quit,
@@ -61,17 +62,6 @@ pub fn init_error_hooks() -> color_eyre::Result<()> {
     Ok(())
 }
 
-fn render_ui(f: &mut Frame<'_>, app: &mut App) {
-    // let image = StatefulImage::new(None).resize(ratatui_image::Resize::Fit(None));
-    // let inner = f.size().inner(&ratatui::layout::Margin {
-    //     horizontal: 4,
-    //     vertical: 4,
-    // });
-
-    // Render with the protocol state.
-    f.render_widget(app, f.size());
-}
-
 ///Start app's main loop
 pub async fn run_app<B: Backend>(backend: B) -> Result<(), Box<dyn Error>> {
     let mut terminal = Terminal::new(backend)?;
@@ -79,6 +69,8 @@ pub async fn run_app<B: Backend>(backend: B) -> Result<(), Box<dyn Error>> {
     let (action_tx, mut action_rx) = unbounded_channel::<Action>();
 
     let (event_tx, mut event_rx) = unbounded_channel::<Events>();
+
+    terminal.show_cursor()?;
 
     let mut app = App::new(action_tx.clone());
 
@@ -88,11 +80,11 @@ pub async fn run_app<B: Backend>(backend: B) -> Result<(), Box<dyn Error>> {
 
     while app.state == AppState::Runnning {
         terminal.draw(|f| {
-            render_ui(f, &mut app);
+            app.render(f.size(), f);
         })?;
 
         if let Some(event) = event_rx.recv().await {
-            app.handle_event(event.clone());
+            app.handle_events(event.clone());
             if app.current_tab == SelectedTabs::Search {
                 app.search_page.handle_events(event);
             }
@@ -105,8 +97,6 @@ pub async fn run_app<B: Backend>(backend: B) -> Result<(), Box<dyn Error>> {
         if let Ok(search_page_action) = app.search_page.action_rx.try_recv() {
             app.search_page.update(search_page_action);
         }
-
-        
     }
 
     Ok(())

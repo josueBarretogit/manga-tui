@@ -2,14 +2,17 @@ use crossterm::event::{self, KeyCode, KeyEventKind};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Direction, Layout, Offset, Rect};
 use ratatui::widgets::{Block, Paragraph, Widget, WidgetRef};
+use ratatui::Frame;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
 
-use crate::backend::tui::{Action, Events};
+use crate::backend::tui::Events;
+use crate::view::widgets::Component;
 
 pub enum SearchPageActions {
     StartTyping,
+    StopTyping,
     Search,
     Load,
 }
@@ -25,22 +28,51 @@ pub enum InputMode {
 pub struct SearchPage {
     action_tx: UnboundedSender<SearchPageActions>,
     pub action_rx: UnboundedReceiver<SearchPageActions>,
-    search_term: String,
     pub input_mode: InputMode,
     search_bar: Input,
 }
 
-impl WidgetRef for SearchPage {
-    fn render_ref(&self, area: ratatui::prelude::Rect, buf: &mut ratatui::prelude::Buffer) {
+impl Component<SearchPageActions> for SearchPage {
+    fn render(&mut self, area: Rect, frame: &mut Frame<'_>) {
         let search_page_layout = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Max(5), Constraint::Min(20)]);
+            .constraints([Constraint::Max(4), Constraint::Min(20)]);
 
         let [input_area, manga_area] = search_page_layout.areas(area);
 
-        self.render_input_area(input_area, buf);
+        self.render_input_area(input_area, frame);
 
-        self.render_manga_area(manga_area, buf);
+        self.render_manga_area(manga_area, frame.buffer_mut());
+    }
+    fn update(&mut self, action: SearchPageActions) {
+        match action {
+            SearchPageActions::StartTyping => self.focus_search_bar(),
+            SearchPageActions::StopTyping => self.input_mode = InputMode::Idle,
+            SearchPageActions::Search => {}
+            SearchPageActions::Load => {}
+        }
+    }
+    fn handle_events(&mut self, events: Events) {
+        if let Events::Key(key_event) = events {
+            match self.input_mode {
+                InputMode::Idle => {
+                    if let KeyCode::Char('s') = key_event.code {
+                        self.action_tx.send(SearchPageActions::StartTyping).unwrap()
+                    }
+                }
+                InputMode::Typing => match key_event.code {
+                    KeyCode::Enter => {
+                        self.action_tx.send(SearchPageActions::Search).unwrap();
+                    }
+                    KeyCode::Esc => {
+                        self.action_tx.send(SearchPageActions::StopTyping).unwrap();
+                    }
+                    _ => {
+                        self.search_bar.handle_event(&event::Event::Key(key_event));
+                    }
+                },
+            }
+        }
     }
 }
 
@@ -51,57 +83,44 @@ impl SearchPage {
         Self {
             action_tx,
             action_rx,
-            search_term: String::default(),
             input_mode: InputMode::default(),
             search_bar: Input::default(),
         }
     }
 
-    fn render_input_area(&self, area: Rect, buf: &mut Buffer) {
+    fn render_input_area(&self, area: Rect, frame: &mut Frame<'_>) {
         let layout = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Max(2), Constraint::Max(5)])
+            .constraints([Constraint::Max(1), Constraint::Max(5)])
             .split(area);
 
-        let parag = Paragraph::new(match self.input_mode {
-            InputMode::Idle => "Press s to start searching".to_string(),
-            InputMode::Typing => self.search_term.clone(),
+        let helper = Paragraph::new(match self.input_mode {
+            InputMode::Idle => "Press s to type",
+            InputMode::Typing => "Press <esc> to stop typing",
         });
 
-        parag.render(layout[0], buf);
+        helper.render(layout[0], frame.buffer_mut());
 
         let input_bar = Paragraph::new(self.search_bar.value()).block(Block::bordered());
 
-        input_bar.render(layout[1], buf);
+        input_bar.render(layout[1], frame.buffer_mut());
+
+        let width = layout[0].width.max(3) - 3;
+
+        let scroll = self.search_bar.visual_scroll(width as usize);
+
+        match self.input_mode {
+            InputMode::Idle => {}
+            InputMode::Typing => frame.set_cursor(
+                layout[1].x + ((self.search_bar.visual_cursor()).max(scroll) - scroll) as u16 + 1,
+                layout[1].y + 1,
+            ),
+        }
     }
 
     fn render_manga_area(&self, area: Rect, buf: &mut Buffer) {}
-}
 
-impl SearchPage {
-    pub fn focus_search_bar(&mut self) {
+    fn focus_search_bar(&mut self) {
         self.input_mode = InputMode::Typing;
-    }
-
-    pub fn update(&mut self, action: SearchPageActions) {
-        match action {
-            SearchPageActions::StartTyping => self.input_mode = InputMode::Typing,
-            SearchPageActions::Search => {}
-            SearchPageActions::Load => {}
-        }
-    }
-
-    pub fn handle_events(&mut self, events: Events) {
-        if let Events::Key(key_event) = events {
-            match self.input_mode {
-                InputMode::Idle => match key_event.code {
-                    KeyCode::Up => self.action_tx.send(SearchPageActions::StartTyping).unwrap(),
-                    _ => {}
-                },
-                InputMode::Typing => {
-                    self.search_bar.handle_event(&event::Event::Key(key_event));
-                }
-            }
-        }
     }
 }

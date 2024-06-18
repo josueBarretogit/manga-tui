@@ -1,10 +1,8 @@
-use std::time::Duration;
-
 use ::crossterm::event::{EventStream, KeyCode, KeyEventKind};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{self, Constraint, Layout, Rect};
 use ratatui::style::Color;
-use ratatui::widgets::{Block, Tabs, Widget, WidgetRef};
+use ratatui::widgets::{Block, Borders, Tabs, Widget, WidgetRef};
 use ratatui::{Frame, Terminal};
 use ratatui_image::picker::Picker;
 use ratatui_image::protocol::StatefulProtocol;
@@ -17,6 +15,8 @@ use crate::backend::tui::{Action, Events};
 use crate::view::pages::*;
 
 use self::search::{InputMode, SearchPage};
+
+use super::widgets::Component;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
 pub enum AppState {
@@ -31,20 +31,43 @@ pub struct App {
     pub search_page: SearchPage,
 }
 
-impl Widget for &mut App {
-    fn render(self, area: ratatui::prelude::Rect, buf: &mut ratatui::prelude::Buffer)
-    where
-        Self: Sized,
-    {
+impl Component<Action> for App {
+    fn render(&mut self, area: Rect, frame: &mut Frame<'_>) {
         let main_layout = Layout::default()
             .direction(layout::Direction::Vertical)
-            .constraints([Constraint::Percentage(10), Constraint::Percentage(90)]);
+            .constraints([Constraint::Percentage(7), Constraint::Percentage(93)]);
 
         let [top_tabs_area, page_area] = main_layout.areas(area);
 
-        self.render_top_tabs(top_tabs_area, buf);
+        self.render_top_tabs(top_tabs_area, frame.buffer_mut());
 
-        self.render_pages(page_area, buf);
+        self.render_pages(page_area, frame);
+    }
+
+    fn handle_events(&mut self, events: Events) {
+        if let Events::Key(key_event) = events {
+            match key_event.code {
+                KeyCode::Char('q') => {
+                    if self.current_tab == SelectedTabs::Search
+                        && self.search_page.input_mode != InputMode::Typing
+                    {
+                        self.action_tx.send(Action::Quit).unwrap();
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn update(&mut self, action: Action) {
+        match action {
+            Action::Quit => {
+                self.state = AppState::Done;
+            }
+            Action::PreviousTab => self.previous_tab(),
+            Action::NextTab => self.next_tab(),
+            _ => {}
+        }
     }
 }
 
@@ -74,7 +97,7 @@ impl App {
     pub fn render_top_tabs(&self, area: Rect, buf: &mut Buffer) {
         let titles: Vec<String> = SelectedTabs::iter().map(|page| page.to_string()).collect();
 
-        let tabs_block = Block::bordered();
+        let tabs_block = Block::default().borders(Borders::BOTTOM);
 
         let current_page = self.current_tab as usize;
 
@@ -87,14 +110,14 @@ impl App {
             .render(area, buf);
     }
 
-    pub fn render_pages(&self, area: Rect, buf: &mut Buffer) {
+    pub fn render_pages(&mut self, area: Rect, frame: &mut Frame<'_>) {
         match self.current_tab {
-            SelectedTabs::Search => self.render_search_page(area, buf),
+            SelectedTabs::Search => self.render_search_page(area, frame),
         }
     }
 
-    pub fn render_search_page(&self, area: Rect, buf: &mut Buffer) {
-        WidgetRef::render_ref(&self.search_page, area, buf);
+    pub fn render_search_page(&mut self, area: Rect, frame: &mut Frame<'_>) {
+        self.search_page.render(area, frame);
     }
 
     pub fn render_home_page(&self, area: Rect, buf: &mut Buffer) {}
@@ -110,30 +133,3 @@ impl App {
     }
 }
 
-impl App {
-    pub fn update(&mut self, action: Action) {
-        match action {
-            Action::Quit => {
-                self.state = AppState::Done;
-            }
-            Action::PreviousTab => self.previous_tab(),
-            Action::NextTab => self.next_tab(),
-            _ => {}
-        }
-    }
-
-    pub fn handle_event(&mut self, events: Events) {
-        if let Events::Key(key_event) = events {
-            match key_event.code {
-                KeyCode::Char('q') => {
-                    if self.current_tab == SelectedTabs::Search
-                        && self.search_page.input_mode != InputMode::Typing
-                    {
-                        self.action_tx.send(Action::Quit).unwrap();
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-}
