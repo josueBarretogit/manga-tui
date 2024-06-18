@@ -58,7 +58,11 @@ pub struct MangaPreview<'a> {
 
 impl<'a> MangaPreview<'a> {
     pub fn new(title: String, description: String, image_data: &'a [u8]) -> Self {
-        Self { title, description, image_data }
+        Self {
+            title,
+            description,
+            image_data,
+        }
     }
 }
 

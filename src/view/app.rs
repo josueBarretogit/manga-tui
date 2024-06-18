@@ -9,7 +9,6 @@ use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::StatefulImage;
 use strum::IntoEnumIterator;
 use tokio::sync::mpsc::UnboundedSender;
-use tui_input::backend::crossterm;
 
 use crate::backend::tui::{Action, Events};
 use crate::view::pages::*;
@@ -73,7 +72,6 @@ impl Component<Action> for App {
 
 impl App {
     pub fn new(action_tx: UnboundedSender<Action>) -> Self {
-
         // let mut picker = Picker::from_termios().unwrap();
         // // Guess the protocol.
         // picker.guess_protocol();
@@ -133,4 +131,3 @@ impl App {
         self.current_tab = self.current_tab.previous();
     }
 }
-

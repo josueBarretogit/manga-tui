@@ -12,20 +12,23 @@ use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
 
+#[derive(Default)]
 struct MangasFound {
     id: String,
     title: String,
     tags: Vec<String>,
     description: Vec<String>,
+    img_url : String,
 }
 
+#[derive(Default)]
 struct Mangas(Vec<MangasFound>);
 
 pub enum SearchPageActions {
     StartTyping,
     StopTyping,
     Search,
-    Load,
+    LoadMangasFound,
 }
 
 #[derive(Default, PartialEq, Eq, PartialOrd, Ord)]
@@ -41,6 +44,7 @@ pub struct SearchPage {
     pub action_rx: UnboundedReceiver<SearchPageActions>,
     pub input_mode: InputMode,
     search_bar: Input,
+    mangas_found: Mangas,
 }
 
 impl Component<SearchPageActions> for SearchPage {
@@ -59,8 +63,15 @@ impl Component<SearchPageActions> for SearchPage {
         match action {
             SearchPageActions::StartTyping => self.focus_search_bar(),
             SearchPageActions::StopTyping => self.input_mode = InputMode::Idle,
-            SearchPageActions::Search => {}
-            SearchPageActions::Load => {}
+            SearchPageActions::Search => {
+                let tx = self.action_tx.clone();
+                tokio::spawn(async move {
+
+                    tx.send(SearchPageActions::LoadMangasFound).unwrap();
+
+                });
+            }
+            SearchPageActions::LoadMangasFound => {}
         }
     }
     fn handle_events(&mut self, events: Events) {
@@ -95,6 +106,7 @@ impl SearchPage {
             action_tx,
             action_rx,
             input_mode: InputMode::default(),
+            mangas_found: Mangas::default(),
             search_bar: Input::default(),
         }
     }
@@ -140,7 +152,12 @@ impl SearchPage {
             MangaItem::new("another".to_string(), true),
         ]);
 
-        StatefulWidget::render(list_mangas_widget, list_mangas_found_area, buf, &mut ListState::default());
+        StatefulWidget::render(
+            list_mangas_widget,
+            list_mangas_found_area,
+            buf,
+            &mut ListState::default(),
+        );
 
         let preview = MangaPreview::new(
             "a preview".to_string(),
