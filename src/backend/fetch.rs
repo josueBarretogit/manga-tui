@@ -1,3 +1,7 @@
+use core::panic;
+
+use reqwest::header::USER_AGENT;
+
 use super::SearchMangaResponse;
 
 #[derive(Clone)]
@@ -20,15 +24,13 @@ impl MangadexClient {
         &self,
         search_term: &str,
     ) -> Result<SearchMangaResponse, reqwest::Error> {
-        self.client
-            .get(format!(
-                "{}/manga?title={}&includes[]=cover_art",
-                self.api_url, search_term
-            ))
-            .send()
-            .await?
-            .json::<SearchMangaResponse>()
-            .await
+        let url = format!("{}/manga?title='{}'&includes[]=cover_art", self.api_url, search_term);
+
+        let response = self.client.get(url).send().await?;
+
+        let res: SearchMangaResponse = response.json().await?;
+
+        Ok(res)
     }
 
     pub async fn get_cover_for_manga(

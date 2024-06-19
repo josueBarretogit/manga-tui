@@ -10,16 +10,12 @@ pub struct SearchMangaResponse {
     pub result: String,
     pub response: String,
     pub data: Vec<Data>,
-    pub limit: i64,
-    pub offset: i64,
-    pub total: i64,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Data {
     pub id: String,
-    #[serde(rename = "type")]
     pub attributes: Attributes,
     pub relationships: Vec<CoverImgMetadata>,
 }
@@ -28,7 +24,7 @@ pub struct Data {
 #[serde(rename_all = "camelCase")]
 pub struct Attributes {
     pub title: Title,
-    pub description: Description,
+    pub description: Option<Description>,
     pub status: String,
     pub tags: Vec<Tag>,
     pub state: String,
@@ -51,12 +47,10 @@ pub struct Description {
 #[serde(rename_all = "camelCase")]
 pub struct CoverImgMetadata {
     id : String,
-    attributes :  Option<CoverImgAttributes>
 }
 
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct CoverImgAttributes {
     #[serde(rename = "fileName")]
     file_name : String,

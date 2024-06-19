@@ -1137,6 +1137,7 @@ dependencies = [
  "ratatui-image",
  "reqwest",
  "serde",
+ "serde_json",
  "strum",
  "strum_macros",
  "throbber-widgets-tui",
