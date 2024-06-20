@@ -46,14 +46,15 @@ pub struct Description {
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CoverImgMetadata {
-    id : String,
+    pub id : String,
+    pub attributes : Option<CoverImgAttributes>
 }
 
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CoverImgAttributes {
     #[serde(rename = "fileName")]
-    file_name : String,
+    pub file_name : String,
 }
 
 
