@@ -2,7 +2,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Style, Stylize};
 use ratatui::text::Line;
-use ratatui::widgets::{Block, List, ListDirection, ListItem, ListState, StatefulWidget, StatefulWidgetRef, Widget};
+use ratatui::widgets::{Block, List, ListDirection, ListItem, ListState, Paragraph, StatefulWidget, StatefulWidgetRef, Widget};
 
 use crate::backend::{Data};
 
@@ -37,10 +37,7 @@ impl From<Data> for MangaItem {
             .find(|relation| relation.attributes.is_some());
 
         let img_url = match img_metadata {
-            Some(data) => match &data.attributes {
-                Some(cover_img_attributes) => Some(cover_img_attributes.file_name.clone()),
-                None => None,
-            },
+            Some(data) => data.attributes.as_ref().map(|cover_img_attributes| cover_img_attributes.file_name.clone()),
             None => None,
         };
 
@@ -96,6 +93,10 @@ impl ListMangasFoundWidget {
 
         Self { mangas }
     }
+
+    pub fn not_found() {
+        ListMangasFoundWidget::default();
+    }
 }
 
 impl StatefulWidgetRef for ListMangasFoundWidget {
@@ -114,11 +115,11 @@ impl StatefulWidgetRef for ListMangasFoundWidget {
 pub struct MangaPreview<'a> {
     title: String,
     description: String,
-    image_data: &'a [u8],
+    image_data: Option<&'a [u8]>,
 }
 
 impl<'a> MangaPreview<'a> {
-    pub fn new(title: String, description: String, image_data: &'a [u8]) -> Self {
+    pub fn new(title: String, description: String, image_data: Option<&'a [u8]>) -> Self {
         Self {
             title,
             description,
@@ -132,8 +133,8 @@ impl Widget for MangaPreview<'_> {
     where
         Self: Sized,
     {
-        let block = Block::bordered().title("Preview");
+        let block = Block::bordered().title(self.title);
 
-        block.render(area, buf);
+        Paragraph::new(self.description).block(block).render(area, buf);
     }
 }

@@ -88,7 +88,9 @@ impl App {
         //
         // // Create the Protocol which will be used by the widget.
         // let image = picker.new_resize_protocol(dyn_img.decode().unwrap());
-        let mangadex_client = MangadexClient::new(Client::builder().user_agent("cargo/manga-tui").build().unwrap());
+        let user_agent = format!("manga-tui/0.1.0 {}", std::env::consts::OS);
+
+        let mangadex_client = MangadexClient::new(Client::builder().user_agent(user_agent).build().unwrap());
 
         App {
             current_tab: SelectedTabs::default(),

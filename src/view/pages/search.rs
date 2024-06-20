@@ -30,6 +30,8 @@ pub enum SearchPageActions {
     StopTyping,
     Search,
     LoadMangasFound(Option<SearchMangaResponse>),
+    ScrollUp,
+    ScrollDown,
 }
 
 #[derive(Default, PartialEq, Eq, PartialOrd, Ord)]
@@ -57,8 +59,6 @@ struct MangasFoundList {
     page: u16,
 }
 
-
-
 impl Component<SearchPageActions> for SearchPage {
     fn render(&mut self, area: Rect, frame: &mut Frame<'_>) {
         let search_page_layout = Layout::default()
@@ -71,6 +71,7 @@ impl Component<SearchPageActions> for SearchPage {
 
         self.render_manga_area(manga_area, frame.buffer_mut());
     }
+
     fn update(&mut self, action: SearchPageActions) {
         match action {
             SearchPageActions::StartTyping => self.focus_search_bar(),
@@ -99,25 +100,31 @@ impl Component<SearchPageActions> for SearchPage {
             }
             SearchPageActions::LoadMangasFound(response) => {
                 self.state = State::DisplayingSearchResponse;
-
                 match response {
                     Some(mangas_found) => {
                         self.mangas_found_list.widget =
-                            ListMangasFoundWidget::from_response(mangas_found.data);
+                            ListMangasFoundWidget::from_response(mangas_found.data)
                     }
-                    None => {}
+                    None => self.mangas_found_list.widget = ListMangasFoundWidget::default(),
                 }
             }
+            SearchPageActions::ScrollUp => self.scroll_up(),
+            SearchPageActions::ScrollDown => self.scroll_down(),
         }
     }
     fn handle_events(&mut self, events: Events) {
         if let Events::Key(key_event) = events {
             match self.input_mode {
-                InputMode::Idle => {
-                    if let KeyCode::Char('s') = key_event.code {
-                        self.action_tx.send(SearchPageActions::StartTyping).unwrap()
+                InputMode::Idle => match key_event.code {
+                    KeyCode::Char('s') => {
+                        self.action_tx.send(SearchPageActions::StartTyping).unwrap();
                     }
-                }
+                    KeyCode::Char('j') => {
+                        self.action_tx.send(SearchPageActions::ScrollDown).unwrap()
+                    }
+                    KeyCode::Char('k') => self.action_tx.send(SearchPageActions::ScrollUp).unwrap(),
+                    _ => {}
+                },
                 InputMode::Typing => match key_event.code {
                     KeyCode::Enter => {
                         if self.state != State::SearchingMangas {
@@ -189,53 +196,69 @@ impl SearchPage {
 
         if self.state == State::Normal || self.state == State::Loading {
             Block::bordered().render(list_mangas_found_area, buf);
+            Block::bordered()
+                .title("Manga preview")
+                .render(manga_preview_area, buf);
         } else {
             StatefulWidgetRef::render_ref(
                 &self.mangas_found_list.widget,
-                area,
+                list_mangas_found_area,
                 buf,
                 &mut self.mangas_found_list.state,
             );
+
+            self.render_manga_preview(manga_preview_area, buf);
         }
-
-        let preview = MangaPreview::new(
-            "a preview".to_string(),
-            "a description".to_string(),
-            &[1, 2, 3, 4, 5],
-        );
-
-        preview.render(manga_preview_area, buf);
     }
 
     fn focus_search_bar(&mut self) {
         self.input_mode = InputMode::Typing;
     }
 
-    // pub fn scroll_down(&mut self) {
-    //     let next = match self.mangas_list_state.selected() {
-    //         Some(index) => {
-    //             if index == self.crates_list.widget.crates.len().saturating_sub(1) {
-    //                 0
-    //             } else {
-    //                 index.saturating_add(1)
-    //             }
-    //         }
-    //         None => self.crates_list.state.selected().unwrap_or(0),
-    //     };
-    //     self.crates_list.state.select(Some(next));
-    // }
-    //
-    // pub fn scroll_up(&mut self) {
-    //     let next_index = match self.mangas_list_state.selected() {
-    //         Some(index) => {
-    //             if index == 0 {
-    //                 self.crates_list.widget.crates.len().saturating_sub(1)
-    //             } else {
-    //                 index.saturating_sub(1)
-    //             }
-    //         }
-    //         None => 1,
-    //     };
-    //     self.crates_list.state.select(Some(next_index));
-    // }
+    pub fn scroll_down(&mut self) {
+        let next = match self.mangas_found_list.state.selected() {
+            Some(index) => {
+                if index == self.mangas_found_list.widget.mangas.len().saturating_sub(1) {
+                    0
+                } else {
+                    index.saturating_add(1)
+                }
+            }
+            None => self.mangas_found_list.state.selected().unwrap_or(0),
+        };
+        self.mangas_found_list.state.select(Some(next));
+    }
+
+    pub fn scroll_up(&mut self) {
+        let next_index = match self.mangas_found_list.state.selected() {
+            Some(index) => {
+                if index == 0 {
+                    self.mangas_found_list.widget.mangas.len().saturating_sub(1)
+                } else {
+                    index.saturating_sub(1)
+                }
+            }
+            None => 1,
+        };
+        self.mangas_found_list.state.select(Some(next_index));
+    }
+
+    fn get_current_manga_selected(&mut self) -> Option<&mut MangaItem> {
+        if let Some(index) = self.mangas_found_list.state.selected() {
+            return self.mangas_found_list.widget.mangas.get_mut(index);
+        }
+        None
+    }
+
+    fn render_manga_preview(&mut self, area: Rect, buf: &mut Buffer) {
+        let current_manga_selected = self.get_current_manga_selected();
+        if let Some(manga) = current_manga_selected {
+            let preview = MangaPreview::new(
+                manga.title.clone(),
+                manga.description.clone(),
+                Some(&[2, 3, 4, 5]),
+            );
+            preview.render(area, buf);
+        }
+    }
 }

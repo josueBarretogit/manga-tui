@@ -1,6 +1,3 @@
-use core::panic;
-
-use reqwest::header::USER_AGENT;
 
 use super::SearchMangaResponse;
 
