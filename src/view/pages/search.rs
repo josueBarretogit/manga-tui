@@ -2,6 +2,7 @@ use core::panic;
 
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
+use crate::backend::SearchMangaResponse;
 use crate::view::widgets::search::*;
 use crate::view::widgets::Component;
 use crossterm::event::{self, KeyCode, KeyEventKind};
@@ -24,6 +25,17 @@ struct MangasFound {
     img_url: String,
 }
 
+/// Determine wheter or not mangas are being searched
+/// if so then this should not make a request until the most recent one finishes
+#[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+enum State {
+    Loading,
+    SearchingMangas,
+    DisplayingMangasFound,
+    #[default]
+    Normal,
+}
+
 #[derive(Default)]
 struct Mangas(Vec<MangasFound>);
 
@@ -31,7 +43,7 @@ pub enum SearchPageActions {
     StartTyping,
     StopTyping,
     Search,
-    LoadMangasFound,
+    LoadMangasFound(Option<SearchMangaResponse>),
 }
 
 #[derive(Default, PartialEq, Eq, PartialOrd, Ord)]
@@ -47,8 +59,16 @@ pub struct SearchPage {
     pub action_rx: UnboundedReceiver<SearchPageActions>,
     pub input_mode: InputMode,
     search_bar: Input,
-    mangas_found: Mangas,
     fetch_client: MangadexClient,
+    state: State,
+    mangas_list_state: ListState,
+    mangas_found_list : MangasFoundList,
+
+}
+
+struct MangasFoundList {
+    widget: ListMangasFoundWidget,
+    data: Vec<String>
 }
 
 impl Component<SearchPageActions> for SearchPage {
@@ -76,16 +96,29 @@ impl Component<SearchPageActions> for SearchPage {
 
                     match search_response {
                         Ok(mangas_found) => {
-                            println!("{:#?}", mangas_found);
-                            tx.send(SearchPageActions::LoadMangasFound).unwrap();
+                            if mangas_found.data.is_empty() {
+                                tx.send(SearchPageActions::LoadMangasFound(None)).unwrap();
+                            } else {
+                                tx.send(SearchPageActions::LoadMangasFound(Some(mangas_found)))
+                                    .unwrap();
+                            }
                         }
-                        Err(err) => {
-                            panic!("{err}");
+                        Err(e) => {
+                            tx.send(SearchPageActions::LoadMangasFound(None)).unwrap();
                         }
                     }
                 });
             }
-            SearchPageActions::LoadMangasFound => {}
+            SearchPageActions::LoadMangasFound(response) => {
+                self.state = State::DisplayingMangasFound;
+
+                match response {
+                    Some(mangas_found) => {
+                        self.mangas_found = Some(mangas_found);
+                    }
+                    None => self.mangas_found = None,
+                }
+            }
         }
     }
     fn handle_events(&mut self, events: Events) {
@@ -98,7 +131,9 @@ impl Component<SearchPageActions> for SearchPage {
                 }
                 InputMode::Typing => match key_event.code {
                     KeyCode::Enter => {
-                        self.action_tx.send(SearchPageActions::Search).unwrap();
+                        if self.state != State::SearchingMangas {
+                            self.action_tx.send(SearchPageActions::Search).unwrap();
+                        }
                     }
                     KeyCode::Esc => {
                         self.action_tx.send(SearchPageActions::StopTyping).unwrap();
@@ -120,9 +155,11 @@ impl SearchPage {
             action_tx,
             action_rx,
             input_mode: InputMode::default(),
-            mangas_found: Mangas::default(),
             search_bar: Input::default(),
             fetch_client: client,
+            state: State::default(),
+            mangas_list_state: ListState::default(),
+            mangas_found: None,
         }
     }
 
@@ -162,17 +199,28 @@ impl SearchPage {
 
         let [list_mangas_found_area, manga_preview_area] = layout.areas(area);
 
-        let list_mangas_widget = ListMangasFoundWidget::new(vec![
-            MangaItem::new("a manga".to_string(), false),
-            MangaItem::new("another".to_string(), true),
-        ]);
+        if self.state == State::Normal || self.state == State::Loading {
+            Block::bordered().render(list_mangas_found_area, buf);
+        } else {
+            match self.mangas_found.as_ref() {
+                Some(mangas) => {
+                    let list_mangas_found =
+                        ListMangasFoundWidget::new(MangaItem::from_response(mangas));
 
-        StatefulWidget::render(
-            list_mangas_widget,
-            list_mangas_found_area,
-            buf,
-            &mut ListState::default(),
-        );
+                    StatefulWidget::render(
+                        list_mangas_found,
+                        list_mangas_found_area,
+                        buf,
+                        &mut self.mangas_list_state.clone(),
+                    );
+                }
+                None => {
+                    Block::bordered()
+                        .title("No mangas found")
+                        .render(list_mangas_found_area, buf);
+                }
+            }
+        }
 
         let preview = MangaPreview::new(
             "a preview".to_string(),
@@ -185,5 +233,33 @@ impl SearchPage {
 
     fn focus_search_bar(&mut self) {
         self.input_mode = InputMode::Typing;
+    }
+
+    pub fn scroll_down(&mut self) {
+        let next = match self.mangas_list_state.selected() {
+            Some(index) => {
+                if index == self.crates_list.widget.crates.len().saturating_sub(1) {
+                    0
+                } else {
+                    index.saturating_add(1)
+                }
+            }
+            None => self.crates_list.state.selected().unwrap_or(0),
+        };
+        self.crates_list.state.select(Some(next));
+    }
+
+    pub fn scroll_up(&mut self) {
+        let next_index = match self.mangas_list_state.selected()  {
+            Some(index) => {
+                if index == 0 {
+                    self.crates_list.widget.crates.len().saturating_sub(1)
+                } else {
+                    index.saturating_sub(1)
+                }
+            }
+            None => 1,
+        };
+        self.crates_list.state.select(Some(next_index));
     }
 }

@@ -4,14 +4,26 @@ use ratatui::style::{Style, Stylize};
 use ratatui::text::Line;
 use ratatui::widgets::{Block, List, ListDirection, ListItem, ListState, StatefulWidget, Widget};
 
+use crate::backend::SearchMangaResponse;
+
 pub struct MangaItem {
     title: String,
     is_selected: bool,
 }
 
 impl MangaItem {
-    pub fn new(title: String, is_selected: bool) -> Self {
-        Self { title, is_selected }
+    pub fn new(title: String) -> Self {
+        Self {
+            title,
+            is_selected: false,
+        }
+    }
+    pub fn from_response(response: &SearchMangaResponse) -> Vec<Self> {
+        let mut new_manga_list: Vec<Self> = vec![];
+        for mangas in response.data.iter() {
+            new_manga_list.push(Self::new(mangas.attributes.title.en.clone()));
+        }
+        new_manga_list
     }
 }
 

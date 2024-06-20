@@ -39,6 +39,7 @@ impl Component<Action> for App {
             .direction(layout::Direction::Vertical)
             .constraints([Constraint::Percentage(7), Constraint::Percentage(93)]);
 
+
         let [top_tabs_area, page_area] = main_layout.areas(area);
 
         self.render_top_tabs(top_tabs_area, frame.buffer_mut());
