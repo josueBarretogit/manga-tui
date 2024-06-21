@@ -1,10 +1,14 @@
 use ratatui::buffer::Buffer;
-use ratatui::layout::Rect;
-use ratatui::style::{Style, Stylize};
+use ratatui::layout::{self, Constraint, Layout, Rect};
+use ratatui::style::{Color, Style, Stylize};
 use ratatui::text::Line;
-use ratatui::widgets::{Block, List, ListDirection, ListItem, ListState, Paragraph, StatefulWidget, StatefulWidgetRef, Widget};
+use ratatui::widgets::{
+    Block, List, ListDirection, ListItem, ListState, Paragraph, StatefulWidget, StatefulWidgetRef,
+    Widget,
+};
+use tui_widget_list::PreRender;
 
-use crate::backend::{Data};
+use crate::backend::Data;
 
 #[derive(Default, Clone)]
 pub struct MangaItem {
@@ -12,7 +16,37 @@ pub struct MangaItem {
     pub description: String,
     pub tags: Vec<String>,
     pub img_url: Option<String>,
-    pub is_selected: bool,
+    pub style: Style,
+}
+
+impl Widget for MangaItem {
+    fn render(self, area: Rect, buf: &mut Buffer)
+    where
+        Self: Sized,
+    {
+        let layout = Layout::default()
+            .direction(layout::Direction::Horizontal)
+            .constraints([Constraint::Max(20), Constraint::Fill(1)]);
+
+        let [cover_area, manga_details_area] = layout.areas(area);
+
+        Block::bordered().render(cover_area, buf);
+        Block::bordered()
+            .title(self.title.clone())
+            .style(self.style)
+            .render(manga_details_area, buf);
+    }
+}
+
+impl PreRender for MangaItem {
+    fn pre_render(&mut self, context: &tui_widget_list::PreRenderContext) -> u16 {
+        if context.is_selected {
+            self.style = Style::default()
+                .bg(Color::Rgb(255, 153, 0))
+                .fg(Color::Rgb(28, 28, 32));
+        }
+        1
+    }
 }
 
 impl From<Data> for MangaItem {
@@ -37,7 +71,10 @@ impl From<Data> for MangaItem {
             .find(|relation| relation.attributes.is_some());
 
         let img_url = match img_metadata {
-            Some(data) => data.attributes.as_ref().map(|cover_img_attributes| cover_img_attributes.file_name.clone()),
+            Some(data) => data
+                .attributes
+                .as_ref()
+                .map(|cover_img_attributes| cover_img_attributes.file_name.clone()),
             None => None,
         };
 
@@ -57,20 +94,8 @@ impl MangaItem {
             description,
             tags,
             img_url,
-            is_selected: false,
+            style : Style::default(),
         }
-    }
-}
-
-impl From<MangaItem> for ListItem<'_> {
-    fn from(val: MangaItem) -> Self {
-        let line = if val.is_selected {
-            Line::from(val.title.bold().blue())
-        } else {
-            Line::from(val.title)
-        };
-
-        ListItem::new(line)
     }
 }
 
@@ -100,13 +125,9 @@ impl ListMangasFoundWidget {
 }
 
 impl StatefulWidgetRef for ListMangasFoundWidget {
-    type State = ListState;
+    type State = tui_widget_list::ListState;
     fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        let list = List::new(self.mangas.clone())
-            .block(Block::bordered().title("Mangas found"))
-            .highlight_style(Style::default().fg(ratatui::style::Color::Cyan))
-            .direction(ListDirection::TopToBottom);
-
+        let list = tui_widget_list::List::new(self.mangas.clone());
         StatefulWidget::render(list, area, buf, state);
     }
 }
@@ -135,6 +156,8 @@ impl Widget for MangaPreview<'_> {
     {
         let block = Block::bordered().title(self.title);
 
-        Paragraph::new(self.description).block(block).render(area, buf);
+        Paragraph::new(self.description)
+            .block(block)
+            .render(area, buf);
     }
 }

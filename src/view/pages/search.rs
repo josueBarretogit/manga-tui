@@ -55,7 +55,7 @@ pub struct SearchPage {
 #[derive(Default)]
 struct MangasFoundList {
     widget: ListMangasFoundWidget,
-    state: ListState,
+    state: tui_widget_list::ListState,
     page: u16,
 }
 
@@ -187,27 +187,17 @@ impl SearchPage {
     }
 
     fn render_manga_area(&mut self, area: Rect, buf: &mut Buffer) {
-        let layout = layout::Layout::default()
-            .margin(1)
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)]);
-
-        let [list_mangas_found_area, manga_preview_area] = layout.areas(area);
 
         if self.state == State::Normal || self.state == State::Loading {
-            Block::bordered().render(list_mangas_found_area, buf);
-            Block::bordered()
-                .title("Manga preview")
-                .render(manga_preview_area, buf);
+            Block::bordered().render(area, buf);
         } else {
             StatefulWidgetRef::render_ref(
                 &self.mangas_found_list.widget,
-                list_mangas_found_area,
+                area,
                 buf,
                 &mut self.mangas_found_list.state,
             );
 
-            self.render_manga_preview(manga_preview_area, buf);
         }
     }
 
@@ -216,7 +206,7 @@ impl SearchPage {
     }
 
     pub fn scroll_down(&mut self) {
-        let next = match self.mangas_found_list.state.selected() {
+        let next = match self.mangas_found_list.state.selected {
             Some(index) => {
                 if index == self.mangas_found_list.widget.mangas.len().saturating_sub(1) {
                     0
@@ -261,4 +251,5 @@ impl SearchPage {
             preview.render(area, buf);
         }
     }
+
 }
