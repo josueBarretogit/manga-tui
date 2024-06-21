@@ -3,6 +3,7 @@ use crate::backend::tui::Events;
 use crate::backend::SearchMangaResponse;
 use crate::view::widgets::search::*;
 use crate::view::widgets::Component;
+use bytes::Bytes;
 use crossterm::event::{self, KeyCode, KeyEventKind};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{self, Constraint, Direction, Layout, Offset, Rect};
@@ -32,6 +33,7 @@ pub enum SearchPageActions {
     LoadMangasFound(Option<SearchMangaResponse>),
     ScrollUp,
     ScrollDown,
+    LoadCover(Bytes, usize),
 }
 
 #[derive(Default, PartialEq, Eq, PartialOrd, Ord)]
@@ -103,13 +105,41 @@ impl Component<SearchPageActions> for SearchPage {
                 match response {
                     Some(mangas_found) => {
                         self.mangas_found_list.widget =
-                            ListMangasFoundWidget::from_response(mangas_found.data)
+                            ListMangasFoundWidget::from_response(mangas_found.data);
+                        for (index, manga) in
+                            self.mangas_found_list.widget.mangas.iter().enumerate()
+                        {
+                            let action_tx = self.action_tx.clone();
+                            let client = self.fetch_client.clone();
+                            let manga_id = manga.id.clone();
+                            let file_name = manga
+                                .img_url
+                                .clone()
+                                .unwrap_or(String::default().clone())
+                                .clone();
+
+                            tokio::spawn(async move {
+                                let img_bytes =
+                                    client.get_cover_for_manga(&manga_id, &file_name).await;
+                                match img_bytes {
+                                    Ok(bytes) => {
+                                        action_tx
+                                            .send(SearchPageActions::LoadCover(bytes, index))
+                                            .unwrap();
+                                    }
+                                    Err(_) => todo!(),
+                                }
+                            });
+                        }
                     }
                     None => self.mangas_found_list.widget = ListMangasFoundWidget::default(),
                 }
             }
             SearchPageActions::ScrollUp => self.scroll_up(),
             SearchPageActions::ScrollDown => self.scroll_down(),
+            SearchPageActions::LoadCover(bytes, index) => {
+                self.mangas_found_list.widget.mangas[index].img_bytes = Some(bytes);
+            }
         }
     }
     fn handle_events(&mut self, events: Events) {
@@ -187,7 +217,6 @@ impl SearchPage {
     }
 
     fn render_manga_area(&mut self, area: Rect, buf: &mut Buffer) {
-
         if self.state == State::Normal || self.state == State::Loading {
             Block::bordered().render(area, buf);
         } else {
@@ -197,7 +226,6 @@ impl SearchPage {
                 buf,
                 &mut self.mangas_found_list.state,
             );
-
         }
     }
 
@@ -206,50 +234,17 @@ impl SearchPage {
     }
 
     pub fn scroll_down(&mut self) {
-        let next = match self.mangas_found_list.state.selected {
-            Some(index) => {
-                if index == self.mangas_found_list.widget.mangas.len().saturating_sub(1) {
-                    0
-                } else {
-                    index.saturating_add(1)
-                }
-            }
-            None => self.mangas_found_list.state.selected().unwrap_or(0),
-        };
-        self.mangas_found_list.state.select(Some(next));
+        self.mangas_found_list.state.next();
     }
 
     pub fn scroll_up(&mut self) {
-        let next_index = match self.mangas_found_list.state.selected() {
-            Some(index) => {
-                if index == 0 {
-                    self.mangas_found_list.widget.mangas.len().saturating_sub(1)
-                } else {
-                    index.saturating_sub(1)
-                }
-            }
-            None => 1,
-        };
-        self.mangas_found_list.state.select(Some(next_index));
+        self.mangas_found_list.state.previous();
     }
 
     fn get_current_manga_selected(&mut self) -> Option<&mut MangaItem> {
-        if let Some(index) = self.mangas_found_list.state.selected() {
+        if let Some(index) = self.mangas_found_list.state.selected {
             return self.mangas_found_list.widget.mangas.get_mut(index);
         }
         None
     }
-
-    fn render_manga_preview(&mut self, area: Rect, buf: &mut Buffer) {
-        let current_manga_selected = self.get_current_manga_selected();
-        if let Some(manga) = current_manga_selected {
-            let preview = MangaPreview::new(
-                manga.title.clone(),
-                manga.description.clone(),
-                Some(&[2, 3, 4, 5]),
-            );
-            preview.render(area, buf);
-        }
-    }
-
 }

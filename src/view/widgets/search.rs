@@ -1,21 +1,28 @@
+use std::io::Cursor;
+
+use bytes::Bytes;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{self, Constraint, Layout, Rect};
 use ratatui::style::{Color, Style, Stylize};
 use ratatui::text::Line;
 use ratatui::widgets::{
     Block, List, ListDirection, ListItem, ListState, Paragraph, StatefulWidget, StatefulWidgetRef,
-    Widget,
+    Widget, Wrap,
 };
+use ratatui_image::picker::Picker;
+use ratatui_image::StatefulImage;
 use tui_widget_list::PreRender;
 
 use crate::backend::Data;
 
 #[derive(Default, Clone)]
 pub struct MangaItem {
+    pub id: String,
     pub title: String,
     pub description: String,
     pub tags: Vec<String>,
     pub img_url: Option<String>,
+    pub img_bytes: Option<Bytes>,
     pub style: Style,
 }
 
@@ -31,10 +38,39 @@ impl Widget for MangaItem {
         let [cover_area, manga_details_area] = layout.areas(area);
 
         Block::bordered().render(cover_area, buf);
+
+        if let Some(bytes) = self.img_bytes {
+            let mut picker = Picker::from_termios().unwrap();
+            // Guess the protocol.
+            picker.guess_protocol();
+
+            // Load an image with the image crate.
+
+            let dyn_img = image::io::Reader::new(Cursor::new(bytes))
+                .with_guessed_format()
+                .unwrap();
+
+            // Create the Protocol which will be used by the widget.
+            let mut image = picker.new_resize_protocol(dyn_img.decode().unwrap());
+
+            let image_wid = StatefulImage::new(None);
+
+            StatefulWidget::render(image_wid, cover_area, buf, &mut image);
+        }
+
         Block::bordered()
-            .title(self.title.clone())
+            .title(self.title)
             .style(self.style)
             .render(manga_details_area, buf);
+
+        let inner = manga_details_area.inner(&layout::Margin {
+            horizontal: 1,
+            vertical: 1,
+        });
+
+        Paragraph::new(self.img_url.unwrap_or_default())
+            .wrap(Wrap { trim: true })
+            .render(inner, buf);
     }
 }
 
@@ -45,12 +81,13 @@ impl PreRender for MangaItem {
                 .bg(Color::Rgb(255, 153, 0))
                 .fg(Color::Rgb(28, 28, 32));
         }
-        1
+        15
     }
 }
 
 impl From<Data> for MangaItem {
     fn from(value: Data) -> Self {
+        let id = value.id;
         let title = value.attributes.title.en;
 
         let description = match value.attributes.description {
@@ -78,23 +115,26 @@ impl From<Data> for MangaItem {
             None => None,
         };
 
-        Self::new(title, description, tags, img_url)
+        Self::new(id, title, description, tags, img_url)
     }
 }
 
 impl MangaItem {
     pub fn new(
+        id: String,
         title: String,
         description: String,
         tags: Vec<String>,
         img_url: Option<String>,
     ) -> Self {
         Self {
+            id,
             title,
             description,
             tags,
             img_url,
-            style : Style::default(),
+            img_bytes: None,
+            style: Style::default(),
         }
     }
 }
@@ -129,35 +169,5 @@ impl StatefulWidgetRef for ListMangasFoundWidget {
     fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         let list = tui_widget_list::List::new(self.mangas.clone());
         StatefulWidget::render(list, area, buf, state);
-    }
-}
-
-#[derive(Default)]
-pub struct MangaPreview<'a> {
-    title: String,
-    description: String,
-    image_data: Option<&'a [u8]>,
-}
-
-impl<'a> MangaPreview<'a> {
-    pub fn new(title: String, description: String, image_data: Option<&'a [u8]>) -> Self {
-        Self {
-            title,
-            description,
-            image_data,
-        }
-    }
-}
-
-impl Widget for MangaPreview<'_> {
-    fn render(self, area: Rect, buf: &mut Buffer)
-    where
-        Self: Sized,
-    {
-        let block = Block::bordered().title(self.title);
-
-        Paragraph::new(self.description)
-            .block(block)
-            .render(area, buf);
     }
 }
