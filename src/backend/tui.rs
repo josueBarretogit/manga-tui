@@ -74,7 +74,7 @@ pub async fn run_app<B: Backend>(backend: B) -> Result<(), Box<dyn Error>> {
 
     let mut app = App::new(action_tx.clone());
 
-    let tick_rate = std::time::Duration::from_millis(250);
+    let tick_rate = std::time::Duration::from_millis(10);
 
     handle_events(tick_rate, event_tx);
 

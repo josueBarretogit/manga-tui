@@ -1,4 +1,5 @@
 use std::io::Cursor;
+use std::sync::mpsc::Sender;
 
 use bytes::Bytes;
 use ratatui::buffer::Buffer;
@@ -10,10 +11,79 @@ use ratatui::widgets::{
     Widget, Wrap,
 };
 use ratatui_image::picker::Picker;
-use ratatui_image::StatefulImage;
+use ratatui_image::protocol::StatefulProtocol;
+use ratatui_image::{Resize, StatefulImage};
 use tui_widget_list::PreRender;
 
 use crate::backend::Data;
+
+
+
+
+/// A widget that uses a custom ThreadProtocol as state to offload resizing and encoding to a
+/// background thread.
+pub struct ThreadImage {
+    resize: Resize,
+}
+
+impl ThreadImage {
+    fn new() -> ThreadImage {
+        ThreadImage {
+            resize: Resize::Fit(None),
+        }
+    }
+
+    pub fn resize(mut self, resize: Resize) -> ThreadImage {
+        self.resize = resize;
+        self
+    }
+}
+
+impl StatefulWidget for ThreadImage {
+    type State = ThreadProtocol;
+
+    fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+        state.inner = match state.inner.take() {
+            // We have the `protocol` and should either resize or render.
+            Some(mut protocol) => {
+                // If it needs resizing (grow or shrink) then send it away instead of rendering.
+                if let Some(rect) = protocol.needs_resize(&self.resize, area) {
+                    state.tx.send((protocol, self.resize, rect)).unwrap();
+                    None
+                } else {
+                    protocol.render(area, buf);
+                    Some(protocol)
+                }
+            }
+            // We are waiting to get back the protocol.
+            None => None,
+        };
+    }
+}
+
+/// The state of a ThreadImage.
+///
+/// Has `inner` [ResizeProtocol] that is sent off to the `tx` mspc channel to do the
+/// `resize_encode()` work.
+#[derive(Clone)]
+pub struct ThreadProtocol {
+    pub inner: Option<Box<dyn StatefulProtocol>>,
+    pub tx: Sender<(Box<dyn StatefulProtocol>, Resize, Rect)>,
+}
+
+impl ThreadProtocol {
+    pub fn new(
+        tx: Sender<(Box<dyn StatefulProtocol>, Resize, Rect)>,
+        inner: Box<dyn StatefulProtocol>,
+    ) -> ThreadProtocol {
+        ThreadProtocol {
+            inner: Some(inner),
+            tx,
+        }
+    }
+}
+
+
 
 #[derive(Default, Clone)]
 pub struct MangaItem {
@@ -24,6 +94,7 @@ pub struct MangaItem {
     pub img_url: Option<String>,
     pub img_bytes: Option<Bytes>,
     pub style: Style,
+    pub image_state : Option<ThreadProtocol>
 }
 
 impl Widget for MangaItem {
@@ -39,23 +110,9 @@ impl Widget for MangaItem {
 
         Block::bordered().render(cover_area, buf);
 
-        if let Some(bytes) = self.img_bytes {
-            let mut picker = Picker::from_termios().unwrap();
-            // Guess the protocol.
-            picker.guess_protocol();
-
-            // Load an image with the image crate.
-
-            let dyn_img = image::io::Reader::new(Cursor::new(bytes))
-                .with_guessed_format()
-                .unwrap();
-
-            // Create the Protocol which will be used by the widget.
-            let mut image = picker.new_resize_protocol(dyn_img.decode().unwrap());
-
-            let image_wid = StatefulImage::new(None);
-
-            StatefulWidget::render(image_wid, cover_area, buf, &mut image);
+        if let Some(mut state) = self.image_state {
+            let image = ThreadImage::new().resize(Resize::Fit(None));
+            StatefulWidget::render(image, cover_area, buf, &mut state)
         }
 
         Block::bordered()
@@ -68,7 +125,7 @@ impl Widget for MangaItem {
             vertical: 1,
         });
 
-        Paragraph::new(self.img_url.unwrap_or_default())
+        Paragraph::new(self.description)
             .wrap(Wrap { trim: true })
             .render(inner, buf);
     }
@@ -134,6 +191,7 @@ impl MangaItem {
             tags,
             img_url,
             img_bytes: None,
+            image_state : None,
             style: Style::default(),
         }
     }

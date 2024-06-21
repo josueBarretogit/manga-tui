@@ -1,3 +1,6 @@
+use std::io::Cursor;
+use std::thread;
+
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
 use crate::backend::SearchMangaResponse;
@@ -11,6 +14,9 @@ use ratatui::widgets::ListState;
 use ratatui::widgets::StatefulWidgetRef;
 use ratatui::widgets::{Block, Paragraph, Widget, WidgetRef};
 use ratatui::Frame;
+use ratatui_image::picker::Picker;
+use ratatui_image::protocol::StatefulProtocol;
+use ratatui_image::Resize;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
@@ -34,6 +40,7 @@ pub enum SearchPageActions {
     ScrollUp,
     ScrollDown,
     LoadCover(Bytes, usize),
+    ResizeImg(Box<dyn StatefulProtocol>, usize)
 }
 
 #[derive(Default, PartialEq, Eq, PartialOrd, Ord)]
@@ -94,7 +101,7 @@ impl Component<SearchPageActions> for SearchPage {
                                     .unwrap();
                             }
                         }
-                        Err(e) => {
+                        Err(_) => {
                             tx.send(SearchPageActions::LoadMangasFound(None)).unwrap();
                         }
                     }
@@ -138,7 +145,36 @@ impl Component<SearchPageActions> for SearchPage {
             SearchPageActions::ScrollUp => self.scroll_up(),
             SearchPageActions::ScrollDown => self.scroll_down(),
             SearchPageActions::LoadCover(bytes, index) => {
-                self.mangas_found_list.widget.mangas[index].img_bytes = Some(bytes);
+                let mut picker = Picker::from_termios().unwrap();
+                // Guess the protocol.
+                picker.guess_protocol();
+                let action_tx = self.action_tx.clone();
+
+                let (tx_worker, rec_worker) =
+                    std::sync::mpsc::channel::<(Box<dyn StatefulProtocol>, Resize, Rect)>();
+                // Load an image with the image crate.
+                //
+                
+
+                let dyn_img = image::io::Reader::new(Cursor::new(bytes))
+                    .with_guessed_format()
+                    .unwrap();
+
+                // this is the part that lags the application
+                let image = picker.new_resize_protocol(dyn_img.decode().unwrap());
+
+                self.mangas_found_list.widget.mangas[index].image_state =
+                    Some(ThreadProtocol::new(tx_worker.clone(), image));
+                thread::spawn(move || loop {
+                    if let Ok((mut protocol, resize, area)) = rec_worker.recv() {
+                        protocol.resize_encode(&resize, None, area);
+                        action_tx.send(SearchPageActions::ResizeImg(protocol, index)).unwrap();
+                    }
+                });
+            }
+            SearchPageActions::ResizeImg(protocol, index) => {
+               self.mangas_found_list.widget.mangas[index].image_state.as_mut().unwrap().inner = Some(protocol);
+
             }
         }
     }
