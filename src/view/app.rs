@@ -26,11 +26,12 @@ pub enum AppState {
 }
 
 pub struct App {
+    pub picker: Picker,
     pub action_tx: UnboundedSender<Action>,
     pub state: AppState,
     pub current_tab: SelectedTabs,
     pub search_page: SearchPage,
-    fetch_client : MangadexClient,
+    fetch_client: MangadexClient,
 }
 
 impl Component<Action> for App {
@@ -38,7 +39,6 @@ impl Component<Action> for App {
         let main_layout = Layout::default()
             .direction(layout::Direction::Vertical)
             .constraints([Constraint::Percentage(7), Constraint::Percentage(93)]);
-
 
         let [top_tabs_area, page_area] = main_layout.areas(area);
 
@@ -76,17 +76,22 @@ impl Component<Action> for App {
 
 impl App {
     pub fn new(action_tx: UnboundedSender<Action>) -> Self {
+        let mut picker = Picker::from_termios().unwrap();
+        // Guess the protocol.
+        picker.guess_protocol();
+
         let user_agent = format!("manga-tui/0.1.0 {}", std::env::consts::OS);
 
-        let mangadex_client = MangadexClient::new(Client::builder().user_agent(user_agent).build().unwrap());
+        let mangadex_client =
+            MangadexClient::new(Client::builder().user_agent(user_agent).build().unwrap());
 
         App {
+            picker,
             current_tab: SelectedTabs::default(),
-            search_page: SearchPage::init(mangadex_client.clone()),
+            search_page: SearchPage::init(mangadex_client.clone(), picker),
             action_tx,
             state: AppState::Runnning,
             fetch_client: mangadex_client,
-
         }
     }
 

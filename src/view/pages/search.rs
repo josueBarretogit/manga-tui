@@ -1,5 +1,5 @@
 use std::io::Cursor;
-use std::sync::mpsc::TryRecvError;
+use std::ops::Deref;
 use std::thread;
 
 use crate::backend::fetch::MangadexClient;
@@ -12,13 +12,13 @@ use crossterm::event::{self, KeyCode, KeyEventKind};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{self, Constraint, Direction, Layout, Offset, Rect};
 use ratatui::widgets::ListState;
+use ratatui::widgets::StatefulWidget;
 use ratatui::widgets::StatefulWidgetRef;
 use ratatui::widgets::{Block, Paragraph, Widget, WidgetRef};
 use ratatui::Frame;
 use ratatui_image::picker::Picker;
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::Resize;
-use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
@@ -34,8 +34,10 @@ enum State {
     Normal,
 }
 
-enum PageEstate {
+enum SearchPageEvents {
     Redraw(Box<dyn StatefulProtocol>, usize),
+    LoadCover(Bytes, usize),
+    LoadMangasFound(Option<SearchMangaResponse>),
 }
 
 pub enum SearchPageActions {
@@ -45,8 +47,6 @@ pub enum SearchPageActions {
     LoadMangasFound(Option<SearchMangaResponse>),
     ScrollUp,
     ScrollDown,
-    LoadCover(Bytes, usize),
-    ResizeImg(Box<dyn StatefulProtocol>, usize),
 }
 
 #[derive(Default, PartialEq, Eq, PartialOrd, Ord)]
@@ -58,10 +58,11 @@ pub enum InputMode {
 
 ///This is the "page" where the user can search for a manga
 pub struct SearchPage {
+    picker : Picker,
     action_tx: UnboundedSender<SearchPageActions>,
     pub action_rx: UnboundedReceiver<SearchPageActions>,
-    action_event_tx: UnboundedSender<PageEstate>,
-    event_rx: UnboundedReceiver<PageEstate>,
+    action_event_tx: UnboundedSender<SearchPageEvents>,
+    event_rx: UnboundedReceiver<SearchPageEvents>,
     pub input_mode: InputMode,
     search_bar: Input,
     fetch_client: MangadexClient,
@@ -73,6 +74,7 @@ pub struct SearchPage {
 struct MangasFoundList {
     widget: ListMangasFoundWidget,
     state: tui_widget_list::ListState,
+    cover_list_state : tui_widget_list::ListState,
     page: u16,
 }
 
@@ -86,7 +88,7 @@ impl Component<SearchPageActions> for SearchPage {
 
         self.render_input_area(input_area, frame);
 
-        self.render_manga_area(manga_area, frame.buffer_mut());
+        self.render_search_results(manga_area, frame.buffer_mut());
     }
 
     fn update(&mut self, action: SearchPageActions) {
@@ -138,9 +140,6 @@ impl Component<SearchPageActions> for SearchPage {
                                     client.get_cover_for_manga(&manga_id, &file_name).await;
                                 match img_bytes {
                                     Ok(bytes) => {
-                                        action_tx
-                                            .send(SearchPageActions::LoadCover(bytes, index))
-                                            .unwrap();
                                     }
                                     Err(e) => println!("{e}"),
                                 }
@@ -152,36 +151,7 @@ impl Component<SearchPageActions> for SearchPage {
             }
             SearchPageActions::ScrollUp => self.scroll_up(),
             SearchPageActions::ScrollDown => self.scroll_down(),
-            SearchPageActions::LoadCover(bytes, index) => {
-                let mut picker = Picker::from_termios().unwrap();
-                // Guess the protocol.
-                picker.guess_protocol();
-                let action_tx = self.action_event_tx.clone();
-
-                let (tx_worker, rec_worker) =
-                    std::sync::mpsc::channel::<(Box<dyn StatefulProtocol>, Resize, Rect)>();
-                // Load an image with the image crate.
-                //
-
-                let dyn_img = image::io::Reader::new(Cursor::new(bytes))
-                    .with_guessed_format()
-                    .unwrap();
-
-                // this is the part that lags the application
-                let image = picker.new_resize_protocol(dyn_img.decode().unwrap());
-
-                self.mangas_found_list.widget.mangas[index].image_state =
-                    Some(ThreadProtocol::new(tx_worker.clone(), image));
-                thread::spawn(move || loop {
-                    match rec_worker.recv() {
-                        Ok((mut protocol, resize, area)) => {
-                            protocol.resize_encode(&resize, None, area);
-                            action_tx.send(PageEstate::Redraw(protocol, index)).unwrap();
-                        }
-                        Err(RecvError) => break,
-                    }
-                });
-            }
+            
             _ => {}
         }
     }
@@ -213,20 +183,6 @@ impl Component<SearchPageActions> for SearchPage {
                 },
             },
             Events::Tick => {
-                if !self.mangas_found_list.widget.mangas.is_empty() {
-                    if let Ok(event) = self.event_rx.try_recv() {
-                        match event {
-                            PageEstate::Redraw(protocol, index) => {
-                                if let Some(pro) = self.mangas_found_list.widget.mangas[index]
-                                    .image_state
-                                    .as_mut()
-                                {
-                                    pro.inner = Some(protocol)
-                                }
-                            }
-                        }
-                    }
-                }
             }
             _ => {}
         }
@@ -234,11 +190,12 @@ impl Component<SearchPageActions> for SearchPage {
 }
 
 impl SearchPage {
-    pub fn init(client: MangadexClient) -> Self {
+    pub fn init(client: MangadexClient, picker : Picker) -> Self {
         let (action_tx, action_rx) = mpsc::unbounded_channel::<SearchPageActions>();
-        let (state_tx, state_rx) = mpsc::unbounded_channel::<PageEstate>();
+        let (state_tx, state_rx) = mpsc::unbounded_channel::<SearchPageEvents>();
 
         Self {
+            picker,
             action_tx,
             action_rx,
             action_event_tx: state_tx,
@@ -279,13 +236,28 @@ impl SearchPage {
         }
     }
 
-    fn render_manga_area(&mut self, area: Rect, buf: &mut Buffer) {
+    fn render_search_results(&mut self, area: Rect, buf: &mut Buffer) {
+        let layout = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Max(30), Constraint::Fill(1)]);
+
+        let [cover_area, mangas_area] = layout.areas(area);
+
         if self.state == State::Normal || self.state == State::Loading {
             Block::bordered().render(area, buf);
         } else {
+            let mut covers : Vec<MangaCover> = vec![];
+
+            for manga in &self.mangas_found_list.widget.mangas {
+                covers.push(MangaCover::new());
+            }
+
+            let covers_list = tui_widget_list::List::new(covers);
+            StatefulWidget::render(covers_list, area, buf, &mut self.mangas_found_list.cover_list_state);
+            
             StatefulWidgetRef::render_ref(
                 &self.mangas_found_list.widget,
-                area,
+                mangas_area,
                 buf,
                 &mut self.mangas_found_list.state,
             );
@@ -298,10 +270,12 @@ impl SearchPage {
 
     pub fn scroll_down(&mut self) {
         self.mangas_found_list.state.next();
+        self.mangas_found_list.cover_list_state.next();
     }
 
     pub fn scroll_up(&mut self) {
         self.mangas_found_list.state.previous();
+        self.mangas_found_list.cover_list_state.previous();
     }
 
     fn get_current_manga_selected(&mut self) -> Option<&mut MangaItem> {
@@ -311,5 +285,4 @@ impl SearchPage {
         None
     }
 
-    fn redraw_cover() {}
 }
