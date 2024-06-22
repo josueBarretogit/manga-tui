@@ -1,4 +1,5 @@
 use std::io::Cursor;
+use std::sync::mpsc::TryRecvError;
 use std::thread;
 
 use crate::backend::fetch::MangadexClient;
@@ -17,6 +18,7 @@ use ratatui::Frame;
 use ratatui_image::picker::Picker;
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::Resize;
+use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
@@ -32,6 +34,10 @@ enum State {
     Normal,
 }
 
+enum PageEstate {
+    Redraw(Box<dyn StatefulProtocol>, usize),
+}
+
 pub enum SearchPageActions {
     StartTyping,
     StopTyping,
@@ -40,7 +46,7 @@ pub enum SearchPageActions {
     ScrollUp,
     ScrollDown,
     LoadCover(Bytes, usize),
-    ResizeImg(Box<dyn StatefulProtocol>, usize)
+    ResizeImg(Box<dyn StatefulProtocol>, usize),
 }
 
 #[derive(Default, PartialEq, Eq, PartialOrd, Ord)]
@@ -54,6 +60,8 @@ pub enum InputMode {
 pub struct SearchPage {
     action_tx: UnboundedSender<SearchPageActions>,
     pub action_rx: UnboundedReceiver<SearchPageActions>,
+    action_event_tx: UnboundedSender<PageEstate>,
+    event_rx: UnboundedReceiver<PageEstate>,
     pub input_mode: InputMode,
     search_bar: Input,
     fetch_client: MangadexClient,
@@ -134,7 +142,7 @@ impl Component<SearchPageActions> for SearchPage {
                                             .send(SearchPageActions::LoadCover(bytes, index))
                                             .unwrap();
                                     }
-                                    Err(_) => todo!(),
+                                    Err(e) => println!("{e}"),
                                 }
                             });
                         }
@@ -148,13 +156,12 @@ impl Component<SearchPageActions> for SearchPage {
                 let mut picker = Picker::from_termios().unwrap();
                 // Guess the protocol.
                 picker.guess_protocol();
-                let action_tx = self.action_tx.clone();
+                let action_tx = self.action_event_tx.clone();
 
                 let (tx_worker, rec_worker) =
                     std::sync::mpsc::channel::<(Box<dyn StatefulProtocol>, Resize, Rect)>();
                 // Load an image with the image crate.
                 //
-                
 
                 let dyn_img = image::io::Reader::new(Cursor::new(bytes))
                     .with_guessed_format()
@@ -166,21 +173,21 @@ impl Component<SearchPageActions> for SearchPage {
                 self.mangas_found_list.widget.mangas[index].image_state =
                     Some(ThreadProtocol::new(tx_worker.clone(), image));
                 thread::spawn(move || loop {
-                    if let Ok((mut protocol, resize, area)) = rec_worker.recv() {
-                        protocol.resize_encode(&resize, None, area);
-                        action_tx.send(SearchPageActions::ResizeImg(protocol, index)).unwrap();
+                    match rec_worker.recv() {
+                        Ok((mut protocol, resize, area)) => {
+                            protocol.resize_encode(&resize, None, area);
+                            action_tx.send(PageEstate::Redraw(protocol, index)).unwrap();
+                        }
+                        Err(RecvError) => break,
                     }
                 });
             }
-            SearchPageActions::ResizeImg(protocol, index) => {
-               self.mangas_found_list.widget.mangas[index].image_state.as_mut().unwrap().inner = Some(protocol);
-
-            }
+            _ => {}
         }
     }
     fn handle_events(&mut self, events: Events) {
-        if let Events::Key(key_event) = events {
-            match self.input_mode {
+        match events {
+            Events::Key(key_event) => match self.input_mode {
                 InputMode::Idle => match key_event.code {
                     KeyCode::Char('s') => {
                         self.action_tx.send(SearchPageActions::StartTyping).unwrap();
@@ -204,7 +211,24 @@ impl Component<SearchPageActions> for SearchPage {
                         self.search_bar.handle_event(&event::Event::Key(key_event));
                     }
                 },
+            },
+            Events::Tick => {
+                if !self.mangas_found_list.widget.mangas.is_empty() {
+                    if let Ok(event) = self.event_rx.try_recv() {
+                        match event {
+                            PageEstate::Redraw(protocol, index) => {
+                                if let Some(pro) = self.mangas_found_list.widget.mangas[index]
+                                    .image_state
+                                    .as_mut()
+                                {
+                                    pro.inner = Some(protocol)
+                                }
+                            }
+                        }
+                    }
+                }
             }
+            _ => {}
         }
     }
 }
@@ -212,10 +236,13 @@ impl Component<SearchPageActions> for SearchPage {
 impl SearchPage {
     pub fn init(client: MangadexClient) -> Self {
         let (action_tx, action_rx) = mpsc::unbounded_channel::<SearchPageActions>();
+        let (state_tx, state_rx) = mpsc::unbounded_channel::<PageEstate>();
 
         Self {
             action_tx,
             action_rx,
+            action_event_tx: state_tx,
+            event_rx: state_rx,
             input_mode: InputMode::default(),
             search_bar: Input::default(),
             fetch_client: client,
@@ -283,4 +310,6 @@ impl SearchPage {
         }
         None
     }
+
+    fn redraw_cover() {}
 }

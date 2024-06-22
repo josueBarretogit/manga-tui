@@ -48,7 +48,7 @@ impl StatefulWidget for ThreadImage {
             Some(mut protocol) => {
                 // If it needs resizing (grow or shrink) then send it away instead of rendering.
                 if let Some(rect) = protocol.needs_resize(&self.resize, area) {
-                    state.tx.send((protocol, self.resize, rect)).unwrap();
+                    state.tx.send((protocol, self.resize, rect)).unwrap_or(());
                     None
                 } else {
                     protocol.render(area, buf);
@@ -104,7 +104,7 @@ impl Widget for MangaItem {
     {
         let layout = Layout::default()
             .direction(layout::Direction::Horizontal)
-            .constraints([Constraint::Max(20), Constraint::Fill(1)]);
+            .constraints([Constraint::Max(30), Constraint::Fill(1)]);
 
         let [cover_area, manga_details_area] = layout.areas(area);
 
