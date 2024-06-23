@@ -10,6 +10,7 @@ use crate::view::widgets::Component;
 use bytes::Bytes;
 use crossterm::event::KeyEvent;
 use crossterm::event::{self, KeyCode, KeyEventKind};
+use image::DynamicImage;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{self, Constraint, Direction, Layout, Offset, Rect};
 use ratatui::widgets::ListState;
@@ -38,6 +39,7 @@ enum PageState {
 /// This should happend "in the background"
 enum SearchPageEvents {
     LoadCoverBytes(Option<Bytes>, usize),
+    LoadProtocols(Option<Box<dyn Protocol>>, usize),
     LoadMangasFound(Option<SearchMangaResponse>),
     StartSearchingCovers,
 }
@@ -75,7 +77,7 @@ pub struct SearchPage {
 #[derive(Default)]
 struct MangasFoundList {
     widget: ListMangasFoundWidget,
-    cover_protocols: Vec<Box<dyn Protocol>>,
+    covers: Vec<MangaCover>,
     state: tui_widget_list::ListState,
     cover_list_state: tui_widget_list::ListState,
     page: u16,
@@ -197,9 +199,8 @@ impl SearchPage {
         } else {
             let mut covers: Vec<MangaCover> = vec![];
 
-            for manga in &self.mangas_found_list.widget.mangas {
-                let mut cover = MangaCover::new();
-                covers.push(cover);
+            for cover in self.mangas_found_list.covers.iter() {
+                covers.push(cover.clone());
             }
 
             let covers_list = tui_widget_list::List::new(covers);
@@ -285,14 +286,7 @@ impl SearchPage {
                         None => self.mangas_found_list.widget = ListMangasFoundWidget::not_found(),
                     }
                 }
-                SearchPageEvents::LoadCoverBytes(maybe_bytes, index_cover) => {
-                    match maybe_bytes {
-                        Some(bytes_found) => {
-                            // self.mangas_found_list.cover_protocols.push(protocol_found);
-                        }
-                        None => {}
-                    }
-                }
+
                 SearchPageEvents::StartSearchingCovers => {
                     for (index, manga) in self.mangas_found_list.widget.mangas.iter().enumerate() {
                         let manga_id = manga.id.clone();
@@ -316,6 +310,51 @@ impl SearchPage {
                         });
                     }
                 }
+                SearchPageEvents::LoadProtocols(maybe_protocol, index_cover) => {
+                    match maybe_protocol {
+                        Some(protocol) => {
+                            self.mangas_found_list.covers[index_cover] = Some(protocol)
+                        }
+                        None => self.mangas_found_list.covers[index_cover] = None,
+                    }
+                }
+                SearchPageEvents::LoadCoverBytes(maybe_bytes, index_cover) => match maybe_bytes {
+                    Some(bytes_found) => {
+                        let maybe_image = image::io::Reader::new(Cursor::new(bytes_found))
+                            .with_guessed_format()
+                            .unwrap()
+                            .decode();
+                        match maybe_image {
+                            Ok(image) => {
+                                let protocol = self.picker.new_protocol(
+                                    image,
+                                    Rect {
+                                        x: 10,
+                                        y: 10,
+                                        width: 20,
+                                        height: 20,
+                                    },
+                                    Resize::Crop,
+                                );
+                                self.event_tx
+                                    .send(SearchPageEvents::LoadProtocols(
+                                        Some(protocol.unwrap()),
+                                        index_cover,
+                                    ))
+                                    .unwrap();
+                            }
+                            Err(_) => {
+                                self.event_tx
+                                    .send(SearchPageEvents::LoadProtocols(None, index_cover))
+                                    .unwrap();
+                            }
+                        };
+                    }
+                    None => self
+                        .event_tx
+                        .send(SearchPageEvents::LoadProtocols(None, index_cover))
+                        .unwrap(),
+                },
             }
         }
     }

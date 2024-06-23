@@ -16,11 +16,12 @@ pub struct MangaCover {
     protocol: Option<Box<dyn Protocol>>,
 }
 
+
 impl MangaCover {
     pub fn new() -> Self {
         Self { protocol: None }
     }
-    pub fn set_protocol(mut self, protocol: Box<dyn Protocol>) -> Self {
+    pub fn set_protocol(&mut self, protocol: Box<dyn Protocol>) -> &mut Self {
         self.protocol = Some(protocol);
         self
     }
