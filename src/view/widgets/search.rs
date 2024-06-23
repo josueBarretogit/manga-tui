@@ -2,12 +2,10 @@ use bytes::Bytes;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{self, Constraint, Layout, Rect};
 use ratatui::style::{Color, Style, Stylize};
-use ratatui::text::Line;
 use ratatui::widgets::{
     Block, List, ListDirection, ListItem, ListState, Paragraph, StatefulWidget, StatefulWidgetRef,
     Widget, Wrap,
 };
-use ratatui_image::picker::Picker;
 use ratatui_image::protocol::{self, Protocol, StatefulProtocol};
 use ratatui_image::{Image, Resize, StatefulImage};
 use tui_widget_list::PreRender;
@@ -166,8 +164,8 @@ impl ListMangasFoundWidget {
         Self { mangas }
     }
 
-    pub fn not_found() {
-        ListMangasFoundWidget::default();
+    pub fn not_found() -> Self {
+        ListMangasFoundWidget::default()
     }
 }
 
