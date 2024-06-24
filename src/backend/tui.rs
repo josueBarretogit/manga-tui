@@ -21,7 +21,6 @@ use crate::view::widgets::Component;
 
 pub enum Action {
     Quit,
-    Tick,
     NextTab,
     PreviousTab,
 }

@@ -26,6 +26,7 @@ pub enum AppState {
 }
 
 pub struct App {
+    picker : Picker,
     pub action_tx: UnboundedSender<Action>,
     pub state: AppState,
     pub current_tab: SelectedTabs,
@@ -78,11 +79,16 @@ impl App {
     pub fn new(action_tx: UnboundedSender<Action>) -> Self {
         let user_agent = format!("manga-tui/0.1.0 {}", std::env::consts::OS);
 
+        let mut picker = Picker::from_termios().unwrap();
+
+        picker.guess_protocol();
+
         let mangadex_client = MangadexClient::new(Client::builder().user_agent(user_agent).build().unwrap());
 
         App {
+            picker,
             current_tab: SelectedTabs::default(),
-            search_page: SearchPage::init(mangadex_client.clone()),
+            search_page: SearchPage::init(mangadex_client.clone(), picker),
             action_tx,
             state: AppState::Runnning,
             fetch_client: mangadex_client,

@@ -1,4 +1,3 @@
-use std::io::Cursor;
 use std::sync::mpsc::Sender;
 
 use bytes::Bytes;
@@ -17,8 +16,44 @@ use tui_widget_list::PreRender;
 
 use crate::backend::Data;
 
+pub struct Preview {
+    cover_image_state: Option<ThreadProtocol>,
+    title: String,
+    description: String,
+    categories: Vec<String>,
+}
 
+impl StatefulWidget for Preview {
+    type State = Option<ThreadProtocol>;
+    fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+        let layout = Layout::default()
+            .margin(1)
+            .direction(layout::Direction::Vertical)
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)]);
+        let [cover_area, details_area] = layout.areas(area);
 
+        match state.as_mut() {
+            Some(image_state) => {
+                let cover = ThreadImage::new().resize(Resize::Fit(None));
+                StatefulWidget::render(cover, cover_area, buf, image_state)
+            }
+            None => {
+                Block::bordered().render(cover_area, buf);
+            }
+        };
+
+        Block::bordered().render(details_area, buf);
+
+        let inner = details_area.inner(&layout::Margin {
+            horizontal: 1,
+            vertical: 1,
+        });
+
+        Paragraph::new(self.description)
+            .wrap(Wrap { trim: true })
+            .render(inner, buf);
+    }
+}
 
 /// A widget that uses a custom ThreadProtocol as state to offload resizing and encoding to a
 /// background thread.
@@ -83,8 +118,6 @@ impl ThreadProtocol {
     }
 }
 
-
-
 #[derive(Default, Clone)]
 pub struct MangaItem {
     pub id: String,
@@ -94,7 +127,7 @@ pub struct MangaItem {
     pub img_url: Option<String>,
     pub img_bytes: Option<Bytes>,
     pub style: Style,
-    pub image_state : Option<ThreadProtocol>
+    pub image_state: Option<ThreadProtocol>,
 }
 
 impl Widget for MangaItem {
@@ -191,7 +224,7 @@ impl MangaItem {
             tags,
             img_url,
             img_bytes: None,
-            image_state : None,
+            image_state: None,
             style: Style::default(),
         }
     }
