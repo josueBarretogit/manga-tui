@@ -13,6 +13,7 @@ use crossterm::terminal::{
 use futures::{FutureExt, StreamExt};
 use ratatui::backend::Backend;
 use ratatui::{Frame, Terminal};
+use ratatui_image::protocol::StatefulProtocol;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 
 use crate::view::app::{App, AppState};
@@ -30,6 +31,7 @@ pub enum Action {
 pub enum Events {
     Tick,
     Key(KeyEvent),
+    Redraw(Box<dyn StatefulProtocol>, usize),
     Mouse(MouseEvent),
 }
 
@@ -71,7 +73,7 @@ pub async fn run_app<B: Backend>(backend: B) -> Result<(), Box<dyn Error>> {
 
     terminal.show_cursor()?;
 
-    let mut app = App::new(action_tx.clone());
+    let mut app = App::new(action_tx.clone(), event_tx.clone());
 
     let tick_rate = std::time::Duration::from_millis(250);
 
@@ -82,7 +84,7 @@ pub async fn run_app<B: Backend>(backend: B) -> Result<(), Box<dyn Error>> {
             app.render(f.size(), f);
         })?;
 
-        if let Some(event) = event_rx.recv().await {
+        if let Ok(event) = event_rx.try_recv() {
             app.handle_events(event.clone());
             if app.current_tab == SelectedTabs::Search {
                 app.search_page.handle_events(event);
@@ -110,10 +112,8 @@ pub fn handle_events(tick_rate: Duration, event_tx: UnboundedSender<Events>) {
             let delay = tick_interval.tick();
             let event = reader.next().fuse();
             tokio::select! {
-
                 maybe_event = event => {
                     match maybe_event  {
-
                         Some(Ok(evt)) => {
                             match evt {
                                 crossterm::event::Event::Key(key) => {

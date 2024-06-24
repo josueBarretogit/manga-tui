@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use ::crossterm::event::{EventStream, KeyCode, KeyEventKind};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{self, Constraint, Layout, Rect};
@@ -31,7 +33,7 @@ pub struct App {
     pub state: AppState,
     pub current_tab: SelectedTabs,
     pub search_page: SearchPage,
-    fetch_client : MangadexClient,
+    fetch_client : Arc<MangadexClient>,
 }
 
 impl Component<Action> for App {
@@ -76,19 +78,19 @@ impl Component<Action> for App {
 }
 
 impl App {
-    pub fn new(action_tx: UnboundedSender<Action>) -> Self {
+    pub fn new(action_tx: UnboundedSender<Action>, event_tx : UnboundedSender<Events>) -> Self {
         let user_agent = format!("manga-tui/0.1.0 {}", std::env::consts::OS);
 
         let mut picker = Picker::from_termios().unwrap();
 
         picker.guess_protocol();
 
-        let mangadex_client = MangadexClient::new(Client::builder().user_agent(user_agent).build().unwrap());
+        let mangadex_client = Arc::new(MangadexClient::new(Client::builder().user_agent(user_agent).build().unwrap()));
 
         App {
             picker,
             current_tab: SelectedTabs::default(),
-            search_page: SearchPage::init(mangadex_client.clone(), picker),
+            search_page: SearchPage::init(Arc::clone(&mangadex_client), picker, event_tx),
             action_tx,
             state: AppState::Runnning,
             fetch_client: mangadex_client,
