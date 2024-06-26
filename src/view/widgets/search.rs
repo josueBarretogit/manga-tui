@@ -16,20 +16,45 @@ use tui_widget_list::PreRender;
 
 use crate::backend::Data;
 
-pub struct Preview {
+pub struct MangaPreview {
     cover_image_state: Option<ThreadProtocol>,
     title: String,
     description: String,
     categories: Vec<String>,
 }
 
-impl StatefulWidget for Preview {
+impl MangaPreview {
+    pub fn new(title: String, description: String, categories: Vec<String>) -> Self {
+        Self {
+            cover_image_state: None,
+            title,
+            description,
+            categories,
+        }
+    }
+
+    pub fn with_image_protocol(
+        title: String,
+        description: String,
+        categories: Vec<String>,
+        protocol: ThreadProtocol,
+    ) -> Self {
+        Self {
+            cover_image_state: Some(protocol),
+            title,
+            description,
+            categories,
+        }
+    }
+}
+
+impl StatefulWidget for MangaPreview {
     type State = Option<ThreadProtocol>;
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         let layout = Layout::default()
-            .margin(1)
             .direction(layout::Direction::Vertical)
             .constraints([Constraint::Percentage(50), Constraint::Percentage(50)]);
+
         let [cover_area, details_area] = layout.areas(area);
 
         match state.as_mut() {
@@ -38,10 +63,12 @@ impl StatefulWidget for Preview {
                 StatefulWidget::render(cover, cover_area, buf, image_state)
             }
             None => {
+                //Loading cover
                 Block::bordered().render(cover_area, buf);
             }
         };
 
+        // Manga details
         Block::bordered().render(details_area, buf);
 
         let inner = details_area.inner(&layout::Margin {
@@ -83,7 +110,7 @@ impl StatefulWidget for ThreadImage {
             Some(mut protocol) => {
                 // If it needs resizing (grow or shrink) then send it away instead of rendering.
                 if let Some(rect) = protocol.needs_resize(&self.resize, area) {
-                    state.tx.send((protocol, self.resize, rect)).unwrap_or(());
+                    state.tx.send((protocol, self.resize, rect)).unwrap();
                     None
                 } else {
                     protocol.render(area, buf);
@@ -135,32 +162,10 @@ impl Widget for MangaItem {
     where
         Self: Sized,
     {
-        let layout = Layout::default()
-            .direction(layout::Direction::Horizontal)
-            .constraints([Constraint::Max(30), Constraint::Fill(1)]);
-
-        let [cover_area, manga_details_area] = layout.areas(area);
-
-        Block::bordered().render(cover_area, buf);
-
-        if let Some(mut state) = self.image_state {
-            let image = ThreadImage::new().resize(Resize::Fit(None));
-            StatefulWidget::render(image, cover_area, buf, &mut state)
-        }
-
         Block::bordered()
             .title(self.title)
             .style(self.style)
-            .render(manga_details_area, buf);
-
-        let inner = manga_details_area.inner(&layout::Margin {
-            horizontal: 1,
-            vertical: 1,
-        });
-
-        Paragraph::new(self.description)
-            .wrap(Wrap { trim: true })
-            .render(inner, buf);
+            .render(area, buf);
     }
 }
 
@@ -171,7 +176,7 @@ impl PreRender for MangaItem {
                 .bg(Color::Rgb(255, 153, 0))
                 .fg(Color::Rgb(28, 28, 32));
         }
-        15
+        5
     }
 }
 

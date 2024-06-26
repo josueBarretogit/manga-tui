@@ -13,6 +13,7 @@ use crossterm::event::KeyEvent;
 use crossterm::event::{self, KeyCode, KeyEventKind};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{self, Constraint, Direction, Layout, Offset, Rect};
+use ratatui::widgets::StatefulWidget;
 use ratatui::widgets::StatefulWidgetRef;
 use ratatui::widgets::{Block, Paragraph, Widget, WidgetRef};
 use ratatui::Frame;
@@ -83,7 +84,7 @@ impl Component<SearchPageActions> for SearchPage {
     fn render(&mut self, area: Rect, frame: &mut Frame<'_>) {
         let search_page_layout = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Max(4), Constraint::Min(20)]);
+            .constraints([Constraint::Max(4), Constraint::Fill(1)]);
 
         let [input_area, manga_area] = search_page_layout.areas(area);
 
@@ -195,15 +196,42 @@ impl SearchPage {
     }
 
     fn render_manga_area(&mut self, area: Rect, buf: &mut Buffer) {
+        let layout = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(40), Constraint::Percentage(50)]);
+
+        let [manga_list_area, preview_area] = layout.areas(area);
+
         if self.state == State::Normal || self.state == State::Loading {
             Block::bordered().render(area, buf);
         } else {
             StatefulWidgetRef::render_ref(
                 &self.mangas_found_list.widget,
-                area,
+                manga_list_area,
                 buf,
                 &mut self.mangas_found_list.state,
             );
+
+            if let Some(manga_select) = self.get_current_manga_selected() {
+                StatefulWidget::render(
+                    match manga_select.image_state.as_ref() {
+                        Some(state) => MangaPreview::with_image_protocol(
+                            manga_select.title.clone(),
+                            manga_select.description.clone(),
+                            vec![],
+                            state.clone(),
+                        ),
+                        None => MangaPreview::new(
+                            manga_select.title.clone(),
+                            manga_select.description.clone(),
+                            vec![],
+                        ),
+                    },
+                    preview_area,
+                    buf,
+                    &mut None,
+                );
+            }
         }
     }
 
@@ -258,10 +286,16 @@ impl SearchPage {
                     self.state = State::DisplayingSearchResponse;
                     match response {
                         Some(mangas_found) => {
-                            self.mangas_found_list.widget =
-                                ListMangasFoundWidget::from_response(mangas_found.data);
+                            let mut mangas: Vec<MangaItem> = vec![];
 
-                            self.event_tx.send(SearchPageEvents::SearchCovers).unwrap();
+
+                            for manga in mangas_found.data {
+                                let manga_id = manga.id.clone();
+                                let cover_file_name =
+                                mangas.push(MangaItem::from(manga));
+                            }
+
+                            self.mangas_found_list.widget = ListMangasFoundWidget::new(mangas);
                         }
                         None => self.mangas_found_list.widget = ListMangasFoundWidget::default(),
                     }
