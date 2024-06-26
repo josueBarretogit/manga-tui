@@ -5,6 +5,7 @@ use crate::backend::tui::Events;
 
 pub mod search;
 
+
 pub trait Component<A> {
     ///Handles the logic for drawing to the screen
     fn render(&mut self, area: Rect, frame : &mut Frame<'_>);

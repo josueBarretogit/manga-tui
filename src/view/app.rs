@@ -28,12 +28,12 @@ pub enum AppState {
 }
 
 pub struct App {
-    picker : Picker,
+    picker: Picker,
     pub action_tx: UnboundedSender<Action>,
     pub state: AppState,
     pub current_tab: SelectedTabs,
     pub search_page: SearchPage,
-    fetch_client : Arc<MangadexClient>,
+    fetch_client: Arc<MangadexClient>,
 }
 
 impl Component<Action> for App {
@@ -41,7 +41,6 @@ impl Component<Action> for App {
         let main_layout = Layout::default()
             .direction(layout::Direction::Vertical)
             .constraints([Constraint::Percentage(7), Constraint::Percentage(93)]);
-
 
         let [top_tabs_area, page_area] = main_layout.areas(area);
 
@@ -78,14 +77,21 @@ impl Component<Action> for App {
 }
 
 impl App {
-    pub fn new(action_tx: UnboundedSender<Action>, event_tx : UnboundedSender<Events>) -> Self {
-        let user_agent = format!("manga-tui/0.1.0 {}", std::env::consts::OS);
+    pub fn new(action_tx: UnboundedSender<Action>, event_tx: UnboundedSender<Events>) -> Self {
+        let user_agent = format!(
+            "manga-tui/0.beta1.0 ({}/{}/{})",
+            std::env::consts::FAMILY,
+            std::env::consts::OS,
+            std::env::consts::ARCH
+        );
 
         let mut picker = Picker::from_termios().unwrap();
 
         picker.guess_protocol();
 
-        let mangadex_client = Arc::new(MangadexClient::new(Client::builder().user_agent(user_agent).build().unwrap()));
+        let mangadex_client = Arc::new(MangadexClient::new(
+            Client::builder().user_agent(user_agent).build().unwrap(),
+        ));
 
         App {
             picker,
@@ -94,7 +100,6 @@ impl App {
             action_tx,
             state: AppState::Runnning,
             fetch_client: mangadex_client,
-
         }
     }
 

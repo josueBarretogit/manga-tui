@@ -77,7 +77,6 @@ pub struct SearchPage {
 struct MangasFoundList {
     widget: ListMangasFoundWidget,
     state: tui_widget_list::ListState,
-    page: u16,
 }
 
 impl Component<SearchPageActions> for SearchPage {
@@ -101,7 +100,7 @@ impl Component<SearchPageActions> for SearchPage {
                 self.state = State::SearchingMangas;
                 self.mangas_found_list.widget = ListMangasFoundWidget::default();
                 let tx = self.event_tx.clone();
-                let client = self.fetch_client.clone();
+                let client = Arc::clone(&self.fetch_client);
                 let manga_to_search = self.search_bar.value().to_string();
                 tokio::spawn(async move {
                     let search_response = client.search_mangas(&manga_to_search).await;
@@ -144,7 +143,11 @@ impl Component<SearchPageActions> for SearchPage {
 }
 
 impl SearchPage {
-    pub fn init(client: Arc<MangadexClient>, picker: Picker, event_tx: UnboundedSender<Events>) -> Self {
+    pub fn init(
+        client: Arc<MangadexClient>,
+        picker: Picker,
+        event_tx: UnboundedSender<Events>,
+    ) -> Self {
         let (action_tx, action_rx) = mpsc::unbounded_channel::<SearchPageActions>();
         let (local_event_tx, local_event) = mpsc::unbounded_channel::<SearchPageEvents>();
 
@@ -278,6 +281,7 @@ impl SearchPage {
 
                         self.mangas_found_list.widget.mangas[index].image_state =
                             Some(ThreadProtocol::new(tx_worker.clone(), image));
+
                         thread::spawn(move || loop {
                             match rec_worker.recv() {
                                 Ok((mut protocol, resize, area)) => {
@@ -296,25 +300,31 @@ impl SearchPage {
                         let event_tx = self.event_tx.clone();
                         let client = Arc::clone(&self.fetch_client);
                         let manga_id = manga.id.clone();
-                        let file_name = manga
-                            .img_url
-                            .clone()
-                            .unwrap_or(String::default().clone())
-                            .clone();
 
-                        tokio::spawn(async move {
-                            let img_bytes = client.get_cover_for_manga(&manga_id, &file_name).await;
-                            match img_bytes {
-                                Ok(bytes) => {
-                                    event_tx
-                                        .send(SearchPageEvents::LoadCover(Some(bytes), index))
-                                        .unwrap();
-                                }
-                                Err(e) => event_tx
-                                    .send(SearchPageEvents::LoadCover(None, index))
-                                    .unwrap(),
+                        let file_name = manga.img_url.clone();
+
+                        match file_name {
+                            Some(name) => {
+                                tokio::spawn(async move {
+                                    let img_bytes =
+                                        client.get_cover_for_manga(&manga_id, &name).await;
+                                    match img_bytes {
+                                        Ok(bytes) => {
+                                            event_tx
+                                                .send(SearchPageEvents::LoadCover(
+                                                    Some(bytes),
+                                                    index,
+                                                ))
+                                                .unwrap();
+                                        }
+                                        Err(e) => event_tx
+                                            .send(SearchPageEvents::LoadCover(None, index))
+                                            .unwrap(),
+                                    }
+                                });
                             }
-                        });
+                            None => {}
+                        }
                     }
                 }
             }
