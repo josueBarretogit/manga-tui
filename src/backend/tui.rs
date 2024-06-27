@@ -1,6 +1,6 @@
 use std::error::Error;
 use std::time::Duration;
-
+use ratatui::prelude::*;
 use color_eyre::config::HookBuilder;
 use crossterm::event::{
     poll, DisableMouseCapture, EnableMouseCapture, Event, EventStream, KeyCode, KeyEvent,
@@ -12,7 +12,6 @@ use crossterm::terminal::{
 };
 use futures::{FutureExt, StreamExt};
 use ratatui::backend::Backend;
-use ratatui::{Frame, Terminal};
 use ratatui_image::protocol::StatefulProtocol;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 

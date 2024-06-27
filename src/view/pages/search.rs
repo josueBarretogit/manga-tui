@@ -1,10 +1,11 @@
 use std::io::Cursor;
 use std::sync::Arc;
 use std::thread;
+use ratatui::prelude::*;
+use ratatui::widgets::*;
 
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
-use crate::backend::Description;
 use crate::backend::SearchMangaResponse;
 use crate::view::widgets::search::*;
 use crate::view::widgets::Component;
@@ -13,12 +14,6 @@ use crossterm::event::KeyEvent;
 use crossterm::event::{self, KeyCode, KeyEventKind};
 use image::io::Reader;
 use image::DynamicImage;
-use ratatui::buffer::Buffer;
-use ratatui::layout::{self, Constraint, Direction, Layout, Offset, Rect};
-use ratatui::widgets::StatefulWidget;
-use ratatui::widgets::StatefulWidgetRef;
-use ratatui::widgets::{Block, Paragraph, Widget, WidgetRef};
-use ratatui::Frame;
 use ratatui_image::picker::Picker;
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::Resize;
@@ -124,7 +119,6 @@ impl Component<SearchPageActions> for SearchPage {
             }
             SearchPageActions::ScrollUp => self.scroll_up(),
             SearchPageActions::ScrollDown => self.scroll_down(),
-            _ => {}
         }
     }
     fn handle_events(&mut self, events: Events) {
@@ -311,7 +305,7 @@ impl SearchPage {
                                     None => None,
                                 };
 
-                                match img_url {
+                                let handle = match img_url {
                                     Some(file_name) => {
                                         let handle = tokio::spawn(async move {
                                             let response = client
@@ -332,10 +326,13 @@ impl SearchPage {
                                                     .unwrap(),
                                             }
                                         });
+                                        Some(handle)
                                     }
-                                    None => tx
-                                        .send(SearchPageEvents::DecodeImage(None, manga_id))
-                                        .unwrap(),
+                                    None => {
+                                        tx.send(SearchPageEvents::DecodeImage(None, manga_id))
+                                            .unwrap();
+                                        None
+                                    }
                                 };
                                 mangas.push(MangaItem::from(manga.clone()));
                             }
@@ -375,7 +372,7 @@ impl SearchPage {
                         let tx = self.global_event_tx.clone();
 
                         let (tx_worker, rec_worker) =
-                            std::sync::mpsc::channel::<(Box<dyn StatefulProtocol>, Resize, Rect)>();
+                            std::sync::mpsc::channel::<(Box<dyn StatefulProtocol>, Resize, ratatui::layout::Rect)>();
 
                         let image = self.picker.new_resize_protocol(image);
 

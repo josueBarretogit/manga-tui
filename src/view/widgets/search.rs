@@ -1,17 +1,14 @@
-use std::sync::mpsc::Sender;
-
 use bytes::Bytes;
 use ratatui::buffer::Buffer;
-use ratatui::layout::{self, Constraint, Layout, Rect};
+use ratatui::layout::{self, Constraint, Layout};
 use ratatui::style::{Color, Style, Stylize};
-use ratatui::text::Line;
 use ratatui::widgets::{
     Block, List, ListDirection, ListItem, ListState, Paragraph, StatefulWidget, StatefulWidgetRef,
     Widget, Wrap,
 };
-use ratatui_image::picker::Picker;
 use ratatui_image::protocol::StatefulProtocol;
-use ratatui_image::{Resize, StatefulImage};
+use ratatui_image::Resize;
+use std::sync::mpsc::Sender;
 use tui_widget_list::PreRender;
 
 use crate::backend::Data;
@@ -50,14 +47,15 @@ impl MangaPreview {
 
 impl StatefulWidget for MangaPreview {
     type State = Option<ThreadProtocol>;
-    fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+
+    fn render(self, area: ratatui::prelude::Rect, buf: &mut Buffer, state: &mut Self::State) {
         let layout = Layout::default()
             .direction(layout::Direction::Vertical)
             .constraints([Constraint::Percentage(50), Constraint::Percentage(50)]);
 
         let [cover_area, details_area] = layout.areas(area);
 
-        match state.as_mut() {
+        match state {
             Some(image_state) => {
                 let cover = ThreadImage::new().resize(Resize::Fit(None));
                 StatefulWidget::render(cover, cover_area, buf, image_state)
@@ -104,7 +102,7 @@ impl ThreadImage {
 impl StatefulWidget for ThreadImage {
     type State = ThreadProtocol;
 
-    fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+    fn render(self, area: ratatui::prelude::Rect, buf: &mut ratatui::buffer::Buffer, state: &mut Self::State) {
         state.inner = match state.inner.take() {
             // We have the `protocol` and should either resize or render.
             Some(mut protocol) => {
@@ -130,12 +128,12 @@ impl StatefulWidget for ThreadImage {
 #[derive(Clone)]
 pub struct ThreadProtocol {
     pub inner: Option<Box<dyn StatefulProtocol>>,
-    pub tx: Sender<(Box<dyn StatefulProtocol>, Resize, Rect)>,
+    pub tx: Sender<(Box<dyn StatefulProtocol>, Resize, ratatui::prelude::Rect)>,
 }
 
 impl ThreadProtocol {
     pub fn new(
-        tx: Sender<(Box<dyn StatefulProtocol>, Resize, Rect)>,
+        tx: Sender<(Box<dyn StatefulProtocol>, Resize, ratatui::prelude::Rect)>,
         inner: Box<dyn StatefulProtocol>,
     ) -> ThreadProtocol {
         ThreadProtocol {
@@ -158,7 +156,7 @@ pub struct MangaItem {
 }
 
 impl Widget for MangaItem {
-    fn render(self, area: Rect, buf: &mut Buffer)
+    fn render(self, area: ratatui::prelude::Rect, buf: &mut Buffer)
     where
         Self: Sized,
     {
@@ -262,7 +260,7 @@ impl ListMangasFoundWidget {
 
 impl StatefulWidgetRef for ListMangasFoundWidget {
     type State = tui_widget_list::ListState;
-    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+    fn render_ref(&self, area: ratatui::prelude::Rect, buf: &mut Buffer, state: &mut Self::State) {
         let list = tui_widget_list::List::new(self.mangas.clone());
         StatefulWidget::render(list, area, buf, state);
     }
