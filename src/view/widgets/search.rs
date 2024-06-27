@@ -176,7 +176,7 @@ impl PreRender for MangaItem {
                 .bg(Color::Rgb(255, 153, 0))
                 .fg(Color::Rgb(28, 28, 32));
         }
-        5
+        2
     }
 }
 
