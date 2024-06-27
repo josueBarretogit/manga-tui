@@ -1,6 +1,6 @@
 use std::error::Error;
 use std::time::Duration;
-
+use ratatui::prelude::*;
 use color_eyre::config::HookBuilder;
 use crossterm::event::{
     poll, DisableMouseCapture, EnableMouseCapture, Event, EventStream, KeyCode, KeyEvent,
@@ -12,7 +12,6 @@ use crossterm::terminal::{
 };
 use futures::{FutureExt, StreamExt};
 use ratatui::backend::Backend;
-use ratatui::{Frame, Terminal};
 use ratatui_image::protocol::StatefulProtocol;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 
@@ -31,7 +30,7 @@ pub enum Action {
 pub enum Events {
     Tick,
     Key(KeyEvent),
-    Redraw(Box<dyn StatefulProtocol>, usize),
+    Redraw(Box<dyn StatefulProtocol>, String),
     Mouse(MouseEvent),
 }
 
@@ -95,7 +94,7 @@ pub async fn run_app<B: Backend>(backend: B) -> Result<(), Box<dyn Error>> {
             app.update(app_action);
         }
 
-        if let Ok(search_page_action) = app.search_page.action_rx.try_recv() {
+        if let Ok(search_page_action) = app.search_page.local_action_rx.try_recv() {
             app.search_page.update(search_page_action);
         }
     }

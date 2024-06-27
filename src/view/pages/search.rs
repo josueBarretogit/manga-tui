@@ -1,7 +1,8 @@
 use std::io::Cursor;
-use std::sync::mpsc::TryRecvError;
 use std::sync::Arc;
 use std::thread;
+use ratatui::prelude::*;
+use ratatui::widgets::*;
 
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
@@ -11,15 +12,11 @@ use crate::view::widgets::Component;
 use bytes::Bytes;
 use crossterm::event::KeyEvent;
 use crossterm::event::{self, KeyCode, KeyEventKind};
-use ratatui::buffer::Buffer;
-use ratatui::layout::{self, Constraint, Direction, Layout, Offset, Rect};
-use ratatui::widgets::StatefulWidgetRef;
-use ratatui::widgets::{Block, Paragraph, Widget, WidgetRef};
-use ratatui::Frame;
+use image::io::Reader;
+use image::DynamicImage;
 use ratatui_image::picker::Picker;
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::Resize;
-use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
@@ -27,8 +24,7 @@ use tui_input::Input;
 /// Determine wheter or not mangas are being searched
 /// if so then this should not make a request until the most recent one finishes
 #[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
-enum State {
-    Loading,
+enum PageState {
     SearchingMangas,
     DisplayingSearchResponse,
     #[default]
@@ -36,10 +32,10 @@ enum State {
 }
 
 /// These happens in the background
-enum SearchPageEvents {
-    LoadCover(Option<Bytes>, usize),
+pub enum SearchPageEvents {
+    LoadCover(Option<DynamicImage>, String),
+    DecodeImage(Option<Bytes>, String),
     LoadMangasFound(Option<SearchMangaResponse>),
-    SearchCovers,
 }
 
 /// These are actions that the user actively does
@@ -60,16 +56,17 @@ pub enum InputMode {
 
 ///This is the "page" where the user can search for a manga
 pub struct SearchPage {
+    /// This tx "talks" to the app
     global_event_tx: UnboundedSender<Events>,
     picker: Picker,
     action_tx: UnboundedSender<SearchPageActions>,
-    pub action_rx: UnboundedReceiver<SearchPageActions>,
-    event_tx: UnboundedSender<SearchPageEvents>,
-    event_rx: UnboundedReceiver<SearchPageEvents>,
+    pub local_action_rx: UnboundedReceiver<SearchPageActions>,
+    local_event_tx: UnboundedSender<SearchPageEvents>,
+    pub local_event_rx: UnboundedReceiver<SearchPageEvents>,
     pub input_mode: InputMode,
     search_bar: Input,
     fetch_client: Arc<MangadexClient>,
-    state: State,
+    state: PageState,
     mangas_found_list: MangasFoundList,
 }
 
@@ -83,7 +80,7 @@ impl Component<SearchPageActions> for SearchPage {
     fn render(&mut self, area: Rect, frame: &mut Frame<'_>) {
         let search_page_layout = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Max(4), Constraint::Min(20)]);
+            .constraints([Constraint::Max(4), Constraint::Fill(1)]);
 
         let [input_area, manga_area] = search_page_layout.areas(area);
 
@@ -97,9 +94,9 @@ impl Component<SearchPageActions> for SearchPage {
             SearchPageActions::StartTyping => self.focus_search_bar(),
             SearchPageActions::StopTyping => self.input_mode = InputMode::Idle,
             SearchPageActions::Search => {
-                self.state = State::SearchingMangas;
+                self.state = PageState::SearchingMangas;
                 self.mangas_found_list.widget = ListMangasFoundWidget::default();
-                let tx = self.event_tx.clone();
+                let tx = self.local_event_tx.clone();
                 let client = Arc::clone(&self.fetch_client);
                 let manga_to_search = self.search_bar.value().to_string();
                 tokio::spawn(async move {
@@ -122,18 +119,22 @@ impl Component<SearchPageActions> for SearchPage {
             }
             SearchPageActions::ScrollUp => self.scroll_up(),
             SearchPageActions::ScrollDown => self.scroll_down(),
-            _ => {}
         }
     }
     fn handle_events(&mut self, events: Events) {
         match events {
             Events::Key(key_event) => self.handle_key_events(key_event),
-            Events::Redraw(protocol, index) => {
-                if let Some(pro) = self.mangas_found_list.widget.mangas[index]
-                    .image_state
-                    .as_mut()
+            Events::Redraw(new_protocol, index) => {
+                if let Some(manga) = self
+                    .mangas_found_list
+                    .widget
+                    .mangas
+                    .iter_mut()
+                    .find(|manga| manga.id == index)
                 {
-                    pro.inner = Some(protocol)
+                    if let Some(image_state) = manga.image_state.as_mut() {
+                        image_state.inner = Some(new_protocol);
+                    }
                 }
             }
             Events::Tick => self.tick(),
@@ -155,13 +156,13 @@ impl SearchPage {
             global_event_tx: event_tx,
             picker,
             action_tx,
-            action_rx,
-            event_tx: local_event_tx,
-            event_rx: local_event,
+            local_action_rx: action_rx,
+            local_event_tx,
+            local_event_rx: local_event,
             input_mode: InputMode::default(),
             search_bar: Input::default(),
             fetch_client: client,
-            state: State::default(),
+            state: PageState::default(),
             mangas_found_list: MangasFoundList::default(),
         }
     }
@@ -195,15 +196,40 @@ impl SearchPage {
     }
 
     fn render_manga_area(&mut self, area: Rect, buf: &mut Buffer) {
-        if self.state == State::Normal || self.state == State::Loading {
-            Block::bordered().render(area, buf);
-        } else {
-            StatefulWidgetRef::render_ref(
-                &self.mangas_found_list.widget,
-                area,
-                buf,
-                &mut self.mangas_found_list.state,
-            );
+        let layout = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(40), Constraint::Percentage(60)]);
+
+        let [manga_list_area, preview_area] = layout.areas(area);
+
+        match self.state {
+            PageState::Normal => {
+                Block::bordered().render(area, buf);
+            }
+            PageState::SearchingMangas => {
+                Block::bordered().render(area, buf);
+            }
+            PageState::DisplayingSearchResponse => {
+                StatefulWidgetRef::render_ref(
+                    &self.mangas_found_list.widget,
+                    manga_list_area,
+                    buf,
+                    &mut self.mangas_found_list.state,
+                );
+
+                if let Some(manga_select) = self.get_current_manga_selected() {
+                    StatefulWidget::render(
+                        MangaPreview::new(
+                            manga_select.title.clone(),
+                            manga_select.description.clone(),
+                            manga_select.tags.clone(),
+                        ),
+                        preview_area,
+                        buf,
+                        &mut manga_select.image_state,
+                    )
+                }
+            }
         }
     }
 
@@ -237,7 +263,7 @@ impl SearchPage {
             },
             InputMode::Typing => match key_event.code {
                 KeyCode::Enter => {
-                    if self.state != State::SearchingMangas {
+                    if self.state != PageState::SearchingMangas {
                         self.action_tx.send(SearchPageActions::Search).unwrap();
                     }
                 }
@@ -251,82 +277,130 @@ impl SearchPage {
         }
     }
 
-    fn tick(&mut self) {
-        if let Ok(event) = self.event_rx.try_recv() {
+    pub fn tick(&mut self) {
+        if let Ok(event) = self.local_event_rx.try_recv() {
             match event {
                 SearchPageEvents::LoadMangasFound(response) => {
-                    self.state = State::DisplayingSearchResponse;
+                    self.state = PageState::DisplayingSearchResponse;
                     match response {
                         Some(mangas_found) => {
-                            self.mangas_found_list.widget =
-                                ListMangasFoundWidget::from_response(mangas_found.data);
+                            let mut mangas: Vec<MangaItem> = vec![];
 
-                            self.event_tx.send(SearchPageEvents::SearchCovers).unwrap();
+                            for (index, manga) in mangas_found.data.iter().enumerate() {
+                                let manga_id = manga.id.clone();
+                                let client = Arc::clone(&self.fetch_client);
+                                let tx = self.local_event_tx.clone();
+
+                                let img_metadata = manga
+                                    .relationships
+                                    .iter()
+                                    .find(|relation| relation.attributes.is_some());
+
+                                let img_url = match img_metadata {
+                                    Some(data) => {
+                                        data.attributes.as_ref().map(|cover_img_attributes| {
+                                            cover_img_attributes.file_name.clone()
+                                        })
+                                    }
+                                    None => None,
+                                };
+
+                                let handle = match img_url {
+                                    Some(file_name) => {
+                                        let handle = tokio::spawn(async move {
+                                            let response = client
+                                                .get_cover_for_manga(&manga_id, &file_name)
+                                                .await;
+
+                                            match response {
+                                                Ok(bytes) => tx
+                                                    .send(SearchPageEvents::DecodeImage(
+                                                        Some(bytes),
+                                                        manga_id,
+                                                    ))
+                                                    .unwrap(),
+                                                Err(_) => tx
+                                                    .send(SearchPageEvents::DecodeImage(
+                                                        None, manga_id,
+                                                    ))
+                                                    .unwrap(),
+                                            }
+                                        });
+                                        Some(handle)
+                                    }
+                                    None => {
+                                        tx.send(SearchPageEvents::DecodeImage(None, manga_id))
+                                            .unwrap();
+                                        None
+                                    }
+                                };
+                                mangas.push(MangaItem::from(manga.clone()));
+                            }
+
+                            self.mangas_found_list.widget = ListMangasFoundWidget::new(mangas);
                         }
                         None => self.mangas_found_list.widget = ListMangasFoundWidget::default(),
                     }
                 }
-                SearchPageEvents::LoadCover(maybe_bytes, index) => match maybe_bytes {
+                SearchPageEvents::DecodeImage(maybe_bytes, manga_id) => match maybe_bytes {
                     Some(bytes) => {
-                        let tx = self.global_event_tx.clone();
+                        let tx = self.local_event_tx.clone();
 
-                        let (tx_worker, rec_worker) =
-                            std::sync::mpsc::channel::<(Box<dyn StatefulProtocol>, Resize, Rect)>();
-
-                        let dyn_img = image::io::Reader::new(Cursor::new(bytes))
+                        let dyn_img = Reader::new(Cursor::new(bytes))
                             .with_guessed_format()
                             .unwrap();
 
-                        let image = self.picker.new_resize_protocol(dyn_img.decode().unwrap());
-
-                        self.mangas_found_list.widget.mangas[index].image_state =
-                            Some(ThreadProtocol::new(tx_worker.clone(), image));
-
-                        thread::spawn(move || loop {
-                            match rec_worker.recv() {
-                                Ok((mut protocol, resize, area)) => {
-                                    protocol.resize_encode(&resize, None, area);
-                                    tx.send(Events::Redraw(protocol, index)).unwrap();
+                        std::thread::spawn(move || {
+                            let maybe_decoded = dyn_img.decode();
+                            match maybe_decoded {
+                                Ok(image) => {
+                                    tx.send(SearchPageEvents::LoadCover(Some(image), manga_id))
+                                        .unwrap();
                                 }
-                                Err(_e) => break,
-                            }
+                                Err(_) => {
+                                    tx.send(SearchPageEvents::LoadCover(None, manga_id))
+                                        .unwrap();
+                                }
+                            };
                         });
                     }
                     None => {}
                 },
 
-                SearchPageEvents::SearchCovers => {
-                    for (index, manga) in self.mangas_found_list.widget.mangas.iter().enumerate() {
-                        let event_tx = self.event_tx.clone();
-                        let client = Arc::clone(&self.fetch_client);
-                        let manga_id = manga.id.clone();
+                SearchPageEvents::LoadCover(maybe_image, manga_id) => match maybe_image {
+                    Some(image) => {
+                        let tx = self.global_event_tx.clone();
 
-                        let file_name = manga.img_url.clone();
+                        let (tx_worker, rec_worker) =
+                            std::sync::mpsc::channel::<(Box<dyn StatefulProtocol>, Resize, ratatui::layout::Rect)>();
 
-                        match file_name {
-                            Some(name) => {
-                                tokio::spawn(async move {
-                                    let img_bytes =
-                                        client.get_cover_for_manga(&manga_id, &name).await;
-                                    match img_bytes {
-                                        Ok(bytes) => {
-                                            event_tx
-                                                .send(SearchPageEvents::LoadCover(
-                                                    Some(bytes),
-                                                    index,
-                                                ))
-                                                .unwrap();
-                                        }
-                                        Err(e) => event_tx
-                                            .send(SearchPageEvents::LoadCover(None, index))
-                                            .unwrap(),
+                        let image = self.picker.new_resize_protocol(image);
+
+                        if let Some(manga) = self
+                            .mangas_found_list
+                            .widget
+                            .mangas
+                            .iter_mut()
+                            .find(|manga| manga.id == manga_id)
+                        {
+                            manga.image_state = Some(ThreadProtocol::new(tx_worker.clone(), image));
+
+                            let id = manga.id.clone();
+
+                            thread::spawn(move || loop {
+                                let id = id.clone();
+                                match rec_worker.recv() {
+                                    Ok((mut protocol, resize, area)) => {
+                                        protocol.resize_encode(&resize, None, area);
+                                        tx.send(Events::Redraw(protocol, id)).unwrap();
                                     }
-                                });
-                            }
-                            None => {}
+                                    Err(_e) => break,
+                                }
+                            });
                         }
                     }
-                }
+                    None => {}
+                },
             }
         }
     }

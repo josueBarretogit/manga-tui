@@ -21,7 +21,7 @@ impl MangadexClient {
         &self,
         search_term: &str,
     ) -> Result<SearchMangaResponse, reqwest::Error> {
-        let url = format!("{}/manga?title='{}'&includes[]=cover_art", self.api_url, search_term);
+        let url = format!("{}/manga?title='{}'&includes[]=cover_art&limit=10", self.api_url, search_term);
 
         let response = self.client.get(url).send().await?;
 
