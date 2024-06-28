@@ -25,7 +25,7 @@ impl MangadexClient {
             "{}/manga?title='{}'&includes[]=cover_art&limit=10&offset={}",
             self.api_url_base,
             search_term,
-            if page == 1 { 0 } else { page * 10 }
+            (page - 1) * 10
         );
 
         self.client

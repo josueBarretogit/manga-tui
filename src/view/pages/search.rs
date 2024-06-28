@@ -3,6 +3,7 @@ use crate::backend::tui::Events;
 use crate::backend::SearchMangaResponse;
 use crate::view::widgets::search::*;
 use crate::view::widgets::Component;
+use crate::view::widgets::ThreadProtocol;
 use bytes::Bytes;
 use crossterm::event::KeyEvent;
 use crossterm::event::{self, KeyCode};
@@ -43,6 +44,7 @@ pub enum SearchPageActions {
     Search,
     ScrollUp,
     ScrollDown,
+    NextPage,
 }
 
 #[derive(Default, PartialEq, Eq, PartialOrd, Ord)]
@@ -69,23 +71,16 @@ pub struct SearchPage {
 }
 
 /// This contains the data the application gets when doing a search
+#[derive(Default)]
 struct MangasFoundList {
     widget: ListMangasFoundWidget,
     state: tui_widget_list::ListState,
+    total_result: i32,
     page: i32,
 }
 
-impl Default for MangasFoundList {
-    fn default() -> Self {
-        Self {
-            widget: ListMangasFoundWidget::default(),
-            state: tui_widget_list::ListState::default(),
-            page: 1,
-        }
-    }
-}
-
-impl Component<SearchPageActions> for SearchPage {
+impl Component for SearchPage {
+    type Actions = SearchPageActions;
     fn render(&mut self, area: Rect, frame: &mut Frame<'_>) {
         let search_page_layout = Layout::default()
             .direction(Direction::Vertical)
@@ -103,35 +98,19 @@ impl Component<SearchPageActions> for SearchPage {
             SearchPageActions::StartTyping => self.focus_search_bar(),
             SearchPageActions::StopTyping => self.input_mode = InputMode::Idle,
             SearchPageActions::Search => {
-                self.state = PageState::SearchingMangas;
-                self.mangas_found_list.state = tui_widget_list::ListState::default();
-                self.mangas_found_list.widget = ListMangasFoundWidget::default();
-                let tx = self.local_event_tx.clone();
-                let client = Arc::clone(&self.fetch_client);
-                let manga_to_search = self.search_bar.value().to_string();
-                let page_to_search = self.mangas_found_list.page;
-
-                tokio::spawn(async move {
-                    let search_response =
-                        client.search_mangas(&manga_to_search, page_to_search).await;
-
-                    match search_response {
-                        Ok(mangas_found) => {
-                            if mangas_found.data.is_empty() {
-                                tx.send(SearchPageEvents::LoadMangasFound(None)).unwrap();
-                            } else {
-                                tx.send(SearchPageEvents::LoadMangasFound(Some(mangas_found)))
-                                    .unwrap();
-                            }
-                        }
-                        Err(_) => {
-                            tx.send(SearchPageEvents::LoadMangasFound(None)).unwrap();
-                        }
-                    }
-                });
+                self.mangas_found_list.page = 0;
+                self.search_mangas(1);
             }
             SearchPageActions::ScrollUp => self.scroll_up(),
             SearchPageActions::ScrollDown => self.scroll_down(),
+            SearchPageActions::NextPage => {
+                if self.state == PageState::DisplayingSearchResponse
+                    && self.mangas_found_list.page * 10 <= self.mangas_found_list.total_result
+                {
+                    self.mangas_found_list.page += 1;
+                    self.search_mangas(self.mangas_found_list.page);
+                }
+            }
         }
     }
     fn handle_events(&mut self, events: Events) {
@@ -230,6 +209,14 @@ impl SearchPage {
                     &mut self.mangas_found_list.state,
                 );
 
+                Block::default()
+                    .title_bottom(format!(
+                        "Current page: {}, total : {}",
+                        self.mangas_found_list.page + 1,
+                        self.mangas_found_list.total_result
+                    ))
+                    .render(manga_list_area, buf);
+
                 if let Some(manga_select) = self.get_current_manga_selected() {
                     StatefulWidget::render(
                         MangaPreview::new(
@@ -264,6 +251,7 @@ impl SearchPage {
         }
         None
     }
+
     fn handle_key_events(&mut self, key_event: KeyEvent) {
         match self.input_mode {
             InputMode::Idle => match key_event.code {
@@ -276,9 +264,14 @@ impl SearchPage {
                     .local_action_tx
                     .send(SearchPageActions::ScrollDown)
                     .unwrap(),
+
                 KeyCode::Char('k') => self
                     .local_action_tx
                     .send(SearchPageActions::ScrollUp)
+                    .unwrap(),
+                KeyCode::Char(' ') => self
+                    .local_action_tx
+                    .send(SearchPageActions::NextPage)
                     .unwrap(),
                 _ => {}
             },
@@ -300,6 +293,33 @@ impl SearchPage {
                 }
             },
         }
+    }
+
+    fn search_mangas(&mut self, page: i32) {
+        self.state = PageState::SearchingMangas;
+        self.mangas_found_list.state = tui_widget_list::ListState::default();
+        self.mangas_found_list.widget = ListMangasFoundWidget::default();
+        let tx = self.local_event_tx.clone();
+        let client = Arc::clone(&self.fetch_client);
+        let manga_to_search = self.search_bar.value().to_string();
+
+        tokio::spawn(async move {
+            let search_response = client.search_mangas(&manga_to_search, page).await;
+
+            match search_response {
+                Ok(mangas_found) => {
+                    if mangas_found.data.is_empty() {
+                        tx.send(SearchPageEvents::LoadMangasFound(None)).unwrap();
+                    } else {
+                        tx.send(SearchPageEvents::LoadMangasFound(Some(mangas_found)))
+                            .unwrap();
+                    }
+                }
+                Err(_) => {
+                    tx.send(SearchPageEvents::LoadMangasFound(None)).unwrap();
+                }
+            }
+        });
     }
 
     pub fn tick(&mut self) {
@@ -363,6 +383,7 @@ impl SearchPage {
                             }
 
                             self.mangas_found_list.widget = ListMangasFoundWidget::new(mangas);
+                            self.mangas_found_list.total_result = response.total;
                         }
                         None => self.mangas_found_list.widget = ListMangasFoundWidget::default(),
                     }

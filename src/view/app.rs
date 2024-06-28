@@ -36,7 +36,8 @@ pub struct App {
     fetch_client: Arc<MangadexClient>,
 }
 
-impl Component<Action> for App {
+impl Component for App {
+    type Actions = Action;
     fn render(&mut self, area: Rect, frame: &mut Frame<'_>) {
         let main_layout = Layout::default()
             .direction(layout::Direction::Vertical)
@@ -77,7 +78,7 @@ impl Component<Action> for App {
 }
 
 impl App {
-    pub fn new(action_tx: UnboundedSender<Action>, event_tx: UnboundedSender<Events>) -> Self {
+    pub fn new(global_action_tx: UnboundedSender<Action>, global_event_tx: UnboundedSender<Events>) -> Self {
         let user_agent = format!(
             "manga-tui/0.beta-testing1.0 ({}/{}/{})",
             std::env::consts::FAMILY,
@@ -96,8 +97,8 @@ impl App {
         App {
             picker,
             current_tab: SelectedTabs::default(),
-            search_page: SearchPage::init(Arc::clone(&mangadex_client), picker, event_tx),
-            action_tx,
+            search_page: SearchPage::init(Arc::clone(&mangadex_client), picker, global_event_tx),
+            action_tx: global_action_tx,
             state: AppState::Runnning,
             fetch_client: mangadex_client,
         }
