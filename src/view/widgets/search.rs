@@ -1,20 +1,11 @@
-use bytes::Bytes;
-use ratatui::buffer::Buffer;
-use ratatui::layout::{self, Constraint, Layout};
-use ratatui::style::{Color, Style, Stylize};
-use ratatui::widgets::{
-    Block, List, ListDirection, ListItem, ListState, Paragraph, StatefulWidget, StatefulWidgetRef,
-    Widget, Wrap,
-};
+use crate::backend::Data;
+use ratatui::{prelude::*, widgets::*};
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::Resize;
 use std::sync::mpsc::Sender;
 use tui_widget_list::PreRender;
 
-use crate::backend::Data;
-
 pub struct MangaPreview {
-    cover_image_state: Option<ThreadProtocol>,
     title: String,
     description: String,
     categories: Vec<String>,
@@ -23,21 +14,6 @@ pub struct MangaPreview {
 impl MangaPreview {
     pub fn new(title: String, description: String, categories: Vec<String>) -> Self {
         Self {
-            cover_image_state: None,
-            title,
-            description,
-            categories,
-        }
-    }
-
-    pub fn with_image_protocol(
-        title: String,
-        description: String,
-        categories: Vec<String>,
-        protocol: ThreadProtocol,
-    ) -> Self {
-        Self {
-            cover_image_state: Some(protocol),
             title,
             description,
             categories,
@@ -67,11 +43,13 @@ impl StatefulWidget for MangaPreview {
         };
 
         // Manga details
-        Block::bordered().render(details_area, buf);
+        Block::bordered()
+            .title(self.title)
+            .render(details_area, buf);
 
         let inner = details_area.inner(&layout::Margin {
             horizontal: 1,
-            vertical: 1,
+            vertical: 2,
         });
 
         Paragraph::new(self.description)
@@ -102,7 +80,12 @@ impl ThreadImage {
 impl StatefulWidget for ThreadImage {
     type State = ThreadProtocol;
 
-    fn render(self, area: ratatui::prelude::Rect, buf: &mut ratatui::buffer::Buffer, state: &mut Self::State) {
+    fn render(
+        self,
+        area: ratatui::prelude::Rect,
+        buf: &mut ratatui::buffer::Buffer,
+        state: &mut Self::State,
+    ) {
         state.inner = match state.inner.take() {
             // We have the `protocol` and should either resize or render.
             Some(mut protocol) => {
@@ -150,7 +133,6 @@ pub struct MangaItem {
     pub description: String,
     pub tags: Vec<String>,
     pub img_url: Option<String>,
-    pub img_bytes: Option<Bytes>,
     pub style: Style,
     pub image_state: Option<ThreadProtocol>,
 }
@@ -160,8 +142,8 @@ impl Widget for MangaItem {
     where
         Self: Sized,
     {
-        Block::bordered()
-            .title(self.title)
+        Paragraph::new(self.title)
+            .block(Block::default().borders(Borders::BOTTOM))
             .style(self.style)
             .render(area, buf);
     }
@@ -226,7 +208,6 @@ impl MangaItem {
             description,
             tags,
             img_url,
-            img_bytes: None,
             image_state: None,
             style: Style::default(),
         }
@@ -252,6 +233,8 @@ impl ListMangasFoundWidget {
 
         Self { mangas }
     }
+
+    pub fn loading() {}
 
     pub fn not_found() {
         ListMangasFoundWidget::default();

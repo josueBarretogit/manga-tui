@@ -1,9 +1,3 @@
-use std::io::Cursor;
-use std::sync::Arc;
-use std::thread;
-use ratatui::prelude::*;
-use ratatui::widgets::*;
-
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
 use crate::backend::SearchMangaResponse;
@@ -11,12 +5,16 @@ use crate::view::widgets::search::*;
 use crate::view::widgets::Component;
 use bytes::Bytes;
 use crossterm::event::KeyEvent;
-use crossterm::event::{self, KeyCode, KeyEventKind};
+use crossterm::event::{self, KeyCode};
 use image::io::Reader;
 use image::DynamicImage;
+use ratatui::{prelude::*, widgets::*};
 use ratatui_image::picker::Picker;
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::Resize;
+use std::io::Cursor;
+use std::sync::Arc;
+use std::thread;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
@@ -59,7 +57,7 @@ pub struct SearchPage {
     /// This tx "talks" to the app
     global_event_tx: UnboundedSender<Events>,
     picker: Picker,
-    action_tx: UnboundedSender<SearchPageActions>,
+    local_action_tx: UnboundedSender<SearchPageActions>,
     pub local_action_rx: UnboundedReceiver<SearchPageActions>,
     local_event_tx: UnboundedSender<SearchPageEvents>,
     pub local_event_rx: UnboundedReceiver<SearchPageEvents>,
@@ -70,10 +68,21 @@ pub struct SearchPage {
     mangas_found_list: MangasFoundList,
 }
 
-#[derive(Default)]
+/// This contains the data the application gets when doing a search
 struct MangasFoundList {
     widget: ListMangasFoundWidget,
     state: tui_widget_list::ListState,
+    page: i32,
+}
+
+impl Default for MangasFoundList {
+    fn default() -> Self {
+        Self {
+            widget: ListMangasFoundWidget::default(),
+            state: tui_widget_list::ListState::default(),
+            page: 1,
+        }
+    }
 }
 
 impl Component<SearchPageActions> for SearchPage {
@@ -95,12 +104,16 @@ impl Component<SearchPageActions> for SearchPage {
             SearchPageActions::StopTyping => self.input_mode = InputMode::Idle,
             SearchPageActions::Search => {
                 self.state = PageState::SearchingMangas;
+                self.mangas_found_list.state = tui_widget_list::ListState::default();
                 self.mangas_found_list.widget = ListMangasFoundWidget::default();
                 let tx = self.local_event_tx.clone();
                 let client = Arc::clone(&self.fetch_client);
                 let manga_to_search = self.search_bar.value().to_string();
+                let page_to_search = self.mangas_found_list.page;
+
                 tokio::spawn(async move {
-                    let search_response = client.search_mangas(&manga_to_search).await;
+                    let search_response =
+                        client.search_mangas(&manga_to_search, page_to_search).await;
 
                     match search_response {
                         Ok(mangas_found) => {
@@ -155,7 +168,7 @@ impl SearchPage {
         Self {
             global_event_tx: event_tx,
             picker,
-            action_tx,
+            local_action_tx: action_tx,
             local_action_rx: action_rx,
             local_event_tx,
             local_event_rx: local_event,
@@ -176,7 +189,7 @@ impl SearchPage {
         let input_bar = Paragraph::new(self.search_bar.value()).block(Block::bordered().title(
             match self.input_mode {
                 InputMode::Idle => "Press <s> to type ",
-                InputMode::Typing => "Press <enter> to search,<esc> to stop typing",
+                InputMode::Typing => "Press <enter> to search, <esc> to stop typing",
             },
         ));
 
@@ -255,20 +268,32 @@ impl SearchPage {
         match self.input_mode {
             InputMode::Idle => match key_event.code {
                 KeyCode::Char('s') => {
-                    self.action_tx.send(SearchPageActions::StartTyping).unwrap();
+                    self.local_action_tx
+                        .send(SearchPageActions::StartTyping)
+                        .unwrap();
                 }
-                KeyCode::Char('j') => self.action_tx.send(SearchPageActions::ScrollDown).unwrap(),
-                KeyCode::Char('k') => self.action_tx.send(SearchPageActions::ScrollUp).unwrap(),
+                KeyCode::Char('j') => self
+                    .local_action_tx
+                    .send(SearchPageActions::ScrollDown)
+                    .unwrap(),
+                KeyCode::Char('k') => self
+                    .local_action_tx
+                    .send(SearchPageActions::ScrollUp)
+                    .unwrap(),
                 _ => {}
             },
             InputMode::Typing => match key_event.code {
                 KeyCode::Enter => {
                     if self.state != PageState::SearchingMangas {
-                        self.action_tx.send(SearchPageActions::Search).unwrap();
+                        self.local_action_tx
+                            .send(SearchPageActions::Search)
+                            .unwrap();
                     }
                 }
                 KeyCode::Esc => {
-                    self.action_tx.send(SearchPageActions::StopTyping).unwrap();
+                    self.local_action_tx
+                        .send(SearchPageActions::StopTyping)
+                        .unwrap();
                 }
                 _ => {
                     self.search_bar.handle_event(&event::Event::Key(key_event));
@@ -283,10 +308,10 @@ impl SearchPage {
                 SearchPageEvents::LoadMangasFound(response) => {
                     self.state = PageState::DisplayingSearchResponse;
                     match response {
-                        Some(mangas_found) => {
+                        Some(response) => {
                             let mut mangas: Vec<MangaItem> = vec![];
 
-                            for (index, manga) in mangas_found.data.iter().enumerate() {
+                            for manga in response.data.iter() {
                                 let manga_id = manga.id.clone();
                                 let client = Arc::clone(&self.fetch_client);
                                 let tx = self.local_event_tx.clone();
@@ -371,8 +396,11 @@ impl SearchPage {
                     Some(image) => {
                         let tx = self.global_event_tx.clone();
 
-                        let (tx_worker, rec_worker) =
-                            std::sync::mpsc::channel::<(Box<dyn StatefulProtocol>, Resize, ratatui::layout::Rect)>();
+                        let (tx_worker, rec_worker) = std::sync::mpsc::channel::<(
+                            Box<dyn StatefulProtocol>,
+                            Resize,
+                            ratatui::layout::Rect,
+                        )>();
 
                         let image = self.picker.new_resize_protocol(image);
 

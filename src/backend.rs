@@ -1,6 +1,5 @@
-pub mod tui;
 pub mod fetch;
-
+pub mod tui;
 
 use serde::{Deserialize, Serialize};
 
@@ -10,6 +9,9 @@ pub struct SearchMangaResponse {
     pub result: String,
     pub response: String,
     pub data: Vec<Data>,
+    pub limit: i32,
+    pub offset: i32,
+    pub total: i32,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -36,7 +38,6 @@ pub struct Title {
     pub en: String,
 }
 
-
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Description {
@@ -46,17 +47,15 @@ pub struct Description {
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CoverImgMetadata {
-    pub id : String,
-    pub attributes : Option<CoverImgAttributes>
+    pub id: String,
+    pub attributes: Option<CoverImgAttributes>,
 }
-
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CoverImgAttributes {
     #[serde(rename = "fileName")]
-    pub file_name : String,
+    pub file_name: String,
 }
-
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

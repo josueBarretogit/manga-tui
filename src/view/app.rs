@@ -40,7 +40,7 @@ impl Component<Action> for App {
     fn render(&mut self, area: Rect, frame: &mut Frame<'_>) {
         let main_layout = Layout::default()
             .direction(layout::Direction::Vertical)
-            .constraints([Constraint::Percentage(7), Constraint::Percentage(93)]);
+            .constraints([Constraint::Percentage(6), Constraint::Percentage(94)]);
 
         let [top_tabs_area, page_area] = main_layout.areas(area);
 
@@ -79,7 +79,7 @@ impl Component<Action> for App {
 impl App {
     pub fn new(action_tx: UnboundedSender<Action>, event_tx: UnboundedSender<Events>) -> Self {
         let user_agent = format!(
-            "manga-tui/0.beta1.0 ({}/{}/{})",
+            "manga-tui/0.beta-testing1.0 ({}/{}/{})",
             std::env::consts::FAMILY,
             std::env::consts::OS,
             std::env::consts::ARCH

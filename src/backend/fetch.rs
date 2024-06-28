@@ -1,10 +1,9 @@
-
 use super::SearchMangaResponse;
 
 #[derive(Clone)]
 pub struct MangadexClient {
-    api_url: String,
-    cover_img_source: String,
+    api_url_base: String,
+    cover_img_url_base: String,
     client: reqwest::Client,
 }
 
@@ -12,22 +11,29 @@ impl MangadexClient {
     pub fn new(client: reqwest::Client) -> Self {
         Self {
             client,
-            api_url: "https://api.mangadex.org".to_string(),
-            cover_img_source: "https://uploads.mangadex.org/covers".to_string(),
+            api_url_base: "https://api.mangadex.org".to_string(),
+            cover_img_url_base: "https://uploads.mangadex.org/covers".to_string(),
         }
     }
 
     pub async fn search_mangas(
         &self,
         search_term: &str,
+        page: i32,
     ) -> Result<SearchMangaResponse, reqwest::Error> {
-        let url = format!("{}/manga?title='{}'&includes[]=cover_art&limit=10", self.api_url, search_term);
+        let url = format!(
+            "{}/manga?title='{}'&includes[]=cover_art&limit=10&offset={}",
+            self.api_url_base,
+            search_term,
+            if page == 1 { 0 } else { page * 10 }
+        );
 
-        let response = self.client.get(url).send().await?;
-
-        let res: SearchMangaResponse = response.json().await?;
-
-        Ok(res)
+        self.client
+            .get(url)
+            .send()
+            .await?
+            .json::<SearchMangaResponse>()
+            .await
     }
 
     pub async fn get_cover_for_manga(
@@ -38,7 +44,7 @@ impl MangadexClient {
         self.client
             .get(format!(
                 "{}/{}/{}",
-                self.cover_img_source, id_manga, file_name
+                self.cover_img_url_base, id_manga, file_name
             ))
             .send()
             .await?
