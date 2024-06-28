@@ -13,10 +13,13 @@ use ratatui::{prelude::*, widgets::*};
 use ratatui_image::picker::Picker;
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::Resize;
+use rayon::iter::IntoParallelRefIterator;
+use rayon::iter::ParallelIterator;
 use std::io::Cursor;
 use std::sync::Arc;
 use std::thread;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use tokio::task::JoinHandle;
 use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
 
@@ -45,6 +48,7 @@ pub enum SearchPageActions {
     ScrollUp,
     ScrollDown,
     NextPage,
+    PreviousPage,
 }
 
 #[derive(Default, PartialEq, Eq, PartialOrd, Ord)]
@@ -68,6 +72,7 @@ pub struct SearchPage {
     fetch_client: Arc<MangadexClient>,
     state: PageState,
     mangas_found_list: MangasFoundList,
+    search_cover_handles: Vec<Option<JoinHandle<()>>>,
 }
 
 /// This contains the data the application gets when doing a search
@@ -98,16 +103,26 @@ impl Component for SearchPage {
             SearchPageActions::StartTyping => self.focus_search_bar(),
             SearchPageActions::StopTyping => self.input_mode = InputMode::Idle,
             SearchPageActions::Search => {
-                self.mangas_found_list.page = 0;
+                self.mangas_found_list.page = 1;
                 self.search_mangas(1);
             }
             SearchPageActions::ScrollUp => self.scroll_up(),
             SearchPageActions::ScrollDown => self.scroll_down(),
             SearchPageActions::NextPage => {
                 if self.state == PageState::DisplayingSearchResponse
-                    && self.mangas_found_list.page * 10 <= self.mangas_found_list.total_result
+                    && self.state != PageState::SearchingMangas
+                    && self.mangas_found_list.page * 10 < self.mangas_found_list.total_result
                 {
                     self.mangas_found_list.page += 1;
+                    self.search_mangas(self.mangas_found_list.page);
+                }
+            }
+            SearchPageActions::PreviousPage => {
+                if self.state == PageState::DisplayingSearchResponse
+                    && self.state != PageState::SearchingMangas
+                    && self.mangas_found_list.page != 1
+                {
+                    self.mangas_found_list.page -= 1;
                     self.search_mangas(self.mangas_found_list.page);
                 }
             }
@@ -156,6 +171,7 @@ impl SearchPage {
             fetch_client: client,
             state: PageState::default(),
             mangas_found_list: MangasFoundList::default(),
+            search_cover_handles: vec![],
         }
     }
 
@@ -209,10 +225,12 @@ impl SearchPage {
                     &mut self.mangas_found_list.state,
                 );
 
+                let total_pages = self.mangas_found_list.total_result as f64 / 10_f64;
                 Block::default()
                     .title_bottom(format!(
-                        "Current page: {}, total : {}",
-                        self.mangas_found_list.page + 1,
+                        "Page: {} of {}, total : {}",
+                        self.mangas_found_list.page,
+                        total_pages.ceil(),
                         self.mangas_found_list.total_result
                     ))
                     .render(manga_list_area, buf);
@@ -252,6 +270,20 @@ impl SearchPage {
         None
     }
 
+    fn abort_search_cover_handles(&mut self) {
+        if !self.search_cover_handles.is_empty() {
+            for handle in self.search_cover_handles.iter_mut() {
+                match handle {
+                    Some(running_task) => {
+                        running_task.abort();
+                    }
+                    None => {}
+                }
+            }
+            self.search_cover_handles.clear();
+        }
+    }
+
     fn handle_key_events(&mut self, key_event: KeyEvent) {
         match self.input_mode {
             InputMode::Idle => match key_event.code {
@@ -269,9 +301,13 @@ impl SearchPage {
                     .local_action_tx
                     .send(SearchPageActions::ScrollUp)
                     .unwrap(),
-                KeyCode::Char(' ') => self
+                KeyCode::Char('l') => self
                     .local_action_tx
                     .send(SearchPageActions::NextPage)
+                    .unwrap(),
+                KeyCode::Char('h') => self
+                    .local_action_tx
+                    .send(SearchPageActions::PreviousPage)
                     .unwrap(),
                 _ => {}
             },
@@ -296,6 +332,7 @@ impl SearchPage {
     }
 
     fn search_mangas(&mut self, page: i32) {
+        self.abort_search_cover_handles();
         self.state = PageState::SearchingMangas;
         self.mangas_found_list.state = tui_widget_list::ListState::default();
         self.mangas_found_list.widget = ListMangasFoundWidget::default();
@@ -379,39 +416,43 @@ impl SearchPage {
                                         None
                                     }
                                 };
+                                self.search_cover_handles.push(handle);
                                 mangas.push(MangaItem::from(manga.clone()));
                             }
-
                             self.mangas_found_list.widget = ListMangasFoundWidget::new(mangas);
                             self.mangas_found_list.total_result = response.total;
                         }
+                        // Todo indicate that mangas where not found
                         None => self.mangas_found_list.widget = ListMangasFoundWidget::default(),
                     }
                 }
-                SearchPageEvents::DecodeImage(maybe_bytes, manga_id) => match maybe_bytes {
-                    Some(bytes) => {
-                        let tx = self.local_event_tx.clone();
+                SearchPageEvents::DecodeImage(maybe_bytes, manga_id) => {
+                    let tx = self.local_event_tx.clone();
+                    match maybe_bytes {
+                        Some(bytes) => {
+                            let dyn_img = Reader::new(Cursor::new(bytes))
+                                .with_guessed_format()
+                                .unwrap();
 
-                        let dyn_img = Reader::new(Cursor::new(bytes))
-                            .with_guessed_format()
-                            .unwrap();
-
-                        std::thread::spawn(move || {
-                            let maybe_decoded = dyn_img.decode();
-                            match maybe_decoded {
-                                Ok(image) => {
-                                    tx.send(SearchPageEvents::LoadCover(Some(image), manga_id))
-                                        .unwrap();
-                                }
-                                Err(_) => {
-                                    tx.send(SearchPageEvents::LoadCover(None, manga_id))
-                                        .unwrap();
-                                }
-                            };
-                        });
+                            std::thread::spawn(move || {
+                                let maybe_decoded = dyn_img.decode();
+                                match maybe_decoded {
+                                    Ok(image) => {
+                                        tx.send(SearchPageEvents::LoadCover(Some(image), manga_id))
+                                            .unwrap();
+                                    }
+                                    Err(_) => {
+                                        tx.send(SearchPageEvents::LoadCover(None, manga_id))
+                                            .unwrap();
+                                    }
+                                };
+                            });
+                        }
+                        None => tx
+                            .send(SearchPageEvents::LoadCover(None, manga_id))
+                            .unwrap(),
                     }
-                    None => {}
-                },
+                }
 
                 SearchPageEvents::LoadCover(maybe_image, manga_id) => match maybe_image {
                     Some(image) => {
@@ -448,7 +489,9 @@ impl SearchPage {
                             });
                         }
                     }
-                    None => {}
+                    None => {
+                        // todo! indicate that for the manga the cover could not be loaded
+                    }
                 },
             }
         }
