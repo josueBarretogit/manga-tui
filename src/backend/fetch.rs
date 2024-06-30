@@ -12,7 +12,7 @@ impl MangadexClient {
         Self {
             client,
             api_url_base: "https://api.mangadex.dev".to_string(),
-            cover_img_url_base: "https://uploads.mangadex.org/covers".to_string(),
+            cover_img_url_base: "https://uploads.mangadex.dev/covers".to_string(),
         }
     }
 

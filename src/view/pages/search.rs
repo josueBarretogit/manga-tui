@@ -276,7 +276,7 @@ impl SearchPage {
 
     fn abort_search_cover_handles(&mut self) {
         if !self.search_cover_handles.is_empty() {
-            for handle in self.search_cover_handles.iter_mut() {
+            for handle in self.search_cover_handles.iter() {
                 match handle {
                     Some(running_task) => {
                         running_task.abort();
@@ -342,7 +342,6 @@ impl SearchPage {
         }
         self.state = PageState::SearchingMangas;
         self.mangas_found_list.state = tui_widget_list::ListState::default();
-        self.mangas_found_list.widget = ListMangasFoundWidget::default();
 
         let tx = self.local_event_tx.clone();
         let client = Arc::clone(&self.fetch_client);
@@ -411,7 +410,7 @@ impl SearchPage {
                                                     .unwrap(),
                                                 Err(_) => tx
                                                     .send(SearchPageEvents::DecodeImage(
-                                                       None, manga_id,
+                                                        None, manga_id,
                                                     ))
                                                     .unwrap(),
                                             }
@@ -434,6 +433,7 @@ impl SearchPage {
                         // Todo indicate that mangas where not found
                         None => {
                             self.state = PageState::NotFound;
+                            self.mangas_found_list.total_result = 0;
                         }
                     }
                 }

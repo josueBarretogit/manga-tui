@@ -9,7 +9,7 @@ use ratatui::{Frame, Terminal};
 use ratatui_image::picker::Picker;
 use reqwest::Client;
 use strum::IntoEnumIterator;
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::{Action, Events};
@@ -28,7 +28,10 @@ pub enum AppState {
 
 pub struct App {
     picker: Picker,
-    pub action_tx: UnboundedSender<Action>,
+    pub global_action_tx: UnboundedSender<Action>,
+    pub global_action_rx: UnboundedReceiver<Action>,
+    pub global_event_tx: UnboundedSender<Events>,
+    pub global_event_rx: UnboundedReceiver<Events>,
     pub state: AppState,
     pub current_tab: SelectedTabs,
     pub manga_page: Option<MangaPage>,
@@ -51,17 +54,29 @@ impl Component for App {
     }
 
     fn handle_events(&mut self, events: Events) {
-        if let Events::Key(key_event) = events {
-            match key_event.code {
+        match events {
+            Events::Key(key_event) => match key_event.code {
                 KeyCode::Char('q') => {
                     if self.current_tab == SelectedTabs::Search
                         && self.search_page.input_mode != InputMode::Typing
                     {
-                        self.action_tx.send(Action::Quit).unwrap();
+                        self.global_action_tx.send(Action::Quit).unwrap();
                     }
                 }
                 _ => {}
+            },
+            Events::GoToMangaPage(manga) => {
+                self.manga_page = Some(MangaPage::new(
+                    manga.id,
+                    manga.title,
+                    manga.description,
+                    manga.tags,
+                    manga.img_url,
+                    manga.image_state,
+                    self.global_event_tx.clone(),
+                ))
             }
+            _ => {}
         }
     }
 
@@ -78,10 +93,7 @@ impl Component for App {
 }
 
 impl App {
-    pub fn new(
-        global_action_tx: UnboundedSender<Action>,
-        global_event_tx: UnboundedSender<Events>,
-    ) -> Self {
+    pub fn new() -> Self {
         let user_agent = format!(
             "manga-tui/0.beta-testing1.0 ({}/{}/{})",
             std::env::consts::FAMILY,
@@ -97,19 +109,36 @@ impl App {
             Client::builder().user_agent(user_agent).build().unwrap(),
         ));
 
+        let (global_action_tx, global_action_rx) = unbounded_channel::<Action>();
+        let (global_event_tx, global_event_rx) = unbounded_channel::<Events>();
+
         App {
             picker,
             current_tab: SelectedTabs::default(),
-            search_page: SearchPage::init(Arc::clone(&mangadex_client), picker, global_event_tx),
-            manga_page : None,
-            action_tx: global_action_tx,
+            search_page: SearchPage::init(
+                Arc::clone(&mangadex_client),
+                picker,
+                global_event_tx.clone(),
+            ),
+            manga_page: None,
+            global_action_tx,
+            global_action_rx,
+            global_event_tx,
+            global_event_rx,
             state: AppState::Runnning,
             fetch_client: mangadex_client,
         }
     }
 
     pub fn render_top_tabs(&self, area: Rect, buf: &mut Buffer) {
-        let titles: Vec<String> = SelectedTabs::iter().map(|page| page.to_string()).collect();
+        let titles: Vec<&str> = if self.current_tab == SelectedTabs::MangaTab {
+            match self.manga_page.as_ref() {
+                Some(page) => vec!["Search", &page.title],
+                None => vec!["Search"],
+            }
+        } else {
+            vec!["Search"]
+        };
 
         let tabs_block = Block::default().borders(Borders::BOTTOM);
 
@@ -127,6 +156,7 @@ impl App {
     pub fn render_pages(&mut self, area: Rect, frame: &mut Frame<'_>) {
         match self.current_tab {
             SelectedTabs::Search => self.render_search_page(area, frame),
+            SelectedTabs::MangaTab => self.render_manga_page(area, frame),
         }
     }
 
@@ -134,9 +164,13 @@ impl App {
         self.search_page.render(area, frame);
     }
 
-    pub fn render_home_page(&self, area: Rect, buf: &mut Buffer) {}
+    pub fn render_manga_page(&mut self, area: Rect, frame: &mut Frame<'_>) {
+        if let Some(page) = self.manga_page.as_mut() {
+            page.render(area, frame);
+        }
+    }
 
-    pub fn render_manga_page(&self, area: Rect, buf: &mut Buffer) {}
+    pub fn render_home_page(&self, area: Rect, buf: &mut Buffer) {}
 
     pub fn next_tab(&mut self) {
         self.current_tab = self.current_tab.next();

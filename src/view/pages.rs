@@ -1,7 +1,7 @@
 use strum::{Display, EnumCount, EnumIter, FromRepr, IntoEnumIterator};
 
-pub mod search;
 pub mod manga;
+pub mod search;
 
 #[derive(
     Clone, Copy, Default, FromRepr, Display, EnumIter, EnumCount, PartialEq, Eq, PartialOrd, Ord,
@@ -11,6 +11,7 @@ pub enum SelectedTabs {
     // Home,
     ///In these page the user will be able to search for a manga by title
     ///Reference: https://mangadex.org/search?q=death+note
+    MangaTab,
     #[default]
     Search,
 }

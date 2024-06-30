@@ -65,37 +65,34 @@ pub fn init_error_hooks() -> color_eyre::Result<()> {
 pub async fn run_app<B: Backend>(backend: B) -> Result<(), Box<dyn Error>> {
     let mut terminal = Terminal::new(backend)?;
 
-    let (action_tx, mut action_rx) = unbounded_channel::<Action>();
-
-    let (event_tx, mut event_rx) = unbounded_channel::<Events>();
-
     terminal.show_cursor()?;
 
-    let mut app = App::new(action_tx.clone(), event_tx.clone());
+    let mut app = App::new();
 
     let tick_rate = std::time::Duration::from_millis(250);
 
-    handle_events(tick_rate, event_tx);
+    handle_events(tick_rate, app.global_event_tx.clone());
 
     while app.state == AppState::Runnning {
         terminal.draw(|f| {
             app.render(f.size(), f);
         })?;
 
-        if let Ok(event) = event_rx.try_recv() {
+        if let Ok(event) = app.global_event_rx.try_recv() {
             app.handle_events(event.clone());
             if app.current_tab == SelectedTabs::Search {
                 app.search_page.handle_events(event);
             }
         }
 
-        if let Ok(app_action) = action_rx.try_recv() {
+        if let Ok(app_action) = app.global_action_rx.try_recv() {
             app.update(app_action);
         }
 
         if let Ok(search_page_action) = app.search_page.local_action_rx.try_recv() {
             app.search_page.update(search_page_action);
         }
+
     }
 
     Ok(())
