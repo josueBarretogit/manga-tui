@@ -13,8 +13,6 @@ use ratatui::{prelude::*, widgets::*};
 use ratatui_image::picker::Picker;
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::Resize;
-use rayon::iter::IntoParallelRefIterator;
-use rayon::iter::ParallelIterator;
 use std::io::Cursor;
 use std::sync::Arc;
 use std::thread;
@@ -28,7 +26,8 @@ use tui_input::Input;
 #[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 enum PageState {
     SearchingMangas,
-    DisplayingSearchResponse,
+    DisplayingMangasFound,
+    NotFound,
     #[default]
     Normal,
 }
@@ -109,7 +108,7 @@ impl Component for SearchPage {
             SearchPageActions::ScrollUp => self.scroll_up(),
             SearchPageActions::ScrollDown => self.scroll_down(),
             SearchPageActions::NextPage => {
-                if self.state == PageState::DisplayingSearchResponse
+                if self.state == PageState::DisplayingMangasFound
                     && self.state != PageState::SearchingMangas
                     && self.mangas_found_list.page * 10 < self.mangas_found_list.total_result
                 {
@@ -118,7 +117,7 @@ impl Component for SearchPage {
                 }
             }
             SearchPageActions::PreviousPage => {
-                if self.state == PageState::DisplayingSearchResponse
+                if self.state == PageState::DisplayingMangasFound
                     && self.state != PageState::SearchingMangas
                     && self.mangas_found_list.page != 1
                 {
@@ -217,7 +216,12 @@ impl SearchPage {
             PageState::SearchingMangas => {
                 Block::bordered().render(area, buf);
             }
-            PageState::DisplayingSearchResponse => {
+            PageState::NotFound => {
+                Block::bordered()
+                    .title("No mangas were found")
+                    .render(area, buf);
+            }
+            PageState::DisplayingMangasFound => {
                 StatefulWidgetRef::render_ref(
                     &self.mangas_found_list.widget,
                     manga_list_area,
@@ -301,11 +305,11 @@ impl SearchPage {
                     .local_action_tx
                     .send(SearchPageActions::ScrollUp)
                     .unwrap(),
-                KeyCode::Char('l') => self
+                KeyCode::Char('w') => self
                     .local_action_tx
                     .send(SearchPageActions::NextPage)
                     .unwrap(),
-                KeyCode::Char('h') => self
+                KeyCode::Char('b') => self
                     .local_action_tx
                     .send(SearchPageActions::PreviousPage)
                     .unwrap(),
@@ -333,9 +337,13 @@ impl SearchPage {
 
     fn search_mangas(&mut self, page: i32) {
         self.abort_search_cover_handles();
+        if !self.mangas_found_list.widget.mangas.is_empty() {
+            self.mangas_found_list.widget.mangas.clear();
+        }
         self.state = PageState::SearchingMangas;
         self.mangas_found_list.state = tui_widget_list::ListState::default();
         self.mangas_found_list.widget = ListMangasFoundWidget::default();
+
         let tx = self.local_event_tx.clone();
         let client = Arc::clone(&self.fetch_client);
         let manga_to_search = self.search_bar.value().to_string();
@@ -352,7 +360,8 @@ impl SearchPage {
                             .unwrap();
                     }
                 }
-                Err(_) => {
+                Err(e) => {
+                    panic!("could not fetch mangas : {e}");
                     tx.send(SearchPageEvents::LoadMangasFound(None)).unwrap();
                 }
             }
@@ -363,7 +372,6 @@ impl SearchPage {
         if let Ok(event) = self.local_event_rx.try_recv() {
             match event {
                 SearchPageEvents::LoadMangasFound(response) => {
-                    self.state = PageState::DisplayingSearchResponse;
                     match response {
                         Some(response) => {
                             let mut mangas: Vec<MangaItem> = vec![];
@@ -403,7 +411,7 @@ impl SearchPage {
                                                     .unwrap(),
                                                 Err(_) => tx
                                                     .send(SearchPageEvents::DecodeImage(
-                                                        None, manga_id,
+                                                       None, manga_id,
                                                     ))
                                                     .unwrap(),
                                             }
@@ -421,9 +429,12 @@ impl SearchPage {
                             }
                             self.mangas_found_list.widget = ListMangasFoundWidget::new(mangas);
                             self.mangas_found_list.total_result = response.total;
+                            self.state = PageState::DisplayingMangasFound;
                         }
                         // Todo indicate that mangas where not found
-                        None => self.mangas_found_list.widget = ListMangasFoundWidget::default(),
+                        None => {
+                            self.state = PageState::NotFound;
+                        }
                     }
                 }
                 SearchPageEvents::DecodeImage(maybe_bytes, manga_id) => {

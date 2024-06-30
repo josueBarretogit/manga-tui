@@ -1,6 +1,7 @@
 use strum::{Display, EnumCount, EnumIter, FromRepr, IntoEnumIterator};
 
 pub mod search;
+pub mod manga;
 
 #[derive(
     Clone, Copy, Default, FromRepr, Display, EnumIter, EnumCount, PartialEq, Eq, PartialOrd, Ord,

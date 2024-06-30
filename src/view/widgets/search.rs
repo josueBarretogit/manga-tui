@@ -58,8 +58,6 @@ impl StatefulWidget for MangaPreview {
     }
 }
 
-
-
 #[derive(Default, Clone)]
 pub struct MangaItem {
     pub id: String,
@@ -96,8 +94,23 @@ impl PreRender for MangaItem {
 
 impl From<Data> for MangaItem {
     fn from(value: Data) -> Self {
+        
         let id = value.id;
-        let title = value.attributes.title.en;
+        let title = value.attributes.title.en.unwrap_or(
+            value.attributes.title.ja_ro.unwrap_or(
+                value.attributes.title.ja.unwrap_or(
+                    value.attributes.title.jp.unwrap_or(
+                        value.attributes.title.zh.unwrap_or(
+                            value
+                                .attributes
+                                .title
+                                .ko
+                                .unwrap_or(value.attributes.title.ko_ro.unwrap_or_default()),
+                        ),
+                    ),
+                ),
+            ),
+        );
 
         let description = match value.attributes.description {
             Some(description) => description.en.unwrap_or("No description".to_string()),

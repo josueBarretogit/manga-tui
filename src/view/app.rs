@@ -7,8 +7,6 @@ use ratatui::style::Color;
 use ratatui::widgets::{Block, Borders, Tabs, Widget, WidgetRef};
 use ratatui::{Frame, Terminal};
 use ratatui_image::picker::Picker;
-use ratatui_image::protocol::StatefulProtocol;
-use ratatui_image::StatefulImage;
 use reqwest::Client;
 use strum::IntoEnumIterator;
 use tokio::sync::mpsc::UnboundedSender;
@@ -17,6 +15,7 @@ use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::{Action, Events};
 use crate::view::pages::*;
 
+use self::manga::MangaPage;
 use self::search::{InputMode, SearchPage};
 
 use super::widgets::Component;
@@ -32,6 +31,7 @@ pub struct App {
     pub action_tx: UnboundedSender<Action>,
     pub state: AppState,
     pub current_tab: SelectedTabs,
+    pub manga_page: Option<MangaPage>,
     pub search_page: SearchPage,
     fetch_client: Arc<MangadexClient>,
 }
@@ -78,7 +78,10 @@ impl Component for App {
 }
 
 impl App {
-    pub fn new(global_action_tx: UnboundedSender<Action>, global_event_tx: UnboundedSender<Events>) -> Self {
+    pub fn new(
+        global_action_tx: UnboundedSender<Action>,
+        global_event_tx: UnboundedSender<Events>,
+    ) -> Self {
         let user_agent = format!(
             "manga-tui/0.beta-testing1.0 ({}/{}/{})",
             std::env::consts::FAMILY,
@@ -98,6 +101,7 @@ impl App {
             picker,
             current_tab: SelectedTabs::default(),
             search_page: SearchPage::init(Arc::clone(&mangadex_client), picker, global_event_tx),
+            manga_page : None,
             action_tx: global_action_tx,
             state: AppState::Runnning,
             fetch_client: mangadex_client,

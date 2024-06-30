@@ -11,7 +11,7 @@ impl MangadexClient {
     pub fn new(client: reqwest::Client) -> Self {
         Self {
             client,
-            api_url_base: "https://api.mangadex.org".to_string(),
+            api_url_base: "https://api.mangadex.dev".to_string(),
             cover_img_url_base: "https://uploads.mangadex.org/covers".to_string(),
         }
     }
@@ -21,19 +21,15 @@ impl MangadexClient {
         search_term: &str,
         page: i32,
     ) -> Result<SearchMangaResponse, reqwest::Error> {
+        let offset = (page - 1) * 10;
         let url = format!(
             "{}/manga?title='{}'&includes[]=cover_art&limit=10&offset={}",
             self.api_url_base,
-            search_term,
-            (page - 1) * 10
+            search_term.trim(),
+            offset,
         );
 
-        self.client
-            .get(url)
-            .send()
-            .await?
-            .json::<SearchMangaResponse>()
-            .await
+        self.client.get(url).send().await?.json().await
     }
 
     pub async fn get_cover_for_manga(

@@ -1,8 +1,5 @@
 use color_eyre::config::HookBuilder;
-use crossterm::event::{
-    poll, DisableMouseCapture, EnableMouseCapture, Event, EventStream, KeyCode, KeyEvent,
-    KeyEventKind, MouseEvent,
-};
+use crossterm::event::{DisableMouseCapture, EnableMouseCapture, KeyEvent, MouseEvent};
 use crossterm::execute;
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
@@ -17,6 +14,7 @@ use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 
 use crate::view::app::{App, AppState};
 use crate::view::pages::SelectedTabs;
+use crate::view::widgets::search::MangaItem;
 use crate::view::widgets::Component;
 
 pub enum Action {
@@ -31,6 +29,7 @@ pub enum Events {
     Tick,
     Key(KeyEvent),
     Redraw(Box<dyn StatefulProtocol>, String),
+    GoToMangaPage(MangaItem),
     Mouse(MouseEvent),
 }
 

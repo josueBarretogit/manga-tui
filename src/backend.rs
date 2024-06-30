@@ -33,9 +33,18 @@ pub struct Attributes {
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct Title {
-    pub en: String,
+    pub en: Option<String>,
+    pub ja: Option<String>,
+    #[serde(rename = "ja-ro")]
+    pub ja_ro: Option<String>,
+    pub jp: Option<String>,
+    pub zh: Option<String>,
+    pub ko: Option<String>,
+    #[serde(rename = "zh-ro")]
+    pub zh_ro: Option<String>,
+    #[serde(rename = "zh-ro")]
+    pub ko_ro: Option<String>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
