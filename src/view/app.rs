@@ -78,6 +78,7 @@ impl Component for App {
                     manga.img_url,
                     manga.image_state,
                     self.global_event_tx.clone(),
+                    Arc::clone(&self.fetch_client)
                 ))
             }
 

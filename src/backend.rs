@@ -84,3 +84,52 @@ pub struct TagAtributtes {
 pub struct Name {
     pub en: String,
 }
+
+
+
+// manga's chapter structs
+//
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChapterResponse {
+    pub result: String,
+    pub response: String,
+    pub data: Vec<ChapterData>,
+    pub limit: i64,
+    pub offset: i64,
+    pub total: i64,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChapterData {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub type_field: String,
+    pub attributes: Attributes,
+    pub relationships: Vec<Relationship>,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChapterAttribute {
+    pub volume: String,
+    pub chapter: String,
+    pub title: String,
+    pub translated_language: String,
+    pub external_url: Option<String>,
+    pub publish_at: String,
+    pub readable_at: String,
+    pub created_at: String,
+    pub updated_at: String,
+    pub pages: i64,
+    pub version: i64,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Relationship {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub type_field: String,
+}

@@ -94,8 +94,8 @@ impl PreRender for MangaItem {
 
 impl From<Data> for MangaItem {
     fn from(value: Data) -> Self {
-        
         let id = value.id;
+        // Todo! maybe there is a better way to do this
         let title = value.attributes.title.en.unwrap_or(
             value.attributes.title.ja_ro.unwrap_or(
                 value.attributes.title.ja.unwrap_or(

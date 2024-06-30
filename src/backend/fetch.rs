@@ -1,4 +1,6 @@
-use super::SearchMangaResponse;
+use color_eyre::owo_colors::style;
+
+use super::{ChapterResponse, SearchMangaResponse};
 
 #[derive(Clone)]
 pub struct MangadexClient {
@@ -23,7 +25,7 @@ impl MangadexClient {
     ) -> Result<SearchMangaResponse, reqwest::Error> {
         let offset = (page - 1) * 10;
         let url = format!(
-            "{}/manga?title='{}'&includes[]=cover_art&limit=10&offset={}",
+            "{}/manga?title='{}'&includes[]=cover_art&limit=10&offset={}&order[relevance]=desc",
             self.api_url_base,
             search_term.trim(),
             offset,
@@ -46,5 +48,13 @@ impl MangadexClient {
             .await?
             .bytes()
             .await
+    }
+
+    pub async fn get_manga_chapters(&self, id: String) -> Result<ChapterResponse, reqwest::Error> {
+        let endpoint = format!("{}/manga/{}/feed", self.api_url_base, id);
+
+        let reponse = self.client.get(endpoint).send().await?;
+
+        reponse.json().await
     }
 }

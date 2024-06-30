@@ -82,9 +82,14 @@ pub async fn run_app<B: Backend>(backend: B) -> Result<(), Box<dyn Error>> {
 
         if let Ok(event) = app.global_event_rx.try_recv() {
             app.handle_events(event.clone());
-            if app.current_tab == SelectedTabs::Search {
-                app.search_page.handle_events(event);
-            }
+            match app.current_tab {
+                SelectedTabs::Search => {
+                    app.search_page.handle_events(event);
+                }
+                SelectedTabs::MangaTab => {
+                    app.manga_page.as_mut().unwrap().handle_events(event);
+                }
+            };
         }
 
         if let Ok(app_action) = app.global_action_rx.try_recv() {
