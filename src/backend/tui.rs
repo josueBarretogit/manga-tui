@@ -18,6 +18,7 @@ use crate::view::widgets::search::MangaItem;
 use crate::view::widgets::Component;
 
 pub enum Action {
+    GoToSearchPage,
     Quit,
     NextTab,
     PreviousTab,
@@ -29,8 +30,9 @@ pub enum Events {
     Tick,
     Key(KeyEvent),
     Redraw(Box<dyn StatefulProtocol>, String),
-    GoToMangaPage(MangaItem),
+    // Todo! maybe implement something that uses the mouse?
     Mouse(MouseEvent),
+    GoToMangaPage(MangaItem),
 }
 
 /// Initialize the terminal
@@ -92,7 +94,6 @@ pub async fn run_app<B: Backend>(backend: B) -> Result<(), Box<dyn Error>> {
         if let Ok(search_page_action) = app.search_page.local_action_rx.try_recv() {
             app.search_page.update(search_page_action);
         }
-
     }
 
     Ok(())

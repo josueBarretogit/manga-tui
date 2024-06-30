@@ -55,17 +55,21 @@ impl Component for App {
 
     fn handle_events(&mut self, events: Events) {
         match events {
-            Events::Key(key_event) => match key_event.code {
-                KeyCode::Char('q') => {
-                    if self.current_tab == SelectedTabs::Search
-                        && self.search_page.input_mode != InputMode::Typing
-                    {
-                        self.global_action_tx.send(Action::Quit).unwrap();
+            Events::Key(key_event) => {
+                if self.search_page.input_mode != InputMode::Typing {
+                    match key_event.code {
+                        KeyCode::Char('q') => self.global_action_tx.send(Action::Quit).unwrap(),
+                        KeyCode::Tab => {
+                            if let SelectedTabs::MangaTab = self.current_tab {
+                                self.global_action_tx.send(Action::GoToSearchPage).unwrap();
+                            }
+                        }
+                        _ => {}
                     }
                 }
-                _ => {}
-            },
+            }
             Events::GoToMangaPage(manga) => {
+                self.current_tab = SelectedTabs::MangaTab;
                 self.manga_page = Some(MangaPage::new(
                     manga.id,
                     manga.title,
@@ -76,6 +80,7 @@ impl Component for App {
                     self.global_event_tx.clone(),
                 ))
             }
+
             _ => {}
         }
     }
@@ -87,6 +92,7 @@ impl Component for App {
             }
             Action::PreviousTab => self.previous_tab(),
             Action::NextTab => self.next_tab(),
+            Action::GoToSearchPage => self.current_tab = SelectedTabs::Search,
             _ => {}
         }
     }

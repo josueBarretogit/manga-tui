@@ -48,6 +48,7 @@ pub enum SearchPageActions {
     ScrollDown,
     NextPage,
     PreviousPage,
+    GoToMangaPage,
 }
 
 #[derive(Default, PartialEq, Eq, PartialOrd, Ord)]
@@ -123,6 +124,14 @@ impl Component for SearchPage {
                 {
                     self.mangas_found_list.page -= 1;
                     self.search_mangas(self.mangas_found_list.page);
+                }
+            }
+            SearchPageActions::GoToMangaPage => {
+                let manga_selected = self.get_current_manga_selected();
+                if let Some(manga) = manga_selected {
+                    self.global_event_tx
+                        .send(Events::GoToMangaPage(manga))
+                        .unwrap();
                 }
             }
         }
@@ -239,7 +248,7 @@ impl SearchPage {
                     ))
                     .render(manga_list_area, buf);
 
-                if let Some(manga_select) = self.get_current_manga_selected() {
+                if let Some(manga_select) = self.get_current_manga_selected_mut() {
                     StatefulWidget::render(
                         MangaPreview::new(
                             manga_select.title.clone(),
@@ -267,9 +276,16 @@ impl SearchPage {
         self.mangas_found_list.state.previous();
     }
 
-    fn get_current_manga_selected(&mut self) -> Option<&mut MangaItem> {
+    fn get_current_manga_selected_mut(&mut self) -> Option<&mut MangaItem> {
         if let Some(index) = self.mangas_found_list.state.selected {
             return self.mangas_found_list.widget.mangas.get_mut(index);
+        }
+        None
+    }
+
+    fn get_current_manga_selected(&mut self) -> Option<MangaItem> {
+        if let Some(index) = self.mangas_found_list.state.selected {
+            return Some(self.mangas_found_list.widget.mangas[index].clone());
         }
         None
     }
@@ -312,6 +328,10 @@ impl SearchPage {
                 KeyCode::Char('b') => self
                     .local_action_tx
                     .send(SearchPageActions::PreviousPage)
+                    .unwrap(),
+                KeyCode::Char('r') => self
+                    .local_action_tx
+                    .send(SearchPageActions::GoToMangaPage)
                     .unwrap(),
                 _ => {}
             },
