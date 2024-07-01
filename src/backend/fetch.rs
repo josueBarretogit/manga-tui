@@ -1,3 +1,5 @@
+use std::error::Error;
+
 use color_eyre::owo_colors::style;
 
 use super::{ChapterResponse, SearchMangaResponse};
@@ -51,10 +53,9 @@ impl MangadexClient {
     }
 
     pub async fn get_manga_chapters(&self, id: String) -> Result<ChapterResponse, reqwest::Error> {
-        let endpoint = format!("{}/manga/{}/feed", self.api_url_base, id);
+        let endpoint = format!("{}/manga/{}/feed?limit=10", self.api_url_base, id);
 
-        let reponse = self.client.get(endpoint).send().await?;
-
-        reponse.json().await
+        let reponse = self.client.get(endpoint).send().await?.text().await?;
+        Ok(serde_json::from_str(&reponse).unwrap_or_else(|e| panic!("{e}")))
     }
 }

@@ -99,6 +99,14 @@ pub async fn run_app<B: Backend>(backend: B) -> Result<(), Box<dyn Error>> {
         if let Ok(search_page_action) = app.search_page.local_action_rx.try_recv() {
             app.search_page.update(search_page_action);
         }
+
+        if app.current_tab == SelectedTabs::MangaTab {
+            if let Some(manga_page) = app.manga_page.as_mut() {
+                if let Ok(action) = manga_page.local_action_rx.try_recv() {
+                    manga_page.update(action);
+                }
+            }
+        }
     }
 
     Ok(())

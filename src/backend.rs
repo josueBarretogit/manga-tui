@@ -85,8 +85,6 @@ pub struct Name {
     pub en: String,
 }
 
-
-
 // manga's chapter structs
 //
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -106,16 +104,16 @@ pub struct ChapterData {
     pub id: String,
     #[serde(rename = "type")]
     pub type_field: String,
-    pub attributes: Attributes,
+    pub attributes: ChapterAttribute,
     pub relationships: Vec<Relationship>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChapterAttribute {
-    pub volume: String,
-    pub chapter: String,
-    pub title: String,
+    pub volume: Option<String>,
+    pub chapter: Option<String>,
+    pub title: Option<String>,
     pub translated_language: String,
     pub external_url: Option<String>,
     pub publish_at: String,
