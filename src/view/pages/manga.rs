@@ -21,6 +21,7 @@ pub enum MangaPageActions {
     ScrollChapterDown,
     ScrollChapterUp,
     ToggleOrder,
+    ReadChapter,
 }
 
 pub enum MangaPageEvents {
@@ -248,8 +249,30 @@ impl MangaPage {
         self.search_chapters();
     }
 
+    // Todo! filter by language
     fn change_language(&mut self) {
         self.search_chapters();
+    }
+
+    fn read_chapter(&mut self) {
+        if let Some(chapters) = &self.chapters {
+            if let Some(index_chapter) = chapters.state.selected {
+                let client = Arc::clone(&self.client);
+                let id = self.id.clone();
+                let tx = self.global_event_tx.clone();
+                tokio::spawn(async move {
+                    let chapter_response = client.get_chapter_pages(&id).await;
+                    match chapter_response {
+                        Ok(response) => {
+                            tx.send(Events::ReadChapter(response)).unwrap();
+                        }
+                        Err(_e) => {
+                            // Todo! indicate a chapter cannot be read for some error
+                        }
+                    }
+                });
+            }
+        }
     }
 
     fn search_chapters(&mut self) {
@@ -320,6 +343,9 @@ impl Component for MangaPage {
                 if self.state != PageState::SearchingChapters {
                     self.toggle_chapter_order()
                 }
+            }
+            MangaPageActions::ReadChapter => {
+                self.read_chapter();
             }
         }
     }

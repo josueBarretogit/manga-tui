@@ -16,6 +16,7 @@ use crate::backend::tui::{Action, Events};
 use crate::view::pages::*;
 
 use self::manga::MangaPage;
+use self::reader::MangaReader;
 use self::search::{InputMode, SearchPage};
 
 use super::widgets::Component;
@@ -35,6 +36,7 @@ pub struct App {
     pub state: AppState,
     pub current_tab: SelectedTabs,
     pub manga_page: Option<MangaPage>,
+    pub manga_reader_page: Option<MangaReader>,
     pub search_page: SearchPage,
     fetch_client: Arc<MangadexClient>,
 }
@@ -78,7 +80,7 @@ impl Component for App {
                     manga.img_url,
                     manga.image_state,
                     self.global_event_tx.clone(),
-                    Arc::clone(&self.fetch_client)
+                    Arc::clone(&self.fetch_client),
                 ))
             }
 
@@ -128,6 +130,7 @@ impl App {
                 global_event_tx.clone(),
             ),
             manga_page: None,
+            manga_reader_page: None,
             global_action_tx,
             global_action_rx,
             global_event_tx,
@@ -177,7 +180,7 @@ impl App {
         }
     }
 
-    pub fn render_home_page(&self, area: Rect, buf: &mut Buffer) {}
+    //pub fn render_home_page(&self, area: Rect, buf: &mut Buffer) {}
 
     pub fn next_tab(&mut self) {
         self.current_tab = self.current_tab.next();

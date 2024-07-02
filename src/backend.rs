@@ -1,8 +1,6 @@
 pub mod fetch;
 pub mod tui;
 
-use std::default;
-
 use serde::{Deserialize, Serialize};
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -181,4 +179,20 @@ impl From<Languages> for &str {
             _ => "",
         }
     }
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChapterPagesResponse {
+    pub result: String,
+    pub base_url: String,
+    pub chapter: ChapterPages,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChapterPages {
+    pub hash: String,
+    pub data: Vec<String>,
+    pub data_saver: Vec<String>,
 }

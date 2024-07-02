@@ -2,6 +2,7 @@ use strum::{Display, EnumCount, EnumIter, FromRepr, IntoEnumIterator};
 
 pub mod manga;
 pub mod search;
+pub mod reader;
 
 #[derive(
     Clone, Copy, Default, FromRepr, Display, EnumIter, EnumCount, PartialEq, Eq, PartialOrd, Ord,

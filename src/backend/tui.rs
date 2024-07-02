@@ -10,13 +10,15 @@ use ratatui::prelude::*;
 use ratatui_image::protocol::StatefulProtocol;
 use std::error::Error;
 use std::time::Duration;
-use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
+use tokio::sync::mpsc::{UnboundedSender};
 use tokio::task::JoinHandle;
 
 use crate::view::app::{App, AppState};
 use crate::view::pages::SelectedTabs;
 use crate::view::widgets::search::MangaItem;
 use crate::view::widgets::Component;
+
+use super::ChapterPagesResponse;
 
 pub enum Action {
     GoToSearchPage,
@@ -34,6 +36,7 @@ pub enum Events {
     // Todo! maybe implement something that uses the mouse?
     Mouse(MouseEvent),
     GoToMangaPage(MangaItem),
+    ReadChapter(ChapterPagesResponse)
 }
 
 /// Initialize the terminal

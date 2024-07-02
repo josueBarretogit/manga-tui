@@ -4,7 +4,7 @@ use crate::backend::{ChapterResponse, Languages};
 
 #[derive(Clone)]
 pub struct ChapterItem {
-    id: String,
+    pub id: String,
     title: String,
     chapter_number: String,
     is_read: bool,
@@ -65,7 +65,7 @@ impl ChapterItem {
 
 #[derive(Clone)]
 pub struct ChaptersListWidget {
-    chapters: Vec<ChapterItem>,
+    pub chapters: Vec<ChapterItem>,
 }
 
 impl ChaptersListWidget {

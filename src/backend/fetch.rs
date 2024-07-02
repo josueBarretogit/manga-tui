@@ -1,6 +1,6 @@
 use crate::view::pages::manga::ChapterOrder;
 
-use super::{ChapterResponse, Languages, SearchMangaResponse};
+use super::{ChapterPagesResponse, ChapterResponse, Languages, SearchMangaResponse};
 
 #[derive(Clone)]
 pub struct MangadexClient {
@@ -69,5 +69,14 @@ impl MangadexClient {
 
         let reponse = self.client.get(endpoint).send().await?.text().await?;
         Ok(serde_json::from_str(&reponse).unwrap_or_else(|e| panic!("{e}")))
+    }
+
+    pub async fn get_chapter_pages(
+        &self,
+        id: &str,
+    ) -> Result<ChapterPagesResponse, reqwest::Error> {
+        let endpoint = format!("{}/at-home/server/{}", self.api_url_base, id);
+
+        self.client.get(endpoint).send().await?.json().await
     }
 }
