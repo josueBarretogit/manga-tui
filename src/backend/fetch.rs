@@ -92,6 +92,10 @@ impl MangadexClient {
     ) -> Result<ChapterPagesResponse, reqwest::Error> {
         let endpoint = format!("{}/at-home/server/{}", self.api_url_base, id);
 
-        self.client.get(endpoint).send().await?.json().await
+        let text_response = self.client.get(endpoint).send().await?.text().await?;
+
+        let response : ChapterPagesResponse = serde_json::from_str(&text_response).unwrap();
+
+        Ok(response)
     }
 }

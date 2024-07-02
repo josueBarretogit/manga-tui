@@ -10,7 +10,7 @@ use ratatui::prelude::*;
 use ratatui_image::protocol::StatefulProtocol;
 use std::error::Error;
 use std::time::Duration;
-use tokio::sync::mpsc::{UnboundedSender};
+use tokio::sync::mpsc::UnboundedSender;
 use tokio::task::JoinHandle;
 
 use crate::view::app::{App, AppState};
@@ -36,7 +36,7 @@ pub enum Events {
     // Todo! maybe implement something that uses the mouse?
     Mouse(MouseEvent),
     GoToMangaPage(MangaItem),
-    ReadChapter(ChapterPagesResponse)
+    ReadChapter(ChapterPagesResponse),
 }
 
 /// Initialize the terminal
@@ -93,6 +93,9 @@ pub async fn run_app<B: Backend>(backend: B) -> Result<(), Box<dyn Error>> {
                 SelectedTabs::MangaTab => {
                     app.manga_page.as_mut().unwrap().handle_events(event);
                 }
+                SelectedTabs::ReaderTab => {
+                    app.manga_reader_page.as_mut().unwrap().handle_events(event)
+                }
             };
         }
 
@@ -110,6 +113,14 @@ pub async fn run_app<B: Backend>(backend: B) -> Result<(), Box<dyn Error>> {
             if let Some(manga_page) = app.manga_page.as_mut() {
                 if let Ok(action) = manga_page.local_action_rx.try_recv() {
                     manga_page.update(action);
+                }
+            }
+        }
+
+        if app.current_tab == SelectedTabs::ReaderTab {
+            if let Some(reader_page) = app.manga_reader_page.as_mut() {
+                if let Ok(reader_action) = reader_page.local_action_rx.try_recv() {
+                    reader_page.update(reader_action);
                 }
             }
         }

@@ -84,6 +84,17 @@ impl Component for App {
                 ))
             }
 
+            Events::ReadChapter(chapter_response) => {
+                self.current_tab = SelectedTabs::ReaderTab;
+                self.manga_reader_page = Some(MangaReader::new(
+                    chapter_response.chapter.hash,
+                    chapter_response.base_url,
+                    self.picker,
+                    Arc::clone(&self.fetch_client),
+                    chapter_response.chapter.data
+                ))
+            }
+
             _ => {}
         }
     }
@@ -167,6 +178,7 @@ impl App {
         match self.current_tab {
             SelectedTabs::Search => self.render_search_page(area, frame),
             SelectedTabs::MangaTab => self.render_manga_page(area, frame),
+            SelectedTabs::ReaderTab => self.render_reader_page(area, frame),
         }
     }
 
@@ -176,6 +188,12 @@ impl App {
 
     pub fn render_manga_page(&mut self, area: Rect, frame: &mut Frame<'_>) {
         if let Some(page) = self.manga_page.as_mut() {
+            page.render(area, frame);
+        }
+    }
+
+    pub fn render_reader_page(&mut self, area: Rect, frame: &mut Frame<'_>) {
+        if let Some(page) = self.manga_reader_page.as_mut() {
             page.render(area, frame);
         }
     }

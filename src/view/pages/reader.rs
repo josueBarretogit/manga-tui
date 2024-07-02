@@ -8,7 +8,7 @@ use ratatui::{prelude::*, widgets::*};
 use ratatui_image::picker::Picker;
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::Resize;
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
 use crate::backend::fetch::MangadexClient;
@@ -31,6 +31,16 @@ pub struct Page {
     pub image_state: Option<ThreadProtocol>,
     pub url: String,
     pub data_save_url: String,
+}
+
+impl Page {
+    pub fn new(url: String, data_save_url: String) -> Self {
+        Self {
+            image_state: None,
+            url,
+            data_save_url,
+        }
+    }
 }
 
 pub struct MangaReader {
@@ -83,6 +93,39 @@ impl Component for MangaReader {
 }
 
 impl MangaReader {
+    pub fn new(
+        chapter_id: String,
+        base_url: String,
+        picker: Picker,
+        client: Arc<MangadexClient>,
+        url_imgs: Vec<String>,
+    ) -> Self {
+        let set: JoinSet<()> = JoinSet::new();
+        let (local_action_tx, local_action_rx) = mpsc::unbounded_channel::<MangaReaderActions>();
+        let (local_event_tx, local_event_rx) = mpsc::unbounded_channel::<MangaReaderEvents>();
+
+        local_event_tx.send(MangaReaderEvents::FetchPages).unwrap();
+        let mut pages: Vec<Page> = vec![];
+
+        for url in url_imgs {
+            pages.push(Page::new(url, String::default()));
+        }
+
+        Self {
+            chapter_id,
+            base_url,
+            pages,
+            current_page_index: 0,
+            image_tasks: set,
+            picker,
+            client,
+            local_action_tx,
+            local_action_rx,
+            local_event_tx,
+            local_event_rx,
+        }
+    }
+
     fn next_page(&mut self) {
         if (self.current_page_index - 1) == 0 {
             self.current_page_index -= 1;

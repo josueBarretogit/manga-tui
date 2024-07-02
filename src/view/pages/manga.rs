@@ -228,6 +228,9 @@ impl MangaPage {
                     .send(MangaPageActions::ToggleOrder)
                     .unwrap();
             }
+            KeyCode::Char('r') => {
+                self.local_action_tx.send(MangaPageActions::ReadChapter).unwrap();
+            }
             _ => {}
         }
     }
@@ -258,16 +261,16 @@ impl MangaPage {
         if let Some(chapters) = &self.chapters {
             if let Some(index_chapter) = chapters.state.selected {
                 let client = Arc::clone(&self.client);
-                let id = self.id.clone();
+                let id_chapter = chapters.widget.chapters[index_chapter].id.clone();
                 let tx = self.global_event_tx.clone();
                 tokio::spawn(async move {
-                    let chapter_response = client.get_chapter_pages(&id).await;
+                    let chapter_response = client.get_chapter_pages(&id_chapter).await;
                     match chapter_response {
                         Ok(response) => {
                             tx.send(Events::ReadChapter(response)).unwrap();
                         }
-                        Err(_e) => {
-                            // Todo! indicate a chapter cannot be read for some error
+                        Err(e) => {
+                            panic!("{e}");
                         }
                     }
                 });
