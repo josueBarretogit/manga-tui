@@ -1,3 +1,5 @@
+use bytes::Bytes;
+
 use crate::view::pages::manga::ChapterOrder;
 
 use super::{ChapterPagesResponse, ChapterResponse, Languages, SearchMangaResponse};
@@ -44,6 +46,19 @@ impl MangadexClient {
                 "{}/{}/{}",
                 self.cover_img_url_base, id_manga, file_name
             ))
+            .send()
+            .await?
+            .bytes()
+            .await
+    }
+
+    pub async fn get_chapter_page(
+        &self,
+        endpoint: &str,
+        file_name: &str,
+    ) -> Result<Bytes, reqwest::Error> {
+        self.client
+            .get(format!("{}/{}", endpoint, file_name))
             .send()
             .await?
             .bytes()

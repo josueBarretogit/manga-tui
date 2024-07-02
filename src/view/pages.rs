@@ -12,6 +12,7 @@ pub enum SelectedTabs {
     // Home,
     ///In these page the user will be able to search for a manga by title
     ///Reference: https://mangadex.org/search?q=death+note
+    ReaderTab,
     MangaTab,
     #[default]
     Search,
