@@ -1,6 +1,8 @@
 pub mod fetch;
 pub mod tui;
 
+use std::default;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -85,8 +87,7 @@ pub struct Name {
     pub en: String,
 }
 
-// manga's chapter structs
-//
+// manga chapter structs
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChapterResponse {
@@ -130,4 +131,55 @@ pub struct Relationship {
     pub id: String,
     #[serde(rename = "type")]
     pub type_field: String,
+}
+
+// Translations
+
+#[derive(strum_macros::Display, Default)]
+pub enum Languages {
+    French,
+    #[default]
+    English,
+    Spanish,
+    #[strum(to_string = "Latin spanish")]
+    SpanishLa,
+    Japanese,
+    Korean,
+    #[strum(to_string = "Portuguese")]
+    BrazilianPortuguese,
+    #[strum(to_string = "Traditional chinese")]
+    TraditionalChinese,
+    Russian,
+    German,
+    Unknown,
+}
+
+impl From<&str> for Languages {
+    fn from(value: &str) -> Self {
+        match value {
+            "fr" => Self::French,
+            "en" => Self::English,
+            "es" => Self::Spanish,
+            "es-la" => Self::SpanishLa,
+            "ko" => Self::Korean,
+            "de" => Self::German,
+            "pt-br" => Self::BrazilianPortuguese,
+            "ru" => Self::Russian,
+            "zh-hk" => Self::TraditionalChinese,
+            "ja" | "ja-ro" => Self::Japanese,
+            _ => Self::Unknown,
+        }
+    }
+}
+
+impl From<Languages> for &str {
+    fn from(value: Languages) -> Self {
+        match value {
+            Languages::Spanish => "es",
+            Languages::French => "fr",
+            Languages::English => "en",
+            Languages::Japanese => "ja",
+            _ => "",
+        }
+    }
 }

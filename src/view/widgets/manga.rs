@@ -1,7 +1,6 @@
 use ratatui::{prelude::*, widgets::*};
 use tui_widget_list::PreRender;
-
-use crate::backend::{ChapterResponse, SearchMangaResponse};
+use crate::backend::{ChapterResponse, Languages};
 
 #[derive(Clone)]
 pub struct ChapterItem {
@@ -18,15 +17,21 @@ impl Widget for ChapterItem {
     where
         Self: Sized,
     {
-        let layout = Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]);
+        let layout = Layout::horizontal([
+            Constraint::Percentage(60),
+            Constraint::Percentage(20),
+            Constraint::Percentage(20),
+        ]);
 
-        let [title_area, chapter_number_area] = layout.areas(area);
+        let [title_area, chapter_number_area, translated_language_area] = layout.areas(area);
 
         Paragraph::new(self.title)
             .style(self.style)
             .render(title_area, buf);
 
+        let translated_language: Languages = self.translated_language.as_str().into();
         Paragraph::new(self.chapter_number).render(chapter_number_area, buf);
+        Paragraph::new(translated_language.to_string()).render(translated_language_area, buf);
     }
 }
 
@@ -107,3 +112,5 @@ impl StatefulWidget for ChaptersListWidget {
         StatefulWidget::render(chapters_list, area, buf, state);
     }
 }
+
+

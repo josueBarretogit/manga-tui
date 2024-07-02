@@ -1,15 +1,21 @@
+use std::default;
 use std::sync::Arc;
 
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
-use crate::backend::ChapterResponse;
+use crate::backend::{ChapterResponse, Languages};
 use crate::view::widgets::manga::ChaptersListWidget;
 use crate::view::widgets::{Component, ThreadImage, ThreadProtocol};
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{prelude::*, widgets::*};
 use ratatui_image::Resize;
+use strum::Display;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
-use tui_widget_list::ListState;
+
+pub enum PageState {
+    SearchingChapters,
+    DisplayingChaptersFound,
+}
 
 pub enum MangaPageActions {
     ScrollChapterDown,
@@ -19,6 +25,15 @@ pub enum MangaPageActions {
 pub enum MangaPageEvents {
     FetchChapters,
     LoadChapters(Option<ChapterResponse>),
+}
+
+#[derive(Display, Default, Clone, Copy)]
+pub enum ChapterOrder {
+    #[strum(to_string = "asc")]
+    Ascending,
+    #[strum(to_string = "desc")]
+    #[default]
+    Descending,
 }
 
 pub struct MangaPage {
@@ -40,6 +55,9 @@ pub struct MangaPage {
 struct Chapters {
     state: tui_widget_list::ListState,
     widget: ChaptersListWidget,
+    order: ChapterOrder,
+    page: u32,
+    total_result: u32,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -57,7 +75,12 @@ impl MangaPage {
         let (local_action_tx, local_action_rx) = mpsc::unbounded_channel::<MangaPageActions>();
         let (local_event_tx, local_event_rx) = mpsc::unbounded_channel::<MangaPageEvents>();
 
-        local_event_tx.send(MangaPageEvents::FetchChapters).unwrap();
+        let send_status = local_event_tx.send(MangaPageEvents::FetchChapters);
+
+        match send_status {
+            Ok(_t) => {}
+            Err(_e) => {}
+        };
 
         Self {
             id,
@@ -96,34 +119,79 @@ impl MangaPage {
         let [manga_information_area, manga_chapters_area] = layout.areas(area);
 
         Paragraph::new(self.description.clone())
-            .block(Block::bordered())
+            .block(Block::bordered().title(self.id.clone()))
             .wrap(Wrap { trim: true })
             .render(manga_information_area, frame.buffer_mut());
 
-        self.render_chapters(manga_chapters_area, frame);
+        self.render_chapters_area(manga_chapters_area, frame);
     }
 
-    fn render_chapters(&mut self, area: Rect, frame: &mut Frame<'_>) {
-        Block::bordered().render(area, frame.buffer_mut());
+    fn render_chapters_area(&mut self, area: Rect, frame: &mut Frame<'_>) {
+        let layout = Layout::vertical([Constraint::Percentage(20), Constraint::Percentage(80)]);
 
         let inner_block = area.inner(&Margin {
             horizontal: 1,
             vertical: 1,
         });
 
+        let [sorting_buttons_area, chapters_area] = layout.areas(inner_block);
+
         match self.chapters.as_mut() {
             Some(chapters) => {
+                let page = format!("Page {}", chapters.page);
+                let total = format!("Total chapters {}", chapters.total_result);
+                Block::bordered()
+                    .title_bottom(Line::from(page).left_aligned())
+                    .title_bottom(Line::from(total).right_aligned())
+                    .render(area, frame.buffer_mut());
+
+                MangaPage::render_sorting_buttons(
+                    sorting_buttons_area,
+                    frame.buffer_mut(),
+                    chapters.order,
+                    Languages::default(),
+                );
+
                 StatefulWidget::render(
                     chapters.widget.clone(),
-                    inner_block,
+                    chapters_area,
                     frame.buffer_mut(),
                     &mut chapters.state,
                 );
             }
             None => {
+                Block::bordered().render(area, frame.buffer_mut());
                 // Todo! show chapters are loading
             }
         }
+    }
+
+    fn render_sorting_buttons(
+        area: Rect,
+        buf: &mut Buffer,
+        order: ChapterOrder,
+        language: Languages,
+    ) {
+        let layout = Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]);
+        let [sorting_area, language_area] = layout.areas(area);
+
+        let order_title = format!(
+            "Order: {}",
+            match order {
+                ChapterOrder::Descending => "Descending",
+                ChapterOrder::Ascending => "Ascending",
+            }
+        );
+
+        Block::bordered()
+            .title(order_title)
+            .render(sorting_area, buf);
+
+        // Todo! bring in selectable widget
+
+        Block::bordered()
+            .title(language.to_string())
+            .render(language_area, buf);
     }
 
     fn handle_key_events(&mut self, key_event: KeyEvent) {
@@ -162,7 +230,14 @@ impl MangaPage {
                     let client = Arc::clone(&self.client);
                     let tx = self.local_event_tx.clone();
                     tokio::spawn(async move {
-                        let response = client.get_manga_chapters(manga_id).await;
+                        let response = client
+                            .get_manga_chapters(
+                                manga_id,
+                                1,
+                                Languages::English,
+                                ChapterOrder::Ascending,
+                            )
+                            .await;
 
                         match response {
                             Ok(chapters_response) => tx
@@ -177,6 +252,9 @@ impl MangaPage {
                         self.chapters = Some(Chapters {
                             state: tui_widget_list::ListState::default(),
                             widget: ChaptersListWidget::from_response(&response),
+                            order: ChapterOrder::default(),
+                            page: 1,
+                            total_result: response.total as u32,
                         });
                     }
                     None => self.chapters = None,

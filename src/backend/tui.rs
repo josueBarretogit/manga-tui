@@ -11,6 +11,7 @@ use ratatui_image::protocol::StatefulProtocol;
 use std::error::Error;
 use std::time::Duration;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
+use tokio::task::JoinHandle;
 
 use crate::view::app::{App, AppState};
 use crate::view::pages::SelectedTabs;
@@ -73,7 +74,7 @@ pub async fn run_app<B: Backend>(backend: B) -> Result<(), Box<dyn Error>> {
 
     let tick_rate = std::time::Duration::from_millis(250);
 
-    handle_events(tick_rate, app.global_event_tx.clone());
+    let main_event_handle = handle_events(tick_rate, app.global_event_tx.clone());
 
     while app.state == AppState::Runnning {
         terminal.draw(|f| {
@@ -96,8 +97,10 @@ pub async fn run_app<B: Backend>(backend: B) -> Result<(), Box<dyn Error>> {
             app.update(app_action);
         }
 
-        if let Ok(search_page_action) = app.search_page.local_action_rx.try_recv() {
-            app.search_page.update(search_page_action);
+        if app.current_tab == SelectedTabs::Search {
+            if let Ok(search_page_action) = app.search_page.local_action_rx.try_recv() {
+                app.search_page.update(search_page_action);
+            }
         }
 
         if app.current_tab == SelectedTabs::MangaTab {
@@ -109,10 +112,12 @@ pub async fn run_app<B: Backend>(backend: B) -> Result<(), Box<dyn Error>> {
         }
     }
 
+    main_event_handle.abort();
+
     Ok(())
 }
 
-pub fn handle_events(tick_rate: Duration, event_tx: UnboundedSender<Events>) {
+pub fn handle_events(tick_rate: Duration, event_tx: UnboundedSender<Events>) -> JoinHandle<()> {
     tokio::spawn(async move {
         let mut reader = crossterm::event::EventStream::new();
         let mut tick_interval = tokio::time::interval(tick_rate);
@@ -149,5 +154,5 @@ pub fn handle_events(tick_rate: Duration, event_tx: UnboundedSender<Events>) {
                     }
             }
         }
-    });
+    })
 }

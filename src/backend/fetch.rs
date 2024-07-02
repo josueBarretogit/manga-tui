@@ -1,8 +1,6 @@
-use std::error::Error;
+use crate::view::pages::manga::ChapterOrder;
 
-use color_eyre::owo_colors::style;
-
-use super::{ChapterResponse, SearchMangaResponse};
+use super::{ChapterResponse, Languages, SearchMangaResponse};
 
 #[derive(Clone)]
 pub struct MangadexClient {
@@ -52,8 +50,22 @@ impl MangadexClient {
             .await
     }
 
-    pub async fn get_manga_chapters(&self, id: String) -> Result<ChapterResponse, reqwest::Error> {
-        let endpoint = format!("{}/manga/{}/feed?limit=10", self.api_url_base, id);
+    // Todo! implement order by and filter by language and pagination
+    pub async fn get_manga_chapters(
+        &self,
+        id: String,
+        page: i32,
+        language: Languages,
+        order: ChapterOrder,
+    ) -> Result<ChapterResponse, reqwest::Error> {
+        let language: &str = language.into();
+        let page = (page - 1) * 50;
+
+        let order = format!("order[volume]={order}&order[chapter]={order}");
+        let endpoint = format!(
+            "{}/manga/{}/feed?limit=50&{}&translatedLanguage[]={}&offset=0",
+            self.api_url_base, id, order, language
+        );
 
         let reponse = self.client.get(endpoint).send().await?.text().await?;
         Ok(serde_json::from_str(&reponse).unwrap_or_else(|e| panic!("{e}")))
