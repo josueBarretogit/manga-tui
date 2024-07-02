@@ -1008,6 +1008,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "itertools"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1133,7 +1142,7 @@ dependencies = [
  "directories",
  "futures",
  "image",
- "ratatui",
+ "ratatui 0.26.3",
  "ratatui-image",
  "rayon",
  "reqwest",
@@ -1144,6 +1153,7 @@ dependencies = [
  "throbber-widgets-tui",
  "tokio",
  "tui-input",
+ "tui-menu",
  "tui-widget-list",
 ]
 
@@ -1572,12 +1582,33 @@ dependencies = [
  "cassowary",
  "compact_str",
  "crossterm",
- "itertools",
+ "itertools 0.12.1",
  "lru",
  "paste",
  "stability",
  "strum",
  "time",
+ "unicode-segmentation",
+ "unicode-truncate",
+ "unicode-width",
+]
+
+[[package]]
+name = "ratatui"
+version = "0.27.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d16546c5b5962abf8ce6e2881e722b4e0ae3b6f1a08a26ae3573c55853ca68d3"
+dependencies = [
+ "bitflags 2.5.0",
+ "cassowary",
+ "compact_str",
+ "crossterm",
+ "itertools 0.13.0",
+ "lru",
+ "paste",
+ "stability",
+ "strum",
+ "strum_macros",
  "unicode-segmentation",
  "unicode-truncate",
  "unicode-width",
@@ -1590,13 +1621,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "07d1ed81eabd67488a23fd502b770dc09106918d32ec1746cd20ccc7dd46937f"
 dependencies = [
  "base64",
+ "crossterm",
  "dyn-clone",
  "icy_sixel",
  "image",
  "rand",
- "ratatui",
+ "ratatui 0.26.3",
  "rustix",
- "serde",
 ]
 
 [[package]]
@@ -1613,7 +1644,7 @@ dependencies = [
  "built",
  "cfg-if",
  "interpolate_name",
- "itertools",
+ "itertools 0.12.1",
  "libc",
  "libfuzzer-sys",
  "log",
@@ -2126,7 +2157,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "431b847a60fc7b1df94a5b1bcb3cdd7027bb0013b431b08038505e8891c577a2"
 dependencies = [
  "rand",
- "ratatui",
+ "ratatui 0.26.3",
 ]
 
 [[package]]
@@ -2343,12 +2374,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "tui-menu"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d14fc2fa14913c136efd7594846d83c47e2e3f0d8a235fb9f37fa8f24a86eab5"
+dependencies = [
+ "ratatui 0.27.0",
+]
+
+[[package]]
 name = "tui-widget-list"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df726626b0672a967d70a9ad353f29cfacea79e177f6457e1bdd544b8c1ddcfd"
 dependencies = [
- "ratatui",
+ "ratatui 0.26.3",
 ]
 
 [[package]]
@@ -2369,7 +2409,7 @@ version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5a5fbabedabe362c618c714dbefda9927b5afc8e2a8102f47f081089a9019226"
 dependencies = [
- "itertools",
+ "itertools 0.12.1",
  "unicode-width",
 ]
 

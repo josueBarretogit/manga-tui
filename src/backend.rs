@@ -135,7 +135,7 @@ pub struct Relationship {
 
 // Translations
 
-#[derive(strum_macros::Display, Default)]
+#[derive(strum_macros::Display, Default, Clone, Copy)]
 pub enum Languages {
     French,
     #[default]
@@ -151,7 +151,6 @@ pub enum Languages {
     TraditionalChinese,
     Russian,
     German,
-    Unknown,
 }
 
 impl From<&str> for Languages {
@@ -167,7 +166,7 @@ impl From<&str> for Languages {
             "ru" => Self::Russian,
             "zh-hk" => Self::TraditionalChinese,
             "ja" | "ja-ro" => Self::Japanese,
-            _ => Self::Unknown,
+            _ => Self::default(),
         }
     }
 }

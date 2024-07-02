@@ -1,4 +1,3 @@
-use std::default;
 use std::sync::Arc;
 
 use crate::backend::fetch::MangadexClient;
@@ -12,14 +11,16 @@ use ratatui_image::Resize;
 use strum::Display;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
+#[derive(PartialEq, Eq)]
 pub enum PageState {
     SearchingChapters,
-    DisplayingChaptersFound,
+    SearchingStopped,
 }
 
 pub enum MangaPageActions {
     ScrollChapterDown,
     ScrollChapterUp,
+    ToggleOrder,
 }
 
 pub enum MangaPageEvents {
@@ -36,6 +37,15 @@ pub enum ChapterOrder {
     Descending,
 }
 
+impl ChapterOrder {
+    fn toggle(self) -> Self {
+        match self {
+            ChapterOrder::Ascending => ChapterOrder::Descending,
+            ChapterOrder::Descending => ChapterOrder::Ascending,
+        }
+    }
+}
+
 pub struct MangaPage {
     pub id: String,
     pub title: String,
@@ -50,12 +60,14 @@ pub struct MangaPage {
     local_event_rx: UnboundedReceiver<MangaPageEvents>,
     client: Arc<MangadexClient>,
     chapters: Option<Chapters>,
+    chapter_order: ChapterOrder,
+    chapter_language: Languages,
+    state: PageState,
 }
 
 struct Chapters {
     state: tui_widget_list::ListState,
     widget: ChaptersListWidget,
-    order: ChapterOrder,
     page: u32,
     total_result: u32,
 }
@@ -96,6 +108,9 @@ impl MangaPage {
             local_event_rx,
             client,
             chapters: None,
+            chapter_language: Languages::default(),
+            chapter_order: ChapterOrder::default(),
+            state: PageState::SearchingChapters,
         }
     }
     fn render_cover(&mut self, area: Rect, buf: &mut Buffer) {
@@ -136,6 +151,13 @@ impl MangaPage {
 
         let [sorting_buttons_area, chapters_area] = layout.areas(inner_block);
 
+        MangaPage::render_sorting_buttons(
+            sorting_buttons_area,
+            frame.buffer_mut(),
+            self.chapter_order,
+            self.chapter_language,
+        );
+
         match self.chapters.as_mut() {
             Some(chapters) => {
                 let page = format!("Page {}", chapters.page);
@@ -144,13 +166,6 @@ impl MangaPage {
                     .title_bottom(Line::from(page).left_aligned())
                     .title_bottom(Line::from(total).right_aligned())
                     .render(area, frame.buffer_mut());
-
-                MangaPage::render_sorting_buttons(
-                    sorting_buttons_area,
-                    frame.buffer_mut(),
-                    chapters.order,
-                    Languages::default(),
-                );
 
                 StatefulWidget::render(
                     chapters.widget.clone(),
@@ -185,6 +200,7 @@ impl MangaPage {
 
         Block::bordered()
             .title(order_title)
+            .title_bottom(Line::from("Change order : <o>").centered())
             .render(sorting_area, buf);
 
         // Todo! bring in selectable widget
@@ -206,6 +222,11 @@ impl MangaPage {
                     .send(MangaPageActions::ScrollChapterUp)
                     .unwrap();
             }
+            KeyCode::Char('o') => {
+                self.local_action_tx
+                    .send(MangaPageActions::ToggleOrder)
+                    .unwrap();
+            }
             _ => {}
         }
     }
@@ -222,43 +243,58 @@ impl MangaPage {
         }
     }
 
+    fn toggle_chapter_order(&mut self) {
+        self.chapter_order = self.chapter_order.toggle();
+        self.search_chapters();
+    }
+
+    fn change_language(&mut self) {
+        self.search_chapters();
+    }
+
+    fn search_chapters(&mut self) {
+        self.state = PageState::SearchingChapters;
+        let manga_id = self.id.clone();
+        let client = Arc::clone(&self.client);
+        let tx = self.local_event_tx.clone();
+        let language = self.chapter_language;
+        let chapter_order = self.chapter_order;
+        tokio::spawn(async move {
+            let response = client
+                .get_manga_chapters(manga_id, 1, language, chapter_order)
+                .await;
+
+            match response {
+                Ok(chapters_response) => tx
+                    .send(MangaPageEvents::LoadChapters(Some(chapters_response)))
+                    .unwrap(),
+                Err(_e) => tx.send(MangaPageEvents::LoadChapters(None)).unwrap(),
+            }
+        });
+    }
+
     fn tick(&mut self) {
         if let Ok(background_event) = self.local_event_rx.try_recv() {
             match background_event {
-                MangaPageEvents::FetchChapters => {
-                    let manga_id = self.id.clone();
-                    let client = Arc::clone(&self.client);
-                    let tx = self.local_event_tx.clone();
-                    tokio::spawn(async move {
-                        let response = client
-                            .get_manga_chapters(
-                                manga_id,
-                                1,
-                                Languages::English,
-                                ChapterOrder::Ascending,
-                            )
-                            .await;
+                MangaPageEvents::FetchChapters => self.search_chapters(),
+                MangaPageEvents::LoadChapters(response) => {
+                    self.state = PageState::SearchingStopped;
+                    match response {
+                        Some(response) => {
+                            let mut list_state = tui_widget_list::ListState::default();
 
-                        match response {
-                            Ok(chapters_response) => tx
-                                .send(MangaPageEvents::LoadChapters(Some(chapters_response)))
-                                .unwrap(),
-                            Err(_e) => tx.send(MangaPageEvents::LoadChapters(None)).unwrap(),
+                            list_state.select(Some(0));
+
+                            self.chapters = Some(Chapters {
+                                state: list_state,
+                                widget: ChaptersListWidget::from_response(&response),
+                                page: 1,
+                                total_result: response.total as u32,
+                            });
                         }
-                    });
-                }
-                MangaPageEvents::LoadChapters(response) => match response {
-                    Some(response) => {
-                        self.chapters = Some(Chapters {
-                            state: tui_widget_list::ListState::default(),
-                            widget: ChaptersListWidget::from_response(&response),
-                            order: ChapterOrder::default(),
-                            page: 1,
-                            total_result: response.total as u32,
-                        });
+                        None => self.chapters = None,
                     }
-                    None => self.chapters = None,
-                },
+                }
             }
         }
     }
@@ -280,6 +316,11 @@ impl Component for MangaPage {
         match action {
             MangaPageActions::ScrollChapterUp => self.scroll_chapter_up(),
             MangaPageActions::ScrollChapterDown => self.scroll_chapter_down(),
+            MangaPageActions::ToggleOrder => {
+                if self.state != PageState::SearchingChapters {
+                    self.toggle_chapter_order()
+                }
+            }
         }
     }
     fn handle_events(&mut self, events: Events) {
