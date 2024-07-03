@@ -61,15 +61,27 @@ pub struct MangaReader {
 impl Component for MangaReader {
     type Actions = MangaReaderActions;
     fn render(&mut self, area: ratatui::prelude::Rect, frame: &mut Frame<'_>) {
+        let layout =
+            Layout::vertical([Constraint::Percentage(10), Constraint::Percentage(90)]).split(area);
+
+        self.current_page_index
+            .to_string()
+            .render(layout[0], frame.buffer_mut());
+
         match self.pages.get_mut(self.current_page_index) {
-            Some(page) => {
-                if let Some(img_state) = page.image_state.as_mut() {
+            Some(page) => match page.image_state.as_mut() {
+                Some(img_state) => {
                     let image = ThreadImage::new().resize(Resize::Fit(None));
                     StatefulWidget::render(image, area, frame.buffer_mut(), img_state);
                 }
-            }
-            None => Block::bordered().render(area, frame.buffer_mut()),
-        }
+                None => {
+                    Block::bordered().render(layout[1], frame.buffer_mut());
+                }
+            },
+            None => Block::bordered()
+                .title("loading page")
+                .render(layout[1], frame.buffer_mut()),
+        };
     }
 
     fn update(&mut self, action: Self::Actions) {
@@ -82,8 +94,14 @@ impl Component for MangaReader {
     fn handle_events(&mut self, events: crate::backend::tui::Events) {
         match events {
             Events::Key(key_event) => match key_event.code {
-                KeyCode::Down | KeyCode::Char('j') => self.next_page(),
-                KeyCode::Up | KeyCode::Char('k') => self.previous_page(),
+                KeyCode::Down | KeyCode::Char('j') => self
+                    .local_action_tx
+                    .send(MangaReaderActions::NextPage)
+                    .unwrap(),
+                KeyCode::Up | KeyCode::Char('k') => self
+                    .local_action_tx
+                    .send(MangaReaderActions::PreviousPage)
+                    .unwrap(),
                 _ => {}
             },
             Events::Tick => self.tick(),
@@ -104,18 +122,19 @@ impl MangaReader {
         let (local_action_tx, local_action_rx) = mpsc::unbounded_channel::<MangaReaderActions>();
         let (local_event_tx, local_event_rx) = mpsc::unbounded_channel::<MangaReaderEvents>();
 
-        local_event_tx.send(MangaReaderEvents::FetchPages).unwrap();
         let mut pages: Vec<Page> = vec![];
 
         for url in url_imgs {
             pages.push(Page::new(url, String::default()));
         }
 
+        local_event_tx.send(MangaReaderEvents::FetchPages).unwrap();
+
         Self {
             chapter_id,
             base_url,
             pages,
-            current_page_index: 0,
+            current_page_index: 1,
             image_tasks: set,
             picker,
             client,
@@ -127,14 +146,14 @@ impl MangaReader {
     }
 
     fn next_page(&mut self) {
-        if (self.current_page_index - 1) == 0 {
-            self.current_page_index -= 1;
+        if (self.current_page_index + 1) < self.pages.len() {
+            self.current_page_index += 1;
         }
     }
 
     fn previous_page(&mut self) {
-        if (self.current_page_index + 1) > self.pages.len() {
-            self.current_page_index += 1;
+        if (self.current_page_index - 1) != 0 {
+            self.current_page_index -= 1;
         }
     }
 
@@ -148,19 +167,17 @@ impl MangaReader {
                 MangaReaderEvents::FetchPages => {
                     for (index, page) in self.pages.iter().enumerate() {
                         let file_name = page.url.clone();
-                        let endpoint = format!("{}/{}", self.base_url, self.chapter_id);
+                        let endpoint = format!("{}/data/{}", self.base_url, self.chapter_id);
                         let client = Arc::clone(&self.client);
                         let tx = self.local_event_tx.clone();
-                        self.image_tasks.spawn(async move {
+                        tokio::spawn(async move {
                             let image_response =
                                 client.get_chapter_page(&endpoint, &file_name).await;
                             match image_response {
                                 Ok(bytes) => tx
                                     .send(MangaReaderEvents::DecodeImage(Some(bytes), index))
                                     .unwrap(),
-                                Err(_) => tx
-                                    .send(MangaReaderEvents::DecodeImage(None, index))
-                                    .unwrap(),
+                                Err(e) => panic!("could not get chapter :{e}"),
                             };
                         });
                     }
@@ -196,12 +213,12 @@ impl MangaReader {
                                 });
                             }
                             None => {
-                                //Todo! indicate that the image for a page could not be loadded
+                                panic!("could note load image")
                             }
                         }
                     }
                     None => {
-                        //Todo! indicate that the image for a page could not be loadded
+                        panic!("could note load image")
                     }
                 },
 

@@ -81,18 +81,19 @@ impl Component for App {
                     manga.image_state,
                     self.global_event_tx.clone(),
                     Arc::clone(&self.fetch_client),
-                ))
+                ));
             }
 
             Events::ReadChapter(chapter_response) => {
                 self.current_tab = SelectedTabs::ReaderTab;
+                self.manga_page = None;
                 self.manga_reader_page = Some(MangaReader::new(
                     chapter_response.chapter.hash,
                     chapter_response.base_url,
                     self.picker,
                     Arc::clone(&self.fetch_client),
-                    chapter_response.chapter.data
-                ))
+                    chapter_response.chapter.data,
+                ));
             }
 
             _ => {}

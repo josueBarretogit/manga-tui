@@ -15,8 +15,8 @@ impl MangadexClient {
     pub fn new(client: reqwest::Client) -> Self {
         Self {
             client,
-            api_url_base: "https://api.mangadex.dev".to_string(),
-            cover_img_url_base: "https://uploads.mangadex.dev/covers".to_string(),
+            api_url_base: "https://api.mangadex.org".to_string(),
+            cover_img_url_base: "https://uploads.mangadex.org/covers".to_string(),
         }
     }
 
