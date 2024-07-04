@@ -15,8 +15,8 @@ impl MangadexClient {
     pub fn new(client: reqwest::Client) -> Self {
         Self {
             client,
-            api_url_base: "https://api.mangadex.org".to_string(),
-            cover_img_url_base: "https://uploads.mangadex.org/covers".to_string(),
+            api_url_base: "https://api.mangadex.dev".to_string(),
+            cover_img_url_base: "https://uploads.mangadex.dev/covers".to_string(),
         }
     }
 
@@ -74,7 +74,7 @@ impl MangadexClient {
         order: ChapterOrder,
     ) -> Result<ChapterResponse, reqwest::Error> {
         let language: &str = language.into();
-        let page = (page - 1) * 50;
+        // let page = (page - 1) * 50;
 
         let order = format!("order[volume]={order}&order[chapter]={order}");
         let endpoint = format!(
@@ -94,7 +94,7 @@ impl MangadexClient {
 
         let text_response = self.client.get(endpoint).send().await?.text().await?;
 
-        let response : ChapterPagesResponse = serde_json::from_str(&text_response).unwrap();
+        let response: ChapterPagesResponse = serde_json::from_str(&text_response).unwrap();
 
         Ok(response)
     }

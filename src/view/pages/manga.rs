@@ -145,7 +145,7 @@ impl MangaPage {
     fn render_chapters_area(&mut self, area: Rect, frame: &mut Frame<'_>) {
         let layout = Layout::vertical([Constraint::Percentage(20), Constraint::Percentage(80)]);
 
-        let inner_block = area.inner(&Margin {
+        let inner_block = area.inner(Margin {
             horizontal: 1,
             vertical: 1,
         });

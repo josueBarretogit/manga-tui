@@ -268,11 +268,11 @@ impl SearchPage {
         self.input_mode = InputMode::Typing;
     }
 
-    pub fn scroll_down(&mut self) {
+    fn scroll_down(&mut self) {
         self.mangas_found_list.state.next();
     }
 
-    pub fn scroll_up(&mut self) {
+    fn scroll_up(&mut self) {
         self.mangas_found_list.state.previous();
     }
 
@@ -302,6 +302,11 @@ impl SearchPage {
             }
             self.search_cover_handles.clear();
         }
+    }
+
+    pub fn clean(&mut self) {
+        self.mangas_found_list.widget.mangas.clear();
+        self.local_event_rx.close();
     }
 
     fn handle_key_events(&mut self, key_event: KeyEvent) {

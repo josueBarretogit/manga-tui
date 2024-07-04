@@ -61,11 +61,7 @@ impl Component for App {
                 if self.search_page.input_mode != InputMode::Typing {
                     match key_event.code {
                         KeyCode::Char('q') => self.global_action_tx.send(Action::Quit).unwrap(),
-                        KeyCode::Tab => {
-                            if let SelectedTabs::MangaTab = self.current_tab {
-                                self.global_action_tx.send(Action::GoToSearchPage).unwrap();
-                            }
-                        }
+
                         _ => {}
                     }
                 }
@@ -84,16 +80,34 @@ impl Component for App {
                 ));
             }
 
+            //At this point the search must be cleared
             Events::ReadChapter(chapter_response) => {
                 self.current_tab = SelectedTabs::ReaderTab;
-                self.manga_page = None;
+                self.search_page.clean();
                 self.manga_reader_page = Some(MangaReader::new(
+                    self.global_event_tx.clone(),
                     chapter_response.chapter.hash,
                     chapter_response.base_url,
                     self.picker,
                     Arc::clone(&self.fetch_client),
-                    chapter_response.chapter.data,
+                    chapter_response
+                        .chapter
+                        .data_saver
+                        .iter()
+                        .take(5)
+                        .cloned()
+                        .collect(),
+                    chapter_response
+                        .chapter
+                        .data
+                        .iter()
+                        .skip(5)
+                        .cloned()
+                        .collect(),
                 ));
+            },
+            Events::GoBackMangaPage => {
+                self.current_tab = SelectedTabs::MangaTab;
             }
 
             _ => {}
@@ -107,7 +121,11 @@ impl Component for App {
             }
             Action::PreviousTab => self.previous_tab(),
             Action::NextTab => self.next_tab(),
-            Action::GoToSearchPage => self.current_tab = SelectedTabs::Search,
+            Action::GoToSearchPage => {
+                self.current_tab = SelectedTabs::Search;
+                self.manga_reader_page = None;
+                self.manga_page = None;
+            }
             _ => {}
         }
     }

@@ -47,7 +47,7 @@ impl StatefulWidget for MangaPreview {
             .title(self.title)
             .render(details_area, buf);
 
-        let inner = details_area.inner(&layout::Margin {
+        let inner = details_area.inner(layout::Margin {
             horizontal: 1,
             vertical: 2,
         });

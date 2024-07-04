@@ -36,6 +36,7 @@ pub enum Events {
     // Todo! maybe implement something that uses the mouse?
     Mouse(MouseEvent),
     GoToMangaPage(MangaItem),
+    GoBackMangaPage,
     ReadChapter(ChapterPagesResponse),
 }
 

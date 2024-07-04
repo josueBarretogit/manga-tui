@@ -18,6 +18,7 @@ use crate::view::widgets::{Component, ThreadImage, ThreadProtocol};
 pub enum MangaReaderActions {
     NextPage,
     PreviousPage,
+    GoBackToMangaPage,
 }
 
 pub enum MangaReaderEvents {
@@ -27,18 +28,23 @@ pub enum MangaReaderEvents {
     Redraw(Box<dyn StatefulProtocol>, usize),
 }
 
+pub enum PageType {
+    HighQuality,
+    LowQuality,
+}
+
 pub struct Page {
     pub image_state: Option<ThreadProtocol>,
     pub url: String,
-    pub data_save_url: String,
+    pub page_type: PageType,
 }
 
 impl Page {
-    pub fn new(url: String, data_save_url: String) -> Self {
+    pub fn new(url: String, page_type: PageType) -> Self {
         Self {
             image_state: None,
             url,
-            data_save_url,
+            page_type,
         }
     }
 }
@@ -52,6 +58,7 @@ pub struct MangaReader {
     pub image_tasks: JoinSet<()>,
     pub picker: Picker,
     pub client: Arc<MangadexClient>,
+    pub global_event_tx: UnboundedSender<Events>,
     pub local_action_tx: UnboundedSender<MangaReaderActions>,
     pub local_action_rx: UnboundedReceiver<MangaReaderActions>,
     pub local_event_tx: UnboundedSender<MangaReaderEvents>,
@@ -61,26 +68,34 @@ pub struct MangaReader {
 impl Component for MangaReader {
     type Actions = MangaReaderActions;
     fn render(&mut self, area: ratatui::prelude::Rect, frame: &mut Frame<'_>) {
-        let layout =
-            Layout::vertical([Constraint::Percentage(10), Constraint::Percentage(90)]).split(area);
+        let buf = frame.buffer_mut();
 
-        self.current_page_index
-            .to_string()
-            .render(layout[0], frame.buffer_mut());
+        let layout = Layout::horizontal([
+            Constraint::Fill(1),
+            Constraint::Fill(2),
+            Constraint::Fill(1),
+        ]);
+
+        let [left, center, right] = layout.areas(area);
+
+        Block::bordered().render(left, buf);
+        Block::bordered().render(right, buf);
 
         match self.pages.get_mut(self.current_page_index) {
             Some(page) => match page.image_state.as_mut() {
                 Some(img_state) => {
                     let image = ThreadImage::new().resize(Resize::Fit(None));
-                    StatefulWidget::render(image, area, frame.buffer_mut(), img_state);
+                    StatefulWidget::render(image, center, buf, img_state);
                 }
                 None => {
-                    Block::bordered().render(layout[1], frame.buffer_mut());
+                    Block::bordered()
+                        .title("Loading page")
+                        .render(center, frame.buffer_mut());
                 }
             },
             None => Block::bordered()
-                .title("loading page")
-                .render(layout[1], frame.buffer_mut()),
+                .title("Loading page")
+                .render(center, frame.buffer_mut()),
         };
     }
 
@@ -88,6 +103,7 @@ impl Component for MangaReader {
         match action {
             MangaReaderActions::NextPage => self.next_page(),
             MangaReaderActions::PreviousPage => self.previous_page(),
+            MangaReaderActions::GoBackToMangaPage => self.go_back_manga_page(),
         }
     }
 
@@ -102,6 +118,11 @@ impl Component for MangaReader {
                     .local_action_tx
                     .send(MangaReaderActions::PreviousPage)
                     .unwrap(),
+                KeyCode::Tab => self
+                    .local_action_tx
+                    .send(MangaReaderActions::GoBackToMangaPage)
+                    .unwrap(),
+
                 _ => {}
             },
             Events::Tick => self.tick(),
@@ -112,11 +133,13 @@ impl Component for MangaReader {
 
 impl MangaReader {
     pub fn new(
+        global_event_tx: UnboundedSender<Events>,
         chapter_id: String,
         base_url: String,
         picker: Picker,
         client: Arc<MangadexClient>,
         url_imgs: Vec<String>,
+        url_imgs_high_quality: Vec<String>,
     ) -> Self {
         let set: JoinSet<()> = JoinSet::new();
         let (local_action_tx, local_action_rx) = mpsc::unbounded_channel::<MangaReaderActions>();
@@ -125,16 +148,21 @@ impl MangaReader {
         let mut pages: Vec<Page> = vec![];
 
         for url in url_imgs {
-            pages.push(Page::new(url, String::default()));
+            pages.push(Page::new(url, PageType::LowQuality));
+        }
+
+        for url in url_imgs_high_quality {
+            pages.push(Page::new(url, PageType::HighQuality));
         }
 
         local_event_tx.send(MangaReaderEvents::FetchPages).unwrap();
 
         Self {
+            global_event_tx,
             chapter_id,
             base_url,
             pages,
-            current_page_index: 1,
+            current_page_index: 0,
             image_tasks: set,
             picker,
             client,
@@ -152,13 +180,16 @@ impl MangaReader {
     }
 
     fn previous_page(&mut self) {
-        if (self.current_page_index - 1) != 0 {
-            self.current_page_index -= 1;
-        }
+        self.current_page_index = self.current_page_index.saturating_sub(1);
     }
 
     fn abort_fetch_pages(&mut self) {
         self.image_tasks.abort_all();
+    }
+
+    fn go_back_manga_page(&mut self) {
+        self.abort_fetch_pages();
+        self.global_event_tx.send(Events::GoBackMangaPage).unwrap();
     }
 
     fn tick(&mut self) {
@@ -167,10 +198,18 @@ impl MangaReader {
                 MangaReaderEvents::FetchPages => {
                     for (index, page) in self.pages.iter().enumerate() {
                         let file_name = page.url.clone();
-                        let endpoint = format!("{}/data/{}", self.base_url, self.chapter_id);
+                        let endpoint = format!(
+                            "{}/{}/{}",
+                            self.base_url,
+                            match page.page_type {
+                                PageType::LowQuality => "data-saver",
+                                PageType::HighQuality => "data",
+                            },
+                            self.chapter_id
+                        );
                         let client = Arc::clone(&self.client);
                         let tx = self.local_event_tx.clone();
-                        tokio::spawn(async move {
+                        self.image_tasks.spawn(async move {
                             let image_response =
                                 client.get_chapter_page(&endpoint, &file_name).await;
                             match image_response {

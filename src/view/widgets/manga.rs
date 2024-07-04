@@ -1,6 +1,6 @@
+use crate::backend::{ChapterResponse, Languages};
 use ratatui::{prelude::*, widgets::*};
 use tui_widget_list::PreRender;
-use crate::backend::{ChapterResponse, Languages};
 
 #[derive(Clone)]
 pub struct ChapterItem {
@@ -69,10 +69,6 @@ pub struct ChaptersListWidget {
 }
 
 impl ChaptersListWidget {
-    pub fn new(chapters: Vec<ChapterItem>) -> Self {
-        Self { chapters }
-    }
-
     pub fn from_response(response: &ChapterResponse) -> Self {
         let mut chapters: Vec<ChapterItem> = vec![];
 
@@ -112,5 +108,3 @@ impl StatefulWidget for ChaptersListWidget {
         StatefulWidget::render(chapters_list, area, buf, state);
     }
 }
-
-
