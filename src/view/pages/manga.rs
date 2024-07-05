@@ -4,10 +4,11 @@ use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
 use crate::backend::{ChapterResponse, Languages};
 use crate::view::widgets::manga::{ChapterItem, ChaptersListWidget};
-use crate::view::widgets::{Component, ThreadImage, ThreadProtocol};
+use crate::view::widgets::{Component};
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{prelude::*, widgets::*};
-use ratatui_image::Resize;
+use ratatui_image::protocol::StatefulProtocol;
+use ratatui_image::{Resize, StatefulImage};
 use strum::Display;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinHandle;
@@ -57,7 +58,7 @@ pub struct MangaPage {
     pub description: String,
     pub tags: Vec<String>,
     pub img_url: Option<String>,
-    pub image_state: Option<ThreadProtocol>,
+    pub image_state: Option<Box<dyn StatefulProtocol>>,
     global_event_tx: UnboundedSender<Events>,
     local_action_tx: UnboundedSender<MangaPageActions>,
     pub local_action_rx: UnboundedReceiver<MangaPageActions>,
@@ -86,7 +87,7 @@ impl MangaPage {
         description: String,
         tags: Vec<String>,
         img_url: Option<String>,
-        image_state: Option<ThreadProtocol>,
+        image_state: Option<Box<dyn StatefulProtocol>>,
         global_event_tx: UnboundedSender<Events>,
         client: Arc<MangadexClient>,
     ) -> Self {
@@ -118,7 +119,7 @@ impl MangaPage {
     fn render_cover(&mut self, area: Rect, buf: &mut Buffer) {
         match self.image_state.as_mut() {
             Some(state) => {
-                let image = ThreadImage::new().resize(Resize::Fit(None));
+                let image = StatefulImage::new(None).resize(Resize::Fit(None));
                 StatefulWidget::render(image, area, buf, state);
             }
             None => {
@@ -399,13 +400,7 @@ impl Component for MangaPage {
     }
     fn handle_events(&mut self, events: Events) {
         match events {
-            Events::Redraw(protocol, manga_id) => {
-                if self.id == manga_id {
-                    if let Some(img_state) = self.image_state.as_mut() {
-                        img_state.inner = Some(protocol);
-                    }
-                }
-            }
+            
             Events::Key(key_event) => self.handle_key_events(key_event),
             _ => self.tick(),
         }

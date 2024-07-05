@@ -3,7 +3,6 @@ use crate::backend::tui::Events;
 use crate::backend::SearchMangaResponse;
 use crate::view::widgets::search::*;
 use crate::view::widgets::Component;
-use crate::view::widgets::ThreadProtocol;
 use bytes::Bytes;
 use crossterm::event::KeyEvent;
 use crossterm::event::{self, KeyCode};
@@ -11,11 +10,8 @@ use image::io::Reader;
 use image::DynamicImage;
 use ratatui::{prelude::*, widgets::*};
 use ratatui_image::picker::Picker;
-use ratatui_image::protocol::StatefulProtocol;
-use ratatui_image::Resize;
 use std::io::Cursor;
 use std::sync::Arc;
-use std::thread;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinHandle;
 use tui_input::backend::crossterm::EventHandler;
@@ -140,19 +136,6 @@ impl Component for SearchPage {
     fn handle_events(&mut self, events: Events) {
         match events {
             Events::Key(key_event) => self.handle_key_events(key_event),
-            Events::Redraw(new_protocol, index) => {
-                if let Some(manga) = self
-                    .mangas_found_list
-                    .widget
-                    .mangas
-                    .iter_mut()
-                    .find(|manga| manga.id == index)
-                {
-                    if let Some(image_state) = manga.image_state.as_mut() {
-                        image_state.inner = Some(new_protocol);
-                    }
-                }
-            }
             Events::Tick => self.tick(),
             _ => {}
         }
@@ -498,14 +481,6 @@ impl SearchPage {
 
                 SearchPageEvents::LoadCover(maybe_image, manga_id) => match maybe_image {
                     Some(image) => {
-                        let tx = self.global_event_tx.clone();
-
-                        let (tx_worker, rec_worker) = std::sync::mpsc::channel::<(
-                            Box<dyn StatefulProtocol>,
-                            Resize,
-                            ratatui::layout::Rect,
-                        )>();
-
                         let image = self.picker.new_resize_protocol(image);
 
                         if let Some(manga) = self
@@ -515,20 +490,7 @@ impl SearchPage {
                             .iter_mut()
                             .find(|manga| manga.id == manga_id)
                         {
-                            manga.image_state = Some(ThreadProtocol::new(tx_worker.clone(), image));
-
-                            let id = manga.id.clone();
-
-                            thread::spawn(move || loop {
-                                let id = id.clone();
-                                match rec_worker.recv() {
-                                    Ok((mut protocol, resize, area)) => {
-                                        protocol.resize_encode(&resize, None, area);
-                                        tx.send(Events::Redraw(protocol, id)).unwrap();
-                                    }
-                                    Err(_e) => break,
-                                }
-                            });
+                            manga.image_state = Some(image);
                         }
                     }
                     None => {

@@ -1,9 +1,9 @@
 use crate::backend::Data;
 use ratatui::{prelude::*, widgets::*};
-use ratatui_image::Resize;
+use ratatui_image::protocol::StatefulProtocol;
+use ratatui_image::{Resize, StatefulImage};
 use tui_widget_list::PreRender;
 
-use super::{ThreadImage, ThreadProtocol};
 
 pub struct MangaPreview {
     title: String,
@@ -22,7 +22,7 @@ impl MangaPreview {
 }
 
 impl StatefulWidget for MangaPreview {
-    type State = Option<ThreadProtocol>;
+    type State = Option<Box<dyn StatefulProtocol>>;
 
     fn render(self, area: ratatui::prelude::Rect, buf: &mut Buffer, state: &mut Self::State) {
         let layout = Layout::default()
@@ -33,7 +33,7 @@ impl StatefulWidget for MangaPreview {
 
         match state {
             Some(image_state) => {
-                let cover = ThreadImage::new().resize(Resize::Fit(None));
+                let cover = StatefulImage::new(None).resize(Resize::Fit(None));
                 StatefulWidget::render(cover, cover_area, buf, image_state)
             }
             None => {
@@ -66,7 +66,7 @@ pub struct MangaItem {
     pub tags: Vec<String>,
     pub img_url: Option<String>,
     pub style: Style,
-    pub image_state: Option<ThreadProtocol>,
+    pub image_state: Option<Box<dyn StatefulProtocol>>,
 }
 
 impl Widget for MangaItem {

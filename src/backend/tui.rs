@@ -32,7 +32,6 @@ pub enum Action {
 pub enum Events {
     Tick,
     Key(KeyEvent),
-    Redraw(Box<dyn StatefulProtocol>, String),
     // Todo! maybe implement something that uses the mouse?
     Mouse(MouseEvent),
     GoToMangaPage(MangaItem),
