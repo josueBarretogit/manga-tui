@@ -7,14 +7,14 @@ use image::DynamicImage;
 use ratatui::{prelude::*, widgets::*};
 use ratatui_image::picker::Picker;
 use ratatui_image::protocol::StatefulProtocol;
-use ratatui_image::Resize;
+use ratatui_image::{Resize, StatefulImage};
 use strum::Display;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
-use crate::view::widgets::{Component, ThreadImage, ThreadProtocol};
+use crate::view::widgets::Component;
 
 pub enum MangaReaderActions {
     NextPage,
@@ -30,7 +30,6 @@ pub enum State {
 pub enum MangaReaderEvents {
     FetchPages,
     LoadPage(Option<DynamicImage>, usize),
-    Redraw(Box<dyn StatefulProtocol>, usize),
 }
 
 #[derive(Display)]
@@ -42,7 +41,7 @@ pub enum PageType {
 }
 
 pub struct Page {
-    pub image_state: Option<ThreadProtocol>,
+    pub image_state: Option<Box<dyn StatefulProtocol>>,
     pub url: String,
     pub page_type: PageType,
 }
@@ -98,7 +97,7 @@ impl Component for MangaReader {
         {
             Some(page) => match page.image_state.as_mut() {
                 Some(img_state) => {
-                    let image = ThreadImage::new().resize(Resize::Fit(None));
+                    let image = StatefulImage::new(None).resize(Resize::Fit(None));
                     StatefulWidget::render(image, center, buf, img_state);
                 }
                 None => {
@@ -258,51 +257,19 @@ impl MangaReader {
                 }
                 MangaReaderEvents::LoadPage(maybe_image, index_page) => match maybe_image {
                     Some(image) => {
-                        let tx = self.local_event_tx.clone();
-
-                        let (tx_worker, rec_worker) = std::sync::mpsc::channel::<(
-                            Box<dyn StatefulProtocol>,
-                            Resize,
-                            ratatui::prelude::Rect,
-                        )>();
-
                         let image = self.picker.new_resize_protocol(image);
 
                         match self.pages.get_mut(index_page) {
                             Some(page) => {
-                                page.image_state =
-                                    Some(ThreadProtocol::new(tx_worker.clone(), image));
-
-                                std::thread::spawn(move || loop {
-                                    match rec_worker.recv() {
-                                        Ok((mut protocol, resize, area)) => {
-                                            protocol.resize_encode(&resize, None, area);
-                                            tx.send(MangaReaderEvents::Redraw(
-                                                protocol, index_page,
-                                            ))
-                                            .unwrap();
-                                        }
-                                        Err(_e) => break,
-                                    }
-                                });
+                                page.image_state = Some(image);
                             }
-                            None => {
-                                panic!("could note load image")
-                            }
+                            None => {}
                         }
                     }
                     None => {
                         panic!("could note load image")
                     }
                 },
-
-                MangaReaderEvents::Redraw(protocol, index_page) => {
-                    if let Some(page) = self.pages.get_mut(index_page) {
-                        if let Some(img_state) = page.image_state.as_mut() {
-                            img_state.inner = Some(protocol);
-                        }
-                    }
-                }
             }
         }
     }
