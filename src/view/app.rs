@@ -216,12 +216,6 @@ impl App {
         }
     }
 
-    pub fn render_reader_page(&mut self, area: Rect, frame: &mut Frame<'_>) {
-        if let Some(page) = self.manga_reader_page.as_mut() {
-            page.render(area, frame);
-        }
-    }
-
     //pub fn render_home_page(&self, area: Rect, buf: &mut Buffer) {}
 
     pub fn next_tab(&mut self) {

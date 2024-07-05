@@ -20,17 +20,23 @@ impl MangadexClient {
         }
     }
 
+    // Todo! implement more advanced filters
     pub async fn search_mangas(
         &self,
         search_term: &str,
         page: i32,
     ) -> Result<SearchMangaResponse, reqwest::Error> {
+        let content_rating =
+            "contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica";
+
         let offset = (page - 1) * 10;
+
         let url = format!(
-            "{}/manga?title='{}'&includes[]=cover_art&limit=10&offset={}&order[relevance]=desc",
+            "{}/manga?title='{}'&includes[]=cover_art&limit=10&offset={}&{}&includedTagsMode=AND&excludedTagsMode=OR",
             self.api_url_base,
             search_term.trim(),
             offset,
+            content_rating
         );
 
         self.client.get(url).send().await?.json().await
@@ -65,7 +71,7 @@ impl MangadexClient {
             .await
     }
 
-    // Todo! implement order by and filter by language and pagination
+    // Todo! implement filter by language and pagination
     pub async fn get_manga_chapters(
         &self,
         id: String,

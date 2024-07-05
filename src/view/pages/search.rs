@@ -20,6 +20,7 @@ use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinHandle;
 use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
+use tui_widget_list::ListState;
 
 /// Determine wheter or not mangas are being searched
 /// if so then this should not make a request until the most recent one finishes
@@ -306,6 +307,11 @@ impl SearchPage {
 
     /// This method is used to "forget" the data stored in the search page
     pub fn clean(&mut self) {
+        self.state = PageState::default();
+        self.input_mode = InputMode::Idle;
+        self.search_bar.reset();
+        self.abort_search_cover_handles();
+        self.mangas_found_list.state = ListState::default();
         self.mangas_found_list.widget.mangas.clear();
     }
 

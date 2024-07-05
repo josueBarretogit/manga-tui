@@ -214,10 +214,13 @@ impl MangaPage {
 
     fn handle_key_events(&mut self, key_event: KeyEvent) {
         match key_event.code {
-            KeyCode::Tab => self
-                .local_action_tx
-                .send(MangaPageActions::GoBackSearchPage)
-                .unwrap(),
+            KeyCode::Tab => {
+                if self.state != PageState::SearchingChapterData {
+                    self.local_action_tx
+                        .send(MangaPageActions::GoBackSearchPage)
+                        .unwrap()
+                }
+            }
             KeyCode::Char('j') => {
                 if self.state != PageState::SearchingChapterData {
                     self.local_action_tx

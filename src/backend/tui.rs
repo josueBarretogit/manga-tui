@@ -70,7 +70,7 @@ pub fn init_error_hooks() -> color_eyre::Result<()> {
 }
 
 ///Start app's main loop
-pub async fn run_app<B: Backend>(backend: B) -> Result<(), Box<dyn Error>> {
+pub async fn run_app(backend: impl Backend) -> Result<(), Box<dyn Error>> {
     let mut terminal = Terminal::new(backend)?;
 
     terminal.show_cursor()?;
@@ -86,7 +86,7 @@ pub async fn run_app<B: Backend>(backend: B) -> Result<(), Box<dyn Error>> {
             app.render(f.size(), f);
         })?;
 
-        if let Ok(event) = app.global_event_rx.try_recv() {
+        if let Some(event) = app.global_event_rx.recv().await {
             app.handle_events(event.clone());
             match app.current_tab {
                 SelectedTabs::Search => {

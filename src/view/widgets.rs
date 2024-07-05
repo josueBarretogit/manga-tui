@@ -9,6 +9,7 @@ use crate::backend::tui::Events;
 
 pub mod search;
 pub mod manga;
+pub mod reader;
 
 
 pub trait Component {

@@ -8,6 +8,7 @@ use ratatui::{prelude::*, widgets::*};
 use ratatui_image::picker::Picker;
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::Resize;
+use strum::Display;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
@@ -28,13 +29,15 @@ pub enum State {
 
 pub enum MangaReaderEvents {
     FetchPages,
-    DecodeImage(Option<Bytes>, usize),
     LoadPage(Option<DynamicImage>, usize),
     Redraw(Box<dyn StatefulProtocol>, usize),
 }
 
+#[derive(Display)]
 pub enum PageType {
+    #[strum(to_string = "data")]
     HighQuality,
+    #[strum(to_string = "data-saver")]
     LowQuality,
 }
 
@@ -55,14 +58,15 @@ impl Page {
 }
 
 pub struct MangaReader {
-    pub chapter_id: String,
-    pub base_url: String,
-    pub pages: Vec<Page>,
-    pub current_page_index: usize,
+    chapter_id: String,
+    base_url: String,
+    pages: Vec<Page>,
+    page_list_state: ListState,
+    state: State,
     /// Handle fetching the images
-    pub image_tasks: JoinSet<()>,
-    pub picker: Picker,
-    pub client: Arc<MangadexClient>,
+    image_tasks: JoinSet<()>,
+    picker: Picker,
+    client: Arc<MangadexClient>,
     pub global_event_tx: UnboundedSender<Events>,
     pub local_action_tx: UnboundedSender<MangaReaderActions>,
     pub local_action_rx: UnboundedReceiver<MangaReaderActions>,
@@ -84,9 +88,14 @@ impl Component for MangaReader {
         let [left, center, right] = layout.areas(area);
 
         Block::bordered().render(left, buf);
+        self.render_page_list(left, buf);
+
         Block::bordered().render(right, buf);
 
-        match self.pages.get_mut(self.current_page_index) {
+        match self
+            .pages
+            .get_mut(self.page_list_state.selected().unwrap_or(0))
+        {
             Some(page) => match page.image_state.as_mut() {
                 Some(img_state) => {
                     let image = ThreadImage::new().resize(Resize::Fit(None));
@@ -167,7 +176,7 @@ impl MangaReader {
             chapter_id,
             base_url,
             pages,
-            current_page_index: 0,
+            page_list_state: ListState::default(),
             image_tasks: set,
             picker,
             client,
@@ -175,17 +184,16 @@ impl MangaReader {
             local_action_rx,
             local_event_tx,
             local_event_rx,
+            state: State::SearchingPages,
         }
     }
 
     fn next_page(&mut self) {
-        if (self.current_page_index + 1) < self.pages.len() {
-            self.current_page_index += 1;
-        }
+        self.page_list_state.select_next();
     }
 
     fn previous_page(&mut self) {
-        self.current_page_index = self.current_page_index.saturating_sub(1);
+        self.page_list_state.select_previous();
     }
 
     fn abort_fetch_pages(&mut self) {
@@ -197,30 +205,52 @@ impl MangaReader {
         self.global_event_tx.send(Events::GoBackMangaPage).unwrap();
     }
 
+    fn render_page_list(&mut self, area: Rect, buf: &mut Buffer) {
+        let mut items: Vec<String> = vec![];
+        for (index, page) in self.pages.iter().enumerate() {
+            items.push(index.to_string());
+        }
+        let page_list = List::new(items)
+            .highlight_style(Style::default().bg(Color::Blue))
+            .highlight_symbol(">>");
+
+        StatefulWidget::render(page_list, area, buf, &mut self.page_list_state);
+    }
+
     fn tick(&mut self) {
         if let Ok(background_event) = self.local_event_rx.try_recv() {
             match background_event {
                 MangaReaderEvents::FetchPages => {
                     for (index, page) in self.pages.iter().enumerate() {
                         let file_name = page.url.clone();
-                        let endpoint = format!(
-                            "{}/{}/{}",
-                            self.base_url,
-                            match page.page_type {
-                                PageType::LowQuality => "data-saver",
-                                PageType::HighQuality => "data",
-                            },
-                            self.chapter_id
-                        );
+                        let endpoint =
+                            format!("{}/{}/{}", self.base_url, page.page_type, self.chapter_id);
                         let client = Arc::clone(&self.client);
                         let tx = self.local_event_tx.clone();
                         self.image_tasks.spawn(async move {
                             let image_response =
                                 client.get_chapter_page(&endpoint, &file_name).await;
                             match image_response {
-                                Ok(bytes) => tx
-                                    .send(MangaReaderEvents::DecodeImage(Some(bytes), index))
-                                    .unwrap(),
+                                Ok(bytes) => {
+                                    let dyn_img = Reader::new(std::io::Cursor::new(bytes))
+                                        .with_guessed_format()
+                                        .unwrap();
+
+                                    let maybe_decoded = dyn_img.decode();
+                                    match maybe_decoded {
+                                        Ok(image) => {
+                                            tx.send(MangaReaderEvents::LoadPage(
+                                                Some(image),
+                                                index,
+                                            ))
+                                            .unwrap();
+                                        }
+                                        Err(_) => {
+                                            tx.send(MangaReaderEvents::LoadPage(None, index))
+                                                .unwrap();
+                                        }
+                                    };
+                                }
                                 Err(e) => panic!("could not get chapter :{e}"),
                             };
                         });
@@ -266,36 +296,6 @@ impl MangaReader {
                     }
                 },
 
-                MangaReaderEvents::DecodeImage(maybe_bytes, index_page) => {
-                    let tx = self.local_event_tx.clone();
-                    match maybe_bytes {
-                        Some(bytes) => {
-                            let dyn_img = Reader::new(std::io::Cursor::new(bytes))
-                                .with_guessed_format()
-                                .unwrap();
-
-                            std::thread::spawn(move || {
-                                let maybe_decoded = dyn_img.decode();
-                                match maybe_decoded {
-                                    Ok(image) => {
-                                        tx.send(MangaReaderEvents::LoadPage(
-                                            Some(image),
-                                            index_page,
-                                        ))
-                                        .unwrap();
-                                    }
-                                    Err(_) => {
-                                        tx.send(MangaReaderEvents::LoadPage(None, index_page))
-                                            .unwrap();
-                                    }
-                                };
-                            });
-                        }
-                        None => tx
-                            .send(MangaReaderEvents::LoadPage(None, index_page))
-                            .unwrap(),
-                    }
-                }
                 MangaReaderEvents::Redraw(protocol, index_page) => {
                     if let Some(page) = self.pages.get_mut(index_page) {
                         if let Some(img_state) = page.image_state.as_mut() {
