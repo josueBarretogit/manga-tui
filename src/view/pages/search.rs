@@ -304,9 +304,9 @@ impl SearchPage {
         }
     }
 
+    /// This method is used to "forget" the data stored in the search page
     pub fn clean(&mut self) {
         self.mangas_found_list.widget.mangas.clear();
-        self.local_event_rx.close();
     }
 
     fn handle_key_events(&mut self, key_event: KeyEvent) {

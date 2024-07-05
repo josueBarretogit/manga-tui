@@ -37,6 +37,7 @@ pub enum Events {
     Mouse(MouseEvent),
     GoToMangaPage(MangaItem),
     GoBackMangaPage,
+    GoSearchPage,
     ReadChapter(ChapterPagesResponse),
 }
 

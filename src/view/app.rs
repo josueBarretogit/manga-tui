@@ -8,7 +8,6 @@ use ratatui::widgets::{Block, Borders, Tabs, Widget, WidgetRef};
 use ratatui::{Frame, Terminal};
 use ratatui_image::picker::Picker;
 use reqwest::Client;
-use strum::IntoEnumIterator;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
 use crate::backend::fetch::MangadexClient;
@@ -44,15 +43,19 @@ pub struct App {
 impl Component for App {
     type Actions = Action;
     fn render(&mut self, area: Rect, frame: &mut Frame<'_>) {
-        let main_layout = Layout::default()
-            .direction(layout::Direction::Vertical)
-            .constraints([Constraint::Percentage(6), Constraint::Percentage(94)]);
+        if self.manga_reader_page.is_some() && self.current_tab == SelectedTabs::ReaderTab {
+            self.manga_reader_page.as_mut().unwrap().render(area, frame);
+        } else {
+            let main_layout = Layout::default()
+                .direction(layout::Direction::Vertical)
+                .constraints([Constraint::Percentage(6), Constraint::Percentage(94)]);
 
-        let [top_tabs_area, page_area] = main_layout.areas(area);
+            let [top_tabs_area, page_area] = main_layout.areas(area);
 
-        self.render_top_tabs(top_tabs_area, frame.buffer_mut());
+            self.render_top_tabs(top_tabs_area, frame.buffer_mut());
 
-        self.render_pages(page_area, frame);
+            self.render_pages(page_area, frame);
+        }
     }
 
     fn handle_events(&mut self, events: Events) {
@@ -61,7 +64,6 @@ impl Component for App {
                 if self.search_page.input_mode != InputMode::Typing {
                     match key_event.code {
                         KeyCode::Char('q') => self.global_action_tx.send(Action::Quit).unwrap(),
-
                         _ => {}
                     }
                 }
@@ -105,9 +107,12 @@ impl Component for App {
                         .cloned()
                         .collect(),
                 ));
-            },
+            }
             Events::GoBackMangaPage => {
                 self.current_tab = SelectedTabs::MangaTab;
+            }
+            Events::GoSearchPage => {
+                self.current_tab = SelectedTabs::Search;
             }
 
             _ => {}
@@ -197,7 +202,7 @@ impl App {
         match self.current_tab {
             SelectedTabs::Search => self.render_search_page(area, frame),
             SelectedTabs::MangaTab => self.render_manga_page(area, frame),
-            SelectedTabs::ReaderTab => self.render_reader_page(area, frame),
+            SelectedTabs::ReaderTab => {}
         }
     }
 

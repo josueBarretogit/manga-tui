@@ -3,17 +3,19 @@ use std::sync::Arc;
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
 use crate::backend::{ChapterResponse, Languages};
-use crate::view::widgets::manga::ChaptersListWidget;
+use crate::view::widgets::manga::{ChapterItem, ChaptersListWidget};
 use crate::view::widgets::{Component, ThreadImage, ThreadProtocol};
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{prelude::*, widgets::*};
 use ratatui_image::Resize;
 use strum::Display;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use tokio::task::JoinHandle;
 
 #[derive(PartialEq, Eq)]
 pub enum PageState {
     SearchingChapters,
+    SearchingChapterData,
     SearchingStopped,
 }
 
@@ -22,10 +24,12 @@ pub enum MangaPageActions {
     ScrollChapterUp,
     ToggleOrder,
     ReadChapter,
+    GoBackSearchPage,
 }
 
 pub enum MangaPageEvents {
     FetchChapters,
+    StoppedSearchingChapterData,
     LoadChapters(Option<ChapterResponse>),
 }
 
@@ -60,13 +64,14 @@ pub struct MangaPage {
     local_event_tx: UnboundedSender<MangaPageEvents>,
     local_event_rx: UnboundedReceiver<MangaPageEvents>,
     client: Arc<MangadexClient>,
-    chapters: Option<Chapters>,
+    chapters: Option<ChaptersData>,
     chapter_order: ChapterOrder,
     chapter_language: Languages,
     state: PageState,
+    search_chapter_task: Option<JoinHandle<()>>,
 }
 
-struct Chapters {
+struct ChaptersData {
     state: tui_widget_list::ListState,
     widget: ChaptersListWidget,
     page: u32,
@@ -88,12 +93,7 @@ impl MangaPage {
         let (local_action_tx, local_action_rx) = mpsc::unbounded_channel::<MangaPageActions>();
         let (local_event_tx, local_event_rx) = mpsc::unbounded_channel::<MangaPageEvents>();
 
-        let send_status = local_event_tx.send(MangaPageEvents::FetchChapters);
-
-        match send_status {
-            Ok(_t) => {}
-            Err(_e) => {}
-        };
+        local_event_tx.send(MangaPageEvents::FetchChapters).ok();
 
         Self {
             id,
@@ -112,6 +112,7 @@ impl MangaPage {
             chapter_language: Languages::default(),
             chapter_order: ChapterOrder::default(),
             state: PageState::SearchingChapters,
+            search_chapter_task: None,
         }
     }
     fn render_cover(&mut self, area: Rect, buf: &mut Buffer) {
@@ -213,23 +214,35 @@ impl MangaPage {
 
     fn handle_key_events(&mut self, key_event: KeyEvent) {
         match key_event.code {
+            KeyCode::Tab => self
+                .local_action_tx
+                .send(MangaPageActions::GoBackSearchPage)
+                .unwrap(),
             KeyCode::Char('j') => {
-                self.local_action_tx
-                    .send(MangaPageActions::ScrollChapterDown)
-                    .unwrap();
+                if self.state != PageState::SearchingChapterData {
+                    self.local_action_tx
+                        .send(MangaPageActions::ScrollChapterDown)
+                        .unwrap();
+                }
             }
             KeyCode::Char('k') => {
-                self.local_action_tx
-                    .send(MangaPageActions::ScrollChapterUp)
-                    .unwrap();
+                if self.state != PageState::SearchingChapterData {
+                    self.local_action_tx
+                        .send(MangaPageActions::ScrollChapterUp)
+                        .unwrap();
+                }
             }
             KeyCode::Char('o') => {
-                self.local_action_tx
-                    .send(MangaPageActions::ToggleOrder)
-                    .unwrap();
+                if self.state != PageState::SearchingChapters {
+                    self.local_action_tx
+                        .send(MangaPageActions::ToggleOrder)
+                        .unwrap();
+                }
             }
             KeyCode::Char('r') => {
-                self.local_action_tx.send(MangaPageActions::ReadChapter).unwrap();
+                self.local_action_tx
+                    .send(MangaPageActions::ReadChapter)
+                    .unwrap();
             }
             _ => {}
         }
@@ -257,24 +270,42 @@ impl MangaPage {
         self.search_chapters();
     }
 
+    fn get_current_selected_chapter_mut(&mut self) -> Option<&mut ChapterItem> {
+        match self.chapters.as_mut() {
+            Some(chapters_data) => match chapters_data.state.selected {
+                Some(selected_chapter_index) => {
+                    return chapters_data
+                        .widget
+                        .chapters
+                        .get_mut(selected_chapter_index)
+                }
+                None => None,
+            },
+            None => None,
+        }
+    }
+
     fn read_chapter(&mut self) {
-        if let Some(chapters) = &self.chapters {
-            if let Some(index_chapter) = chapters.state.selected {
-                let client = Arc::clone(&self.client);
-                let id_chapter = chapters.widget.chapters[index_chapter].id.clone();
-                let tx = self.global_event_tx.clone();
-                tokio::spawn(async move {
-                    let chapter_response = client.get_chapter_pages(&id_chapter).await;
-                    match chapter_response {
-                        Ok(response) => {
-                            tx.send(Events::ReadChapter(response)).unwrap();
-                        }
-                        Err(e) => {
-                            panic!("{e}");
-                        }
+        self.state = PageState::SearchingChapterData;
+        let client = Arc::clone(&self.client);
+        if let Some(chapter_selected) = self.get_current_selected_chapter_mut() {
+            let id_chapter = chapter_selected.id.clone();
+            let tx = self.global_event_tx.clone();
+            let local_tx = self.local_event_tx.clone();
+            tokio::spawn(async move {
+                let chapter_response = client.get_chapter_pages(&id_chapter).await;
+                match chapter_response {
+                    Ok(response) => {
+                        tx.send(Events::ReadChapter(response)).unwrap();
+                        local_tx
+                            .send(MangaPageEvents::StoppedSearchingChapterData)
+                            .unwrap();
                     }
-                });
-            }
+                    Err(e) => {
+                        panic!("{e}");
+                    }
+                }
+            });
         }
     }
 
@@ -285,7 +316,7 @@ impl MangaPage {
         let tx = self.local_event_tx.clone();
         let language = self.chapter_language;
         let chapter_order = self.chapter_order;
-        tokio::spawn(async move {
+        self.search_chapter_task = Some(tokio::spawn(async move {
             let response = client
                 .get_manga_chapters(manga_id, 1, language, chapter_order)
                 .await;
@@ -296,7 +327,7 @@ impl MangaPage {
                     .unwrap(),
                 Err(_e) => tx.send(MangaPageEvents::LoadChapters(None)).unwrap(),
             }
-        });
+        }));
     }
 
     fn tick(&mut self) {
@@ -311,7 +342,7 @@ impl MangaPage {
 
                             list_state.select(Some(0));
 
-                            self.chapters = Some(Chapters {
+                            self.chapters = Some(ChaptersData {
                                 state: list_state,
                                 widget: ChaptersListWidget::from_response(&response),
                                 page: 1,
@@ -320,6 +351,9 @@ impl MangaPage {
                         }
                         None => self.chapters = None,
                     }
+                }
+                MangaPageEvents::StoppedSearchingChapterData => {
+                    self.state = PageState::SearchingStopped
                 }
             }
         }
@@ -348,7 +382,15 @@ impl Component for MangaPage {
                 }
             }
             MangaPageActions::ReadChapter => {
-                self.read_chapter();
+                if self.state != PageState::SearchingChapterData {
+                    self.read_chapter();
+                }
+            }
+            MangaPageActions::GoBackSearchPage => {
+                if let Some(searching_task) = &self.search_chapter_task {
+                    searching_task.abort();
+                }
+                self.global_event_tx.send(Events::GoSearchPage).unwrap();
             }
         }
     }

@@ -21,6 +21,11 @@ pub enum MangaReaderActions {
     GoBackToMangaPage,
 }
 
+pub enum State {
+    SearchingPages,
+    StoppedSearching,
+}
+
 pub enum MangaReaderEvents {
     FetchPages,
     DecodeImage(Option<Bytes>, usize),
