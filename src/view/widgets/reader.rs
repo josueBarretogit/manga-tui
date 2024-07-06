@@ -6,7 +6,7 @@ use tui_widget_list::PreRender;
 #[derive(PartialEq, Eq, Clone)]
 pub enum PageItemState {
     Loading,
-    Display,
+    FinishedLoad,
     NotFound,
 }
 
@@ -26,11 +26,14 @@ impl Widget for PagesItem {
         let layout = Layout::horizontal([Constraint::Percentage(20), Constraint::Percentage(80)]);
         let [chapter_number_area, loader_area] = layout.areas(area);
 
-        self.number.to_string().render(chapter_number_area, buf);
+        Block::default().style(self.style).render(area, buf);
+
+        format!("Page {}", self.number).render(chapter_number_area, buf);
+
         if self.state == PageItemState::Loading {
             let loader = Throbber::default()
-                .style(Style::default())
-                .throbber_style(Style::default())
+                .label("Loading")
+                .style(Style::default().fg(Color::Yellow))
                 .throbber_set(throbber_widgets_tui::BRAILLE_SIX)
                 .use_type(throbber_widgets_tui::WhichUse::Spin);
 
@@ -73,7 +76,7 @@ impl PagesList {
     }
     pub fn on_tick(&mut self) {
         for page in self.pages.iter_mut() {
-            if page.state != PageItemState::Loading {
+            if page.state == PageItemState::Loading {
                 page.on_tick();
             }
         }

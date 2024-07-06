@@ -14,7 +14,7 @@ use tokio::task::JoinSet;
 
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
-use crate::view::widgets::reader::{PagesItem, PagesList};
+use crate::view::widgets::reader::{PageItemState, PagesItem, PagesList};
 use crate::view::widgets::Component;
 
 pub enum MangaReaderActions {
@@ -213,9 +213,13 @@ impl MangaReader {
     }
 
     fn render_page_list(&mut self, area: Rect, buf: &mut Buffer) {
+        let inner_area = area.inner(Margin {
+            horizontal: 1,
+            vertical: 1,
+        });
         StatefulWidget::render(
             self.pages_list.clone(),
-            area,
+            inner_area,
             buf,
             &mut self.page_list_state,
         );
@@ -276,6 +280,12 @@ impl MangaReader {
                                 // Todo! indicate that the page couldnot be loaded
                             }
                         };
+                        match self.pages_list.pages.get_mut(index_page) {
+                            Some(page_item) => page_item.state = PageItemState::FinishedLoad,
+                            None => {
+                                // Todo! indicate with an x that some page didnt load
+                            }
+                        }
                     }
                     None => {
                         panic!("could note load image")
