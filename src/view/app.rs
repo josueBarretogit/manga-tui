@@ -85,7 +85,6 @@ impl Component for App {
             //At this point the search must be cleared
             Events::ReadChapter(chapter_response) => {
                 self.current_tab = SelectedTabs::ReaderTab;
-                self.search_page.clean();
                 self.manga_reader_page = Some(MangaReader::new(
                     self.global_event_tx.clone(),
                     chapter_response.chapter.hash,

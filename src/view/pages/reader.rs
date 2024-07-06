@@ -14,6 +14,7 @@ use tokio::task::JoinSet;
 
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
+use crate::view::widgets::reader::{PagesItem, PagesList};
 use crate::view::widgets::Component;
 
 pub enum MangaReaderActions {
@@ -60,7 +61,8 @@ pub struct MangaReader {
     chapter_id: String,
     base_url: String,
     pages: Vec<Page>,
-    page_list_state: ListState,
+    pages_list: PagesList,
+    page_list_state: tui_widget_list::ListState,
     state: State,
     /// Handle fetching the images
     image_tasks: JoinSet<()>,
@@ -175,7 +177,7 @@ impl MangaReader {
             chapter_id,
             base_url,
             pages,
-            page_list_state: ListState::default(),
+            page_list_state: tui_widget_list::ListState::default(),
             image_tasks: set,
             picker,
             client,
@@ -184,15 +186,16 @@ impl MangaReader {
             local_event_tx,
             local_event_rx,
             state: State::SearchingPages,
+            pages_list: PagesList::default(),
         }
     }
 
     fn next_page(&mut self) {
-        self.page_list_state.select_next();
+        self.page_list_state.next()
     }
 
     fn previous_page(&mut self) {
-        self.page_list_state.select_previous();
+        self.page_list_state.previous();
     }
 
     fn abort_fetch_pages(&mut self) {
@@ -201,31 +204,36 @@ impl MangaReader {
 
     fn go_back_manga_page(&mut self) {
         self.abort_fetch_pages();
+        self.clean();
         self.global_event_tx.send(Events::GoBackMangaPage).unwrap();
     }
 
-    fn render_page_list(&mut self, area: Rect, buf: &mut Buffer) {
-        let mut items: Vec<String> = vec![];
-        for (index, page) in self.pages.iter().enumerate() {
-            items.push(index.to_string());
-        }
-        let page_list = List::new(items)
-            .highlight_style(Style::default().bg(Color::Blue))
-            .highlight_symbol(">>");
+    fn clean(&mut self) {
+        self.pages.clear();
+    }
 
-        StatefulWidget::render(page_list, area, buf, &mut self.page_list_state);
+    fn render_page_list(&mut self, area: Rect, buf: &mut Buffer) {
+        StatefulWidget::render(
+            self.pages_list.clone(),
+            area,
+            buf,
+            &mut self.page_list_state,
+        );
     }
 
     fn tick(&mut self) {
+        self.pages_list.on_tick();
         if let Ok(background_event) = self.local_event_rx.try_recv() {
             match background_event {
                 MangaReaderEvents::FetchPages => {
+                    let mut pages_list: Vec<PagesItem> = vec![];
                     for (index, page) in self.pages.iter().enumerate() {
                         let file_name = page.url.clone();
                         let endpoint =
                             format!("{}/{}/{}", self.base_url, page.page_type, self.chapter_id);
                         let client = Arc::clone(&self.client);
                         let tx = self.local_event_tx.clone();
+                        pages_list.push(PagesItem::new(index));
                         self.image_tasks.spawn(async move {
                             let image_response =
                                 client.get_chapter_page(&endpoint, &file_name).await;
@@ -254,6 +262,7 @@ impl MangaReader {
                             };
                         });
                     }
+                    self.pages_list = PagesList::new(pages_list);
                 }
                 MangaReaderEvents::LoadPage(maybe_image, index_page) => match maybe_image {
                     Some(image) => {
@@ -263,8 +272,10 @@ impl MangaReader {
                             Some(page) => {
                                 page.image_state = Some(image);
                             }
-                            None => {}
-                        }
+                            None => {
+                                // Todo! indicate that the page couldnot be loaded
+                            }
+                        };
                     }
                     None => {
                         panic!("could note load image")

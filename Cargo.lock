@@ -1169,7 +1169,7 @@ dependencies = [
  "directories",
  "futures",
  "image",
- "ratatui 0.27.0",
+ "ratatui",
  "ratatui-image",
  "rayon",
  "reqwest",
@@ -1611,26 +1611,6 @@ dependencies = [
 
 [[package]]
 name = "ratatui"
-version = "0.26.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f44c9e68fd46eda15c646fbb85e1040b657a58cdc8c98db1d97a55930d991eef"
-dependencies = [
- "bitflags 2.5.0",
- "cassowary",
- "compact_str",
- "crossterm",
- "itertools 0.12.1",
- "lru",
- "paste",
- "stability",
- "strum",
- "unicode-segmentation",
- "unicode-truncate",
- "unicode-width",
-]
-
-[[package]]
-name = "ratatui"
 version = "0.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d16546c5b5962abf8ce6e2881e722b4e0ae3b6f1a08a26ae3573c55853ca68d3"
@@ -1663,7 +1643,7 @@ dependencies = [
  "icy_sixel",
  "image",
  "rand",
- "ratatui 0.27.0",
+ "ratatui",
  "rustix",
 ]
 
@@ -2269,12 +2249,12 @@ dependencies = [
 
 [[package]]
 name = "throbber-widgets-tui"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "431b847a60fc7b1df94a5b1bcb3cdd7027bb0013b431b08038505e8891c577a2"
+checksum = "685391f5e78b08989c1014f5a0edddf6751e0726b6a8dd1bdcc98d05921b19b6"
 dependencies = [
  "rand",
- "ratatui 0.26.3",
+ "ratatui",
 ]
 
 [[package]]
@@ -2507,7 +2487,7 @@ version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d14fc2fa14913c136efd7594846d83c47e2e3f0d8a235fb9f37fa8f24a86eab5"
 dependencies = [
- "ratatui 0.27.0",
+ "ratatui",
 ]
 
 [[package]]
@@ -2517,7 +2497,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0730d42066a83bd64499610b462adeb1d0d4dce82f221d753962df692cccf2f6"
 dependencies = [
  "indoc",
- "ratatui 0.27.0",
+ "ratatui",
  "rstest",
 ]
 
@@ -2527,7 +2507,7 @@ version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bf538b06ca860a3ac3ef3ed43f56bbfa4702b5d474822adf0d27a1cec3bd8c6e"
 dependencies = [
- "ratatui 0.27.0",
+ "ratatui",
 ]
 
 [[package]]
