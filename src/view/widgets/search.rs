@@ -4,33 +4,51 @@ use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::{Resize, StatefulImage};
 use tui_widget_list::PreRender;
 
-
 pub struct MangaPreview {
     title: String,
     description: String,
-    categories: Vec<String>,
+    tags: Vec<String>,
+    content_rating: String,
 }
 
 impl MangaPreview {
-    pub fn new(title: String, description: String, categories: Vec<String>) -> Self {
+    pub fn new(
+        title: String,
+        description: String,
+        mut tags: Vec<String>,
+        content_rating: String,
+    ) -> Self {
+        tags.push(content_rating.clone());
         Self {
             title,
             description,
-            categories,
+            tags,
+            content_rating,
         }
     }
-}
 
-impl StatefulWidget for MangaPreview {
-    type State = Option<Box<dyn StatefulProtocol>>;
+    pub fn render_cover_and_details_area(
+        &mut self,
+        area: Rect,
+        buf: &mut Buffer,
+        state: &mut Option<Box<dyn StatefulProtocol>>,
+    ) {
+        let layout = Layout::horizontal([Constraint::Percentage(60), Constraint::Percentage(40)]);
+        let [cover_area, tags_area] = layout.areas(area);
 
-    fn render(self, area: ratatui::prelude::Rect, buf: &mut Buffer, state: &mut Self::State) {
-        let layout = Layout::default()
-            .direction(layout::Direction::Vertical)
-            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)]);
+        let tags_list: Vec<ListItem<'_>> = self
+            .tags
+            .iter()
+            .map(|tag| match tag.to_lowercase().as_str() {
+                "suggestive" => ListItem::new(tag.to_string().yellow()),
+                "erotica" | "pornographic" | "sexual violence" => {
+                    ListItem::new(tag.to_string().red())
+                }
+                _ => ListItem::new(tag.to_string()),
+            })
+            .collect();
 
-        let [cover_area, details_area] = layout.areas(area);
-
+        Widget::render(List::new(tags_list), tags_area, buf);
         match state {
             Some(image_state) => {
                 let cover = StatefulImage::new(None).resize(Resize::Fit(None));
@@ -38,16 +56,18 @@ impl StatefulWidget for MangaPreview {
             }
             None => {
                 //Loading cover
-                Block::bordered().render(cover_area, buf);
+                Block::bordered()
+                    .title("Loading cover")
+                    .render(cover_area, buf);
             }
         };
+    }
 
+    pub fn render_description_area(self, area: Rect, buf: &mut Buffer) {
         // Manga details
-        Block::bordered()
-            .title(self.title)
-            .render(details_area, buf);
+        Block::bordered().title(self.title).render(area, buf);
 
-        let inner = details_area.inner(layout::Margin {
+        let inner = area.inner(layout::Margin {
             horizontal: 1,
             vertical: 2,
         });
@@ -58,12 +78,28 @@ impl StatefulWidget for MangaPreview {
     }
 }
 
+impl StatefulWidget for MangaPreview {
+    type State = Option<Box<dyn StatefulProtocol>>;
+
+    fn render(mut self, area: ratatui::prelude::Rect, buf: &mut Buffer, state: &mut Self::State) {
+        let layout = Layout::default()
+            .direction(layout::Direction::Vertical)
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)]);
+
+        let [cover_details_area, description_area] = layout.areas(area);
+
+        self.render_cover_and_details_area(cover_details_area, buf, state);
+        self.render_description_area(description_area, buf);
+    }
+}
+
 #[derive(Default, Clone)]
 pub struct MangaItem {
     pub id: String,
     pub title: String,
     pub description: String,
     pub tags: Vec<String>,
+    pub content_rating: String,
     pub img_url: Option<String>,
     pub style: Style,
     pub image_state: Option<Box<dyn StatefulProtocol>>,
@@ -117,6 +153,8 @@ impl From<Data> for MangaItem {
             None => String::from("No description"),
         };
 
+        let content_rating = value.attributes.content_rating;
+
         let tags: Vec<String> = value
             .attributes
             .tags
@@ -137,7 +175,7 @@ impl From<Data> for MangaItem {
             None => None,
         };
 
-        Self::new(id, title, description, tags, img_url)
+        Self::new(id, title, description, tags, content_rating, img_url)
     }
 }
 
@@ -147,6 +185,7 @@ impl MangaItem {
         title: String,
         description: String,
         tags: Vec<String>,
+        content_rating: String,
         img_url: Option<String>,
     ) -> Self {
         Self {
@@ -155,6 +194,7 @@ impl MangaItem {
             description,
             tags,
             img_url,
+            content_rating,
             image_state: None,
             style: Style::default(),
         }

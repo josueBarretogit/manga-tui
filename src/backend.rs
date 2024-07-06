@@ -29,6 +29,7 @@ pub struct Attributes {
     pub description: Option<Description>,
     pub status: String,
     pub tags: Vec<Tag>,
+    pub content_rating: String,
     pub state: String,
 }
 

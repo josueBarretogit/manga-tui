@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use bytes::Bytes;
 use crossterm::event::KeyCode;
 use image::io::Reader;
 use image::DynamicImage;
@@ -95,7 +94,7 @@ impl Component for MangaReader {
 
         match self
             .pages
-            .get_mut(self.page_list_state.selected().unwrap_or(0))
+            .get_mut(self.page_list_state.selected.unwrap_or(0))
         {
             Some(page) => match page.image_state.as_mut() {
                 Some(img_state) => {

@@ -5,6 +5,7 @@ pub mod manga;
 pub mod reader;
 pub mod search;
 
+
 pub trait Component {
     type Actions;
     ///Handles the logic for drawing to the screen
