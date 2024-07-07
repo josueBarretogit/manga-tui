@@ -3,6 +3,7 @@ use crate::backend::tui::Events;
 use crate::backend::SearchMangaResponse;
 use crate::view::widgets::search::*;
 use crate::view::widgets::Component;
+use color_eyre::owo_colors::OwoColorize;
 use crossterm::event::KeyEvent;
 use crossterm::event::{self, KeyCode};
 use image::io::Reader;
@@ -213,15 +214,19 @@ impl SearchPage {
                     .render(area, buf);
             }
             PageState::DisplayingMangasFound => {
-                StatefulWidgetRef::render_ref(
-                    &self.mangas_found_list.widget,
-                    manga_list_area,
-                    buf,
-                    &mut self.mangas_found_list.state,
-                );
-
                 let total_pages = self.mangas_found_list.total_result as f64 / 10_f64;
-                Block::default()
+
+                let list_instructions = Line::from(vec![
+                    "Go down ".into(),
+                    "<j> ".bold().blue(),
+                    "Go up ".into(),
+                    "<k> ".bold().blue(),
+                    "Read ".into(),
+                    "<r> ".bold().fg(Color::Yellow),
+                ]);
+
+                Block::bordered()
+                    .title_top(list_instructions)
                     .title_bottom(format!(
                         "Page: {} of {}, total : {}",
                         self.mangas_found_list.page,
@@ -229,6 +234,18 @@ impl SearchPage {
                         self.mangas_found_list.total_result
                     ))
                     .render(manga_list_area, buf);
+
+                let inner_list_area = manga_list_area.inner(Margin {
+                    horizontal: 1,
+                    vertical: 1,
+                });
+
+                StatefulWidgetRef::render_ref(
+                    &self.mangas_found_list.widget,
+                    inner_list_area,
+                    buf,
+                    &mut self.mangas_found_list.state,
+                );
 
                 if let Some(manga_selected) = self.get_current_manga_selected_mut() {
                     StatefulWidget::render(

@@ -15,8 +15,8 @@ impl MangadexClient {
     pub fn new(client: reqwest::Client) -> Self {
         Self {
             client,
-            api_url_base: "https://api.mangadex.dev".to_string(),
-            cover_img_url_base: "https://uploads.mangadex.dev/covers".to_string(),
+            api_url_base: "https://api.mangadex.org".to_string(),
+            cover_img_url_base: "https://uploads.mangadex.org/covers".to_string(),
         }
     }
 
@@ -29,12 +29,18 @@ impl MangadexClient {
         let content_rating =
             "contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica";
 
-        let offset = (page - 1) * 10;
+        let offset = (page - 1) * 32;
+
+        let search_by_title = if search_term.is_empty() {
+            "".to_string()
+        } else {
+            format!("title={search_term}")
+        };
 
         let url = format!(
-            "{}/manga?title='{}'&includes[]=cover_art&limit=10&offset={}&{}&includedTagsMode=AND&excludedTagsMode=OR",
+            "{}/manga?{}&includes[]=cover_art&limit=32&offset={}&{}&includedTagsMode=AND&excludedTagsMode=OR",
             self.api_url_base,
-            search_term.trim(),
+            search_by_title,
             offset,
             content_rating
         );

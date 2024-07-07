@@ -253,12 +253,6 @@ impl ListMangasFoundWidget {
 
         Self { mangas }
     }
-
-    pub fn loading() {}
-
-    pub fn not_found() {
-        ListMangasFoundWidget::default();
-    }
 }
 
 impl StatefulWidgetRef for ListMangasFoundWidget {
