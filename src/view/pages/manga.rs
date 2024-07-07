@@ -4,7 +4,7 @@ use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
 use crate::backend::{ChapterResponse, Languages};
 use crate::view::widgets::manga::{ChapterItem, ChaptersListWidget};
-use crate::view::widgets::{Component};
+use crate::view::widgets::Component;
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{prelude::*, widgets::*};
 use ratatui_image::protocol::StatefulProtocol;
@@ -400,7 +400,6 @@ impl Component for MangaPage {
     }
     fn handle_events(&mut self, events: Events) {
         match events {
-            
             Events::Key(key_event) => self.handle_key_events(key_event),
             _ => self.tick(),
         }

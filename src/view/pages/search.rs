@@ -90,7 +90,7 @@ impl Component for SearchPage {
 
         self.render_input_area(input_area, frame);
 
-        self.render_manga_area(manga_area, frame.buffer_mut());
+        self.render_manga_found_area(manga_area, frame.buffer_mut());
     }
 
     fn update(&mut self, action: SearchPageActions) {
@@ -193,7 +193,7 @@ impl SearchPage {
         }
     }
 
-    fn render_manga_area(&mut self, area: Rect, buf: &mut Buffer) {
+    fn render_manga_found_area(&mut self, area: Rect, buf: &mut Buffer) {
         let layout = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Percentage(40), Constraint::Percentage(60)]);
@@ -230,17 +230,18 @@ impl SearchPage {
                     ))
                     .render(manga_list_area, buf);
 
-                if let Some(manga_select) = self.get_current_manga_selected_mut() {
+                if let Some(manga_selected) = self.get_current_manga_selected_mut() {
                     StatefulWidget::render(
                         MangaPreview::new(
-                            manga_select.title.clone(),
-                            manga_select.description.clone(),
-                            manga_select.tags.clone(),
-                            manga_select.content_rating.clone()
+                            &manga_selected.title,
+                            &manga_selected.description,
+                            &manga_selected.tags,
+                            &manga_selected.content_rating,
+                            &manga_selected.status,
                         ),
                         preview_area,
                         buf,
-                        &mut manga_select.image_state,
+                        &mut manga_selected.image_state,
                     )
                 }
             }
