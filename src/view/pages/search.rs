@@ -150,6 +150,8 @@ impl SearchPage {
         let (action_tx, action_rx) = mpsc::unbounded_channel::<SearchPageActions>();
         let (local_event_tx, local_event) = mpsc::unbounded_channel::<SearchPageEvents>();
 
+        action_tx.send(SearchPageActions::Search).ok();
+
         Self {
             global_event_tx: event_tx,
             picker,
@@ -225,14 +227,23 @@ impl SearchPage {
                     "<r> ".bold().fg(Color::Yellow),
                 ]);
 
-                Block::bordered()
-                    .title_top(list_instructions)
-                    .title_bottom(format!(
-                        "Page: {} of {}, total : {}",
+                let pagination_instructions = Line::from(vec![
+                    format!(
+                        "Page : {} of {}, total : {} ",
                         self.mangas_found_list.page,
                         total_pages.ceil(),
                         self.mangas_found_list.total_result
-                    ))
+                    )
+                    .into(),
+                    "Next ".into(),
+                    "<w> ".bold().fg(Color::Yellow),
+                    "Previous ".into(),
+                    "<b> ".bold().fg(Color::Yellow),
+                ]);
+
+                Block::bordered()
+                    .title_top(list_instructions)
+                    .title_bottom(pagination_instructions)
                     .render(manga_list_area, buf);
 
                 let inner_list_area = manga_list_area.inner(Margin {

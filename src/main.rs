@@ -2,6 +2,8 @@ use ratatui::backend::CrosstermBackend;
 
 use self::backend::tui::{init, init_error_hooks, restore, run_app};
 
+mod utils;
+
 mod backend;
 /// These would be like the frontend
 mod view;

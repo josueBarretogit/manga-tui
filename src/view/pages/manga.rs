@@ -1,8 +1,8 @@
 use std::sync::Arc;
-
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
 use crate::backend::{ChapterResponse, Languages};
+use crate::utils::set_tags_style;
 use crate::view::widgets::manga::{ChapterItem, ChaptersListWidget};
 use crate::view::widgets::Component;
 use crossterm::event::{KeyCode, KeyEvent};
@@ -129,19 +129,39 @@ impl MangaPage {
     }
 
     fn render_manga_information(&mut self, area: Rect, frame: &mut Frame<'_>) {
-        let layout = Layout::default()
-            .margin(1)
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Percentage(40), Constraint::Percentage(60)]);
+        let buf = frame.buffer_mut();
+
+        let layout = Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)]);
 
         let [manga_information_area, manga_chapters_area] = layout.areas(area);
 
-        Paragraph::new(self.description.clone())
-            .block(Block::bordered().title(self.id.clone()))
-            .wrap(Wrap { trim: true })
-            .render(manga_information_area, frame.buffer_mut());
+        Block::bordered()
+            .title_top(Line::from(vec![self.title.clone().into()]))
+            .render(manga_information_area, buf);
+
+        self.render_details(manga_information_area, frame.buffer_mut());
 
         self.render_chapters_area(manga_chapters_area, frame);
+    }
+
+    fn render_details(&mut self, area: Rect, buf: &mut Buffer) {
+        let layout =
+            Layout::vertical([Constraint::Percentage(20), Constraint::Percentage(80)]).margin(1);
+        let [tags_area, description_area] = layout.areas(area);
+
+        let tags: Vec<Span<'_>> = self
+            .tags
+            .iter()
+            .map(|tag| set_tags_style(tag))
+            .collect();
+
+        Paragraph::new(Line::from(tags))
+            .wrap(Wrap { trim: true })
+            .render(tags_area, buf);
+
+        Paragraph::new(self.description.clone())
+            .wrap(Wrap { trim: true })
+            .render(description_area, buf);
     }
 
     fn render_chapters_area(&mut self, area: Rect, frame: &mut Frame<'_>) {
@@ -369,7 +389,7 @@ impl Component for MangaPage {
     fn render(&mut self, area: ratatui::prelude::Rect, frame: &mut ratatui::Frame<'_>) {
         let layout = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(40), Constraint::Percentage(60)]);
+            .constraints([Constraint::Percentage(30), Constraint::Percentage(70)]);
 
         let [cover_area, information_area] = layout.areas(area);
 

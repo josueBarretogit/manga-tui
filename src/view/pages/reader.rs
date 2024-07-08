@@ -261,7 +261,7 @@ impl MangaReader {
                                         }
                                     };
                                 }
-                                Err(e) => panic!("could not get chapter :{e}"),
+                                Err(_) => {}
                             };
                         });
                     }
@@ -287,7 +287,7 @@ impl MangaReader {
                         }
                     }
                     None => {
-                        panic!("could note load image")
+                        // Todo! indicate with an x that some page didnt load
                     }
                 },
             }

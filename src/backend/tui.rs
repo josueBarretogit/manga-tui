@@ -7,7 +7,6 @@ use crossterm::terminal::{
 use futures::{FutureExt, StreamExt};
 use ratatui::backend::Backend;
 use ratatui::prelude::*;
-use ratatui_image::protocol::StatefulProtocol;
 use std::error::Error;
 use std::time::Duration;
 use tokio::sync::mpsc::UnboundedSender;
