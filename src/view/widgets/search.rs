@@ -1,4 +1,5 @@
 use crate::backend::Data;
+use crate::utils::set_tags_style;
 use ratatui::{prelude::*, widgets::*};
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::{Resize, StatefulImage};
@@ -75,22 +76,12 @@ impl<'a> MangaPreview<'a> {
         let tags_list: Vec<ListItem<'_>> = self
             .tags
             .iter()
-            .map(|tag| match tag.to_lowercase().as_str() {
-                "gore" | "sexual violence" => ListItem::new(format!(" {tag} ").bg(Color::Red)),
-                "doujinshi" => ListItem::new(format!(" {tag} ").bg(Color::Blue)),
-                _ => ListItem::new(format!(" {tag} ")),
-            })
+            .map(|tag| ListItem::new(set_tags_style(tag)))
             .collect();
 
         Widget::render(List::new(tags_list), tags_area, buf);
 
-        let content_rating = match self.content_rating {
-            "suggestive" => format!(" {} ", self.content_rating)
-                .black()
-                .bg(Color::Yellow),
-            "erotica" | "pornographic" => format!(" {} ", self.content_rating).bg(Color::Red),
-            _ => self.content_rating.into(),
-        };
+        let content_rating = set_tags_style(self.content_rating);
 
         let status = format!(" {} ", self.status);
 

@@ -1,6 +1,8 @@
 pub mod fetch;
 pub mod tui;
 
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -196,4 +198,27 @@ pub struct ChapterPages {
     pub hash: String,
     pub data: Vec<String>,
     pub data_saver: Vec<String>,
+}
+
+// manga statistics
+//
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MangaStatisticsResponse {
+    pub result: String,
+    pub statistics: HashMap<String, Statistics>,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Statistics {
+    pub rating: Rating,
+    pub follows: u64,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Rating {
+    pub average: f64,
 }

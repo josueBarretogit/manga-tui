@@ -1,7 +1,6 @@
-use std::sync::Arc;
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
-use crate::backend::{ChapterResponse, Languages};
+use crate::backend::{ChapterResponse, Languages, MangaStatisticsResponse, Statistics};
 use crate::utils::set_tags_style;
 use crate::view::widgets::manga::{ChapterItem, ChaptersListWidget};
 use crate::view::widgets::Component;
@@ -9,9 +8,10 @@ use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{prelude::*, widgets::*};
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::{Resize, StatefulImage};
+use std::sync::Arc;
 use strum::Display;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
-use tokio::task::JoinHandle;
+use tokio::task::{JoinHandle, JoinSet};
 
 #[derive(PartialEq, Eq)]
 pub enum PageState {
@@ -30,8 +30,10 @@ pub enum MangaPageActions {
 
 pub enum MangaPageEvents {
     FetchChapters,
+    FethStatistics,
     StoppedSearchingChapterData,
     LoadChapters(Option<ChapterResponse>),
+    LoadStatistics(Option<MangaStatisticsResponse>),
 }
 
 #[derive(Display, Default, Clone, Copy)]
@@ -53,12 +55,14 @@ impl ChapterOrder {
 }
 
 pub struct MangaPage {
-    pub id: String,
+    id: String,
     pub title: String,
-    pub description: String,
-    pub tags: Vec<String>,
-    pub img_url: Option<String>,
-    pub image_state: Option<Box<dyn StatefulProtocol>>,
+    description: String,
+    tags: Vec<String>,
+    img_url: Option<String>,
+    image_state: Option<Box<dyn StatefulProtocol>>,
+    status: String,
+    content_rating: String,
     global_event_tx: UnboundedSender<Events>,
     local_action_tx: UnboundedSender<MangaPageActions>,
     pub local_action_rx: UnboundedReceiver<MangaPageActions>,
@@ -69,7 +73,19 @@ pub struct MangaPage {
     chapter_order: ChapterOrder,
     chapter_language: Languages,
     state: PageState,
-    search_chapter_task: Option<JoinHandle<()>>,
+    statistics: Option<MangaStatistics>,
+    tasks: JoinSet<()>,
+}
+
+struct MangaStatistics {
+    rating: f64,
+    follows: u64,
+}
+
+impl MangaStatistics {
+    fn new(rating: f64, follows: u64) -> Self {
+        Self { rating, follows }
+    }
 }
 
 struct ChaptersData {
@@ -88,6 +104,8 @@ impl MangaPage {
         tags: Vec<String>,
         img_url: Option<String>,
         image_state: Option<Box<dyn StatefulProtocol>>,
+        status: String,
+        content_rating: String,
         global_event_tx: UnboundedSender<Events>,
         client: Arc<MangadexClient>,
     ) -> Self {
@@ -95,6 +113,7 @@ impl MangaPage {
         let (local_event_tx, local_event_rx) = mpsc::unbounded_channel::<MangaPageEvents>();
 
         local_event_tx.send(MangaPageEvents::FetchChapters).ok();
+        local_event_tx.send(MangaPageEvents::FethStatistics).ok();
 
         Self {
             id,
@@ -103,6 +122,8 @@ impl MangaPage {
             tags,
             img_url,
             image_state,
+            status,
+            content_rating,
             global_event_tx,
             local_action_tx,
             local_action_rx,
@@ -113,7 +134,8 @@ impl MangaPage {
             chapter_language: Languages::default(),
             chapter_order: ChapterOrder::default(),
             state: PageState::SearchingChapters,
-            search_chapter_task: None,
+            statistics: None,
+            tasks: JoinSet::new(),
         }
     }
     fn render_cover(&mut self, area: Rect, buf: &mut Buffer) {
@@ -135,8 +157,17 @@ impl MangaPage {
 
         let [manga_information_area, manga_chapters_area] = layout.areas(area);
 
+        let statistics = match &self.statistics {
+            Some(statistics) => Span::raw(format!(
+                "⭐ {} follows : {}",
+                statistics.rating, statistics.follows
+            )),
+            None => Span::raw("⭐ follows : ".to_string()),
+        };
+
         Block::bordered()
             .title_top(Line::from(vec![self.title.clone().into()]))
+            .title_bottom(statistics.into_left_aligned_line())
             .render(manga_information_area, buf);
 
         self.render_details(manga_information_area, frame.buffer_mut());
@@ -149,11 +180,9 @@ impl MangaPage {
             Layout::vertical([Constraint::Percentage(20), Constraint::Percentage(80)]).margin(1);
         let [tags_area, description_area] = layout.areas(area);
 
-        let tags: Vec<Span<'_>> = self
-            .tags
-            .iter()
-            .map(|tag| set_tags_style(tag))
-            .collect();
+        let mut tags: Vec<Span<'_>> = self.tags.iter().map(|tag| set_tags_style(tag)).collect();
+
+        tags.push(set_tags_style(&self.content_rating));
 
         Paragraph::new(Line::from(tags))
             .wrap(Wrap { trim: true })
@@ -340,7 +369,7 @@ impl MangaPage {
         let tx = self.local_event_tx.clone();
         let language = self.chapter_language;
         let chapter_order = self.chapter_order;
-        self.search_chapter_task = Some(tokio::spawn(async move {
+        self.tasks.spawn(async move {
             let response = client
                 .get_manga_chapters(manga_id, 1, language, chapter_order)
                 .await;
@@ -351,12 +380,31 @@ impl MangaPage {
                     .unwrap(),
                 Err(_e) => tx.send(MangaPageEvents::LoadChapters(None)).unwrap(),
             }
-        }));
+        });
+    }
+
+    fn fetch_statistics(&mut self) {
+        let manga_id = self.id.clone();
+        let client = Arc::clone(&self.client);
+        let tx = self.local_event_tx.clone();
+        self.tasks.spawn(async move {
+            let response = client.get_manga_statistics(&manga_id).await;
+
+            match response {
+                Ok(res) => {
+                    tx.send(MangaPageEvents::LoadStatistics(Some(res))).ok();
+                }
+                Err(_) => {
+                    tx.send(MangaPageEvents::LoadStatistics(None)).ok();
+                }
+            };
+        });
     }
 
     fn tick(&mut self) {
         if let Ok(background_event) = self.local_event_rx.try_recv() {
             match background_event {
+                MangaPageEvents::FethStatistics => self.fetch_statistics(),
                 MangaPageEvents::FetchChapters => self.search_chapters(),
                 MangaPageEvents::LoadChapters(response) => {
                     self.state = PageState::SearchingStopped;
@@ -374,6 +422,21 @@ impl MangaPage {
                             });
                         }
                         None => self.chapters = None,
+                    }
+                }
+                MangaPageEvents::LoadStatistics(maybe_statistics) => {
+                    //todo! set this task as finished
+                    match maybe_statistics {
+                        Some(response) => {
+                            let statistics: &Statistics = &response.statistics[&self.id];
+                            self.statistics = Some(MangaStatistics::new(
+                                statistics.rating.average,
+                                statistics.follows,
+                            ));
+                        }
+                        None => {
+                            // Todo! show that statistics could not be found
+                        }
                     }
                 }
                 MangaPageEvents::StoppedSearchingChapterData => {
@@ -411,9 +474,7 @@ impl Component for MangaPage {
                 }
             }
             MangaPageActions::GoBackSearchPage => {
-                if let Some(searching_task) = &self.search_chapter_task {
-                    searching_task.abort();
-                }
+                // todo! abort all tasks
                 self.global_event_tx.send(Events::GoSearchPage).unwrap();
             }
         }

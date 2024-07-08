@@ -2,7 +2,9 @@ use bytes::Bytes;
 
 use crate::view::pages::manga::ChapterOrder;
 
-use super::{ChapterPagesResponse, ChapterResponse, Languages, SearchMangaResponse};
+use super::{
+    ChapterPagesResponse, ChapterResponse, Languages, MangaStatisticsResponse, SearchMangaResponse,
+};
 
 #[derive(Clone)]
 pub struct MangadexClient {
@@ -109,5 +111,18 @@ impl MangadexClient {
         let response: ChapterPagesResponse = serde_json::from_str(&text_response).unwrap();
 
         Ok(response)
+    }
+
+    pub async fn get_manga_statistics(
+        &self,
+        id_manga: &str,
+    ) -> Result<MangaStatisticsResponse, reqwest::Error> {
+        let endpoint = format!("{}/statistics/manga/{}", self.api_url_base, id_manga);
+
+        let response = self.client.get(endpoint).send().await?.text().await;
+
+        let data: MangaStatisticsResponse = serde_json::from_str(&response.unwrap()).unwrap();
+
+        Ok(data)
     }
 }

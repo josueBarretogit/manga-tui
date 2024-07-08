@@ -77,6 +77,8 @@ impl Component for App {
                     manga.tags,
                     manga.img_url,
                     manga.image_state,
+                    manga.status,
+                    manga.content_rating,
                     self.global_event_tx.clone(),
                     Arc::clone(&self.fetch_client),
                 ));

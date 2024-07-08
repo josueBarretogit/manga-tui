@@ -150,8 +150,6 @@ impl SearchPage {
         let (action_tx, action_rx) = mpsc::unbounded_channel::<SearchPageActions>();
         let (local_event_tx, local_event) = mpsc::unbounded_channel::<SearchPageEvents>();
 
-        action_tx.send(SearchPageActions::Search).ok();
-
         Self {
             global_event_tx: event_tx,
             picker,
