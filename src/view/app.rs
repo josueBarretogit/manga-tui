@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use ::crossterm::event::{EventStream, KeyCode, KeyEventKind};
+use crossterm::event::{KeyModifiers, ModifierKeyCode};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{self, Constraint, Layout, Rect};
 use ratatui::style::Color;
@@ -63,7 +64,12 @@ impl Component for App {
             Events::Key(key_event) => {
                 if self.search_page.input_mode != InputMode::Typing {
                     match key_event.code {
-                        KeyCode::Char('q') => self.global_action_tx.send(Action::Quit).unwrap(),
+                        KeyCode::Char('c') => match key_event.modifiers {
+                            KeyModifiers::CONTROL => {
+                                self.global_action_tx.send(Action::Quit).unwrap()
+                            }
+                            _ => {}
+                        },
                         _ => {}
                     }
                 }
@@ -79,6 +85,7 @@ impl Component for App {
                     manga.image_state,
                     manga.status,
                     manga.content_rating,
+                    manga.author.unwrap_or_default(),
                     self.global_event_tx.clone(),
                     Arc::clone(&self.fetch_client),
                 ));

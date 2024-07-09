@@ -31,6 +31,7 @@ enum PageState {
 
 /// These happens in the background
 pub enum SearchPageEvents {
+    SearchCovers,
     LoadCover(Option<DynamicImage>, String),
     LoadMangasFound(Option<SearchMangaResponse>),
 }
@@ -413,85 +414,71 @@ impl SearchPage {
                 SearchPageEvents::LoadMangasFound(response) => {
                     match response {
                         Some(response) => {
-                            let mut mangas: Vec<MangaItem> = vec![];
-
-                            for manga in response.data.iter() {
-                                let manga_id = manga.id.clone();
-                                let client = Arc::clone(&self.fetch_client);
-                                let tx = self.local_event_tx.clone();
-
-                                let img_url = manga
-                                    .relationships
-                                    .iter()
-                                    .find(|rel| rel.type_field == "cover_art")
-                                    .map(|cover_img| {
-                                        cover_img
-                                            .attributes
-                                            .as_ref()
-                                            .unwrap()
-                                            .file_name
-                                            .as_ref()
-                                            .unwrap()
-                                            .to_string()
-                                    });
-
-                                let search_cover_task = match img_url {
-                                    Some(file_name) => {
-                                        let handle = tokio::spawn(async move {
-                                            let response = client
-                                                .get_cover_for_manga(&manga_id, &file_name)
-                                                .await;
-
-                                            match response {
-                                                Ok(bytes) => {
-                                                    let dyn_img = Reader::new(Cursor::new(bytes))
-                                                        .with_guessed_format()
-                                                        .unwrap();
-
-                                                    let maybe_decoded = dyn_img.decode();
-                                                    match maybe_decoded {
-                                                        Ok(image) => {
-                                                            tx.send(SearchPageEvents::LoadCover(
-                                                                Some(image),
-                                                                manga_id,
-                                                            ))
-                                                            .unwrap();
-                                                        }
-                                                        Err(_) => {
-                                                            tx.send(SearchPageEvents::LoadCover(
-                                                                None, manga_id,
-                                                            ))
-                                                            .unwrap();
-                                                        }
-                                                    };
-                                                }
-                                                Err(_) => tx
-                                                    .send(SearchPageEvents::LoadCover(
-                                                        None, manga_id,
-                                                    ))
-                                                    .unwrap(),
-                                            }
-                                        });
-                                        Some(handle)
-                                    }
-                                    None => {
-                                        tx.send(SearchPageEvents::LoadCover(None, manga_id))
-                                            .unwrap();
-                                        None
-                                    }
-                                };
-                                self.search_cover_handles.push(search_cover_task);
-                                mangas.push(MangaItem::from(manga.clone()));
-                            }
-                            self.mangas_found_list.widget = ListMangasFoundWidget::new(mangas);
+                            self.mangas_found_list.widget =
+                                ListMangasFoundWidget::from_response(response.data);
                             self.mangas_found_list.total_result = response.total;
                             self.state = PageState::DisplayingMangasFound;
+                            self.local_event_tx
+                                .send(SearchPageEvents::SearchCovers)
+                                .ok();
                         }
                         // Todo indicate that mangas where not found
                         None => {
                             self.state = PageState::NotFound;
                             self.mangas_found_list.total_result = 0;
                         }
+                    }
+                }
+                SearchPageEvents::SearchCovers => {
+                    for manga in self.mangas_found_list.widget.mangas.iter() {
+                        let manga_id = manga.id.clone();
+                        let client = Arc::clone(&self.fetch_client);
+                        let tx = self.local_event_tx.clone();
+
+                        let search_cover_task = match manga.img_url.as_ref() {
+                            Some(file_name) => {
+                                let file_name = file_name.clone();
+                                let handle = tokio::spawn(async move {
+                                    let response =
+                                        client.get_cover_for_manga(&manga_id, &file_name).await;
+
+                                    match response {
+                                        Ok(bytes) => {
+                                            let dyn_img = Reader::new(Cursor::new(bytes))
+                                                .with_guessed_format()
+                                                .unwrap();
+
+                                            let maybe_decoded = dyn_img.decode();
+                                            match maybe_decoded {
+                                                Ok(image) => {
+                                                    tx.send(SearchPageEvents::LoadCover(
+                                                        Some(image),
+                                                        manga_id,
+                                                    ))
+                                                    .unwrap();
+                                                }
+                                                Err(_) => {
+                                                    tx.send(SearchPageEvents::LoadCover(
+                                                        None, manga_id,
+                                                    ))
+                                                    .unwrap();
+                                                }
+                                            };
+                                        }
+                                        Err(_) => tx
+                                            .send(SearchPageEvents::LoadCover(None, manga_id))
+                                            .unwrap(),
+                                    }
+                                });
+                                Some(handle)
+                            }
+                            None => {
+                                tx.send(SearchPageEvents::LoadCover(None, manga_id))
+                                    .unwrap();
+                                None
+                            }
+                        };
+                        self.search_cover_handles.push(search_cover_task);
                     }
                 }
 

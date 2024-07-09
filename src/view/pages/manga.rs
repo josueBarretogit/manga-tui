@@ -1,7 +1,7 @@
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
 use crate::backend::{ChapterResponse, Languages, MangaStatisticsResponse, Statistics};
-use crate::utils::set_tags_style;
+use crate::utils::{set_status_style, set_tags_style};
 use crate::view::widgets::manga::{ChapterItem, ChaptersListWidget};
 use crate::view::widgets::Component;
 use crossterm::event::{KeyCode, KeyEvent};
@@ -63,6 +63,7 @@ pub struct MangaPage {
     image_state: Option<Box<dyn StatefulProtocol>>,
     status: String,
     content_rating: String,
+    author: String,
     global_event_tx: UnboundedSender<Events>,
     local_action_tx: UnboundedSender<MangaPageActions>,
     pub local_action_rx: UnboundedReceiver<MangaPageActions>,
@@ -106,6 +107,7 @@ impl MangaPage {
         image_state: Option<Box<dyn StatefulProtocol>>,
         status: String,
         content_rating: String,
+        author: String,
         global_event_tx: UnboundedSender<Events>,
         client: Arc<MangadexClient>,
     ) -> Self {
@@ -124,6 +126,7 @@ impl MangaPage {
             image_state,
             status,
             content_rating,
+            author,
             global_event_tx,
             local_action_tx,
             local_action_rx,
@@ -168,6 +171,7 @@ impl MangaPage {
         Block::bordered()
             .title_top(Line::from(vec![self.title.clone().into()]))
             .title_bottom(statistics.into_left_aligned_line())
+            .title_bottom(Span::raw(format!("Author : {}", self.author)).into_right_aligned_line())
             .render(manga_information_area, buf);
 
         self.render_details(manga_information_area, frame.buffer_mut());
@@ -183,6 +187,9 @@ impl MangaPage {
         let mut tags: Vec<Span<'_>> = self.tags.iter().map(|tag| set_tags_style(tag)).collect();
 
         tags.push(set_tags_style(&self.content_rating));
+        
+
+        tags.push(set_status_style(&self.status));
 
         Paragraph::new(Line::from(tags))
             .wrap(Wrap { trim: true })

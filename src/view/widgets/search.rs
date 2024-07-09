@@ -1,5 +1,5 @@
 use crate::backend::Data;
-use crate::utils::set_tags_style;
+use crate::utils::{set_status_style, set_tags_style};
 use crossterm::style::Attributes;
 use ratatui::{prelude::*, widgets::*};
 use ratatui_image::protocol::StatefulProtocol;
@@ -84,9 +84,9 @@ impl<'a> MangaPreview<'a> {
 
         let content_rating = set_tags_style(self.content_rating);
 
-        let status = format!(" {} ", self.status);
+        let status = set_status_style(self.status);
 
-        Paragraph::new(Line::from(vec![content_rating, status.into()])).render(details_area, buf);
+        Paragraph::new(Line::from(vec![content_rating, status])).render(details_area, buf);
     }
 }
 

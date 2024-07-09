@@ -11,3 +11,13 @@ pub fn set_tags_style(tag: &str) -> Span<'_> {
         _ => format!(" {tag} ").into(),
     }
 }
+
+pub fn set_status_style(status: &str) -> Span<'_> {
+    match status.to_lowercase().as_str() {
+        "completed" => format!(" 🔵 {status} ").into(),
+        "ongoing" => format!(" 🟢 {status} ").into(),
+        "hiatus" => format!(" 🟡 {status} ").into(),
+        "cancelled" => format!(" 🟠 {status} ").into(),
+        _ => format!(" {status} ").into(),
+    }
+}
