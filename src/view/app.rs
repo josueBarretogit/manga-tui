@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
-use ::crossterm::event::{EventStream, KeyCode, KeyEventKind};
-use crossterm::event::{KeyModifiers, ModifierKeyCode};
+use ::crossterm::event::KeyCode;
+use crossterm::event::KeyModifiers;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{self, Constraint, Layout, Rect};
 use ratatui::style::Color;
-use ratatui::widgets::{Block, Borders, Tabs, Widget, WidgetRef};
-use ratatui::{Frame, Terminal};
+use ratatui::widgets::{Block, Borders, Tabs, Widget};
+use ratatui::Frame;
 use ratatui_image::picker::Picker;
 use reqwest::Client;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
@@ -86,6 +86,7 @@ impl Component for App {
                     manga.status,
                     manga.content_rating,
                     manga.author.unwrap_or_default(),
+                    manga.artist.unwrap_or_default(),
                     self.global_event_tx.clone(),
                     Arc::clone(&self.fetch_client),
                 ));

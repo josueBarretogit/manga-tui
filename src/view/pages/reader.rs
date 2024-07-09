@@ -210,6 +210,7 @@ impl MangaReader {
 
     fn clean(&mut self) {
         self.pages.clear();
+        self.pages_list.pages.clear();
     }
 
     fn render_page_list(&mut self, area: Rect, buf: &mut Buffer) {

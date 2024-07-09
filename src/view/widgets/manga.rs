@@ -8,6 +8,7 @@ pub struct ChapterItem {
     title: String,
     chapter_number: String,
     is_read: bool,
+    is_downlowaded: bool,
     translated_language: String,
     style: Style,
 }
@@ -23,24 +24,43 @@ impl Widget for ChapterItem {
             Constraint::Percentage(20),
         ]);
 
-        let [title_area, chapter_number_area, translated_language_area] = layout.areas(area);
+        Block::bordered().border_style(self.style).render(area, buf);
 
-        Paragraph::new(self.title)
-            .style(self.style)
-            .render(title_area, buf);
+        let [title_area, chapter_number_area, translated_language_area] =
+            layout.areas(area.inner(Margin {
+                horizontal: 1,
+                vertical: 1,
+            }));
 
         let translated_language: Languages = self.translated_language.as_str().into();
-        Paragraph::new(self.chapter_number).render(chapter_number_area, buf);
-        Paragraph::new(translated_language.to_string()).render(translated_language_area, buf);
+
+        let is_read_icon = if !self.is_read {
+            "👁️".to_string()
+        } else {
+            "_".to_string()
+        };
+
+        Paragraph::new(Line::from(vec![
+            is_read_icon.into(),
+            " ".into(),
+            translated_language.to_string().into(),
+            format!(" Ch. {} ", self.chapter_number).into(),
+            self.title.into(),
+            // after this goes the user group,
+            // when it was uploaded
+            // and if the chapters has been downloaded by user
+        ]))
+        .style(self.style)
+        .render(title_area, buf);
     }
 }
 
 impl PreRender for ChapterItem {
     fn pre_render(&mut self, context: &tui_widget_list::PreRenderContext) -> u16 {
         if context.is_selected {
-            self.style = Style::new().bg(Color::Blue);
+            self.style = Style::new().fg(Color::Yellow);
         }
-        2
+        4
     }
 }
 
@@ -57,6 +77,7 @@ impl ChapterItem {
             title,
             chapter_number,
             is_read,
+            is_downlowaded: false,
             translated_language,
             style: Style::default(),
         }

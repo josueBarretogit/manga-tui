@@ -3,7 +3,6 @@ use crate::backend::tui::Events;
 use crate::backend::SearchMangaResponse;
 use crate::view::widgets::search::*;
 use crate::view::widgets::Component;
-use color_eyre::owo_colors::OwoColorize;
 use crossterm::event::KeyEvent;
 use crossterm::event::{self, KeyCode};
 use image::io::Reader;

@@ -64,6 +64,7 @@ pub struct MangaPage {
     status: String,
     content_rating: String,
     author: String,
+    artist: String,
     global_event_tx: UnboundedSender<Events>,
     local_action_tx: UnboundedSender<MangaPageActions>,
     pub local_action_rx: UnboundedReceiver<MangaPageActions>,
@@ -108,6 +109,7 @@ impl MangaPage {
         status: String,
         content_rating: String,
         author: String,
+        artist: String,
         global_event_tx: UnboundedSender<Events>,
         client: Arc<MangadexClient>,
     ) -> Self {
@@ -127,6 +129,7 @@ impl MangaPage {
             status,
             content_rating,
             author,
+            artist,
             global_event_tx,
             local_action_tx,
             local_action_rx,
@@ -171,7 +174,13 @@ impl MangaPage {
         Block::bordered()
             .title_top(Line::from(vec![self.title.clone().into()]))
             .title_bottom(statistics.into_left_aligned_line())
-            .title_bottom(Span::raw(format!("Author : {}", self.author)).into_right_aligned_line())
+            .title_bottom(
+                Span::raw(format!(
+                    "Author : {} | Artist : {}",
+                    self.author, self.artist
+                ))
+                .into_right_aligned_line(),
+            )
             .render(manga_information_area, buf);
 
         self.render_details(manga_information_area, frame.buffer_mut());
@@ -187,7 +196,6 @@ impl MangaPage {
         let mut tags: Vec<Span<'_>> = self.tags.iter().map(|tag| set_tags_style(tag)).collect();
 
         tags.push(set_tags_style(&self.content_rating));
-        
 
         tags.push(set_status_style(&self.status));
 
@@ -201,14 +209,10 @@ impl MangaPage {
     }
 
     fn render_chapters_area(&mut self, area: Rect, frame: &mut Frame<'_>) {
-        let layout = Layout::vertical([Constraint::Percentage(20), Constraint::Percentage(80)]);
+        let layout =
+            Layout::vertical([Constraint::Percentage(10), Constraint::Percentage(90)]).margin(1);
 
-        let inner_block = area.inner(Margin {
-            horizontal: 1,
-            vertical: 1,
-        });
-
-        let [sorting_buttons_area, chapters_area] = layout.areas(inner_block);
+        let [sorting_buttons_area, chapters_area] = layout.areas(area);
 
         MangaPage::render_sorting_buttons(
             sorting_buttons_area,

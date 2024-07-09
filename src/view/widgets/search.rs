@@ -115,6 +115,7 @@ pub struct MangaItem {
     pub status: String,
     pub img_url: Option<String>,
     pub author: Option<String>,
+    pub artist: Option<String>,
     pub style: Style,
     pub image_state: Option<Box<dyn StatefulProtocol>>,
 }
@@ -178,13 +179,17 @@ impl From<Data> for MangaItem {
 
         let mut img_url: Option<String> = Option::default();
         let mut author: Option<String> = Option::default();
+        let mut artist: Option<String> = Option::default();
 
         for rel in &value.relationships {
             if let Some(attributes) = &rel.attributes {
-                if rel.type_field == "author" {
-                    author = Some(attributes.name.as_ref().unwrap().to_string());
-                } else if rel.type_field == "cover_art" {
-                    img_url = Some(attributes.file_name.as_ref().unwrap().to_string());
+                match rel.type_field.as_str() {
+                    "author" => author = Some(attributes.name.as_ref().unwrap().to_string()),
+                    "artist" => artist = Some(attributes.name.as_ref().unwrap().to_string()),
+                    "cover_art" => {
+                        img_url = Some(attributes.file_name.as_ref().unwrap().to_string())
+                    }
+                    _ => {}
                 }
             }
         }
@@ -200,6 +205,7 @@ impl From<Data> for MangaItem {
             status,
             img_url,
             author,
+            artist
         )
     }
 }
@@ -214,6 +220,7 @@ impl MangaItem {
         status: String,
         img_url: Option<String>,
         author: Option<String>,
+        artist: Option<String>,
     ) -> Self {
         Self {
             id,
@@ -226,6 +233,7 @@ impl MangaItem {
             status,
             style: Style::default(),
             author,
+            artist,
         }
     }
 }
