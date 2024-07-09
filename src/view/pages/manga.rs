@@ -11,7 +11,7 @@ use ratatui_image::{Resize, StatefulImage};
 use std::sync::Arc;
 use strum::Display;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
-use tokio::task::{JoinHandle, JoinSet};
+use tokio::task::JoinSet;
 
 #[derive(PartialEq, Eq)]
 pub enum PageState {
@@ -256,10 +256,9 @@ impl MangaPage {
             .render(sorting_area, buf);
 
         // Todo! bring in selectable widget
+        let language = format!("Language: {}", language);
 
-        Block::bordered()
-            .title(language.to_string())
-            .render(language_area, buf);
+        Block::bordered().title(language).render(language_area, buf);
     }
 
     fn handle_key_events(&mut self, key_event: KeyEvent) {
@@ -268,7 +267,7 @@ impl MangaPage {
                 if self.state != PageState::SearchingChapterData {
                     self.local_action_tx
                         .send(MangaPageActions::GoBackSearchPage)
-                        .unwrap()
+                        .ok();
                 }
             }
             KeyCode::Char('j') => {
@@ -299,6 +298,10 @@ impl MangaPage {
             }
             _ => {}
         }
+    }
+
+    fn abort_tasks(&mut self) {
+        self.tasks.abort_all();
     }
 
     fn scroll_chapter_down(&mut self) {
@@ -474,7 +477,7 @@ impl Component for MangaPage {
                 }
             }
             MangaPageActions::GoBackSearchPage => {
-                // todo! abort all tasks
+                self.abort_tasks();
                 self.global_event_tx.send(Events::GoSearchPage).unwrap();
             }
         }

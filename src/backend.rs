@@ -21,7 +21,7 @@ pub struct SearchMangaResponse {
 pub struct Data {
     pub id: String,
     pub attributes: Attributes,
-    pub relationships: Vec<CoverImgMetadata>,
+    pub relationships: Vec<MangaSearchRelationship>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -58,15 +58,19 @@ pub struct Description {
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CoverImgMetadata {
+pub struct MangaSearchRelationship {
     pub id: String,
-    pub attributes: Option<CoverImgAttributes>,
+    #[serde(rename = "type")]
+    pub type_field: String,
+    pub attributes: Option<MangaSearchAttributes>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct CoverImgAttributes {
+pub struct MangaSearchAttributes {
     #[serde(rename = "fileName")]
-    pub file_name: String,
+    pub file_name: Option<String>,
+    pub name: Option<String>,
+    pub locale: Option<String>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -138,19 +142,26 @@ pub struct Relationship {
 
 #[derive(strum_macros::Display, Default, Clone, Copy)]
 pub enum Languages {
+    #[strum(to_string = "🇫🇷")]
     French,
     #[default]
+    #[strum(to_string = "🇬🇧")]
     English,
+    #[strum(to_string = "🇪🇸")]
     Spanish,
-    #[strum(to_string = "Latin spanish")]
+    #[strum(to_string = "🇲🇽")]
     SpanishLa,
+    #[strum(to_string = "🇯🇵")]
     Japanese,
+    #[strum(to_string = "🇪🇸")]
     Korean,
-    #[strum(to_string = "Portuguese")]
+    #[strum(to_string = "🇧🇷")]
     BrazilianPortuguese,
-    #[strum(to_string = "Traditional chinese")]
+    #[strum(to_string = "🇨🇳")]
     TraditionalChinese,
+    #[strum(to_string = "🇷🇺")]
     Russian,
+    #[strum(to_string = "🇩🇪")]
     German,
 }
 

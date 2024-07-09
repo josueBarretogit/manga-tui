@@ -40,7 +40,7 @@ impl MangadexClient {
         };
 
         let url = format!(
-            "{}/manga?{}&includes[]=cover_art&limit=10&offset={}&{}&includedTagsMode=AND&excludedTagsMode=OR",
+            "{}/manga?{}&includes[]=cover_art&includes[]=author&includes[]=artist&limit=10&offset={}&{}&includedTagsMode=AND&excludedTagsMode=OR",
             self.api_url_base,
             search_by_title,
             offset,

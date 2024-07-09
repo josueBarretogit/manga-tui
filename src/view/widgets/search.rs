@@ -1,5 +1,6 @@
 use crate::backend::Data;
 use crate::utils::set_tags_style;
+use crossterm::style::Attributes;
 use ratatui::{prelude::*, widgets::*};
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::{Resize, StatefulImage};
@@ -113,6 +114,7 @@ pub struct MangaItem {
     pub content_rating: String,
     pub status: String,
     pub img_url: Option<String>,
+    pub author: Option<String>,
     pub style: Style,
     pub image_state: Option<Box<dyn StatefulProtocol>>,
 }
@@ -174,18 +176,18 @@ impl From<Data> for MangaItem {
             .map(|tag| tag.attributes.name.en.to_string())
             .collect();
 
-        let img_metadata = value
-            .relationships
-            .iter()
-            .find(|relation| relation.attributes.is_some());
+        let mut img_url: Option<String> = Option::default();
+        let mut author: Option<String> = Option::default();
 
-        let img_url = match img_metadata {
-            Some(data) => data
-                .attributes
-                .as_ref()
-                .map(|cover_img_attributes| cover_img_attributes.file_name.clone()),
-            None => None,
-        };
+        for rel in &value.relationships {
+            if let Some(attributes) = &rel.attributes {
+                if rel.type_field == "author" {
+                    author = Some(attributes.name.as_ref().unwrap().to_string());
+                } else if rel.type_field == "cover_art" {
+                    img_url = Some(attributes.file_name.as_ref().unwrap().to_string());
+                }
+            }
+        }
 
         let status = value.attributes.status;
 
@@ -197,6 +199,7 @@ impl From<Data> for MangaItem {
             content_rating,
             status,
             img_url,
+            author,
         )
     }
 }
@@ -210,6 +213,7 @@ impl MangaItem {
         content_rating: String,
         status: String,
         img_url: Option<String>,
+        author: Option<String>,
     ) -> Self {
         Self {
             id,
@@ -221,6 +225,7 @@ impl MangaItem {
             image_state: None,
             status,
             style: Style::default(),
+            author,
         }
     }
 }

@@ -28,7 +28,8 @@ pub enum State {
 }
 
 pub enum MangaReaderEvents {
-    FetchPages,
+    // Todo! make a way to fetch pages for every 2 or 3 seconds
+    FetchPages(usize),
     LoadPage(Option<DynamicImage>, usize),
 }
 
@@ -169,7 +170,7 @@ impl MangaReader {
             pages.push(Page::new(url, PageType::HighQuality));
         }
 
-        local_event_tx.send(MangaReaderEvents::FetchPages).unwrap();
+        local_event_tx.send(MangaReaderEvents::FetchPages(5)).ok();
 
         Self {
             global_event_tx,
@@ -228,7 +229,7 @@ impl MangaReader {
         self.pages_list.on_tick();
         if let Ok(background_event) = self.local_event_rx.try_recv() {
             match background_event {
-                MangaReaderEvents::FetchPages => {
+                MangaReaderEvents::FetchPages(amount) => {
                     let mut pages_list: Vec<PagesItem> = vec![];
                     for (index, page) in self.pages.iter().enumerate() {
                         let file_name = page.url.clone();
@@ -247,6 +248,7 @@ impl MangaReader {
                                         .unwrap();
 
                                     let maybe_decoded = dyn_img.decode();
+
                                     match maybe_decoded {
                                         Ok(image) => {
                                             tx.send(MangaReaderEvents::LoadPage(

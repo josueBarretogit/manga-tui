@@ -420,19 +420,20 @@ impl SearchPage {
                                 let client = Arc::clone(&self.fetch_client);
                                 let tx = self.local_event_tx.clone();
 
-                                let img_metadata = manga
+                                let img_url = manga
                                     .relationships
                                     .iter()
-                                    .find(|relation| relation.attributes.is_some());
-
-                                let img_url = match img_metadata {
-                                    Some(data) => {
-                                        data.attributes.as_ref().map(|cover_img_attributes| {
-                                            cover_img_attributes.file_name.clone()
-                                        })
-                                    }
-                                    None => None,
-                                };
+                                    .find(|rel| rel.type_field == "cover_art")
+                                    .map(|cover_img| {
+                                        cover_img
+                                            .attributes
+                                            .as_ref()
+                                            .unwrap()
+                                            .file_name
+                                            .as_ref()
+                                            .unwrap()
+                                            .to_string()
+                                    });
 
                                 let search_cover_task = match img_url {
                                     Some(file_name) => {
