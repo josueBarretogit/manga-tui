@@ -43,9 +43,8 @@ impl Component for App {
         if self.manga_reader_page.is_some() && self.current_tab == SelectedTabs::ReaderTab {
             self.manga_reader_page.as_mut().unwrap().render(area, frame);
         } else {
-            let main_layout = Layout::default()
-                .direction(layout::Direction::Vertical)
-                .constraints([Constraint::Percentage(6), Constraint::Percentage(94)]);
+            let main_layout =
+                Layout::vertical([Constraint::Percentage(6), Constraint::Percentage(94)]);
 
             let [top_tabs_area, page_area] = main_layout.areas(area);
 
@@ -71,6 +70,11 @@ impl Component for App {
                             }
                         }
 
+                        KeyCode::Char('1') => {
+                            if self.manga_reader_page.is_none() {
+                                self.global_action_tx.send(Action::GoToHome).ok();
+                            }
+                        }
                         _ => {}
                     }
                 }
@@ -142,7 +146,9 @@ impl Component for App {
                 self.manga_reader_page = None;
                 self.manga_page = None;
             }
-            _ => {}
+            Action::GoToHome => {
+                self.current_tab = SelectedTabs::Home;
+            }
         }
     }
     fn clean_up(&mut self) {}
@@ -173,14 +179,7 @@ impl App {
     }
 
     pub fn render_top_tabs(&self, area: Rect, buf: &mut Buffer) {
-        let titles: Vec<&str> = if self.current_tab == SelectedTabs::MangaTab {
-            match self.manga_page.as_ref() {
-                Some(page) => vec!["Search", &page.title],
-                None => vec!["Search"],
-            }
-        } else {
-            vec!["Search"]
-        };
+        let titles: Vec<&str> = vec!["Home", "Search"];
 
         let tabs_block = Block::default().borders(Borders::BOTTOM);
 

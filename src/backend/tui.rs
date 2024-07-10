@@ -20,6 +20,7 @@ use crate::view::widgets::Component;
 use super::ChapterPagesResponse;
 
 pub enum Action {
+    GoToHome,
     GoToSearchPage,
     Quit,
     NextTab,
@@ -95,9 +96,11 @@ pub async fn run_app(backend: impl Backend) -> Result<(), Box<dyn Error>> {
                     app.manga_page.as_mut().unwrap().handle_events(event);
                 }
                 SelectedTabs::ReaderTab => {
-                    app.manga_reader_page.as_mut().unwrap().handle_events(event)
+                    app.manga_reader_page.as_mut().unwrap().handle_events(event);
                 }
-                SelectedTabs::Home => {}
+                SelectedTabs::Home => {
+                    app.home_page.handle_events(event);
+                }
             };
         }
 
@@ -105,27 +108,32 @@ pub async fn run_app(backend: impl Backend) -> Result<(), Box<dyn Error>> {
             app.update(app_action);
         }
 
-        if app.current_tab == SelectedTabs::Search {
-            if let Ok(search_page_action) = app.search_page.local_action_rx.try_recv() {
-                app.search_page.update(search_page_action);
-            }
-        }
-
-        if app.current_tab == SelectedTabs::MangaTab {
-            if let Some(manga_page) = app.manga_page.as_mut() {
-                if let Ok(action) = manga_page.local_action_rx.try_recv() {
-                    manga_page.update(action);
+        match app.current_tab {
+            SelectedTabs::Search => {
+                if let Ok(search_page_action) = app.search_page.local_action_rx.try_recv() {
+                    app.search_page.update(search_page_action);
                 }
             }
-        }
-
-        if app.current_tab == SelectedTabs::ReaderTab {
-            if let Some(reader_page) = app.manga_reader_page.as_mut() {
-                if let Ok(reader_action) = reader_page.local_action_rx.try_recv() {
-                    reader_page.update(reader_action);
+            SelectedTabs::MangaTab => {
+                if let Some(manga_page) = app.manga_page.as_mut() {
+                    if let Ok(action) = manga_page.local_action_rx.try_recv() {
+                        manga_page.update(action);
+                    }
                 }
             }
-        }
+            SelectedTabs::ReaderTab => {
+                if let Some(reader_page) = app.manga_reader_page.as_mut() {
+                    if let Ok(reader_action) = reader_page.local_action_rx.try_recv() {
+                        reader_page.update(reader_action);
+                    }
+                }
+            }
+            SelectedTabs::Home => {
+                if let Ok(home_action) = app.home_page.local_action_rx.try_recv() {
+                    app.home_page.update(home_action);
+                }
+            }
+        };
     }
 
     main_event_handle.abort();

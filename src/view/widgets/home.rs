@@ -16,6 +16,7 @@ pub struct CarrouselItem {
     pub img_url: Option<String>,
     pub author: Option<String>,
     pub artist: Option<String>,
+    pub width: u16,
     pub style: Style,
     pub cover_state: Option<Box<dyn StatefulProtocol>>,
 }
@@ -45,6 +46,7 @@ impl CarrouselItem {
             author,
             artist,
             style,
+            width: 100,
             cover_state,
         }
     }
@@ -53,6 +55,7 @@ impl CarrouselItem {
         match self.cover_state {
             Some(ref mut image_state) => {
                 let cover = StatefulImage::new(None).resize(Resize::Fit(None));
+
                 StatefulWidget::render(cover, area, buf, image_state)
             }
             None => {
@@ -62,8 +65,6 @@ impl CarrouselItem {
         };
     }
     fn render_details(&mut self, area: Rect, buf: &mut Buffer) {
-        let layout = Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]);
-
         Block::bordered()
             .title(self.title.clone())
             .render(area, buf);
@@ -142,6 +143,7 @@ impl Widget for CarrouselItem {
     where
         Self: Sized,
     {
+        self.width = area.width + 30;
         let layout = Layout::horizontal([Constraint::Percentage(30), Constraint::Percentage(70)]);
 
         let [cover_area, details_area] = layout.areas(area);
@@ -154,9 +156,10 @@ impl Widget for CarrouselItem {
 impl PreRender for CarrouselItem {
     fn pre_render(&mut self, context: &tui_widget_list::PreRenderContext) -> u16 {
         if context.is_selected {
-            self.style = Style::new().on_blue();
+            self.style = Style::new().bg(Color::Blue);
         }
-        40
+
+        self.width
     }
 }
 
@@ -187,5 +190,12 @@ impl Carrousel {
             items,
             state: tui_widget_list::ListState::default(),
         }
+    }
+    pub fn next(&mut self) {
+        self.state.next();
+    }
+
+    pub fn previous(&mut self) {
+        self.state.previous();
     }
 }
