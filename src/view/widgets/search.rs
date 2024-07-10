@@ -1,6 +1,5 @@
 use crate::backend::Data;
 use crate::utils::{set_status_style, set_tags_style};
-use crossterm::style::Attributes;
 use ratatui::{prelude::*, widgets::*};
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::{Resize, StatefulImage};

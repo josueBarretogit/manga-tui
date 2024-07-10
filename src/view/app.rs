@@ -1,5 +1,5 @@
-use std::sync::Arc;
-
+use crate::backend::tui::{Action, Events};
+use crate::view::pages::*;
 use ::crossterm::event::KeyCode;
 use crossterm::event::KeyModifiers;
 use ratatui::buffer::Buffer;
@@ -8,13 +8,9 @@ use ratatui::style::Color;
 use ratatui::widgets::{Block, Borders, Tabs, Widget};
 use ratatui::Frame;
 use ratatui_image::picker::Picker;
-use reqwest::Client;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
-use crate::backend::fetch::MangadexClient;
-use crate::backend::tui::{Action, Events};
-use crate::view::pages::*;
-
+use self::home::Home;
 use self::manga::MangaPage;
 use self::reader::MangaReader;
 use self::search::{InputMode, SearchPage};
@@ -38,6 +34,7 @@ pub struct App {
     pub manga_page: Option<MangaPage>,
     pub manga_reader_page: Option<MangaReader>,
     pub search_page: SearchPage,
+    pub home_page: Home,
 }
 
 impl Component for App {
@@ -63,12 +60,16 @@ impl Component for App {
             Events::Key(key_event) => {
                 if self.search_page.input_mode != InputMode::Typing {
                     match key_event.code {
-                        KeyCode::Char('c') => match key_event.modifiers {
-                            KeyModifiers::CONTROL => {
+                        KeyCode::Char('c') => {
+                            if let KeyModifiers::CONTROL = key_event.modifiers {
                                 self.global_action_tx.send(Action::Quit).unwrap()
                             }
-                            _ => {}
-                        },
+                        }
+                        KeyCode::Char('2') => {
+                            if self.manga_reader_page.is_none() {
+                                self.global_action_tx.send(Action::GoToSearchPage).ok();
+                            }
+                        }
 
                         _ => {}
                     }
@@ -121,6 +122,9 @@ impl Component for App {
             Events::GoSearchPage => {
                 self.current_tab = SelectedTabs::Search;
             }
+            Events::GoToHome => {
+                self.current_tab = SelectedTabs::Home;
+            }
 
             _ => {}
         }
@@ -141,6 +145,7 @@ impl Component for App {
             _ => {}
         }
     }
+    fn clean_up(&mut self) {}
 }
 
 impl App {
@@ -156,6 +161,7 @@ impl App {
             picker,
             current_tab: SelectedTabs::default(),
             search_page: SearchPage::init(picker, global_event_tx.clone()),
+            home_page: Home::new(global_event_tx.clone()),
             manga_page: None,
             manga_reader_page: None,
             global_action_tx,
@@ -193,6 +199,8 @@ impl App {
         match self.current_tab {
             SelectedTabs::Search => self.render_search_page(area, frame),
             SelectedTabs::MangaTab => self.render_manga_page(area, frame),
+            SelectedTabs::Home => self.render_home_page(area, frame),
+            // Reader tab should be on full screen
             SelectedTabs::ReaderTab => {}
         }
     }
@@ -207,7 +215,9 @@ impl App {
         }
     }
 
-    //pub fn render_home_page(&self, area: Rect, buf: &mut Buffer) {}
+    pub fn render_home_page(&mut self, area: Rect, frame: &mut Frame<'_>) {
+        self.home_page.render(area, frame);
+    }
 
     pub fn next_tab(&mut self) {
         self.current_tab = self.current_tab.next();

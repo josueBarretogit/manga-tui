@@ -140,6 +140,12 @@ impl Component for MangaReader {
             _ => {}
         }
     }
+
+    fn clean_up(&mut self) {
+        self.image_tasks.abort_all();
+        self.pages.clear();
+        self.pages_list.pages.clear();
+    }
 }
 
 impl MangaReader {
@@ -192,19 +198,9 @@ impl MangaReader {
         self.page_list_state.previous();
     }
 
-    fn abort_fetch_pages(&mut self) {
-        self.image_tasks.abort_all();
-    }
-
     fn go_back_manga_page(&mut self) {
-        self.abort_fetch_pages();
-        self.clean();
+        self.clean_up();
         self.global_event_tx.send(Events::GoBackMangaPage).unwrap();
-    }
-
-    fn clean(&mut self) {
-        self.pages.clear();
-        self.pages_list.pages.clear();
     }
 
     fn render_page_list(&mut self, area: Rect, buf: &mut Buffer) {

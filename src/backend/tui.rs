@@ -34,6 +34,7 @@ pub enum Events {
     // Todo! maybe implement something that uses the mouse?
     Mouse(MouseEvent),
     GoToMangaPage(MangaItem),
+    GoToHome,
     GoBackMangaPage,
     GoSearchPage,
     ReadChapter(ChapterPagesResponse),
@@ -96,6 +97,7 @@ pub async fn run_app(backend: impl Backend) -> Result<(), Box<dyn Error>> {
                 SelectedTabs::ReaderTab => {
                     app.manga_reader_page.as_mut().unwrap().handle_events(event)
                 }
+                SelectedTabs::Home => {}
             };
         }
 

@@ -8,7 +8,6 @@ use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{prelude::*, widgets::*};
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::{Resize, StatefulImage};
-use std::sync::Arc;
 use strum::Display;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
@@ -333,14 +332,11 @@ impl MangaPage {
         self.search_chapters();
     }
 
-    fn get_current_selected_chapter_mut(&mut self) -> Option<&mut ChapterItem> {
-        match self.chapters.as_mut() {
+    fn get_current_selected_chapter(&self) -> Option<&ChapterItem> {
+        match self.chapters.as_ref() {
             Some(chapters_data) => match chapters_data.state.selected {
                 Some(selected_chapter_index) => {
-                    return chapters_data
-                        .widget
-                        .chapters
-                        .get_mut(selected_chapter_index)
+                    return chapters_data.widget.chapters.get(selected_chapter_index)
                 }
                 None => None,
             },
@@ -350,24 +346,29 @@ impl MangaPage {
 
     fn read_chapter(&mut self) {
         self.state = PageState::SearchingChapterData;
-        if let Some(chapter_selected) = self.get_current_selected_chapter_mut() {
-            let id_chapter = chapter_selected.id.clone();
-            let tx = self.global_event_tx.clone();
-            let local_tx = self.local_event_tx.clone();
-            tokio::spawn(async move {
-                let chapter_response = MangadexClient::global().get_chapter_pages(&id_chapter).await;
-                match chapter_response {
-                    Ok(response) => {
-                        tx.send(Events::ReadChapter(response)).unwrap();
-                        local_tx
-                            .send(MangaPageEvents::StoppedSearchingChapterData)
-                            .unwrap();
+        match self.get_current_selected_chapter() {
+            Some(chapter_selected) => {
+                let id_chapter = chapter_selected.id.clone();
+                let tx = self.global_event_tx.clone();
+                let local_tx = self.local_event_tx.clone();
+                tokio::spawn(async move {
+                    let chapter_response = MangadexClient::global()
+                        .get_chapter_pages(&id_chapter)
+                        .await;
+                    match chapter_response {
+                        Ok(response) => {
+                            tx.send(Events::ReadChapter(response)).unwrap();
+                            local_tx
+                                .send(MangaPageEvents::StoppedSearchingChapterData)
+                                .unwrap();
+                        }
+                        Err(e) => {
+                            panic!("{e}");
+                        }
                     }
-                    Err(e) => {
-                        panic!("{e}");
-                    }
-                }
-            });
+                });
+            }
+            None => self.state = PageState::SearchingStopped,
         }
     }
 
@@ -395,7 +396,9 @@ impl MangaPage {
         let manga_id = self.id.clone();
         let tx = self.local_event_tx.clone();
         self.tasks.spawn(async move {
-            let response = MangadexClient::global().get_manga_statistics(&manga_id).await;
+            let response = MangadexClient::global()
+                .get_manga_statistics(&manga_id)
+                .await;
 
             match response {
                 Ok(res) => {
@@ -481,7 +484,7 @@ impl Component for MangaPage {
                 }
             }
             MangaPageActions::GoBackSearchPage => {
-                self.abort_tasks();
+                self.clean_up();
                 self.global_event_tx.send(Events::GoSearchPage).unwrap();
             }
         }
@@ -491,5 +494,8 @@ impl Component for MangaPage {
             Events::Key(key_event) => self.handle_key_events(key_event),
             _ => self.tick(),
         }
+    }
+    fn clean_up(&mut self) {
+        self.abort_tasks();
     }
 }

@@ -10,9 +10,8 @@ use image::DynamicImage;
 use ratatui::{prelude::*, widgets::*};
 use ratatui_image::picker::Picker;
 use std::io::Cursor;
-use std::sync::Arc;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
-use tokio::task::JoinHandle;
+use tokio::task::JoinSet;
 use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
 use tui_widget_list::ListState;
@@ -67,7 +66,7 @@ pub struct SearchPage {
     search_bar: Input,
     state: PageState,
     mangas_found_list: MangasFoundList,
-    search_cover_handles: Vec<Option<JoinHandle<()>>>,
+    search_cover_handles: JoinSet<()>,
 }
 
 /// This contains the data the application gets when doing a search
@@ -138,6 +137,15 @@ impl Component for SearchPage {
             _ => {}
         }
     }
+    fn clean_up(&mut self) {
+        self.state = PageState::default();
+        self.input_mode = InputMode::Idle;
+        self.abort_search_cover_handles();
+        self.mangas_found_list.state = ListState::default();
+        if !self.mangas_found_list.widget.mangas.is_empty() {
+            self.mangas_found_list.widget.mangas.clear();
+        }
+    }
 }
 
 impl SearchPage {
@@ -156,7 +164,7 @@ impl SearchPage {
             search_bar: Input::default(),
             state: PageState::default(),
             mangas_found_list: MangasFoundList::default(),
-            search_cover_handles: vec![],
+            search_cover_handles: JoinSet::new(),
         }
     }
 
@@ -295,17 +303,7 @@ impl SearchPage {
     }
 
     fn abort_search_cover_handles(&mut self) {
-        if !self.search_cover_handles.is_empty() {
-            for handle in self.search_cover_handles.iter() {
-                match handle {
-                    Some(running_task) => {
-                        running_task.abort();
-                    }
-                    None => {}
-                }
-            }
-            self.search_cover_handles.clear();
-        }
+        self.search_cover_handles.abort_all();
     }
 
     /// This method is used to "forget" the data stored in the search page
@@ -371,10 +369,9 @@ impl SearchPage {
     }
 
     fn search_mangas(&mut self, page: i32) {
+        self.clean_up();
         self.abort_search_cover_handles();
-        if !self.mangas_found_list.widget.mangas.is_empty() {
-            self.mangas_found_list.widget.mangas.clear();
-        }
+
         self.state = PageState::SearchingMangas;
         self.mangas_found_list.state = tui_widget_list::ListState::default();
 
@@ -429,10 +426,10 @@ impl SearchPage {
                         let manga_id = manga.id.clone();
                         let tx = self.local_event_tx.clone();
 
-                        let search_cover_task = match manga.img_url.as_ref() {
+                        match manga.img_url.as_ref() {
                             Some(file_name) => {
                                 let file_name = file_name.clone();
-                                let handle = tokio::spawn(async move {
+                                self.search_cover_handles.spawn(async move {
                                     let response = MangadexClient::global()
                                         .get_cover_for_manga(&manga_id, &file_name)
                                         .await;
@@ -465,15 +462,12 @@ impl SearchPage {
                                             .unwrap(),
                                     }
                                 });
-                                Some(handle)
                             }
                             None => {
                                 tx.send(SearchPageEvents::LoadCover(None, manga_id))
                                     .unwrap();
-                                None
                             }
                         };
-                        self.search_cover_handles.push(search_cover_task);
                     }
                 }
 

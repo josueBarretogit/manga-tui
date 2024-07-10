@@ -18,7 +18,9 @@ pub static MANGADEX_CLIENT_INSTANCE: OnceCell<MangadexClient> = once_cell::sync:
 
 impl MangadexClient {
     pub fn global() -> &'static MangadexClient {
-        MANGADEX_CLIENT_INSTANCE.get().expect("could not get mangadex client")
+        MANGADEX_CLIENT_INSTANCE
+            .get()
+            .expect("could not get mangadex client")
     }
 
     pub fn new(client: reqwest::Client) -> Self {
@@ -130,6 +132,15 @@ impl MangadexClient {
 
         let data: MangaStatisticsResponse = serde_json::from_str(&response.unwrap()).unwrap();
 
+        Ok(data)
+    }
+
+    pub async fn get_popular_mangas(&self) -> Result<SearchMangaResponse, reqwest::Error> {
+        let endpoint = format!("{}/manga?includes[]=cover_art&includes[]=artist&includes[]=author&order[followedCount]=desc&contentRating[]=safe&contentRating[]=suggestive&hasAvailableChapters=true&createdAtSince=2024-06-10T00:00:00", self.api_url_base);
+
+        let response = self.client.get(endpoint).send().await?;
+
+        let data: SearchMangaResponse = response.json().await?;
         Ok(data)
     }
 }

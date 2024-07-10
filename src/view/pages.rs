@@ -1,8 +1,9 @@
 use strum::{Display, EnumCount, EnumIter, FromRepr, IntoEnumIterator};
 
+pub mod home;
 pub mod manga;
-pub mod search;
 pub mod reader;
+pub mod search;
 
 #[derive(
     Clone, Copy, Default, FromRepr, Display, EnumIter, EnumCount, PartialEq, Eq, PartialOrd, Ord,
@@ -15,6 +16,7 @@ pub enum SelectedTabs {
     ReaderTab,
     MangaTab,
     #[default]
+    Home,
     Search,
 }
 
