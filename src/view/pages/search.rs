@@ -65,7 +65,6 @@ pub struct SearchPage {
     pub local_event_rx: UnboundedReceiver<SearchPageEvents>,
     pub input_mode: InputMode,
     search_bar: Input,
-    fetch_client: Arc<MangadexClient>,
     state: PageState,
     mangas_found_list: MangasFoundList,
     search_cover_handles: Vec<Option<JoinHandle<()>>>,
@@ -142,11 +141,7 @@ impl Component for SearchPage {
 }
 
 impl SearchPage {
-    pub fn init(
-        client: Arc<MangadexClient>,
-        picker: Picker,
-        event_tx: UnboundedSender<Events>,
-    ) -> Self {
+    pub fn init(picker: Picker, event_tx: UnboundedSender<Events>) -> Self {
         let (action_tx, action_rx) = mpsc::unbounded_channel::<SearchPageActions>();
         let (local_event_tx, local_event) = mpsc::unbounded_channel::<SearchPageEvents>();
 
@@ -159,7 +154,6 @@ impl SearchPage {
             local_event_rx: local_event,
             input_mode: InputMode::default(),
             search_bar: Input::default(),
-            fetch_client: client,
             state: PageState::default(),
             mangas_found_list: MangasFoundList::default(),
             search_cover_handles: vec![],
@@ -353,6 +347,7 @@ impl SearchPage {
                     .local_action_tx
                     .send(SearchPageActions::GoToMangaPage)
                     .unwrap(),
+
                 _ => {}
             },
             InputMode::Typing => match key_event.code {
@@ -384,11 +379,12 @@ impl SearchPage {
         self.mangas_found_list.state = tui_widget_list::ListState::default();
 
         let tx = self.local_event_tx.clone();
-        let client = Arc::clone(&self.fetch_client);
         let manga_to_search = self.search_bar.value().to_string();
 
         tokio::spawn(async move {
-            let search_response = client.search_mangas(&manga_to_search, page).await;
+            let search_response = MangadexClient::global()
+                .search_mangas(&manga_to_search, page)
+                .await;
 
             match search_response {
                 Ok(mangas_found) => {
@@ -431,15 +427,15 @@ impl SearchPage {
                 SearchPageEvents::SearchCovers => {
                     for manga in self.mangas_found_list.widget.mangas.iter() {
                         let manga_id = manga.id.clone();
-                        let client = Arc::clone(&self.fetch_client);
                         let tx = self.local_event_tx.clone();
 
                         let search_cover_task = match manga.img_url.as_ref() {
                             Some(file_name) => {
                                 let file_name = file_name.clone();
                                 let handle = tokio::spawn(async move {
-                                    let response =
-                                        client.get_cover_for_manga(&manga_id, &file_name).await;
+                                    let response = MangadexClient::global()
+                                        .get_cover_for_manga(&manga_id, &file_name)
+                                        .await;
 
                                     match response {
                                         Ok(bytes) => {

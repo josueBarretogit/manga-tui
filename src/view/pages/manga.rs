@@ -70,7 +70,6 @@ pub struct MangaPage {
     pub local_action_rx: UnboundedReceiver<MangaPageActions>,
     local_event_tx: UnboundedSender<MangaPageEvents>,
     local_event_rx: UnboundedReceiver<MangaPageEvents>,
-    client: Arc<MangadexClient>,
     chapters: Option<ChaptersData>,
     chapter_order: ChapterOrder,
     chapter_language: Languages,
@@ -111,7 +110,6 @@ impl MangaPage {
         author: String,
         artist: String,
         global_event_tx: UnboundedSender<Events>,
-        client: Arc<MangadexClient>,
     ) -> Self {
         let (local_action_tx, local_action_rx) = mpsc::unbounded_channel::<MangaPageActions>();
         let (local_event_tx, local_event_rx) = mpsc::unbounded_channel::<MangaPageEvents>();
@@ -135,7 +133,6 @@ impl MangaPage {
             local_action_rx,
             local_event_tx,
             local_event_rx,
-            client,
             chapters: None,
             chapter_language: Languages::default(),
             chapter_order: ChapterOrder::default(),
@@ -165,22 +162,20 @@ impl MangaPage {
 
         let statistics = match &self.statistics {
             Some(statistics) => Span::raw(format!(
-                "⭐ {} follows : {}",
+                "⭐ {} follows : {} ",
                 statistics.rating, statistics.follows
             )),
             None => Span::raw("⭐ follows : ".to_string()),
         };
 
+        let author_and_artist = Span::raw(format!(
+            "Author : {} | Artist : {}",
+            self.author, self.artist
+        ));
+
         Block::bordered()
             .title_top(Line::from(vec![self.title.clone().into()]))
-            .title_bottom(statistics.into_left_aligned_line())
-            .title_bottom(
-                Span::raw(format!(
-                    "Author : {} | Artist : {}",
-                    self.author, self.artist
-                ))
-                .into_right_aligned_line(),
-            )
+            .title_bottom(Line::from(vec![statistics, "".into(), author_and_artist]))
             .render(manga_information_area, buf);
 
         self.render_details(manga_information_area, frame.buffer_mut());
@@ -254,22 +249,23 @@ impl MangaPage {
         let [sorting_area, language_area] = layout.areas(area);
 
         let order_title = format!(
-            "Order: {}",
+            "Order: {} ",
             match order {
                 ChapterOrder::Descending => "Descending",
                 ChapterOrder::Ascending => "Ascending",
             }
         );
 
-        Block::bordered()
-            .title(order_title)
-            .title_bottom(Line::from("Change order : <o>").centered())
-            .render(sorting_area, buf);
+        Paragraph::new(Line::from(vec![
+            order_title.into(),
+            " Change order : <o>".into(),
+        ]))
+        .render(sorting_area, buf);
 
         // Todo! bring in selectable widget
         let language = format!("Language: {}", language);
 
-        Block::bordered().title(language).render(language_area, buf);
+        Paragraph::new(language).render(language_area, buf);
     }
 
     fn handle_key_events(&mut self, key_event: KeyEvent) {
@@ -354,13 +350,12 @@ impl MangaPage {
 
     fn read_chapter(&mut self) {
         self.state = PageState::SearchingChapterData;
-        let client = Arc::clone(&self.client);
         if let Some(chapter_selected) = self.get_current_selected_chapter_mut() {
             let id_chapter = chapter_selected.id.clone();
             let tx = self.global_event_tx.clone();
             let local_tx = self.local_event_tx.clone();
             tokio::spawn(async move {
-                let chapter_response = client.get_chapter_pages(&id_chapter).await;
+                let chapter_response = MangadexClient::global().get_chapter_pages(&id_chapter).await;
                 match chapter_response {
                     Ok(response) => {
                         tx.send(Events::ReadChapter(response)).unwrap();
@@ -379,12 +374,11 @@ impl MangaPage {
     fn search_chapters(&mut self) {
         self.state = PageState::SearchingChapters;
         let manga_id = self.id.clone();
-        let client = Arc::clone(&self.client);
         let tx = self.local_event_tx.clone();
         let language = self.chapter_language;
         let chapter_order = self.chapter_order;
         self.tasks.spawn(async move {
-            let response = client
+            let response = MangadexClient::global()
                 .get_manga_chapters(manga_id, 1, language, chapter_order)
                 .await;
 
@@ -399,10 +393,9 @@ impl MangaPage {
 
     fn fetch_statistics(&mut self) {
         let manga_id = self.id.clone();
-        let client = Arc::clone(&self.client);
         let tx = self.local_event_tx.clone();
         self.tasks.spawn(async move {
-            let response = client.get_manga_statistics(&manga_id).await;
+            let response = MangadexClient::global().get_manga_statistics(&manga_id).await;
 
             match response {
                 Ok(res) => {

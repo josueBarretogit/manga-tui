@@ -1,4 +1,5 @@
 use bytes::Bytes;
+use once_cell::sync::OnceCell;
 
 use crate::view::pages::manga::ChapterOrder;
 
@@ -6,14 +7,20 @@ use super::{
     ChapterPagesResponse, ChapterResponse, Languages, MangaStatisticsResponse, SearchMangaResponse,
 };
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct MangadexClient {
     api_url_base: String,
     cover_img_url_base: String,
     client: reqwest::Client,
 }
 
+pub static MANGADEX_CLIENT_INSTANCE: OnceCell<MangadexClient> = once_cell::sync::OnceCell::new();
+
 impl MangadexClient {
+    pub fn global() -> &'static MangadexClient {
+        MANGADEX_CLIENT_INSTANCE.get().expect("could not get mangadex client")
+    }
+
     pub fn new(client: reqwest::Client) -> Self {
         Self {
             client,

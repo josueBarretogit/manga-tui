@@ -1,5 +1,7 @@
-use std::sync::Arc;
-
+use crate::backend::fetch::MangadexClient;
+use crate::backend::tui::Events;
+use crate::view::widgets::reader::{PageItemState, PagesItem, PagesList};
+use crate::view::widgets::Component;
 use crossterm::event::KeyCode;
 use image::io::Reader;
 use image::DynamicImage;
@@ -10,11 +12,6 @@ use ratatui_image::{Resize, StatefulImage};
 use strum::Display;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
-
-use crate::backend::fetch::MangadexClient;
-use crate::backend::tui::Events;
-use crate::view::widgets::reader::{PageItemState, PagesItem, PagesList};
-use crate::view::widgets::Component;
 
 pub enum MangaReaderActions {
     NextPage,
@@ -67,7 +64,6 @@ pub struct MangaReader {
     /// Handle fetching the images
     image_tasks: JoinSet<()>,
     picker: Picker,
-    client: Arc<MangadexClient>,
     pub global_event_tx: UnboundedSender<Events>,
     pub local_action_tx: UnboundedSender<MangaReaderActions>,
     pub local_action_rx: UnboundedReceiver<MangaReaderActions>,
@@ -152,7 +148,6 @@ impl MangaReader {
         chapter_id: String,
         base_url: String,
         picker: Picker,
-        client: Arc<MangadexClient>,
         url_imgs: Vec<String>,
         url_imgs_high_quality: Vec<String>,
     ) -> Self {
@@ -180,7 +175,6 @@ impl MangaReader {
             page_list_state: tui_widget_list::ListState::default(),
             image_tasks: set,
             picker,
-            client,
             local_action_tx,
             local_action_rx,
             local_event_tx,
@@ -236,12 +230,12 @@ impl MangaReader {
                         let file_name = page.url.clone();
                         let endpoint =
                             format!("{}/{}/{}", self.base_url, page.page_type, self.chapter_id);
-                        let client = Arc::clone(&self.client);
                         let tx = self.local_event_tx.clone();
                         pages_list.push(PagesItem::new(index));
                         self.image_tasks.spawn(async move {
-                            let image_response =
-                                client.get_chapter_page(&endpoint, &file_name).await;
+                            let image_response = MangadexClient::global()
+                                .get_chapter_page(&endpoint, &file_name)
+                                .await;
                             match image_response {
                                 Ok(bytes) => {
                                     let dyn_img = Reader::new(std::io::Cursor::new(bytes))

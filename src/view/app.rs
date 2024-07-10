@@ -38,7 +38,6 @@ pub struct App {
     pub manga_page: Option<MangaPage>,
     pub manga_reader_page: Option<MangaReader>,
     pub search_page: SearchPage,
-    fetch_client: Arc<MangadexClient>,
 }
 
 impl Component for App {
@@ -70,6 +69,7 @@ impl Component for App {
                             }
                             _ => {}
                         },
+
                         _ => {}
                     }
                 }
@@ -88,7 +88,6 @@ impl Component for App {
                     manga.author.unwrap_or_default(),
                     manga.artist.unwrap_or_default(),
                     self.global_event_tx.clone(),
-                    Arc::clone(&self.fetch_client),
                 ));
             }
 
@@ -100,7 +99,6 @@ impl Component for App {
                     chapter_response.chapter.hash,
                     chapter_response.base_url,
                     self.picker,
-                    Arc::clone(&self.fetch_client),
                     chapter_response
                         .chapter
                         .data_saver
@@ -147,20 +145,9 @@ impl Component for App {
 
 impl App {
     pub fn new() -> Self {
-        let user_agent = format!(
-            "manga-tui/0.beta-testing1.0 ({}/{}/{})",
-            std::env::consts::FAMILY,
-            std::env::consts::OS,
-            std::env::consts::ARCH
-        );
-
         let mut picker = Picker::from_termios().unwrap();
 
         picker.guess_protocol();
-
-        let mangadex_client = Arc::new(MangadexClient::new(
-            Client::builder().user_agent(user_agent).build().unwrap(),
-        ));
 
         let (global_action_tx, global_action_rx) = unbounded_channel::<Action>();
         let (global_event_tx, global_event_rx) = unbounded_channel::<Events>();
@@ -168,11 +155,7 @@ impl App {
         App {
             picker,
             current_tab: SelectedTabs::default(),
-            search_page: SearchPage::init(
-                Arc::clone(&mangadex_client),
-                picker,
-                global_event_tx.clone(),
-            ),
+            search_page: SearchPage::init(picker, global_event_tx.clone()),
             manga_page: None,
             manga_reader_page: None,
             global_action_tx,
@@ -180,7 +163,6 @@ impl App {
             global_event_tx,
             global_event_rx,
             state: AppState::Runnning,
-            fetch_client: mangadex_client,
         }
     }
 

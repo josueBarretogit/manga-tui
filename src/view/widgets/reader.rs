@@ -1,4 +1,3 @@
-use crossterm::style;
 use ratatui::{prelude::*, widgets::*};
 use throbber_widgets_tui::{Throbber, ThrobberState};
 use tui_widget_list::PreRender;
@@ -76,9 +75,7 @@ impl PagesList {
     }
     pub fn on_tick(&mut self) {
         for page in self.pages.iter_mut() {
-            if page.state == PageItemState::Loading {
-                page.on_tick();
-            }
+            page.on_tick();
         }
     }
 }

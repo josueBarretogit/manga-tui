@@ -35,9 +35,9 @@ impl Widget for ChapterItem {
         let translated_language: Languages = self.translated_language.as_str().into();
 
         let is_read_icon = if !self.is_read {
-            "👁️".to_string()
+            "👀".to_string()
         } else {
-            "_".to_string()
+            "".to_string()
         };
 
         Paragraph::new(Line::from(vec![
@@ -60,7 +60,7 @@ impl PreRender for ChapterItem {
         if context.is_selected {
             self.style = Style::new().fg(Color::Yellow);
         }
-        4
+        3
     }
 }
 
