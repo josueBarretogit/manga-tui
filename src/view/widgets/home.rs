@@ -1,9 +1,9 @@
 use ratatui::{prelude::*, widgets::*};
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::{Resize, StatefulImage};
-use tui_widget_list::PreRender;
 
 use crate::backend::{Data, SearchMangaResponse};
+use crate::utils::set_tags_style;
 
 #[derive(Clone)]
 pub struct CarrouselItem {
@@ -16,7 +16,6 @@ pub struct CarrouselItem {
     pub img_url: Option<String>,
     pub author: Option<String>,
     pub artist: Option<String>,
-    pub width: u16,
     pub style: Style,
     pub cover_state: Option<Box<dyn StatefulProtocol>>,
 }
@@ -46,7 +45,6 @@ impl CarrouselItem {
             author,
             artist,
             style,
-            width: 100,
             cover_state,
         }
     }
@@ -65,9 +63,26 @@ impl CarrouselItem {
         };
     }
     fn render_details(&mut self, area: Rect, buf: &mut Buffer) {
+        let layout =
+            Layout::vertical([Constraint::Percentage(20), Constraint::Percentage(80)]).margin(1);
+
+        let [tags_area, description_area] = layout.areas(area);
+
         Block::bordered()
             .title(self.title.clone())
+            .title_bottom(self.author.as_deref().unwrap_or_default())
             .render(area, buf);
+
+        let mut tags: Vec<Span<'_>> = self.tags.iter().map(|tag| set_tags_style(tag)).collect();
+
+        tags.push(set_tags_style(&self.status));
+        tags.push(set_tags_style(&self.content_rating));
+
+        Paragraph::new(Line::from(tags)).render(tags_area, buf);
+
+        Paragraph::new(self.description.clone())
+            .wrap(Wrap { trim: true })
+            .render(description_area, buf);
     }
 
     pub fn from_response(value: Data) -> Self {
@@ -143,7 +158,6 @@ impl Widget for CarrouselItem {
     where
         Self: Sized,
     {
-        self.width = area.width + 30;
         let layout = Layout::horizontal([Constraint::Percentage(30), Constraint::Percentage(70)]);
 
         let [cover_area, details_area] = layout.areas(area);
@@ -153,28 +167,29 @@ impl Widget for CarrouselItem {
     }
 }
 
-impl PreRender for CarrouselItem {
-    fn pre_render(&mut self, context: &tui_widget_list::PreRenderContext) -> u16 {
-        if context.is_selected {
-            self.style = Style::new().bg(Color::Blue);
-        }
-
-        self.width
-    }
-}
-
 #[derive(Default, Clone)]
 pub struct Carrousel {
     pub items: Vec<CarrouselItem>,
-    pub state: tui_widget_list::ListState,
+    pub current_item_visible_index: usize,
 }
 
 impl StatefulWidget for Carrousel {
-    type State = tui_widget_list::ListState;
+    type State = usize;
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        let list = tui_widget_list::List::new(self.items)
-            .scroll_direction(tui_widget_list::ScrollAxis::Horizontal);
-        StatefulWidget::render(list, area, buf, state);
+        let layout = Layout::vertical([Constraint::Percentage(80), Constraint::Percentage(20)]);
+        let [items_area, helper_area] = layout.areas(area);
+
+        match self.items.get(*state) {
+            Some(item) => item.clone().render(items_area, buf),
+            None => Block::bordered().title("loading").render(area, buf),
+        };
+
+        Span::raw(format!(
+            "Next  <w> | previous  <b> | read <r>  No.{}  Total : {}",
+            self.current_item_visible_index + 1,
+            self.items.len()
+        ))
+        .render(helper_area, buf);
     }
 }
 
@@ -188,14 +203,26 @@ impl Carrousel {
 
         Self {
             items,
-            state: tui_widget_list::ListState::default(),
+            current_item_visible_index: 0,
         }
     }
     pub fn next(&mut self) {
-        self.state.next();
+        if self.current_item_visible_index + 1 >= self.items.len() {
+            self.current_item_visible_index = 0
+        } else {
+            self.current_item_visible_index += 1;
+        }
     }
 
     pub fn previous(&mut self) {
-        self.state.previous();
+        if self.current_item_visible_index == 0 {
+            self.current_item_visible_index = self.items.len() - 1
+        } else {
+            self.current_item_visible_index = self.current_item_visible_index.saturating_sub(1)
+        }
+    }
+
+    pub fn get_current_item(&mut self) -> Option<&CarrouselItem> {
+        self.items.get(self.current_item_visible_index)
     }
 }

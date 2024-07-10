@@ -1,19 +1,17 @@
 use core::panic;
-
 use crossterm::event::{KeyCode, KeyEvent};
 use image::io::Reader;
 use image::DynamicImage;
 use ratatui::{prelude::*, widgets::*};
 use ratatui_image::picker::Picker;
-use ratatui_image::protocol::StatefulProtocol;
-use ratatui_image::{Resize, StatefulImage};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
 use crate::backend::SearchMangaResponse;
-use crate::view::widgets::home::Carrousel;
+use crate::view::widgets::home::{Carrousel, CarrouselItem};
+use crate::view::widgets::search::MangaItem;
 use crate::view::widgets::Component;
 
 pub enum HomeState {
@@ -48,8 +46,7 @@ pub struct Home {
 impl Component for Home {
     type Actions = HomeActions;
     fn render(&mut self, area: ratatui::prelude::Rect, frame: &mut Frame<'_>) {
-        let layout =
-            Layout::vertical([Constraint::Percentage(60), Constraint::Percentage(40)]).margin(1);
+        let layout = Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)]);
         let buf = frame.buffer_mut();
 
         let [carrousel_popular_mangas_area, next_area] = layout.areas(area);
@@ -75,7 +72,10 @@ impl Component for Home {
         }
     }
 
-    fn clean_up(&mut self) {}
+    fn clean_up(&mut self) {
+        self.tasks.abort_all();
+        self.carrousel.items.clear();
+    }
 
     fn handle_events(&mut self, events: Events) {
         match events {
@@ -105,10 +105,21 @@ impl Home {
         }
     }
     pub fn render_carrousel(&mut self, area: Rect, buf: &mut Buffer) {
-        StatefulWidget::render(self.carrousel.clone(), area, buf, &mut self.carrousel.state);
+        StatefulWidget::render(
+            self.carrousel.clone(),
+            area,
+            buf,
+            &mut self.carrousel.current_item_visible_index,
+        );
     }
 
-    pub fn go_to_manga_page(&mut self) {}
+    pub fn go_to_manga_page(&mut self) {
+        //self.global_event_tx.send(Events::GoToMangaPage(MangaItem::new(id, title, description, tags, content_rating, status, img_url, author, artist)))
+    }
+
+    fn get_current_manga(&mut self) -> Option<&CarrouselItem> {
+        self.carrousel.get_current_item()
+    }
 
     pub fn tick(&mut self) {
         if let Ok(local_event) = self.local_event_rx.try_recv() {
@@ -217,13 +228,13 @@ impl Home {
 
     pub fn handle_key_events(&mut self, key_event: KeyEvent) {
         match key_event.code {
-            KeyCode::Char('j') => {
+            KeyCode::Char('w') => {
                 self.local_action_tx
                     .send(HomeActions::SelectNextPopularManga)
                     .ok();
             }
 
-            KeyCode::Char('k') => {
+            KeyCode::Char('b') => {
                 self.local_action_tx
                     .send(HomeActions::SelectPreviousPopularManga)
                     .ok();

@@ -65,13 +65,13 @@ impl Component for App {
                             }
                         }
                         KeyCode::Char('2') => {
-                            if self.manga_reader_page.is_none() {
+                            if self.current_tab != SelectedTabs::ReaderTab {
                                 self.global_action_tx.send(Action::GoToSearchPage).ok();
                             }
                         }
 
                         KeyCode::Char('1') => {
-                            if self.manga_reader_page.is_none() {
+                            if self.current_tab != SelectedTabs::ReaderTab {
                                 self.global_action_tx.send(Action::GoToHome).ok();
                             }
                         }
