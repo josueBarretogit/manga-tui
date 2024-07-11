@@ -204,7 +204,8 @@ impl From<Data> for MangaItem {
             status,
             img_url,
             author,
-            artist
+            artist,
+            None,
         )
     }
 }
@@ -220,6 +221,8 @@ impl MangaItem {
         img_url: Option<String>,
         author: Option<String>,
         artist: Option<String>,
+        image_state: Option<Box<dyn StatefulProtocol>>,
+        
     ) -> Self {
         Self {
             id,
@@ -228,7 +231,7 @@ impl MangaItem {
             tags,
             img_url,
             content_rating,
-            image_state: None,
+            image_state,
             status,
             style: Style::default(),
             author,

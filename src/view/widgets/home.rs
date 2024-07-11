@@ -3,7 +3,7 @@ use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::{Resize, StatefulImage};
 
 use crate::backend::{Data, SearchMangaResponse};
-use crate::utils::set_tags_style;
+use crate::utils::{set_status_style, set_tags_style};
 
 #[derive(Clone)]
 pub struct CarrouselItem {
@@ -75,10 +75,12 @@ impl CarrouselItem {
 
         let mut tags: Vec<Span<'_>> = self.tags.iter().map(|tag| set_tags_style(tag)).collect();
 
-        tags.push(set_tags_style(&self.status));
+        tags.push(set_status_style(&self.status));
         tags.push(set_tags_style(&self.content_rating));
 
-        Paragraph::new(Line::from(tags)).render(tags_area, buf);
+        Paragraph::new(Line::from(tags))
+            .wrap(Wrap { trim: true })
+            .render(tags_area, buf);
 
         Paragraph::new(self.description.clone())
             .wrap(Wrap { trim: true })
@@ -222,7 +224,7 @@ impl Carrousel {
         }
     }
 
-    pub fn get_current_item(&mut self) -> Option<&CarrouselItem> {
+    pub fn get_current_item(&self) -> Option<&CarrouselItem> {
         self.items.get(self.current_item_visible_index)
     }
 }

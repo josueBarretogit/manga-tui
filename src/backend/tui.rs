@@ -20,8 +20,6 @@ use crate::view::widgets::Component;
 use super::ChapterPagesResponse;
 
 pub enum Action {
-    GoToHome,
-    GoToSearchPage,
     Quit,
     NextTab,
     PreviousTab,
@@ -36,7 +34,6 @@ pub enum Events {
     Mouse(MouseEvent),
     GoToMangaPage(MangaItem),
     GoToHome,
-    GoBackMangaPage,
     GoSearchPage,
     ReadChapter(ChapterPagesResponse),
 }

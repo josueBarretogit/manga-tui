@@ -64,22 +64,34 @@ impl Component for App {
                                 self.global_action_tx.send(Action::Quit).unwrap()
                             }
                         }
+                        KeyCode::Char('1') => {
+                            if self.current_tab != SelectedTabs::ReaderTab {
+                                self.global_event_tx.send(Events::GoToHome).ok();
+                            }
+                        }
                         KeyCode::Char('2') => {
                             if self.current_tab != SelectedTabs::ReaderTab {
-                                self.global_action_tx.send(Action::GoToSearchPage).ok();
+                                self.global_event_tx.send(Events::GoSearchPage).ok();
+                            }
+                        }
+                        KeyCode::Char('3') => {
+                            if self.current_tab == SelectedTabs::ReaderTab
+                                && self.manga_reader_page.is_some()
+                            {
+                                self.manga_reader_page.as_mut().unwrap().clean_up();
+                                self.current_tab = SelectedTabs::MangaTab;
                             }
                         }
 
-                        KeyCode::Char('1') => {
-                            if self.current_tab != SelectedTabs::ReaderTab {
-                                self.global_action_tx.send(Action::GoToHome).ok();
-                            }
-                        }
                         _ => {}
                     }
                 }
             }
             Events::GoToMangaPage(manga) => {
+                if self.manga_reader_page.is_some() {
+                    self.manga_reader_page.as_mut().unwrap().clean_up();
+                }
+
                 self.current_tab = SelectedTabs::MangaTab;
                 self.manga_page = Some(MangaPage::new(
                     manga.id,
@@ -96,8 +108,8 @@ impl Component for App {
                 ));
             }
 
-            //At this point the search must be cleared
             Events::ReadChapter(chapter_response) => {
+                self.home_page.clean_up();
                 self.current_tab = SelectedTabs::ReaderTab;
                 self.manga_reader_page = Some(MangaReader::new(
                     self.global_event_tx.clone(),
@@ -120,13 +132,19 @@ impl Component for App {
                         .collect(),
                 ));
             }
-            Events::GoBackMangaPage => {
-                self.current_tab = SelectedTabs::MangaTab;
-            }
+
             Events::GoSearchPage => {
+                if self.manga_page.is_some() {
+                    self.manga_page.as_mut().unwrap().clean_up();
+                }
                 self.current_tab = SelectedTabs::Search;
             }
+
             Events::GoToHome => {
+                if self.manga_page.is_some() {
+                    self.manga_page.as_mut().unwrap().clean_up();
+                }
+                self.home_page.init_search();
                 self.current_tab = SelectedTabs::Home;
             }
 
@@ -141,14 +159,6 @@ impl Component for App {
             }
             Action::PreviousTab => self.previous_tab(),
             Action::NextTab => self.next_tab(),
-            Action::GoToSearchPage => {
-                self.current_tab = SelectedTabs::Search;
-                self.manga_reader_page = None;
-                self.manga_page = None;
-            }
-            Action::GoToHome => {
-                self.current_tab = SelectedTabs::Home;
-            }
         }
     }
     fn clean_up(&mut self) {}
@@ -162,6 +172,8 @@ impl App {
 
         let (global_action_tx, global_action_rx) = unbounded_channel::<Action>();
         let (global_event_tx, global_event_rx) = unbounded_channel::<Events>();
+
+        global_event_tx.send(Events::GoToHome).ok();
 
         App {
             picker,

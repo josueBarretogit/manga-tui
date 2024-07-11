@@ -16,7 +16,6 @@ use tokio::task::JoinSet;
 pub enum MangaReaderActions {
     NextPage,
     PreviousPage,
-    GoBackToMangaPage,
 }
 
 pub enum State {
@@ -114,7 +113,6 @@ impl Component for MangaReader {
         match action {
             MangaReaderActions::NextPage => self.next_page(),
             MangaReaderActions::PreviousPage => self.previous_page(),
-            MangaReaderActions::GoBackToMangaPage => self.go_back_manga_page(),
         }
     }
 
@@ -128,10 +126,6 @@ impl Component for MangaReader {
                 KeyCode::Up | KeyCode::Char('k') => self
                     .local_action_tx
                     .send(MangaReaderActions::PreviousPage)
-                    .unwrap(),
-                KeyCode::Tab => self
-                    .local_action_tx
-                    .send(MangaReaderActions::GoBackToMangaPage)
                     .unwrap(),
 
                 _ => {}
@@ -196,11 +190,6 @@ impl MangaReader {
 
     fn previous_page(&mut self) {
         self.page_list_state.previous();
-    }
-
-    fn go_back_manga_page(&mut self) {
-        self.clean_up();
-        self.global_event_tx.send(Events::GoBackMangaPage).unwrap();
     }
 
     fn render_page_list(&mut self, area: Rect, buf: &mut Buffer) {

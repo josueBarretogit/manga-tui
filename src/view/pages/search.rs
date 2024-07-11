@@ -124,7 +124,7 @@ impl Component for SearchPage {
                 let manga_selected = self.get_current_manga_selected();
                 if let Some(manga) = manga_selected {
                     self.global_event_tx
-                        .send(Events::GoToMangaPage(manga))
+                        .send(Events::GoToMangaPage(manga.clone()))
                         .unwrap();
                 }
             }
@@ -295,9 +295,9 @@ impl SearchPage {
         None
     }
 
-    fn get_current_manga_selected(&mut self) -> Option<MangaItem> {
+    fn get_current_manga_selected(&self) -> Option<&MangaItem> {
         if let Some(index) = self.mangas_found_list.state.selected {
-            return Some(self.mangas_found_list.widget.mangas[index].clone());
+            return self.mangas_found_list.widget.mangas.get(index);
         }
         None
     }

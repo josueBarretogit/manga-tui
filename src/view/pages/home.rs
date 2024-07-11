@@ -14,9 +14,11 @@ use crate::view::widgets::home::{Carrousel, CarrouselItem};
 use crate::view::widgets::search::MangaItem;
 use crate::view::widgets::Component;
 
+#[derive(PartialEq, Eq)]
 pub enum HomeState {
-    Loading,
-    Displaying,
+    Unused,
+    Searching,
+    DisplayingPopularMangas,
     NotFound,
 }
 
@@ -30,6 +32,7 @@ pub enum HomeEvents {
 pub enum HomeActions {
     SelectNextPopularManga,
     SelectPreviousPopularManga,
+    GoToPopularMangaPage,
 }
 
 pub struct Home {
@@ -49,17 +52,22 @@ impl Component for Home {
         let layout = Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)]);
         let buf = frame.buffer_mut();
 
-        let [carrousel_popular_mangas_area, next_area] = layout.areas(area);
+        let [carrousel_popular_mangas_area, latest_updates_area] = layout.areas(area);
         match self.state {
-            HomeState::Loading => {
-                Block::bordered().title("loading").render(area, buf);
+            HomeState::Searching => {
+                Block::bordered()
+                    .title("loading")
+                    .render(carrousel_popular_mangas_area, buf);
             }
             HomeState::NotFound => {
-                Block::bordered().title("error fetching").render(area, buf);
+                Block::bordered()
+                    .title("error fetching")
+                    .render(carrousel_popular_mangas_area, buf);
             }
-            HomeState::Displaying => {
+            HomeState::DisplayingPopularMangas => {
                 self.render_carrousel(carrousel_popular_mangas_area, buf);
             }
+            HomeState::Unused => {}
         }
     }
 
@@ -69,12 +77,14 @@ impl Component for Home {
                 self.carrousel.next();
             }
             HomeActions::SelectPreviousPopularManga => self.carrousel.previous(),
+            HomeActions::GoToPopularMangaPage => self.go_to_manga_page(),
         }
     }
 
     fn clean_up(&mut self) {
         self.tasks.abort_all();
         self.carrousel.items.clear();
+        self.state = HomeState::Unused;
     }
 
     fn handle_events(&mut self, events: Events) {
@@ -91,11 +101,9 @@ impl Home {
         let (local_action_tx, local_action_rx) = mpsc::unbounded_channel::<HomeActions>();
         let (local_event_tx, local_event_rx) = mpsc::unbounded_channel::<HomeEvents>();
 
-        local_event_tx.send(HomeEvents::SearchPopularNewMangas).ok();
-
         Self {
             carrousel: Carrousel::default(),
-            state: HomeState::Loading,
+            state: HomeState::Unused,
             global_event_tx: tx,
             local_event_tx,
             local_event_rx,
@@ -113,12 +121,35 @@ impl Home {
         );
     }
 
-    pub fn go_to_manga_page(&mut self) {
-        //self.global_event_tx.send(Events::GoToMangaPage(MangaItem::new(id, title, description, tags, content_rating, status, img_url, author, artist)))
+    pub fn go_to_manga_page(&self) {
+        if let Some(manga) = self.get_current_popular_manga() {
+            self.global_event_tx
+                .send(Events::GoToMangaPage(MangaItem::new(
+                    manga.id.clone(),
+                    manga.title.clone(),
+                    manga.description.clone(),
+                    manga.tags.clone(),
+                    manga.content_rating.clone(),
+                    manga.status.clone(),
+                    manga.img_url.clone(),
+                    manga.author.clone(),
+                    manga.artist.clone(),
+                    manga.cover_state.clone(),
+                )))
+                .ok();
+        }
     }
 
-    fn get_current_manga(&mut self) -> Option<&CarrouselItem> {
+    fn get_current_popular_manga(&self) -> Option<&CarrouselItem> {
         self.carrousel.get_current_item()
+    }
+
+    pub fn init_search(&mut self) {
+        if self.state != HomeState::Searching {
+            self.local_event_tx
+                .send(HomeEvents::SearchPopularNewMangas)
+                .ok();
+        }
     }
 
     pub fn tick(&mut self) {
@@ -139,7 +170,7 @@ impl Home {
     fn load_popular_mangas(&mut self, maybe_response: Option<SearchMangaResponse>) {
         match maybe_response {
             Some(response) => {
-                self.state = HomeState::Displaying;
+                self.state = HomeState::DisplayingPopularMangas;
                 self.carrousel = Carrousel::from_response(response);
                 self.local_event_tx
                     .send(HomeEvents::SearchPopularMangasCover)
@@ -169,6 +200,7 @@ impl Home {
     }
 
     fn search_popular_mangas(&mut self) {
+        self.state = HomeState::Searching;
         let tx = self.local_event_tx.clone();
         self.tasks.spawn(async move {
             let response = MangadexClient::global().get_popular_mangas().await;
@@ -229,15 +261,26 @@ impl Home {
     pub fn handle_key_events(&mut self, key_event: KeyEvent) {
         match key_event.code {
             KeyCode::Char('w') => {
-                self.local_action_tx
-                    .send(HomeActions::SelectNextPopularManga)
-                    .ok();
+                if self.state == HomeState::DisplayingPopularMangas {
+                    self.local_action_tx
+                        .send(HomeActions::SelectNextPopularManga)
+                        .ok();
+                }
             }
 
             KeyCode::Char('b') => {
-                self.local_action_tx
-                    .send(HomeActions::SelectPreviousPopularManga)
-                    .ok();
+                if self.state == HomeState::DisplayingPopularMangas {
+                    self.local_action_tx
+                        .send(HomeActions::SelectPreviousPopularManga)
+                        .ok();
+                }
+            }
+            KeyCode::Char('r') => {
+                if self.state == HomeState::DisplayingPopularMangas {
+                    self.local_action_tx
+                        .send(HomeActions::GoToPopularMangaPage)
+                        .ok();
+                }
             }
             _ => {}
         }
