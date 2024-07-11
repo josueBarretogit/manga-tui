@@ -10,7 +10,7 @@ use tokio::task::JoinSet;
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
 use crate::backend::SearchMangaResponse;
-use crate::view::widgets::home::{Carrousel, CarrouselItem};
+use crate::view::widgets::home::{PopularMangaCarrousel, PopularMangaItem};
 use crate::view::widgets::search::MangaItem;
 use crate::view::widgets::Component;
 
@@ -37,7 +37,7 @@ pub enum HomeActions {
 
 pub struct Home {
     pub global_event_tx: UnboundedSender<Events>,
-    carrousel: Carrousel,
+    carrousel: PopularMangaCarrousel,
     state: HomeState,
     pub local_action_tx: UnboundedSender<HomeActions>,
     pub local_action_rx: UnboundedReceiver<HomeActions>,
@@ -49,7 +49,8 @@ pub struct Home {
 impl Component for Home {
     type Actions = HomeActions;
     fn render(&mut self, area: ratatui::prelude::Rect, frame: &mut Frame<'_>) {
-        let layout = Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)]);
+        let layout =
+            Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)]).margin(1);
         let buf = frame.buffer_mut();
 
         let [carrousel_popular_mangas_area, latest_updates_area] = layout.areas(area);
@@ -101,8 +102,10 @@ impl Home {
         let (local_action_tx, local_action_rx) = mpsc::unbounded_channel::<HomeActions>();
         let (local_event_tx, local_event_rx) = mpsc::unbounded_channel::<HomeEvents>();
 
+        local_event_tx.send(HomeEvents::SearchPopularNewMangas).ok();
+
         Self {
-            carrousel: Carrousel::default(),
+            carrousel: PopularMangaCarrousel::default(),
             state: HomeState::Unused,
             global_event_tx: tx,
             local_event_tx,
@@ -140,8 +143,12 @@ impl Home {
         }
     }
 
-    fn get_current_popular_manga(&self) -> Option<&CarrouselItem> {
+    fn get_current_popular_manga(&self) -> Option<&PopularMangaItem> {
         self.carrousel.get_current_item()
+    }
+
+    pub fn require_search(&mut self) -> bool {
+        self.carrousel.items.is_empty()
     }
 
     pub fn init_search(&mut self) {
@@ -171,7 +178,7 @@ impl Home {
         match maybe_response {
             Some(response) => {
                 self.state = HomeState::DisplayingPopularMangas;
-                self.carrousel = Carrousel::from_response(response);
+                self.carrousel = PopularMangaCarrousel::from_response(response);
                 self.local_event_tx
                     .send(HomeEvents::SearchPopularMangasCover)
                     .ok();
@@ -246,7 +253,8 @@ impl Home {
                                 };
                             }
                             Err(e) => {
-                                panic!("error fetching cover: {e}");
+                                // Todo! handle this case
+                                tx.send(HomeEvents::LoadCover(None, index)).unwrap();
                             }
                         }
                     });

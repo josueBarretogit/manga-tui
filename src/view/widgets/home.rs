@@ -6,7 +6,7 @@ use crate::backend::{Data, SearchMangaResponse};
 use crate::utils::{set_status_style, set_tags_style};
 
 #[derive(Clone)]
-pub struct CarrouselItem {
+pub struct PopularMangaItem {
     pub id: String,
     pub title: String,
     pub description: String,
@@ -20,7 +20,7 @@ pub struct CarrouselItem {
     pub cover_state: Option<Box<dyn StatefulProtocol>>,
 }
 
-impl CarrouselItem {
+impl PopularMangaItem {
     fn new(
         id: String,
         title: String,
@@ -155,7 +155,7 @@ impl CarrouselItem {
     }
 }
 
-impl Widget for CarrouselItem {
+impl Widget for PopularMangaItem {
     fn render(mut self, area: Rect, buf: &mut Buffer)
     where
         Self: Sized,
@@ -170,12 +170,12 @@ impl Widget for CarrouselItem {
 }
 
 #[derive(Default, Clone)]
-pub struct Carrousel {
-    pub items: Vec<CarrouselItem>,
+pub struct PopularMangaCarrousel {
+    pub items: Vec<PopularMangaItem>,
     pub current_item_visible_index: usize,
 }
 
-impl StatefulWidget for Carrousel {
+impl StatefulWidget for PopularMangaCarrousel {
     type State = usize;
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         let layout = Layout::vertical([Constraint::Percentage(80), Constraint::Percentage(20)]);
@@ -195,12 +195,12 @@ impl StatefulWidget for Carrousel {
     }
 }
 
-impl Carrousel {
+impl PopularMangaCarrousel {
     pub fn from_response(response: SearchMangaResponse) -> Self {
-        let mut items: Vec<CarrouselItem> = vec![];
+        let mut items: Vec<PopularMangaItem> = vec![];
 
         for manga in response.data {
-            items.push(CarrouselItem::from_response(manga))
+            items.push(PopularMangaItem::from_response(manga))
         }
 
         Self {
@@ -224,7 +224,7 @@ impl Carrousel {
         }
     }
 
-    pub fn get_current_item(&self) -> Option<&CarrouselItem> {
+    pub fn get_current_item(&self) -> Option<&PopularMangaItem> {
         self.items.get(self.current_item_visible_index)
     }
 }

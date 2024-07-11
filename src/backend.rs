@@ -33,6 +33,7 @@ pub struct Attributes {
     pub tags: Vec<Tag>,
     pub content_rating: String,
     pub state: String,
+    pub publication_demographic: Option<String>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -225,11 +226,11 @@ pub struct MangaStatisticsResponse {
 #[serde(rename_all = "camelCase")]
 pub struct Statistics {
     pub rating: Rating,
-    pub follows: u64,
+    pub follows: Option<u64>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Rating {
-    pub average: f64,
+    pub average: Option<f64>,
 }

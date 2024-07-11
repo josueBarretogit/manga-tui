@@ -74,7 +74,7 @@ impl Component for App {
                                 self.global_event_tx.send(Events::GoSearchPage).ok();
                             }
                         }
-                        KeyCode::Char('3') => {
+                        KeyCode::Backspace => {
                             if self.current_tab == SelectedTabs::ReaderTab
                                 && self.manga_reader_page.is_some()
                             {
@@ -144,7 +144,11 @@ impl Component for App {
                 if self.manga_page.is_some() {
                     self.manga_page.as_mut().unwrap().clean_up();
                 }
-                self.home_page.init_search();
+
+                if self.home_page.require_search() {
+                    self.home_page.init_search();
+                }
+
                 self.current_tab = SelectedTabs::Home;
             }
 
@@ -157,8 +161,6 @@ impl Component for App {
             Action::Quit => {
                 self.state = AppState::Done;
             }
-            Action::PreviousTab => self.previous_tab(),
-            Action::NextTab => self.next_tab(),
         }
     }
     fn clean_up(&mut self) {}

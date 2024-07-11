@@ -1,4 +1,7 @@
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use bytes::Bytes;
+use chrono::{Month, Months, NaiveDate};
 use once_cell::sync::OnceCell;
 
 use crate::view::pages::manga::ChapterOrder;
@@ -136,11 +139,29 @@ impl MangadexClient {
     }
 
     pub async fn get_popular_mangas(&self) -> Result<SearchMangaResponse, reqwest::Error> {
-        let endpoint = format!("{}/manga?includes[]=cover_art&includes[]=artist&includes[]=author&order[followedCount]=desc&contentRating[]=safe&contentRating[]=suggestive&hasAvailableChapters=true&createdAtSince=2024-06-10T00:00:00", self.api_url_base);
+        let current_date = chrono::offset::Local::now()
+            .date_naive()
+            .checked_sub_months(Months::new(1))
+            .unwrap();
+
+        let endpoint = format!("{}/manga?includes[]=cover_art&includes[]=artist&includes[]=author&order[followedCount]=desc&contentRating[]=safe&contentRating[]=suggestive&hasAvailableChapters=true&createdAtSince={}T00:00:00", self.api_url_base, current_date);
+
+        let response = self.client.get(endpoint).send().await?;
+
+        let text = response.text().await?;
+
+        let data: SearchMangaResponse = serde_json::from_str(&text).unwrap();
+
+        Ok(data)
+    }
+
+    pub async fn get_recently_added(&self) -> Result<SearchMangaResponse, reqwest::Error> {
+        let endpoint = format!("{}/manga?limit=15&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&order[createdAt]=desc&includes[]=cover_art&hasAvailableChapters=true", self.api_url_base);
 
         let response = self.client.get(endpoint).send().await?;
 
         let data: SearchMangaResponse = response.json().await?;
+
         Ok(data)
     }
 }

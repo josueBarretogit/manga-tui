@@ -22,10 +22,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mangadex_client =
         MangadexClient::new(Client::builder().user_agent(user_agent).build().unwrap());
 
-
     MANGADEX_CLIENT_INSTANCE.set(mangadex_client).unwrap();
-
-
 
     init_error_hooks()?;
     init()?;

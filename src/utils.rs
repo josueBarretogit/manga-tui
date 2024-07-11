@@ -1,5 +1,14 @@
+use std::io::Cursor;
+
+use image::io::Reader;
 use ratatui::style::{Color, Stylize};
 use ratatui::text::Span;
+use tokio::sync::mpsc::UnboundedSender;
+use tokio::task::JoinSet;
+
+use crate::backend::fetch::MangadexClient;
+use crate::view::pages::search::SearchPageEvents;
+use crate::view::widgets::ImageHandler;
 
 pub fn set_tags_style(tag: &str) -> Span<'_> {
     match tag.to_lowercase().as_str() {
@@ -20,4 +29,37 @@ pub fn set_status_style(status: &str) -> Span<'_> {
         "cancelled" => format!(" 🟠 {status} ").into(),
         _ => format!(" {status} ").into(),
     }
+}
+
+pub fn search_manga_cover<E: ImageHandler>(
+    file_name: String,
+    manga_id: String,
+    join_set: &mut JoinSet<()>,
+    tx: UnboundedSender<E>,
+    handler: E,
+) {
+    join_set.spawn(async move {
+        let response = MangadexClient::global()
+            .get_cover_for_manga(&manga_id, &file_name)
+            .await;
+
+        match response {
+            Ok(bytes) => {
+                let dyn_img = Reader::new(Cursor::new(bytes))
+                    .with_guessed_format()
+                    .unwrap();
+
+                let maybe_decoded = dyn_img.decode();
+                match maybe_decoded {
+                    Ok(image) => {
+                        tx.send(handler.load(Some(image), manga_id)).unwrap();
+                    }
+                    Err(_) => {
+                        tx.send(handler.not_found(None, manga_id)).unwrap();
+                    }
+                };
+            }
+            Err(_) => tx.send(handler.not_found(None, manga_id)).unwrap(),
+        }
+    });
 }

@@ -1,10 +1,11 @@
 use crate::backend::tui::Events;
+use image::DynamicImage;
 use ratatui::Frame;
 
+pub mod home;
 pub mod manga;
 pub mod reader;
 pub mod search;
-pub mod home;
 
 pub trait Component {
     type Actions;
@@ -15,4 +16,9 @@ pub trait Component {
 
     /// This is intended for stuff like aborting tasks and clearing vec's
     fn clean_up(&mut self);
+}
+
+pub trait ImageHandler: Send + 'static {
+    fn load(self, maybe_image: Option<DynamicImage>, id: String) -> Self;
+    fn not_found(self, maybe_image: Option<DynamicImage>, id: String) -> Self;
 }

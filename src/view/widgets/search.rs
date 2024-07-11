@@ -222,7 +222,6 @@ impl MangaItem {
         author: Option<String>,
         artist: Option<String>,
         image_state: Option<Box<dyn StatefulProtocol>>,
-        
     ) -> Self {
         Self {
             id,

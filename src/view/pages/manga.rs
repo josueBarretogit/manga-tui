@@ -435,18 +435,12 @@ impl MangaPage {
                     }
                 }
                 MangaPageEvents::LoadStatistics(maybe_statistics) => {
-                    //todo! set this task as finished
-                    match maybe_statistics {
-                        Some(response) => {
-                            let statistics: &Statistics = &response.statistics[&self.id];
-                            self.statistics = Some(MangaStatistics::new(
-                                statistics.rating.average,
-                                statistics.follows,
-                            ));
-                        }
-                        None => {
-                            // Todo! show that statistics could not be found
-                        }
+                    if let Some(response) = maybe_statistics {
+                        let statistics: &Statistics = &response.statistics[&self.id];
+                        self.statistics = Some(MangaStatistics::new(
+                            statistics.rating.average.unwrap_or_default(),
+                            statistics.follows.unwrap_or_default(),
+                        ));
                     }
                 }
                 MangaPageEvents::StoppedSearchingChapterData => {

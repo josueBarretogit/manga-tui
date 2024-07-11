@@ -21,8 +21,6 @@ use super::ChapterPagesResponse;
 
 pub enum Action {
     Quit,
-    NextTab,
-    PreviousTab,
 }
 
 /// These are the events this app will listen to
