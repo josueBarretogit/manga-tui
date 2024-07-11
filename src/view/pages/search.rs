@@ -5,13 +5,11 @@ use crate::utils::search_manga_cover;
 use crate::view::widgets::search::*;
 use crate::view::widgets::Component;
 use crate::view::widgets::ImageHandler;
+use crate::PICKER;
 use crossterm::event::KeyEvent;
 use crossterm::event::{self, KeyCode};
-use image::io::Reader;
 use image::DynamicImage;
 use ratatui::{prelude::*, widgets::*};
-use ratatui_image::picker::Picker;
-use std::io::Cursor;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 use tui_input::backend::crossterm::EventHandler;
@@ -37,10 +35,10 @@ pub enum SearchPageEvents {
 }
 
 impl ImageHandler for SearchPageEvents {
-    fn load(self, maybe_image: Option<DynamicImage>, id: String) -> Self {
-        Self::LoadCover(maybe_image, id)
+    fn load(image: DynamicImage, id: String) -> Self {
+        Self::LoadCover(Some(image), id)
     }
-    fn not_found(self, maybe_image: Option<DynamicImage>, id: String) -> Self {
+    fn not_found(id: String) -> Self {
         Self::LoadCover(None, id)
     }
 }
@@ -68,7 +66,6 @@ pub enum InputMode {
 pub struct SearchPage {
     /// This tx "talks" to the app
     global_event_tx: UnboundedSender<Events>,
-    picker: Picker,
     local_action_tx: UnboundedSender<SearchPageActions>,
     pub local_action_rx: UnboundedReceiver<SearchPageActions>,
     local_event_tx: UnboundedSender<SearchPageEvents>,
@@ -160,13 +157,12 @@ impl Component for SearchPage {
 }
 
 impl SearchPage {
-    pub fn init(picker: Picker, event_tx: UnboundedSender<Events>) -> Self {
+    pub fn init(event_tx: UnboundedSender<Events>) -> Self {
         let (action_tx, action_rx) = mpsc::unbounded_channel::<SearchPageActions>();
         let (local_event_tx, local_event) = mpsc::unbounded_channel::<SearchPageEvents>();
 
         Self {
             global_event_tx: event_tx,
-            picker,
             local_action_tx: action_tx,
             local_action_rx: action_rx,
             local_event_tx,
@@ -410,9 +406,11 @@ impl SearchPage {
                                 ListMangasFoundWidget::from_response(response.data);
                             self.mangas_found_list.total_result = response.total;
                             self.state = PageState::DisplayingMangasFound;
-                            self.local_event_tx
-                                .send(SearchPageEvents::SearchCovers)
-                                .ok();
+                            if PICKER.is_some() {
+                                self.local_event_tx
+                                    .send(SearchPageEvents::SearchCovers)
+                                    .ok();
+                            }
                         }
                         // Todo indicate that mangas where not found
                         None => {
@@ -434,7 +432,6 @@ impl SearchPage {
                                     manga_id,
                                     &mut self.search_cover_handles,
                                     tx,
-                                    SearchPageEvents::SearchCovers,
                                 );
                             }
                             None => {
@@ -447,7 +444,7 @@ impl SearchPage {
 
                 SearchPageEvents::LoadCover(maybe_image, manga_id) => match maybe_image {
                     Some(image) => {
-                        let image = self.picker.new_resize_protocol(image);
+                        let image = PICKER.unwrap().new_resize_protocol(image);
 
                         if let Some(manga) = self
                             .mangas_found_list

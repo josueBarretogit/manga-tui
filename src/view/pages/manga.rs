@@ -4,10 +4,11 @@ use crate::backend::{ChapterResponse, Languages, MangaStatisticsResponse, Statis
 use crate::utils::{set_status_style, set_tags_style};
 use crate::view::widgets::manga::{ChapterItem, ChaptersListWidget};
 use crate::view::widgets::Component;
+use crate::PICKER;
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{prelude::*, widgets::*};
 use ratatui_image::protocol::StatefulProtocol;
-use ratatui_image::{Resize, StatefulImage};
+use ratatui_image::{picker, Resize, StatefulImage};
 use strum::Display;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
@@ -298,9 +299,11 @@ impl MangaPage {
                 }
             }
             KeyCode::Char('r') => {
-                self.local_action_tx
-                    .send(MangaPageActions::ReadChapter)
-                    .unwrap();
+                if PICKER.is_some() {
+                    self.local_action_tx
+                        .send(MangaPageActions::ReadChapter)
+                        .ok();
+                }
             }
             _ => {}
         }

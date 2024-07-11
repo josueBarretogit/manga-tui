@@ -1,18 +1,18 @@
 use core::panic;
 use crossterm::event::{KeyCode, KeyEvent};
-use image::io::Reader;
 use image::DynamicImage;
 use ratatui::{prelude::*, widgets::*};
-use ratatui_image::picker::Picker;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
 use crate::backend::SearchMangaResponse;
+use crate::utils::search_manga_cover;
 use crate::view::widgets::home::{PopularMangaCarrousel, PopularMangaItem};
 use crate::view::widgets::search::MangaItem;
-use crate::view::widgets::Component;
+use crate::view::widgets::{Component, ImageHandler};
+use crate::PICKER;
 
 #[derive(PartialEq, Eq)]
 pub enum HomeState {
@@ -26,7 +26,16 @@ pub enum HomeEvents {
     SearchPopularNewMangas,
     SearchPopularMangasCover,
     LoadPopularMangas(Option<SearchMangaResponse>),
-    LoadCover(Option<DynamicImage>, usize),
+    LoadCover(Option<DynamicImage>, String),
+}
+
+impl ImageHandler for HomeEvents {
+    fn load(image: DynamicImage, id: String) -> Self {
+        Self::LoadCover(Some(image), id)
+    }
+    fn not_found(id: String) -> Self {
+        Self::LoadCover(None, id)
+    }
 }
 
 pub enum HomeActions {
@@ -179,9 +188,11 @@ impl Home {
             Some(response) => {
                 self.state = HomeState::DisplayingPopularMangas;
                 self.carrousel = PopularMangaCarrousel::from_response(response);
-                self.local_event_tx
-                    .send(HomeEvents::SearchPopularMangasCover)
-                    .ok();
+                if PICKER.is_some() {
+                    self.local_event_tx
+                        .send(HomeEvents::SearchPopularMangasCover)
+                        .ok();
+                }
             }
             None => {
                 self.state = HomeState::NotFound;
@@ -189,14 +200,13 @@ impl Home {
         }
     }
 
-    fn load_popular_manga_cover(&mut self, maybe_cover: Option<DynamicImage>, index: usize) {
+    fn load_popular_manga_cover(&mut self, maybe_cover: Option<DynamicImage>, id: String) {
         match maybe_cover {
             Some(cover) => {
-                if let Some(popular_manga) = self.carrousel.items.get_mut(index) {
-                    let mut picker = Picker::from_termios().unwrap();
-                    picker.guess_protocol();
-
-                    let image = picker.new_resize_protocol(cover);
+                if let Some(popular_manga) =
+                    self.carrousel.items.iter_mut().find(|manga| manga.id == id)
+                {
+                    let image = PICKER.unwrap().new_resize_protocol(cover);
                     popular_manga.cover_state = Some(image);
                 }
             }
@@ -224,43 +234,17 @@ impl Home {
     }
 
     fn search_popular_mangas_cover(&mut self) {
-        for (index, manga) in self.carrousel.items.iter().enumerate() {
+        for manga in self.carrousel.items.iter() {
             let manga_id = manga.id.clone();
             let tx = self.local_event_tx.clone();
 
             match manga.img_url.as_ref() {
                 Some(file_name) => {
                     let file_name = file_name.clone();
-                    self.tasks.spawn(async move {
-                        let response = MangadexClient::global()
-                            .get_cover_for_manga(&manga_id, &file_name)
-                            .await;
-
-                        match response {
-                            Ok(bytes) => {
-                                let dyn_img = Reader::new(std::io::Cursor::new(bytes))
-                                    .with_guessed_format()
-                                    .unwrap();
-
-                                let maybe_decoded = dyn_img.decode();
-                                match maybe_decoded {
-                                    Ok(image) => {
-                                        tx.send(HomeEvents::LoadCover(Some(image), index)).unwrap();
-                                    }
-                                    Err(_) => {
-                                        tx.send(HomeEvents::LoadCover(None, index)).unwrap();
-                                    }
-                                };
-                            }
-                            Err(e) => {
-                                // Todo! handle this case
-                                tx.send(HomeEvents::LoadCover(None, index)).unwrap();
-                            }
-                        }
-                    });
+                    search_manga_cover(file_name, manga_id, &mut self.tasks, tx);
                 }
                 None => {
-                    tx.send(HomeEvents::LoadCover(None, index)).unwrap();
+                    tx.send(HomeEvents::LoadCover(None, manga.id.clone())).ok();
                 }
             };
         }

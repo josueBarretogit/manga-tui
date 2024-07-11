@@ -31,12 +31,11 @@ pub fn set_status_style(status: &str) -> Span<'_> {
     }
 }
 
-pub fn search_manga_cover<E: ImageHandler>(
+pub fn search_manga_cover<IM: ImageHandler>(
     file_name: String,
     manga_id: String,
     join_set: &mut JoinSet<()>,
-    tx: UnboundedSender<E>,
-    handler: E,
+    tx: UnboundedSender<IM>,
 ) {
     join_set.spawn(async move {
         let response = MangadexClient::global()
@@ -52,14 +51,14 @@ pub fn search_manga_cover<E: ImageHandler>(
                 let maybe_decoded = dyn_img.decode();
                 match maybe_decoded {
                     Ok(image) => {
-                        tx.send(handler.load(Some(image), manga_id)).unwrap();
+                        tx.send(IM::load(image, manga_id)).unwrap();
                     }
                     Err(_) => {
-                        tx.send(handler.not_found(None, manga_id)).unwrap();
+                        tx.send(IM::not_found(manga_id)).unwrap();
                     }
                 };
             }
-            Err(_) => tx.send(handler.not_found(None, manga_id)).unwrap(),
+            Err(_) => tx.send(IM::not_found(manga_id)).unwrap(),
         }
     });
 }

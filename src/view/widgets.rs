@@ -19,6 +19,6 @@ pub trait Component {
 }
 
 pub trait ImageHandler: Send + 'static {
-    fn load(self, maybe_image: Option<DynamicImage>, id: String) -> Self;
-    fn not_found(self, maybe_image: Option<DynamicImage>, id: String) -> Self;
+    fn load(image: DynamicImage, id: String) -> Self;
+    fn not_found(id: String) -> Self;
 }

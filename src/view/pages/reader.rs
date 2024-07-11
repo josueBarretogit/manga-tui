@@ -2,11 +2,11 @@ use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
 use crate::view::widgets::reader::{PageItemState, PagesItem, PagesList};
 use crate::view::widgets::Component;
+use crate::PICKER;
 use crossterm::event::KeyCode;
 use image::io::Reader;
 use image::DynamicImage;
 use ratatui::{prelude::*, widgets::*};
-use ratatui_image::picker::Picker;
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::{Resize, StatefulImage};
 use strum::Display;
@@ -62,7 +62,6 @@ pub struct MangaReader {
     state: State,
     /// Handle fetching the images
     image_tasks: JoinSet<()>,
-    picker: Picker,
     pub global_event_tx: UnboundedSender<Events>,
     pub local_action_tx: UnboundedSender<MangaReaderActions>,
     pub local_action_rx: UnboundedReceiver<MangaReaderActions>,
@@ -147,7 +146,6 @@ impl MangaReader {
         global_event_tx: UnboundedSender<Events>,
         chapter_id: String,
         base_url: String,
-        picker: Picker,
         url_imgs: Vec<String>,
         url_imgs_high_quality: Vec<String>,
     ) -> Self {
@@ -174,7 +172,6 @@ impl MangaReader {
             pages,
             page_list_state: tui_widget_list::ListState::default(),
             image_tasks: set,
-            picker,
             local_action_tx,
             local_action_rx,
             local_event_tx,
@@ -251,7 +248,7 @@ impl MangaReader {
                 }
                 MangaReaderEvents::LoadPage(maybe_image, index_page) => match maybe_image {
                     Some(image) => {
-                        let image = self.picker.new_resize_protocol(image);
+                        let image = PICKER.unwrap().new_resize_protocol(image);
 
                         match self.pages.get_mut(index_page) {
                             Some(page) => {

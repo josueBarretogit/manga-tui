@@ -24,7 +24,6 @@ pub enum AppState {
 }
 
 pub struct App {
-    picker: Picker,
     pub global_action_tx: UnboundedSender<Action>,
     pub global_action_rx: UnboundedReceiver<Action>,
     pub global_event_tx: UnboundedSender<Events>,
@@ -115,7 +114,6 @@ impl Component for App {
                     self.global_event_tx.clone(),
                     chapter_response.chapter.hash,
                     chapter_response.base_url,
-                    self.picker,
                     chapter_response
                         .chapter
                         .data_saver
@@ -168,19 +166,14 @@ impl Component for App {
 
 impl App {
     pub fn new() -> Self {
-        let mut picker = Picker::from_termios().unwrap();
-
-        picker.guess_protocol();
-
         let (global_action_tx, global_action_rx) = unbounded_channel::<Action>();
         let (global_event_tx, global_event_rx) = unbounded_channel::<Events>();
 
         global_event_tx.send(Events::GoToHome).ok();
 
         App {
-            picker,
             current_tab: SelectedTabs::default(),
-            search_page: SearchPage::init(picker, global_event_tx.clone()),
+            search_page: SearchPage::init(global_event_tx.clone()),
             home_page: Home::new(global_event_tx.clone()),
             manga_page: None,
             manga_reader_page: None,

@@ -1,4 +1,6 @@
+use once_cell::sync::Lazy;
 use ratatui::backend::CrosstermBackend;
+use ratatui_image::picker::Picker;
 use reqwest::Client;
 
 use self::backend::fetch::{MangadexClient, MANGADEX_CLIENT_INSTANCE};
@@ -9,6 +11,17 @@ mod utils;
 mod backend;
 /// These would be like the frontend
 mod view;
+
+pub static PICKER: Lazy<Option<Picker>> = Lazy::new(|| {
+    let maybe_picker = Picker::from_termios();
+    match maybe_picker {
+        Ok(mut picker) => {
+            picker.guess_protocol();
+            Some(picker)
+        }
+        Err(_) => None,
+    }
+});
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 7)]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
