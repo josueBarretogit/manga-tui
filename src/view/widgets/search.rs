@@ -1,5 +1,5 @@
 use crate::backend::Data;
-use crate::utils::{set_status_style, set_tags_style};
+use crate::utils::{from_manga_response, set_status_style, set_tags_style};
 use ratatui::{prelude::*, widgets::*};
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::{Resize, StatefulImage};
@@ -144,67 +144,18 @@ impl PreRender for MangaItem {
 
 impl From<Data> for MangaItem {
     fn from(value: Data) -> Self {
-        let id = value.id;
-        // Todo! maybe there is a better way to do this
-        let title = value.attributes.title.en.unwrap_or(
-            value.attributes.title.ja_ro.unwrap_or(
-                value.attributes.title.ja.unwrap_or(
-                    value.attributes.title.jp.unwrap_or(
-                        value.attributes.title.zh.unwrap_or(
-                            value
-                                .attributes
-                                .title
-                                .ko
-                                .unwrap_or(value.attributes.title.ko_ro.unwrap_or_default()),
-                        ),
-                    ),
-                ),
-            ),
-        );
-
-        let description = match value.attributes.description {
-            Some(description) => description.en.unwrap_or("No description".to_string()),
-            None => String::from("No description"),
-        };
-
-        let content_rating = value.attributes.content_rating;
-
-        let tags: Vec<String> = value
-            .attributes
-            .tags
-            .iter()
-            .map(|tag| tag.attributes.name.en.to_string())
-            .collect();
-
-        let mut img_url: Option<String> = Option::default();
-        let mut author: Option<String> = Option::default();
-        let mut artist: Option<String> = Option::default();
-
-        for rel in &value.relationships {
-            if let Some(attributes) = &rel.attributes {
-                match rel.type_field.as_str() {
-                    "author" => author = Some(attributes.name.as_ref().unwrap().to_string()),
-                    "artist" => artist = Some(attributes.name.as_ref().unwrap().to_string()),
-                    "cover_art" => {
-                        img_url = Some(attributes.file_name.as_ref().unwrap().to_string())
-                    }
-                    _ => {}
-                }
-            }
-        }
-
-        let status = value.attributes.status;
+        let manga = from_manga_response(value);
 
         Self::new(
-            id,
-            title,
-            description,
-            tags,
-            content_rating,
-            status,
-            img_url,
-            author,
-            artist,
+            manga.id,
+            manga.title,
+            manga.description,
+            manga.tags,
+            manga.content_rating,
+            manga.status,
+            manga.img_url,
+            manga.author,
+            manga.artist,
             None,
         )
     }

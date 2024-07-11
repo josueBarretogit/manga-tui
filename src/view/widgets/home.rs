@@ -3,10 +3,10 @@ use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::{Resize, StatefulImage};
 
 use crate::backend::{Data, SearchMangaResponse};
-use crate::utils::{set_status_style, set_tags_style};
+use crate::utils::{from_manga_response, set_status_style, set_tags_style};
 
 #[derive(Clone)]
-pub struct PopularMangaItem {
+pub struct CarrouselItem {
     pub id: String,
     pub title: String,
     pub description: String,
@@ -16,11 +16,11 @@ pub struct PopularMangaItem {
     pub img_url: Option<String>,
     pub author: Option<String>,
     pub artist: Option<String>,
-    pub style: Style,
     pub cover_state: Option<Box<dyn StatefulProtocol>>,
 }
 
-impl PopularMangaItem {
+#[allow(clippy::too_many_arguments)]
+impl CarrouselItem {
     fn new(
         id: String,
         title: String,
@@ -31,7 +31,6 @@ impl PopularMangaItem {
         img_url: Option<String>,
         author: Option<String>,
         artist: Option<String>,
-        style: Style,
         cover_state: Option<Box<dyn StatefulProtocol>>,
     ) -> Self {
         Self {
@@ -44,7 +43,6 @@ impl PopularMangaItem {
             img_url,
             author,
             artist,
-            style,
             cover_state,
         }
     }
@@ -88,74 +86,23 @@ impl PopularMangaItem {
     }
 
     pub fn from_response(value: Data) -> Self {
-        let id = value.id.clone();
-        // Todo! maybe there is a better way to do this
-        let title = value.attributes.title.en.unwrap_or(
-            value.attributes.title.ja_ro.unwrap_or(
-                value.attributes.title.ja.unwrap_or(
-                    value.attributes.title.jp.unwrap_or(
-                        value.attributes.title.zh.unwrap_or(
-                            value
-                                .attributes
-                                .title
-                                .ko
-                                .unwrap_or(value.attributes.title.ko_ro.unwrap_or_default()),
-                        ),
-                    ),
-                ),
-            ),
-        );
-
-        let description = match value.attributes.description {
-            Some(description) => description.en.unwrap_or("No description".to_string()),
-            None => String::from("No description"),
-        };
-
-        let content_rating = value.attributes.content_rating;
-
-        let tags: Vec<String> = value
-            .attributes
-            .tags
-            .iter()
-            .map(|tag| tag.attributes.name.en.to_string())
-            .collect();
-
-        let mut img_url: Option<String> = Option::default();
-        let mut author: Option<String> = Option::default();
-        let mut artist: Option<String> = Option::default();
-
-        for rel in &value.relationships {
-            if let Some(attributes) = &rel.attributes {
-                match rel.type_field.as_str() {
-                    "author" => author = Some(attributes.name.as_ref().unwrap().to_string()),
-                    "artist" => artist = Some(attributes.name.as_ref().unwrap().to_string()),
-                    "cover_art" => {
-                        img_url = Some(attributes.file_name.as_ref().unwrap().to_string())
-                    }
-                    _ => {}
-                }
-            }
-        }
-
-        let status = value.attributes.status;
-
+        let manga = from_manga_response(value);
         Self::new(
-            id,
-            title,
-            description,
-            tags,
-            content_rating,
-            status,
-            img_url,
-            author,
-            artist,
-            Style::default(),
+            manga.id,
+            manga.title,
+            manga.description,
+            manga.tags,
+            manga.content_rating,
+            manga.status,
+            manga.img_url,
+            manga.author,
+            manga.artist,
             None,
         )
     }
 }
 
-impl Widget for PopularMangaItem {
+impl Widget for CarrouselItem {
     fn render(mut self, area: Rect, buf: &mut Buffer)
     where
         Self: Sized,
@@ -171,7 +118,7 @@ impl Widget for PopularMangaItem {
 
 #[derive(Default, Clone)]
 pub struct PopularMangaCarrousel {
-    pub items: Vec<PopularMangaItem>,
+    pub items: Vec<CarrouselItem>,
     pub current_item_visible_index: usize,
 }
 
@@ -197,10 +144,10 @@ impl StatefulWidget for PopularMangaCarrousel {
 
 impl PopularMangaCarrousel {
     pub fn from_response(response: SearchMangaResponse) -> Self {
-        let mut items: Vec<PopularMangaItem> = vec![];
+        let mut items: Vec<CarrouselItem> = vec![];
 
         for manga in response.data {
-            items.push(PopularMangaItem::from_response(manga))
+            items.push(CarrouselItem::from_response(manga))
         }
 
         Self {
@@ -224,7 +171,45 @@ impl PopularMangaCarrousel {
         }
     }
 
-    pub fn get_current_item(&self) -> Option<&PopularMangaItem> {
+    pub fn get_current_item(&self) -> Option<&CarrouselItem> {
         self.items.get(self.current_item_visible_index)
     }
+}
+
+#[derive(Clone, Default)]
+pub struct RecentlyAddedCarrousel {
+    pub items: Vec<CarrouselItem>,
+    pub selected_item_index: usize,
+}
+
+impl StatefulWidget for RecentlyAddedCarrousel {
+    type State = usize;
+    fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+        let layout = Layout::horizontal([
+            Constraint::Fill(1),
+            Constraint::Fill(1),
+            Constraint::Fill(1),
+        ])
+        .split(area);
+
+        for (index, area_manga) in layout.iter().enumerate() {
+            if index == *state {
+                Block::bordered()
+                    .border_style(Style::default().bg(Color::Yellow))
+                    .render(*area_manga, buf);
+            } else {
+                Block::bordered().render(*area_manga, buf);
+            }
+        }
+    }
+}
+
+impl RecentlyAddedCarrousel {
+    pub fn select_next(&mut self) {
+        self.selected_item_index += 1;
+    }
+    pub fn select_previous(&mut self) {
+        self.selected_item_index -= 1;
+    }
+    pub fn get_current_manga(&mut self) {}
 }

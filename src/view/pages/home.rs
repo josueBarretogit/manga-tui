@@ -9,7 +9,7 @@ use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
 use crate::backend::SearchMangaResponse;
 use crate::utils::search_manga_cover;
-use crate::view::widgets::home::{PopularMangaCarrousel, PopularMangaItem};
+use crate::view::widgets::home::{CarrouselItem, PopularMangaCarrousel, RecentlyAddedCarrousel};
 use crate::view::widgets::search::MangaItem;
 use crate::view::widgets::{Component, ImageHandler};
 use crate::PICKER;
@@ -46,7 +46,8 @@ pub enum HomeActions {
 
 pub struct Home {
     pub global_event_tx: UnboundedSender<Events>,
-    carrousel: PopularMangaCarrousel,
+    carrousel_popular_mangas: PopularMangaCarrousel,
+    carrousel_recently_added: RecentlyAddedCarrousel,
     state: HomeState,
     pub local_action_tx: UnboundedSender<HomeActions>,
     pub local_action_rx: UnboundedReceiver<HomeActions>,
@@ -79,21 +80,27 @@ impl Component for Home {
             }
             HomeState::Unused => {}
         }
+        StatefulWidget::render(
+            self.carrousel_recently_added.clone(),
+            latest_updates_area,
+            buf,
+            &mut self.carrousel_recently_added.selected_item_index,
+        );
     }
 
     fn update(&mut self, action: Self::Actions) {
         match action {
             HomeActions::SelectNextPopularManga => {
-                self.carrousel.next();
+                self.carrousel_popular_mangas.next();
             }
-            HomeActions::SelectPreviousPopularManga => self.carrousel.previous(),
+            HomeActions::SelectPreviousPopularManga => self.carrousel_popular_mangas.previous(),
             HomeActions::GoToPopularMangaPage => self.go_to_manga_page(),
         }
     }
 
     fn clean_up(&mut self) {
         self.tasks.abort_all();
-        self.carrousel.items.clear();
+        self.carrousel_popular_mangas.items.clear();
         self.state = HomeState::Unused;
     }
 
@@ -114,7 +121,8 @@ impl Home {
         local_event_tx.send(HomeEvents::SearchPopularNewMangas).ok();
 
         Self {
-            carrousel: PopularMangaCarrousel::default(),
+            carrousel_popular_mangas: PopularMangaCarrousel::default(),
+            carrousel_recently_added: RecentlyAddedCarrousel::default(),
             state: HomeState::Unused,
             global_event_tx: tx,
             local_event_tx,
@@ -126,10 +134,10 @@ impl Home {
     }
     pub fn render_carrousel(&mut self, area: Rect, buf: &mut Buffer) {
         StatefulWidget::render(
-            self.carrousel.clone(),
+            self.carrousel_popular_mangas.clone(),
             area,
             buf,
-            &mut self.carrousel.current_item_visible_index,
+            &mut self.carrousel_popular_mangas.current_item_visible_index,
         );
     }
 
@@ -152,12 +160,12 @@ impl Home {
         }
     }
 
-    fn get_current_popular_manga(&self) -> Option<&PopularMangaItem> {
-        self.carrousel.get_current_item()
+    fn get_current_popular_manga(&self) -> Option<&CarrouselItem> {
+        self.carrousel_popular_mangas.get_current_item()
     }
 
     pub fn require_search(&mut self) -> bool {
-        self.carrousel.items.is_empty()
+        self.carrousel_popular_mangas.items.is_empty()
     }
 
     pub fn init_search(&mut self) {
@@ -187,7 +195,7 @@ impl Home {
         match maybe_response {
             Some(response) => {
                 self.state = HomeState::DisplayingPopularMangas;
-                self.carrousel = PopularMangaCarrousel::from_response(response);
+                self.carrousel_popular_mangas = PopularMangaCarrousel::from_response(response);
                 if PICKER.is_some() {
                     self.local_event_tx
                         .send(HomeEvents::SearchPopularMangasCover)
@@ -203,8 +211,11 @@ impl Home {
     fn load_popular_manga_cover(&mut self, maybe_cover: Option<DynamicImage>, id: String) {
         match maybe_cover {
             Some(cover) => {
-                if let Some(popular_manga) =
-                    self.carrousel.items.iter_mut().find(|manga| manga.id == id)
+                if let Some(popular_manga) = self
+                    .carrousel_popular_mangas
+                    .items
+                    .iter_mut()
+                    .find(|manga| manga.id == id)
                 {
                     let image = PICKER.unwrap().new_resize_protocol(cover);
                     popular_manga.cover_state = Some(image);
@@ -234,7 +245,7 @@ impl Home {
     }
 
     fn search_popular_mangas_cover(&mut self) {
-        for manga in self.carrousel.items.iter() {
+        for manga in self.carrousel_popular_mangas.items.iter() {
             let manga_id = manga.id.clone();
             let tx = self.local_event_tx.clone();
 
@@ -272,6 +283,16 @@ impl Home {
                     self.local_action_tx
                         .send(HomeActions::GoToPopularMangaPage)
                         .ok();
+                }
+            }
+            KeyCode::Char('l') | KeyCode::Right => {
+                if self.state == HomeState::DisplayingPopularMangas {
+                    self.carrousel_recently_added.select_next();
+                }
+            }
+            KeyCode::Char('h') | KeyCode::Left => {
+                if self.state == HomeState::DisplayingPopularMangas {
+                    self.carrousel_recently_added.select_previous();
                 }
             }
             _ => {}
