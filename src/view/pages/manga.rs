@@ -8,7 +8,7 @@ use crate::PICKER;
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{prelude::*, widgets::*};
 use ratatui_image::protocol::StatefulProtocol;
-use ratatui_image::{picker, Resize, StatefulImage};
+use ratatui_image::{Resize, StatefulImage};
 use strum::Display;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;

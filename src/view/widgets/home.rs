@@ -100,8 +100,21 @@ impl CarrouselItem {
             None,
         )
     }
+
+    pub fn render_recently_added(&mut self, area: Rect, buf: &mut Buffer) {
+        let layout = Layout::vertical([Constraint::Percentage(80), Constraint::Percentage(20)]);
+
+        let [cover_area, title_area] = layout.areas(area);
+
+        self.render_cover(cover_area, buf);
+
+        Paragraph::new(self.title.clone())
+            .wrap(Wrap { trim: true })
+            .render(title_area, buf);
+    }
 }
 
+// This implementation is used for the popular mangas carrousel
 impl Widget for CarrouselItem {
     fn render(mut self, area: Rect, buf: &mut Buffer)
     where
@@ -184,7 +197,7 @@ pub struct RecentlyAddedCarrousel {
 
 impl StatefulWidget for RecentlyAddedCarrousel {
     type State = usize;
-    fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+    fn render(mut self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         let layout = Layout::horizontal([
             Constraint::Fill(1),
             Constraint::Fill(1),
@@ -193,23 +206,40 @@ impl StatefulWidget for RecentlyAddedCarrousel {
         .split(area);
 
         for (index, area_manga) in layout.iter().enumerate() {
-            if index == *state {
-                Block::bordered()
-                    .border_style(Style::default().bg(Color::Yellow))
-                    .render(*area_manga, buf);
-            } else {
-                Block::bordered().render(*area_manga, buf);
+            if let Some(item) = self.items.get_mut(index) {
+                item.render_recently_added(*area_manga, buf);
             }
+            Block::bordered().render(*area_manga, buf);
         }
     }
 }
 
 impl RecentlyAddedCarrousel {
+    // 3 is amount of items per page
     pub fn select_next(&mut self) {
-        self.selected_item_index += 1;
+        if self.selected_item_index + 1 < 3 {
+            self.selected_item_index += 1;
+        }
     }
+
     pub fn select_previous(&mut self) {
-        self.selected_item_index -= 1;
+        self.selected_item_index = self.selected_item_index.saturating_sub(1);
     }
-    pub fn get_current_manga(&mut self) {}
+
+    pub fn get_current_selected_manga(&self) -> Option<&CarrouselItem> {
+        self.items.get(self.selected_item_index)
+    }
+
+    pub fn from_response(response: SearchMangaResponse) -> Self {
+        let mut items: Vec<CarrouselItem> = vec![];
+
+        for manga in response.data {
+            items.push(CarrouselItem::from_response(manga))
+        }
+
+        Self {
+            items,
+            selected_item_index: 0,
+        }
+    }
 }

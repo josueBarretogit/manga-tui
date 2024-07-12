@@ -1,7 +1,9 @@
 use core::panic;
 use crossterm::event::{KeyCode, KeyEvent};
+use image::io::Reader;
 use image::DynamicImage;
 use ratatui::{prelude::*, widgets::*};
+use std::io::Cursor;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
@@ -17,7 +19,7 @@ use crate::PICKER;
 #[derive(PartialEq, Eq)]
 pub enum HomeState {
     Unused,
-    Searching,
+    SearchingPopularMangas,
     DisplayingPopularMangas,
     NotFound,
 }
@@ -25,8 +27,12 @@ pub enum HomeState {
 pub enum HomeEvents {
     SearchPopularNewMangas,
     SearchPopularMangasCover,
+    SearchRecentlyAddedMangas,
+    SearchRecentlyCover,
     LoadPopularMangas(Option<SearchMangaResponse>),
+    LoadRecentlyAddedMangas(Option<SearchMangaResponse>),
     LoadCover(Option<DynamicImage>, String),
+    LoadRecentlyAddedMangasCover(Option<DynamicImage>, String),
 }
 
 impl ImageHandler for HomeEvents {
@@ -42,6 +48,8 @@ pub enum HomeActions {
     SelectNextPopularManga,
     SelectPreviousPopularManga,
     GoToPopularMangaPage,
+    SelectNextRecentlyAddedManga,
+    SelectPreviousRecentlyAddedManga,
 }
 
 pub struct Home {
@@ -65,27 +73,23 @@ impl Component for Home {
 
         let [carrousel_popular_mangas_area, latest_updates_area] = layout.areas(area);
         match self.state {
-            HomeState::Searching => {
+            HomeState::SearchingPopularMangas => {
                 Block::bordered()
                     .title("loading")
                     .render(carrousel_popular_mangas_area, buf);
             }
+
             HomeState::NotFound => {
                 Block::bordered()
                     .title("error fetching")
                     .render(carrousel_popular_mangas_area, buf);
             }
             HomeState::DisplayingPopularMangas => {
-                self.render_carrousel(carrousel_popular_mangas_area, buf);
+                self.render_popular_mangas_carrousel(carrousel_popular_mangas_area, buf);
             }
             HomeState::Unused => {}
         }
-        StatefulWidget::render(
-            self.carrousel_recently_added.clone(),
-            latest_updates_area,
-            buf,
-            &mut self.carrousel_recently_added.selected_item_index,
-        );
+        self.render_recently_added_mangas(latest_updates_area, buf);
     }
 
     fn update(&mut self, action: Self::Actions) {
@@ -95,6 +99,12 @@ impl Component for Home {
             }
             HomeActions::SelectPreviousPopularManga => self.carrousel_popular_mangas.previous(),
             HomeActions::GoToPopularMangaPage => self.go_to_manga_page(),
+            HomeActions::SelectNextRecentlyAddedManga => {
+                self.carrousel_recently_added.select_next()
+            }
+            HomeActions::SelectPreviousRecentlyAddedManga => {
+                self.carrousel_recently_added.select_previous()
+            }
         }
     }
 
@@ -120,6 +130,9 @@ impl Home {
 
         local_event_tx.send(HomeEvents::SearchPopularNewMangas).ok();
 
+        local_event_tx
+            .send(HomeEvents::SearchRecentlyAddedMangas)
+            .ok();
         Self {
             carrousel_popular_mangas: PopularMangaCarrousel::default(),
             carrousel_recently_added: RecentlyAddedCarrousel::default(),
@@ -132,7 +145,7 @@ impl Home {
             tasks: JoinSet::new(),
         }
     }
-    pub fn render_carrousel(&mut self, area: Rect, buf: &mut Buffer) {
+    pub fn render_popular_mangas_carrousel(&mut self, area: Rect, buf: &mut Buffer) {
         StatefulWidget::render(
             self.carrousel_popular_mangas.clone(),
             area,
@@ -169,9 +182,13 @@ impl Home {
     }
 
     pub fn init_search(&mut self) {
-        if self.state != HomeState::Searching {
+        if self.state != HomeState::SearchingPopularMangas {
             self.local_event_tx
                 .send(HomeEvents::SearchPopularNewMangas)
+                .ok();
+
+            self.local_event_tx
+                .send(HomeEvents::SearchRecentlyAddedMangas)
                 .ok();
         }
     }
@@ -186,6 +203,18 @@ impl Home {
                 }
                 HomeEvents::LoadCover(maybe_cover, index) => {
                     self.load_popular_manga_cover(maybe_cover, index)
+                }
+                HomeEvents::SearchRecentlyAddedMangas => {
+                    self.search_recently_added_mangas();
+                }
+                HomeEvents::LoadRecentlyAddedMangas(maybe_response) => {
+                    self.load_recently_added_mangas(maybe_response);
+                }
+                HomeEvents::SearchRecentlyCover => {
+                    self.search_recently_added_mangas_cover();
+                }
+                HomeEvents::LoadRecentlyAddedMangasCover(maybe_image, id) => {
+                    self.load_recently_added_mangas_cover(maybe_image, id);
                 }
             }
         }
@@ -228,7 +257,7 @@ impl Home {
     }
 
     fn search_popular_mangas(&mut self) {
-        self.state = HomeState::Searching;
+        self.state = HomeState::SearchingPopularMangas;
         let tx = self.local_event_tx.clone();
         self.tasks.spawn(async move {
             let response = MangadexClient::global().get_popular_mangas().await;
@@ -248,7 +277,6 @@ impl Home {
         for manga in self.carrousel_popular_mangas.items.iter() {
             let manga_id = manga.id.clone();
             let tx = self.local_event_tx.clone();
-
             match manga.img_url.as_ref() {
                 Some(file_name) => {
                     let file_name = file_name.clone();
@@ -259,6 +287,119 @@ impl Home {
                 }
             };
         }
+    }
+
+    fn search_recently_added_mangas(&mut self) {
+        let tx = self.local_event_tx.clone();
+        self.tasks.spawn(async move {
+            let response = MangadexClient::global().get_recently_added().await;
+            match response {
+                Ok(mangas) => {
+                    tx.send(HomeEvents::LoadRecentlyAddedMangas(Some(mangas)))
+                        .ok();
+                }
+                Err(e) => {
+                    panic!("error fetching mangas {e}");
+                    tx.send(HomeEvents::LoadRecentlyAddedMangas(None)).ok();
+                }
+            }
+        });
+    }
+
+    fn load_recently_added_mangas(&mut self, maybe_response: Option<SearchMangaResponse>) {
+        match maybe_response {
+            Some(response) => {
+                self.carrousel_recently_added = RecentlyAddedCarrousel::from_response(response);
+                if PICKER.is_some() {
+                    self.local_event_tx
+                        .send(HomeEvents::SearchRecentlyCover)
+                        .ok();
+                }
+            }
+            None => {
+                // self.state = HomeState::NotFound;
+            }
+        }
+    }
+
+    fn search_recently_added_mangas_cover(&mut self) {
+        for manga in self.carrousel_recently_added.items.iter() {
+            let manga_id = manga.id.clone();
+            let tx = self.local_event_tx.clone();
+            match manga.img_url.as_ref() {
+                Some(file_name) => {
+                    let file_name = file_name.clone();
+                    self.tasks.spawn(async move {
+                        let response = MangadexClient::global()
+                            .get_cover_for_manga(&manga_id, &file_name)
+                            .await;
+
+                        match response {
+                            Ok(bytes) => {
+                                let dyn_img = Reader::new(Cursor::new(bytes))
+                                    .with_guessed_format()
+                                    .unwrap();
+
+                                let maybe_decoded = dyn_img.decode();
+                                match maybe_decoded {
+                                    Ok(image) => {
+                                        tx.send(HomeEvents::LoadRecentlyAddedMangasCover(
+                                            Some(image),
+                                            manga_id,
+                                        ))
+                                        .unwrap();
+                                    }
+                                    Err(_) => {
+                                        tx.send(HomeEvents::LoadRecentlyAddedMangasCover(
+                                            None, manga_id,
+                                        ))
+                                        .unwrap();
+                                    }
+                                };
+                            }
+                            Err(_) => tx
+                                .send(HomeEvents::LoadRecentlyAddedMangasCover(None, manga_id))
+                                .unwrap(),
+                        }
+                    });
+                }
+                None => {
+                    tx.send(HomeEvents::LoadRecentlyAddedMangasCover(
+                        None,
+                        manga.id.clone(),
+                    ))
+                    .ok();
+                }
+            };
+        }
+    }
+
+    fn load_recently_added_mangas_cover(&mut self, maybe_cover: Option<DynamicImage>, id: String) {
+        match maybe_cover {
+            Some(cover) => {
+                if let Some(recently_added_manga) = self
+                    .carrousel_recently_added
+                    .items
+                    .iter_mut()
+                    .find(|manga| manga.id == id)
+                {
+                    let image = PICKER.unwrap().new_resize_protocol(cover);
+                    recently_added_manga.cover_state = Some(image);
+                }
+            }
+            None => {
+                // Todo! image could not be rendered
+            }
+        }
+    }
+
+    fn render_recently_added_mangas(&mut self, area: Rect, buf: &mut Buffer) {
+        StatefulWidget::render(
+            self.carrousel_recently_added.clone(),
+            area,
+            buf,
+            &mut self.carrousel_recently_added.selected_item_index,
+        );
     }
 
     pub fn handle_key_events(&mut self, key_event: KeyEvent) {
@@ -287,12 +428,16 @@ impl Home {
             }
             KeyCode::Char('l') | KeyCode::Right => {
                 if self.state == HomeState::DisplayingPopularMangas {
-                    self.carrousel_recently_added.select_next();
+                    self.local_action_tx
+                        .send(HomeActions::SelectNextRecentlyAddedManga)
+                        .ok();
                 }
             }
             KeyCode::Char('h') | KeyCode::Left => {
                 if self.state == HomeState::DisplayingPopularMangas {
-                    self.carrousel_recently_added.select_previous();
+                    self.local_action_tx
+                        .send(HomeActions::SelectPreviousRecentlyAddedManga)
+                        .ok();
                 }
             }
             _ => {}
