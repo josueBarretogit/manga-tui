@@ -1,7 +1,5 @@
-use std::time::{SystemTime, UNIX_EPOCH};
-
 use bytes::Bytes;
-use chrono::{Month, Months, NaiveDate};
+use chrono::Months;
 use once_cell::sync::OnceCell;
 
 use crate::view::pages::manga::ChapterOrder;
@@ -156,12 +154,21 @@ impl MangadexClient {
     }
 
     pub async fn get_recently_added(&self) -> Result<SearchMangaResponse, reqwest::Error> {
-        let endpoint = format!("{}/manga?limit=15&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&order[createdAt]=desc&includes[]=cover_art&hasAvailableChapters=true", self.api_url_base);
+        let endpoint = format!("{}/manga?limit=5&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&order[createdAt]=desc&includes[]=cover_art&includes[]=artist&includes[]=author&hasAvailableChapters=true", self.api_url_base);
 
         let response = self.client.get(endpoint).send().await?;
 
         let data: SearchMangaResponse = response.json().await?;
 
         Ok(data)
+    }
+
+    pub async fn get_mangadex_image_support(&self) -> Result<Bytes, reqwest::Error> {
+        self.client
+            .get("https://mangadex.org/img/namicomi/support-dex-chan-1.png")
+            .send()
+            .await?
+            .bytes()
+            .await
     }
 }

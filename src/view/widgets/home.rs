@@ -189,10 +189,11 @@ impl PopularMangaCarrousel {
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct RecentlyAddedCarrousel {
     pub items: Vec<CarrouselItem>,
     pub selected_item_index: usize,
+    pub amount_items_per_page: usize,
 }
 
 impl StatefulWidget for RecentlyAddedCarrousel {
@@ -202,22 +203,43 @@ impl StatefulWidget for RecentlyAddedCarrousel {
             Constraint::Fill(1),
             Constraint::Fill(1),
             Constraint::Fill(1),
+            Constraint::Fill(1),
+            Constraint::Fill(1),
         ])
         .split(area);
 
         for (index, area_manga) in layout.iter().enumerate() {
+            let inner = area_manga.inner(Margin {
+                horizontal: 1,
+                vertical: 1,
+            });
             if let Some(item) = self.items.get_mut(index) {
-                item.render_recently_added(*area_manga, buf);
+                item.render_recently_added(inner, buf);
             }
-            Block::bordered().render(*area_manga, buf);
+            Block::bordered()
+                .border_style(if self.selected_item_index == index {
+                    Style::default().fg(Color::Yellow)
+                } else {
+                    Style::default()
+                })
+                .render(*area_manga, buf);
+        }
+    }
+}
+
+impl Default for RecentlyAddedCarrousel {
+    fn default() -> Self {
+        Self {
+            items: vec![],
+            selected_item_index: 0,
+            amount_items_per_page: 5,
         }
     }
 }
 
 impl RecentlyAddedCarrousel {
-    // 3 is amount of items per page
     pub fn select_next(&mut self) {
-        if self.selected_item_index + 1 < 3 {
+        if self.selected_item_index + 1 < self.amount_items_per_page {
             self.selected_item_index += 1;
         }
     }
@@ -240,6 +262,7 @@ impl RecentlyAddedCarrousel {
         Self {
             items,
             selected_item_index: 0,
+            amount_items_per_page: 5,
         }
     }
 }

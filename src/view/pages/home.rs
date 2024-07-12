@@ -1,8 +1,12 @@
+use color_eyre::owo_colors::OwoColorize;
 use core::panic;
 use crossterm::event::{KeyCode, KeyEvent};
 use image::io::Reader;
 use image::DynamicImage;
 use ratatui::{prelude::*, widgets::*};
+use ratatui_image::protocol::StatefulProtocol;
+use ratatui_image::{Resize, StatefulImage};
+use std::env;
 use std::io::Cursor;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
@@ -29,6 +33,8 @@ pub enum HomeEvents {
     SearchPopularMangasCover,
     SearchRecentlyAddedMangas,
     SearchRecentlyCover,
+    SearchSupportImage,
+    LoadSupportImage(Option<DynamicImage>),
     LoadPopularMangas(Option<SearchMangaResponse>),
     LoadRecentlyAddedMangas(Option<SearchMangaResponse>),
     LoadCover(Option<DynamicImage>, String),
@@ -61,6 +67,7 @@ pub struct Home {
     pub local_action_rx: UnboundedReceiver<HomeActions>,
     pub local_event_tx: UnboundedSender<HomeEvents>,
     pub local_event_rx: UnboundedReceiver<HomeEvents>,
+    pub support_image: Option<Box<dyn StatefulProtocol>>,
     tasks: JoinSet<()>,
 }
 
@@ -89,7 +96,7 @@ impl Component for Home {
             }
             HomeState::Unused => {}
         }
-        self.render_recently_added_mangas(latest_updates_area, buf);
+        self.render_recently_added_mangas_area(latest_updates_area, buf);
     }
 
     fn update(&mut self, action: Self::Actions) {
@@ -133,6 +140,11 @@ impl Home {
         local_event_tx
             .send(HomeEvents::SearchRecentlyAddedMangas)
             .ok();
+
+        if PICKER.is_some() {
+            local_event_tx.send(HomeEvents::SearchSupportImage).ok();
+        }
+
         Self {
             carrousel_popular_mangas: PopularMangaCarrousel::default(),
             carrousel_recently_added: RecentlyAddedCarrousel::default(),
@@ -142,6 +154,7 @@ impl Home {
             local_event_rx,
             local_action_tx,
             local_action_rx,
+            support_image: None,
             tasks: JoinSet::new(),
         }
     }
@@ -190,6 +203,9 @@ impl Home {
             self.local_event_tx
                 .send(HomeEvents::SearchRecentlyAddedMangas)
                 .ok();
+            self.local_event_tx
+                .send(HomeEvents::SearchSupportImage)
+                .ok();
         }
     }
 
@@ -215,6 +231,38 @@ impl Home {
                 }
                 HomeEvents::LoadRecentlyAddedMangasCover(maybe_image, id) => {
                     self.load_recently_added_mangas_cover(maybe_image, id);
+                }
+                HomeEvents::SearchSupportImage => {
+                    let tx = self.local_event_tx.clone();
+                    self.tasks.spawn(async move {
+                        let response = MangadexClient::global().get_mangadex_image_support().await;
+                        match response {
+                            Ok(bytes) => {
+                                let dyn_img = Reader::new(Cursor::new(bytes))
+                                    .with_guessed_format()
+                                    .unwrap();
+
+                                let maybe_decoded = dyn_img.decode();
+                                match maybe_decoded {
+                                    Ok(image) => {
+                                        tx.send(HomeEvents::LoadSupportImage(Some(image))).ok();
+                                    }
+                                    Err(_) => {
+                                        tx.send(HomeEvents::LoadSupportImage(None)).ok();
+                                    }
+                                };
+                            }
+                            Err(_) => {
+                                tx.send(HomeEvents::LoadSupportImage(None)).ok();
+                            }
+                        }
+                    });
+                }
+                HomeEvents::LoadSupportImage(maybe_image) => {
+                    if let Some(image) = maybe_image {
+                        let protocol = PICKER.unwrap().new_resize_protocol(image);
+                        self.support_image = Some(protocol);
+                    }
                 }
             }
         }
@@ -393,13 +441,42 @@ impl Home {
         }
     }
 
-    fn render_recently_added_mangas(&mut self, area: Rect, buf: &mut Buffer) {
+    fn render_recently_added_mangas_area(&mut self, area: Rect, buf: &mut Buffer) {
+        let layout = Layout::horizontal([Constraint::Percentage(30), Constraint::Percentage(70)]);
+        let [app_info_area, recently_added_mangas_area] = layout.areas(area);
+
+        self.render_app_information(app_info_area, buf);
+
         StatefulWidget::render(
             self.carrousel_recently_added.clone(),
-            area,
+            recently_added_mangas_area,
             buf,
             &mut self.carrousel_recently_added.selected_item_index,
         );
+    }
+
+    fn render_app_information(&mut self, area: Rect, buf: &mut Buffer) {
+        let layout = Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)])
+            .margin(1)
+            .split(area);
+
+        Block::bordered()
+            .title(format!("Manga-tui V{}", env!("CARGO_PKG_VERSION")))
+            .render(area, buf);
+
+        if let Some(protocol) = self.support_image.as_mut() {
+            let image = StatefulImage::new(None).resize(Resize::Fit(None));
+            StatefulWidget::render(image, layout[0], buf, protocol);
+        }
+
+        Widget::render(
+            List::new([
+                Text::raw("Support mangadex <s>"),
+                Text::raw("Support this project <g>"),
+            ]),
+            layout[1],
+            buf,
+        )
     }
 
     pub fn handle_key_events(&mut self, key_event: KeyEvent) {
