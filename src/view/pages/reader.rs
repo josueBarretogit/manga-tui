@@ -136,8 +136,8 @@ impl Component for MangaReader {
 
     fn clean_up(&mut self) {
         self.image_tasks.abort_all();
-        self.pages.clear();
-        self.pages_list.pages.clear();
+        self.pages = vec![];
+        self.pages_list.pages = vec![];
     }
 }
 

@@ -16,6 +16,8 @@ use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
 use tui_widget_list::ListState;
 
+use self::style::Styled;
+
 /// Determine wheter or not mangas are being searched
 /// if so then this should not make a request until the most recent one finishes
 #[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
@@ -176,17 +178,21 @@ impl SearchPage {
     }
 
     fn render_input_area(&self, area: Rect, frame: &mut Frame<'_>) {
-        let layout = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Max(1), Constraint::Max(5)])
-            .split(area);
+        let layout = Layout::vertical([Constraint::Max(1), Constraint::Max(5)]).split(area);
 
-        let input_bar = Paragraph::new(self.search_bar.value()).block(Block::bordered().title(
-            match self.input_mode {
-                InputMode::Idle => "Press <s> to type ",
-                InputMode::Typing => "Press <enter> to search, <esc> to stop typing",
-            },
-        ));
+        let (input_help, input_style) = match self.input_mode {
+            InputMode::Idle => ("Press <s> to type ", Style::default()),
+            InputMode::Typing => (
+                "Press <enter> to search, <esc> to stop typing",
+                Style::default().fg(Color::Yellow),
+            ),
+        };
+
+        let input_bar = Paragraph::new(self.search_bar.value()).block(
+            Block::bordered()
+                .title(input_help)
+                .border_style(input_style),
+        );
 
         input_bar.render(layout[1], frame.buffer_mut());
 

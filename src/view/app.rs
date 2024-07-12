@@ -176,7 +176,7 @@ impl App {
     }
 
     pub fn render_top_tabs(&self, area: Rect, buf: &mut Buffer) {
-        let titles: Vec<&str> = vec!["Home", "Search"];
+        let titles: Vec<&str> = vec!["Home", "Search", "History"];
 
         let tabs_block = Block::default().borders(Borders::BOTTOM);
 

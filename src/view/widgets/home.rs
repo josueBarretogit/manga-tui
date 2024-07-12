@@ -1,9 +1,16 @@
+use crate::backend::{Data, SearchMangaResponse};
+use crate::utils::{from_manga_response, set_status_style, set_tags_style};
 use ratatui::{prelude::*, widgets::*};
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::{Resize, StatefulImage};
 
-use crate::backend::{Data, SearchMangaResponse};
-use crate::utils::{from_manga_response, set_status_style, set_tags_style};
+#[derive(Clone, Default, PartialEq, Eq)]
+pub enum CarrouselState {
+    #[default]
+    Searching,
+    Displaying,
+    NotFound,
+}
 
 #[derive(Clone)]
 pub struct CarrouselItem {
@@ -133,25 +140,28 @@ impl Widget for CarrouselItem {
 pub struct PopularMangaCarrousel {
     pub items: Vec<CarrouselItem>,
     pub current_item_visible_index: usize,
+    pub state: CarrouselState,
 }
 
 impl StatefulWidget for PopularMangaCarrousel {
     type State = usize;
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        let layout = Layout::vertical([Constraint::Percentage(80), Constraint::Percentage(20)]);
-        let [items_area, helper_area] = layout.areas(area);
-
-        match self.items.get(*state) {
-            Some(item) => item.clone().render(items_area, buf),
-            None => Block::bordered().title("loading").render(area, buf),
-        };
-
-        Span::raw(format!(
-            "Next  <w> | previous  <b> | read <r>  No.{}  Total : {}",
-            self.current_item_visible_index + 1,
-            self.items.len()
-        ))
-        .render(helper_area, buf);
+        match self.state {
+            CarrouselState::Searching => {
+                Block::bordered().render(area, buf);
+            }
+            CarrouselState::Displaying => {
+                match self.items.get(*state) {
+                    Some(item) => item.clone().render(area, buf),
+                    None => Block::bordered().title("loading").render(area, buf),
+                };
+            }
+            CarrouselState::NotFound => {
+                Block::bordered()
+                    .title("Could not get mangas")
+                    .render(area, buf);
+            }
+        }
     }
 }
 
@@ -166,26 +176,35 @@ impl PopularMangaCarrousel {
         Self {
             items,
             current_item_visible_index: 0,
+            state: CarrouselState::Displaying,
         }
     }
-    pub fn next(&mut self) {
-        if self.current_item_visible_index + 1 >= self.items.len() {
-            self.current_item_visible_index = 0
-        } else {
-            self.current_item_visible_index += 1;
+    pub fn next_item(&mut self) {
+        if self.state == CarrouselState::Displaying {
+            if self.current_item_visible_index + 1 >= self.items.len() {
+                self.current_item_visible_index = 0
+            } else {
+                self.current_item_visible_index += 1;
+            }
         }
     }
 
-    pub fn previous(&mut self) {
-        if self.current_item_visible_index == 0 {
-            self.current_item_visible_index = self.items.len() - 1
-        } else {
-            self.current_item_visible_index = self.current_item_visible_index.saturating_sub(1)
+    pub fn previous_item(&mut self) {
+        if self.state == CarrouselState::Displaying {
+            if self.current_item_visible_index == 0 {
+                self.current_item_visible_index = self.items.len() - 1
+            } else {
+                self.current_item_visible_index = self.current_item_visible_index.saturating_sub(1)
+            }
         }
     }
 
     pub fn get_current_item(&self) -> Option<&CarrouselItem> {
-        self.items.get(self.current_item_visible_index)
+        if self.state == CarrouselState::Displaying {
+            self.items.get(self.current_item_visible_index)
+        } else {
+            None
+        }
     }
 }
 
@@ -194,33 +213,48 @@ pub struct RecentlyAddedCarrousel {
     pub items: Vec<CarrouselItem>,
     pub selected_item_index: usize,
     pub amount_items_per_page: usize,
+    pub state: CarrouselState,
 }
 
 impl StatefulWidget for RecentlyAddedCarrousel {
     type State = usize;
     fn render(mut self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        let layout = Layout::horizontal([
-            Constraint::Fill(1),
-            Constraint::Fill(1),
-            Constraint::Fill(1),
-            Constraint::Fill(1),
-            Constraint::Fill(1),
-        ])
-        .split(area);
+        match self.state {
+            CarrouselState::Displaying => {
+                let layout = Layout::horizontal([
+                    Constraint::Fill(1),
+                    Constraint::Fill(1),
+                    Constraint::Fill(1),
+                    Constraint::Fill(1),
+                    Constraint::Fill(1),
+                ])
+                .split(area);
 
-        for (index, area_manga) in layout.iter().enumerate() {
-            let inner = area_manga.inner(Margin {
-                horizontal: 1,
-                vertical: 1,
-            });
-            if let Some(item) = self.items.get_mut(index) {
-                item.render_recently_added(inner, buf);
+                for (index, area_manga) in layout.iter().enumerate() {
+                    let inner = area_manga.inner(Margin {
+                        horizontal: 1,
+                        vertical: 1,
+                    });
+                    if let Some(item) = self.items.get_mut(index) {
+                        item.render_recently_added(inner, buf);
+                    }
+
+                    if *state == index {
+                        Block::bordered()
+                            .border_style(Style::default().fg(Color::Yellow))
+                            .render(*area_manga, buf);
+                    }
+                }
             }
-
-            if self.selected_item_index == index {
+            CarrouselState::Searching => {
                 Block::bordered()
-                    .border_style(Style::default().fg(Color::Yellow))
-                    .render(*area_manga, buf);
+                    .title("Searching recent mangas")
+                    .render(area, buf);
+            }
+            CarrouselState::NotFound => {
+                Block::bordered()
+                    .title("Could not get recent mangas")
+                    .render(area, buf);
             }
         }
     }
@@ -232,23 +266,32 @@ impl Default for RecentlyAddedCarrousel {
             items: vec![],
             selected_item_index: 0,
             amount_items_per_page: 5,
+            state: CarrouselState::default(),
         }
     }
 }
 
 impl RecentlyAddedCarrousel {
     pub fn select_next(&mut self) {
-        if self.selected_item_index + 1 < self.amount_items_per_page {
+        if self.state == CarrouselState::Displaying
+            && self.selected_item_index + 1 < self.amount_items_per_page
+        {
             self.selected_item_index += 1;
         }
     }
 
     pub fn select_previous(&mut self) {
-        self.selected_item_index = self.selected_item_index.saturating_sub(1);
+        if self.state == CarrouselState::Displaying {
+            self.selected_item_index = self.selected_item_index.saturating_sub(1);
+        }
     }
 
     pub fn get_current_selected_manga(&self) -> Option<&CarrouselItem> {
-        self.items.get(self.selected_item_index)
+        if self.state == CarrouselState::Displaying {
+            self.items.get(self.selected_item_index)
+        } else {
+            None
+        }
     }
 
     pub fn from_response(response: SearchMangaResponse) -> Self {
@@ -262,6 +305,7 @@ impl RecentlyAddedCarrousel {
             items,
             selected_item_index: 0,
             amount_items_per_page: 5,
+            state: CarrouselState::Displaying,
         }
     }
 }

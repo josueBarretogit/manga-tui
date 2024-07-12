@@ -14,7 +14,9 @@ use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
 use crate::backend::SearchMangaResponse;
 use crate::utils::search_manga_cover;
-use crate::view::widgets::home::{CarrouselItem, PopularMangaCarrousel, RecentlyAddedCarrousel};
+use crate::view::widgets::home::{
+    CarrouselItem, CarrouselState, PopularMangaCarrousel, RecentlyAddedCarrousel,
+};
 use crate::view::widgets::search::MangaItem;
 use crate::view::widgets::{Component, ImageHandler};
 use crate::PICKER;
@@ -22,9 +24,6 @@ use crate::PICKER;
 #[derive(PartialEq, Eq)]
 pub enum HomeState {
     Unused,
-    SearchingPopularMangas,
-    DisplayingPopularMangas,
-    NotFound,
 }
 
 pub enum HomeEvents {
@@ -81,32 +80,20 @@ impl Component for Home {
         let buf = frame.buffer_mut();
 
         let [carrousel_popular_mangas_area, latest_updates_area] = layout.areas(area);
-        match self.state {
-            HomeState::SearchingPopularMangas => {
-                Block::bordered()
-                    .title("loading")
-                    .render(carrousel_popular_mangas_area, buf);
-            }
 
-            HomeState::NotFound => {
-                Block::bordered()
-                    .title("error fetching")
-                    .render(carrousel_popular_mangas_area, buf);
-            }
-            HomeState::DisplayingPopularMangas => {
-                self.render_popular_mangas_carrousel(carrousel_popular_mangas_area, buf);
-            }
-            HomeState::Unused => {}
-        }
+        self.render_popular_mangas_carrousel(carrousel_popular_mangas_area, buf);
+
         self.render_recently_added_mangas_area(latest_updates_area, buf);
     }
 
     fn update(&mut self, action: Self::Actions) {
         match action {
             HomeActions::SelectNextPopularManga => {
-                self.carrousel_popular_mangas.next();
+                self.carrousel_popular_mangas.next_item();
             }
-            HomeActions::SelectPreviousPopularManga => self.carrousel_popular_mangas.previous(),
+            HomeActions::SelectPreviousPopularManga => {
+                self.carrousel_popular_mangas.previous_item()
+            }
             HomeActions::GoToPopularMangaPage => self.go_to_manga_page(),
             HomeActions::SelectNextRecentlyAddedManga => {
                 self.carrousel_recently_added.select_next()
@@ -159,16 +146,6 @@ impl Home {
         let (local_action_tx, local_action_rx) = mpsc::unbounded_channel::<HomeActions>();
         let (local_event_tx, local_event_rx) = mpsc::unbounded_channel::<HomeEvents>();
 
-        local_event_tx.send(HomeEvents::SearchPopularNewMangas).ok();
-
-        local_event_tx
-            .send(HomeEvents::SearchRecentlyAddedMangas)
-            .ok();
-
-        if PICKER.is_some() {
-            local_event_tx.send(HomeEvents::SearchSupportImage).ok();
-        }
-
         Self {
             carrousel_popular_mangas: PopularMangaCarrousel::default(),
             carrousel_recently_added: RecentlyAddedCarrousel::default(),
@@ -185,11 +162,19 @@ impl Home {
     pub fn render_popular_mangas_carrousel(&mut self, area: Rect, buf: &mut Buffer) {
         let inner = area.inner(Margin {
             horizontal: 1,
-            vertical: 2,
+            vertical: 1,
         });
 
+        let instructions = Span::from(format!(
+            "Next  <w> | previous  <b> | read <r>  No.{}  Total : {}",
+            self.carrousel_popular_mangas.current_item_visible_index,
+            self.carrousel_popular_mangas.items.len()
+        ))
+        .into_left_aligned_line();
+
         Block::bordered()
-            .title("Popular new titles".bold())
+            .title(Line::from(vec!["Popular new titles".bold()]))
+            .title_bottom(instructions)
             .render(area, buf);
 
         StatefulWidget::render(
@@ -228,14 +213,14 @@ impl Home {
     }
 
     pub fn init_search(&mut self) {
-        if self.state != HomeState::SearchingPopularMangas {
-            self.local_event_tx
-                .send(HomeEvents::SearchPopularNewMangas)
-                .ok();
+        self.local_event_tx
+            .send(HomeEvents::SearchPopularNewMangas)
+            .ok();
 
-            self.local_event_tx
-                .send(HomeEvents::SearchRecentlyAddedMangas)
-                .ok();
+        self.local_event_tx
+            .send(HomeEvents::SearchRecentlyAddedMangas)
+            .ok();
+        if PICKER.is_some() {
             self.local_event_tx
                 .send(HomeEvents::SearchSupportImage)
                 .ok();
@@ -304,8 +289,8 @@ impl Home {
     fn load_popular_mangas(&mut self, maybe_response: Option<SearchMangaResponse>) {
         match maybe_response {
             Some(response) => {
-                self.state = HomeState::DisplayingPopularMangas;
                 self.carrousel_popular_mangas = PopularMangaCarrousel::from_response(response);
+
                 if PICKER.is_some() {
                     self.local_event_tx
                         .send(HomeEvents::SearchPopularMangasCover)
@@ -313,7 +298,7 @@ impl Home {
                 }
             }
             None => {
-                self.state = HomeState::NotFound;
+                self.carrousel_popular_mangas.state = CarrouselState::NotFound;
             }
         }
     }
@@ -338,7 +323,6 @@ impl Home {
     }
 
     fn search_popular_mangas(&mut self) {
-        self.state = HomeState::SearchingPopularMangas;
         let tx = self.local_event_tx.clone();
         self.tasks.spawn(async move {
             let response = MangadexClient::global().get_popular_mangas().await;
@@ -398,7 +382,7 @@ impl Home {
                 }
             }
             None => {
-                // self.state = HomeState::NotFound;
+                self.carrousel_recently_added.state = CarrouselState::NotFound;
             }
         }
     }
@@ -537,40 +521,30 @@ impl Home {
     pub fn handle_key_events(&mut self, key_event: KeyEvent) {
         match key_event.code {
             KeyCode::Char('w') => {
-                if self.state == HomeState::DisplayingPopularMangas {
-                    self.local_action_tx
-                        .send(HomeActions::SelectNextPopularManga)
-                        .ok();
-                }
+                self.local_action_tx
+                    .send(HomeActions::SelectNextPopularManga)
+                    .ok();
             }
 
             KeyCode::Char('b') => {
-                if self.state == HomeState::DisplayingPopularMangas {
-                    self.local_action_tx
-                        .send(HomeActions::SelectPreviousPopularManga)
-                        .ok();
-                }
+                self.local_action_tx
+                    .send(HomeActions::SelectPreviousPopularManga)
+                    .ok();
             }
             KeyCode::Char('r') => {
-                if self.state == HomeState::DisplayingPopularMangas {
-                    self.local_action_tx
-                        .send(HomeActions::GoToPopularMangaPage)
-                        .ok();
-                }
+                self.local_action_tx
+                    .send(HomeActions::GoToPopularMangaPage)
+                    .ok();
             }
             KeyCode::Char('l') | KeyCode::Right => {
-                if self.state == HomeState::DisplayingPopularMangas {
-                    self.local_action_tx
-                        .send(HomeActions::SelectNextRecentlyAddedManga)
-                        .ok();
-                }
+                self.local_action_tx
+                    .send(HomeActions::SelectNextRecentlyAddedManga)
+                    .ok();
             }
             KeyCode::Char('h') | KeyCode::Left => {
-                if self.state == HomeState::DisplayingPopularMangas {
-                    self.local_action_tx
-                        .send(HomeActions::SelectPreviousRecentlyAddedManga)
-                        .ok();
-                }
+                self.local_action_tx
+                    .send(HomeActions::SelectPreviousRecentlyAddedManga)
+                    .ok();
             }
             KeyCode::Enter => {
                 self.local_action_tx
