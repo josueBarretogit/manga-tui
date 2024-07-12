@@ -1,19 +1,12 @@
-use std::io::Cursor;
-use std::string;
-
-use color_eyre::eyre::OptionExt;
+use crate::backend::fetch::MangadexClient;
+use crate::backend::Data;
+use crate::view::widgets::ImageHandler;
 use image::io::Reader;
 use ratatui::style::{Color, Stylize};
 use ratatui::text::Span;
-use serde::de::value::StringDeserializer;
+use std::io::Cursor;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::task::JoinSet;
-
-use crate::backend::fetch::MangadexClient;
-use crate::backend::Data;
-use crate::view::pages::manga;
-use crate::view::pages::search::SearchPageEvents;
-use crate::view::widgets::ImageHandler;
 
 pub fn set_tags_style(tag: &str) -> Span<'_> {
     match tag.to_lowercase().as_str() {

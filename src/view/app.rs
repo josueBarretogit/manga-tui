@@ -3,11 +3,10 @@ use crate::view::pages::*;
 use ::crossterm::event::KeyCode;
 use crossterm::event::KeyModifiers;
 use ratatui::buffer::Buffer;
-use ratatui::layout::{self, Constraint, Layout, Rect};
+use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::Color;
 use ratatui::widgets::{Block, Borders, Tabs, Widget};
 use ratatui::Frame;
-use ratatui_image::picker::Picker;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
 use self::home::Home;
@@ -89,6 +88,7 @@ impl Component for App {
             Events::GoToMangaPage(manga) => {
                 if self.manga_reader_page.is_some() {
                     self.manga_reader_page.as_mut().unwrap().clean_up();
+                    self.manga_reader_page = None;
                 }
 
                 self.current_tab = SelectedTabs::MangaTab;
@@ -114,26 +114,15 @@ impl Component for App {
                     self.global_event_tx.clone(),
                     chapter_response.chapter.hash,
                     chapter_response.base_url,
-                    chapter_response
-                        .chapter
-                        .data_saver
-                        .iter()
-                        .take(5)
-                        .cloned()
-                        .collect(),
-                    chapter_response
-                        .chapter
-                        .data
-                        .iter()
-                        .skip(5)
-                        .cloned()
-                        .collect(),
+                    chapter_response.chapter.data_saver,
+                    chapter_response.chapter.data,
                 ));
             }
 
             Events::GoSearchPage => {
                 if self.manga_page.is_some() {
                     self.manga_page.as_mut().unwrap().clean_up();
+                    self.manga_page = None;
                 }
                 self.current_tab = SelectedTabs::Search;
             }
@@ -141,6 +130,7 @@ impl Component for App {
             Events::GoToHome => {
                 if self.manga_page.is_some() {
                     self.manga_page.as_mut().unwrap().clean_up();
+                    self.manga_page = None;
                 }
 
                 if self.home_page.require_search() {

@@ -216,13 +216,12 @@ impl StatefulWidget for RecentlyAddedCarrousel {
             if let Some(item) = self.items.get_mut(index) {
                 item.render_recently_added(inner, buf);
             }
-            Block::bordered()
-                .border_style(if self.selected_item_index == index {
-                    Style::default().fg(Color::Yellow)
-                } else {
-                    Style::default()
-                })
-                .render(*area_manga, buf);
+
+            if self.selected_item_index == index {
+                Block::bordered()
+                    .border_style(Style::default().fg(Color::Yellow))
+                    .render(*area_manga, buf);
+            }
         }
     }
 }

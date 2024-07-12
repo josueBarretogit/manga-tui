@@ -155,12 +155,12 @@ impl MangaReader {
 
         let mut pages: Vec<Page> = vec![];
 
-        for url in url_imgs {
-            pages.push(Page::new(url, PageType::LowQuality));
+        for url in url_imgs.iter().take(5) {
+            pages.push(Page::new(url.to_string(), PageType::LowQuality));
         }
 
-        for url in url_imgs_high_quality {
-            pages.push(Page::new(url, PageType::HighQuality));
+        for url in url_imgs_high_quality.iter().skip(5) {
+            pages.push(Page::new(url.to_string(), PageType::HighQuality));
         }
 
         local_event_tx.send(MangaReaderEvents::FetchPages(5)).ok();

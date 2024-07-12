@@ -494,5 +494,7 @@ impl Component for MangaPage {
     }
     fn clean_up(&mut self) {
         self.abort_tasks();
+        self.tags = vec![];
+        self.description = String::new();
     }
 }

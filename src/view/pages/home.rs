@@ -1,4 +1,3 @@
-use color_eyre::owo_colors::OwoColorize;
 use core::panic;
 use crossterm::event::{KeyCode, KeyEvent};
 use image::io::Reader;
@@ -54,15 +53,18 @@ pub enum HomeActions {
     SelectNextPopularManga,
     SelectPreviousPopularManga,
     GoToPopularMangaPage,
+    GoToRecentlyAddedMangaPage,
     SelectNextRecentlyAddedManga,
     SelectPreviousRecentlyAddedManga,
+    SupportMangadex,
+    SupportProject,
 }
 
 pub struct Home {
-    pub global_event_tx: UnboundedSender<Events>,
     carrousel_popular_mangas: PopularMangaCarrousel,
     carrousel_recently_added: RecentlyAddedCarrousel,
     state: HomeState,
+    pub global_event_tx: UnboundedSender<Events>,
     pub local_action_tx: UnboundedSender<HomeActions>,
     pub local_action_rx: UnboundedReceiver<HomeActions>,
     pub local_event_tx: UnboundedSender<HomeEvents>,
@@ -112,12 +114,34 @@ impl Component for Home {
             HomeActions::SelectPreviousRecentlyAddedManga => {
                 self.carrousel_recently_added.select_previous()
             }
+            HomeActions::GoToRecentlyAddedMangaPage => {
+                if let Some(manga) = self.carrousel_recently_added.get_current_selected_manga() {
+                    self.global_event_tx
+                        .send(Events::GoToMangaPage(MangaItem::new(
+                            manga.id.clone(),
+                            manga.title.clone(),
+                            manga.description.clone(),
+                            manga.tags.clone(),
+                            manga.content_rating.clone(),
+                            manga.status.clone(),
+                            manga.img_url.clone(),
+                            manga.author.clone(),
+                            manga.artist.clone(),
+                            manga.cover_state.clone(),
+                        )))
+                        .ok();
+                }
+            }
+            HomeActions::SupportProject => self.support_project(),
+            HomeActions::SupportMangadex => self.support_mangadex(),
         }
     }
 
     fn clean_up(&mut self) {
         self.tasks.abort_all();
-        self.carrousel_popular_mangas.items.clear();
+        self.carrousel_popular_mangas.items = vec![];
+        self.carrousel_recently_added.items = vec![];
+        self.support_image = None;
         self.state = HomeState::Unused;
     }
 
@@ -159,9 +183,18 @@ impl Home {
         }
     }
     pub fn render_popular_mangas_carrousel(&mut self, area: Rect, buf: &mut Buffer) {
+        let inner = area.inner(Margin {
+            horizontal: 1,
+            vertical: 2,
+        });
+
+        Block::bordered()
+            .title("Popular new titles".bold())
+            .render(area, buf);
+
         StatefulWidget::render(
             self.carrousel_popular_mangas.clone(),
-            area,
+            inner,
             buf,
             &mut self.carrousel_popular_mangas.current_item_visible_index,
         );
@@ -441,15 +474,37 @@ impl Home {
         }
     }
 
+    fn support_mangadex(&mut self) {
+        open::that("https://namicomi.com/en/org/3Hb7HnWG/mangadex/subscriptions").ok();
+    }
+
+    fn support_project(&mut self) {
+        open::that("https://github.com/josueBarretogit/manga-tui").ok();
+    }
+
     fn render_recently_added_mangas_area(&mut self, area: Rect, buf: &mut Buffer) {
         let layout = Layout::horizontal([Constraint::Percentage(30), Constraint::Percentage(70)]);
         let [app_info_area, recently_added_mangas_area] = layout.areas(area);
 
         self.render_app_information(app_info_area, buf);
 
+        let inner_area = recently_added_mangas_area.inner(Margin {
+            horizontal: 1,
+            vertical: 1,
+        });
+
+        Block::bordered()
+            .title(vec![
+                "Recently added mangas | ".bold(),
+                "Move right <l> ".into(),
+                "Move left <h> ".into(),
+                "Read <Enter> ".into(),
+            ])
+            .render(recently_added_mangas_area, buf);
+
         StatefulWidget::render(
             self.carrousel_recently_added.clone(),
-            recently_added_mangas_area,
+            inner_area,
             buf,
             &mut self.carrousel_recently_added.selected_item_index,
         );
@@ -471,7 +526,7 @@ impl Home {
 
         Widget::render(
             List::new([
-                Text::raw("Support mangadex <s>"),
+                Text::raw("Support mangadex <m>"),
                 Text::raw("Support this project <g>"),
             ]),
             layout[1],
@@ -516,6 +571,17 @@ impl Home {
                         .send(HomeActions::SelectPreviousRecentlyAddedManga)
                         .ok();
                 }
+            }
+            KeyCode::Enter => {
+                self.local_action_tx
+                    .send(HomeActions::GoToRecentlyAddedMangaPage)
+                    .ok();
+            }
+            KeyCode::Char('m') => {
+                self.local_action_tx.send(HomeActions::SupportMangadex).ok();
+            }
+            KeyCode::Char('g') => {
+                self.local_action_tx.send(HomeActions::SupportProject).ok();
             }
             _ => {}
         }
