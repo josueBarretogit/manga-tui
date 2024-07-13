@@ -1,3 +1,5 @@
+use std::sync::Mutex;
+
 use once_cell::sync::Lazy;
 use ratatui::backend::CrosstermBackend;
 use ratatui_image::picker::Picker;
@@ -24,9 +26,10 @@ pub static PICKER: Lazy<Option<Picker>> = Lazy::new(|| {
     }
 });
 
+
+
 #[tokio::main(flavor = "multi_thread", worker_threads = 7)]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-
     let user_agent = format!(
         "manga-tui/0.beta-testing1.0 ({}/{}/{})",
         std::env::consts::FAMILY,

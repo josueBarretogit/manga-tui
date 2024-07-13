@@ -5,11 +5,11 @@ use tui_widget_list::PreRender;
 #[derive(Clone)]
 pub struct ChapterItem {
     pub id: String,
-    title: String,
-    chapter_number: String,
-    is_read: bool,
-    is_downlowaded: bool,
-    translated_language: String,
+    pub title: String,
+    pub chapter_number: String,
+    pub is_read: bool,
+    pub is_downlowaded: bool,
+    pub translated_language: String,
     style: Style,
 }
 

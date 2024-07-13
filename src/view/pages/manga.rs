@@ -1,4 +1,5 @@
 use crate::backend::fetch::MangadexClient;
+use crate::backend::history::save_history;
 use crate::backend::tui::Events;
 use crate::backend::{ChapterResponse, Languages, MangaStatisticsResponse, Statistics};
 use crate::utils::{set_status_style, set_tags_style};
@@ -117,8 +118,6 @@ impl MangaPage {
 
         local_event_tx.send(MangaPageEvents::FetchChapters).ok();
         local_event_tx.send(MangaPageEvents::FethStatistics).ok();
-
-        let db_connection = Connection::open("./db_test.db").unwrap();
 
         Self {
             id,
@@ -356,7 +355,21 @@ impl MangaPage {
             Some(chapter_selected) => {
                 let id_chapter = chapter_selected.id.clone();
                 let tx = self.global_event_tx.clone();
+                let save_response =
+                    save_history(crate::backend::history::MangaReadingHistorySave {
+                        id: &self.id,
+                        title: &self.title,
+                        chapter_id: &chapter_selected.id,
+                        chapter_title: &chapter_selected.title,
+                    });
+
+                match save_response {
+                    Ok(_) => {}
+                    Err(e) => panic!("error saving history : {e}"),
+                }
+
                 let local_tx = self.local_event_tx.clone();
+
                 tokio::spawn(async move {
                     let chapter_response = MangadexClient::global()
                         .get_chapter_pages(&id_chapter)
@@ -364,6 +377,7 @@ impl MangaPage {
                     match chapter_response {
                         Ok(response) => {
                             tx.send(Events::ReadChapter(response)).unwrap();
+
                             local_tx
                                 .send(MangaPageEvents::StoppedSearchingChapterData)
                                 .unwrap();
