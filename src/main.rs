@@ -1,10 +1,7 @@
-use std::sync::Mutex;
-
 use once_cell::sync::Lazy;
 use ratatui::backend::CrosstermBackend;
 use ratatui_image::picker::Picker;
 use reqwest::Client;
-use rusqlite::Connection;
 
 use self::backend::fetch::{MangadexClient, MANGADEX_CLIENT_INSTANCE};
 use self::backend::tui::{init, init_error_hooks, restore, run_app};

@@ -2,6 +2,7 @@ use crate::backend::tui::Events;
 use image::DynamicImage;
 use ratatui::Frame;
 
+pub mod feed;
 pub mod home;
 pub mod manga;
 pub mod reader;

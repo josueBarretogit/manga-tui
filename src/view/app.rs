@@ -72,6 +72,11 @@ impl Component for App {
                                 self.global_event_tx.send(Events::GoSearchPage).ok();
                             }
                         }
+                        KeyCode::Char('3') => {
+                            if self.current_tab != SelectedTabs::ReaderTab {
+                                self.global_event_tx.send(Events::GoFeedPage).ok();
+                            }
+                        }
                         KeyCode::Backspace => {
                             if self.current_tab == SelectedTabs::ReaderTab
                                 && self.manga_reader_page.is_some()
@@ -139,6 +144,7 @@ impl Component for App {
 
                 self.current_tab = SelectedTabs::Home;
             }
+            Events::GoFeedPage => todo!(),
 
             _ => {}
         }
@@ -176,16 +182,14 @@ impl App {
     }
 
     pub fn render_top_tabs(&self, area: Rect, buf: &mut Buffer) {
-        let titles: Vec<&str> = vec!["Home", "Search", "History"];
+        let titles: Vec<&str> = vec!["Home", "Search", "Feed"];
 
         let tabs_block = Block::default().borders(Borders::BOTTOM);
-
-        let current_page = self.current_tab as usize;
 
         Tabs::new(titles)
             .block(tabs_block)
             .highlight_style(Color::Yellow)
-            .select(current_page)
+            .select(0)
             .padding("", "")
             .divider(" | ")
             .render(area, buf);
@@ -213,13 +217,5 @@ impl App {
 
     pub fn render_home_page(&mut self, area: Rect, frame: &mut Frame<'_>) {
         self.home_page.render(area, frame);
-    }
-
-    pub fn next_tab(&mut self) {
-        self.current_tab = self.current_tab.next();
-    }
-
-    pub fn previous_tab(&mut self) {
-        self.current_tab = self.current_tab.previous();
     }
 }

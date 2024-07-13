@@ -33,6 +33,7 @@ pub enum Events {
     GoToMangaPage(MangaItem),
     GoToHome,
     GoSearchPage,
+    GoFeedPage,
     ReadChapter(ChapterPagesResponse),
 }
 

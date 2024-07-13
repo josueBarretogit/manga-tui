@@ -1,5 +1,5 @@
 use crate::backend::fetch::MangadexClient;
-use crate::backend::history::{self, get_manga_history, save_history, MangaReadingHistoryRetrieve};
+use crate::backend::history::{get_manga_history, save_history, DBCONN};
 use crate::backend::tui::Events;
 use crate::backend::{ChapterResponse, Languages, MangaStatisticsResponse, Statistics};
 use crate::utils::{set_status_style, set_tags_style};
@@ -10,7 +10,6 @@ use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{prelude::*, widgets::*};
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::{Resize, StatefulImage};
-use rusqlite::Connection;
 use strum::Display;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
@@ -33,6 +32,7 @@ pub enum MangaPageActions {
 pub enum MangaPageEvents {
     FetchChapters,
     FethStatistics,
+    CheckChaptersRead,
     StoppedSearchingChapterData,
     LoadChapters(Option<ChapterResponse>),
     LoadStatistics(Option<MangaStatisticsResponse>),
@@ -355,17 +355,19 @@ impl MangaPage {
             Some(chapter_selected) => {
                 let id_chapter = chapter_selected.id.clone();
                 let tx = self.global_event_tx.clone();
-                let save_response =
-                    save_history(crate::backend::history::MangaReadingHistorySave {
-                        id: &self.id,
-                        title: &self.title,
-                        chapter_id: &chapter_selected.id,
-                        chapter_title: &chapter_selected.title,
-                    });
+                if DBCONN.lock().unwrap().is_some() {
+                    let save_response =
+                        save_history(crate::backend::history::MangaReadingHistorySave {
+                            id: &self.id,
+                            title: &self.title,
+                            chapter_id: &chapter_selected.id,
+                            chapter_title: &chapter_selected.title,
+                        });
 
-                match save_response {
-                    Ok(_) => {}
-                    Err(e) => panic!("error saving history : {e}"),
+                    match save_response {
+                        Ok(_) => {}
+                        Err(e) => panic!("error saving history : {e}"),
+                    }
                 }
 
                 let local_tx = self.local_event_tx.clone();
@@ -380,7 +382,8 @@ impl MangaPage {
 
                             local_tx
                                 .send(MangaPageEvents::StoppedSearchingChapterData)
-                                .unwrap();
+                                .ok();
+                            local_tx.send(MangaPageEvents::CheckChaptersRead).ok();
                         }
                         Err(e) => {
                             panic!("{e}");
@@ -431,6 +434,18 @@ impl MangaPage {
         });
     }
 
+    fn check_chapters_read(&mut self) {
+        let history = get_manga_history(&self.id);
+
+        if let Ok(his) = history {
+            for chapter in self.chapters.as_mut().unwrap().widget.chapters.iter_mut() {
+                if his.iter().any(|chap| chap.id == chapter.id) {
+                    chapter.is_read = true
+                }
+            }
+        }
+    }
+
     fn tick(&mut self) {
         if let Ok(background_event) = self.local_event_rx.try_recv() {
             match background_event {
@@ -444,17 +459,7 @@ impl MangaPage {
 
                             list_state.select(Some(0));
 
-                            let mut chapter_widget = ChaptersListWidget::from_response(&response);
-
-                            let history = get_manga_history(&self.id);
-
-                            if let Ok(his) = history {
-                                for chapter in chapter_widget.chapters.iter_mut() {
-                                    if his.iter().any(|chap| chap.id == chapter.id) {
-                                        chapter.is_read = true
-                                    }
-                                }
-                            }
+                            let chapter_widget = ChaptersListWidget::from_response(&response);
 
                             self.chapters = Some(ChaptersData {
                                 state: list_state,
@@ -462,9 +467,16 @@ impl MangaPage {
                                 page: 1,
                                 total_result: response.total as u32,
                             });
+
+                            self.local_event_tx
+                                .send(MangaPageEvents::CheckChaptersRead)
+                                .ok();
                         }
                         None => self.chapters = None,
                     }
+                }
+                MangaPageEvents::CheckChaptersRead => {
+                    self.check_chapters_read();
                 }
                 MangaPageEvents::LoadStatistics(maybe_statistics) => {
                     if let Some(response) = maybe_statistics {

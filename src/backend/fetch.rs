@@ -10,12 +10,13 @@ use super::{
 
 #[derive(Clone, Debug)]
 pub struct MangadexClient {
-    api_url_base: String,
-    cover_img_url_base: String,
     client: reqwest::Client,
 }
 
 pub static MANGADEX_CLIENT_INSTANCE: OnceCell<MangadexClient> = once_cell::sync::OnceCell::new();
+
+static API_URL_BASE: &str = "https://api.mangadex.org";
+static COVER_IMG_URL_BASE: &str = "https://uploads.mangadex.org/covers";
 
 impl MangadexClient {
     pub fn global() -> &'static MangadexClient {
@@ -25,11 +26,7 @@ impl MangadexClient {
     }
 
     pub fn new(client: reqwest::Client) -> Self {
-        Self {
-            client,
-            api_url_base: "https://api.mangadex.org".to_string(),
-            cover_img_url_base: "https://uploads.mangadex.org/covers".to_string(),
-        }
+        Self { client }
     }
 
     // Todo! implement more advanced filters
@@ -51,7 +48,7 @@ impl MangadexClient {
 
         let url = format!(
             "{}/manga?{}&includes[]=cover_art&includes[]=author&includes[]=artist&limit=10&offset={}&{}&includedTagsMode=AND&excludedTagsMode=OR",
-            self.api_url_base,
+            API_URL_BASE,
             search_by_title,
             offset,
             content_rating
@@ -66,10 +63,7 @@ impl MangadexClient {
         file_name: &str,
     ) -> Result<bytes::Bytes, reqwest::Error> {
         self.client
-            .get(format!(
-                "{}/{}/{}",
-                self.cover_img_url_base, id_manga, file_name
-            ))
+            .get(format!("{}/{}/{}", COVER_IMG_URL_BASE, id_manga, file_name))
             .send()
             .await?
             .bytes()
@@ -103,7 +97,7 @@ impl MangadexClient {
         let order = format!("order[volume]={order}&order[chapter]={order}");
         let endpoint = format!(
             "{}/manga/{}/feed?limit=50&{}&translatedLanguage[]={}&offset=0",
-            self.api_url_base, id, order, language
+            API_URL_BASE, id, order, language
         );
 
         let reponse = self.client.get(endpoint).send().await?.text().await?;
@@ -114,7 +108,7 @@ impl MangadexClient {
         &self,
         id: &str,
     ) -> Result<ChapterPagesResponse, reqwest::Error> {
-        let endpoint = format!("{}/at-home/server/{}", self.api_url_base, id);
+        let endpoint = format!("{}/at-home/server/{}", API_URL_BASE, id);
 
         let text_response = self.client.get(endpoint).send().await?.text().await?;
 
@@ -127,7 +121,7 @@ impl MangadexClient {
         &self,
         id_manga: &str,
     ) -> Result<MangaStatisticsResponse, reqwest::Error> {
-        let endpoint = format!("{}/statistics/manga/{}", self.api_url_base, id_manga);
+        let endpoint = format!("{}/statistics/manga/{}", API_URL_BASE, id_manga);
 
         let response = self.client.get(endpoint).send().await?.text().await;
 
@@ -142,7 +136,7 @@ impl MangadexClient {
             .checked_sub_months(Months::new(1))
             .unwrap();
 
-        let endpoint = format!("{}/manga?includes[]=cover_art&includes[]=artist&includes[]=author&order[followedCount]=desc&contentRating[]=safe&contentRating[]=suggestive&hasAvailableChapters=true&createdAtSince={}T00:00:00", self.api_url_base, current_date);
+        let endpoint = format!("{}/manga?includes[]=cover_art&includes[]=artist&includes[]=author&order[followedCount]=desc&contentRating[]=safe&contentRating[]=suggestive&hasAvailableChapters=true&createdAtSince={}T00:00:00", API_URL_BASE, current_date);
 
         let response = self.client.get(endpoint).send().await?;
 
@@ -154,7 +148,7 @@ impl MangadexClient {
     }
 
     pub async fn get_recently_added(&self) -> Result<SearchMangaResponse, reqwest::Error> {
-        let endpoint = format!("{}/manga?limit=5&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&order[createdAt]=desc&includes[]=cover_art&includes[]=artist&includes[]=author&hasAvailableChapters=true", self.api_url_base);
+        let endpoint = format!("{}/manga?limit=5&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&order[createdAt]=desc&includes[]=cover_art&includes[]=artist&includes[]=author&hasAvailableChapters=true", API_URL_BASE);
 
         let response = self.client.get(endpoint).send().await?;
 
@@ -163,6 +157,7 @@ impl MangadexClient {
         Ok(data)
     }
 
+    // Todo! store image in this repo since it may change in the future
     pub async fn get_mangadex_image_support(&self) -> Result<Bytes, reqwest::Error> {
         self.client
             .get("https://mangadex.org/img/namicomi/support-dex-chan-1.png")

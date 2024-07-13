@@ -1,7 +1,6 @@
 // save what mangas the user is reading and which chapters where read
 // need a file to store that data,
 // need to update it
-//
 
 use std::sync::Mutex;
 
@@ -39,9 +38,6 @@ pub static DBCONN: Lazy<Mutex<Option<Connection>>> = Lazy::new(|| {
     Mutex::new(Some(conn))
 });
 
-// Create sqlite file if it does not exist and its tables
-pub fn create_history() {}
-
 pub struct MangaReadingHistorySave<'a> {
     pub id: &'a str,
     pub title: &'a str,
@@ -66,7 +62,7 @@ pub fn save_history(manga_read: MangaReadingHistorySave<'_>) -> rusqlite::Result
         .query_map(params![manga_read.id], |row| Ok(Manga { id: row.get(0)? }))?;
 
     if let Some(manga) = manga_exists.next() {
-        let manga = manga.unwrap();
+        let manga = manga?;
         conn.execute(
             "INSERT INTO chapters VALUES (?1, ?2, ?3)",
             (manga_read.chapter_id, manga_read.chapter_title, manga.id),
