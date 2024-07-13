@@ -19,4 +19,5 @@ pub enum SelectedTabs {
     #[default]
     Home,
     Search,
+    Feed,
 }

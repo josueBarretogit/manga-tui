@@ -1,5 +1,7 @@
 use ratatui::{prelude::*, widgets::*};
 
+use crate::backend::database::MangaHistory;
+
 pub enum FeedTabs {
     History,
     PlantToRead,
@@ -22,6 +24,21 @@ impl From<MangasRead> for ListItem<'_> {
 pub struct HistoryWidget {
     pub mangas_read: Vec<MangasRead>,
     pub state: ListState,
+}
+
+impl From<Vec<MangaHistory>> for HistoryWidget {
+    fn from(value: Vec<MangaHistory>) -> Self {
+        Self {
+            mangas_read: value
+                .iter()
+                .map(|history| MangasRead {
+                    id: history.id.clone(),
+                    title: history.title.clone(),
+                })
+                .collect(),
+            state: ListState::default(),
+        }
+    }
 }
 
 impl StatefulWidget for HistoryWidget {

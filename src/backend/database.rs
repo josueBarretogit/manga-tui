@@ -17,7 +17,8 @@ pub static DBCONN: Lazy<Mutex<Option<Connection>>> = Lazy::new(|| {
     conn.execute(
         "CREATE TABLE if not exists mangas (
                 id    TEXT  PRIMARY KEY,
-                title TEXT  NOT NULL
+                title TEXT  NOT NULL,
+                img_url TEXT   NULL
              )",
         (),
     )
@@ -29,7 +30,6 @@ pub static DBCONN: Lazy<Mutex<Option<Connection>>> = Lazy::new(|| {
                 title TEXT  NOT NULL,
                 manga_id TEXT  NOT NULL,
                 FOREIGN KEY (manga_id) REFERENCES mangas (id)
-
             )",
         (),
     )
@@ -41,11 +41,12 @@ pub static DBCONN: Lazy<Mutex<Option<Connection>>> = Lazy::new(|| {
 pub struct MangaReadingHistorySave<'a> {
     pub id: &'a str,
     pub title: &'a str,
+    pub img_url: Option<&'a str>,
     pub chapter_id: &'a str,
     pub chapter_title: &'a str,
 }
 
-pub struct Manga {
+struct Manga {
     id: String,
 }
 
@@ -111,4 +112,33 @@ pub fn get_manga_history(id: &str) -> rusqlite::Result<Vec<MangaReadingHistoryRe
     }
 
     Ok(chapter_ids)
+}
+
+pub struct MangaHistory {
+    pub id: String,
+    pub title: String,
+    // img_url: Option<String>,
+}
+
+pub fn get_reading_history() -> rusqlite::Result<Vec<MangaHistory>> {
+    let binding = DBCONN.lock().unwrap();
+    let conn = binding.as_ref().unwrap();
+
+    let mut statement = conn.prepare("SELECT id, title, img_url from mangas")?;
+
+    let mut manga_history: Vec<MangaHistory> = vec![];
+
+    let iter_mangas = statement.query_map([], |row| {
+        Ok(MangaHistory {
+            id: row.get(0)?,
+            title: row.get(1)?,
+            // img_url: row.get(2)?,
+        })
+    })?;
+
+    for manga in iter_mangas {
+        manga_history.push(manga?);
+    }
+
+    Ok(manga_history)
 }

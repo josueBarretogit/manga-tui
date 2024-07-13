@@ -1,4 +1,4 @@
-use crate::backend::history::get_manga_history;
+use crate::backend::database::get_manga_history;
 use crate::backend::{ChapterResponse, Languages};
 use ratatui::{prelude::*, widgets::*};
 use tui_widget_list::PreRender;

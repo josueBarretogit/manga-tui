@@ -97,6 +97,9 @@ pub async fn run_app(backend: impl Backend) -> Result<(), Box<dyn Error>> {
                 SelectedTabs::Home => {
                     app.home_page.handle_events(event);
                 }
+                SelectedTabs::Feed => {
+                    app.feed_page.handle_events(event);
+                }
             };
         }
 
@@ -127,6 +130,11 @@ pub async fn run_app(backend: impl Backend) -> Result<(), Box<dyn Error>> {
             SelectedTabs::Home => {
                 if let Ok(home_action) = app.home_page.local_action_rx.try_recv() {
                     app.home_page.update(home_action);
+                }
+            }
+            SelectedTabs::Feed => {
+                if let Ok(feed_event) = app.feed_page.local_action_rx.try_recv() {
+                    app.feed_page.update(feed_event);
                 }
             }
         };

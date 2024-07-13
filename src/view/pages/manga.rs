@@ -1,5 +1,6 @@
+use crate::backend::database::MangaReadingHistorySave;
+use crate::backend::database::{get_manga_history, save_history, DBCONN};
 use crate::backend::fetch::MangadexClient;
-use crate::backend::history::{get_manga_history, save_history, DBCONN};
 use crate::backend::tui::Events;
 use crate::backend::{ChapterResponse, Languages, MangaStatisticsResponse, Statistics};
 use crate::utils::{set_status_style, set_tags_style};
@@ -355,14 +356,14 @@ impl MangaPage {
             Some(chapter_selected) => {
                 let id_chapter = chapter_selected.id.clone();
                 let tx = self.global_event_tx.clone();
-                if DBCONN.lock().unwrap().is_some() {
-                    let save_response =
-                        save_history(crate::backend::history::MangaReadingHistorySave {
-                            id: &self.id,
-                            title: &self.title,
-                            chapter_id: &chapter_selected.id,
-                            chapter_title: &chapter_selected.title,
-                        });
+                if DBCONN.lock().unwrap().is_some() && !chapter_selected.is_read {
+                    let save_response = save_history(MangaReadingHistorySave {
+                        id: &self.id,
+                        title: &self.title,
+                        img_url: self.img_url.as_deref(),
+                        chapter_id: &chapter_selected.id,
+                        chapter_title: &chapter_selected.title,
+                    });
 
                     match save_response {
                         Ok(_) => {}

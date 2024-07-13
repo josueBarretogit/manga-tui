@@ -9,6 +9,7 @@ use ratatui::widgets::{Block, Borders, Tabs, Widget};
 use ratatui::Frame;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
+use self::feed::Feed;
 use self::home::Home;
 use self::manga::MangaPage;
 use self::reader::MangaReader;
@@ -33,6 +34,7 @@ pub struct App {
     pub manga_reader_page: Option<MangaReader>,
     pub search_page: SearchPage,
     pub home_page: Home,
+    pub feed_page: Feed,
 }
 
 impl Component for App {
@@ -144,7 +146,13 @@ impl Component for App {
 
                 self.current_tab = SelectedTabs::Home;
             }
-            Events::GoFeedPage => todo!(),
+            Events::GoFeedPage => {
+                if self.manga_page.is_some() {
+                    self.manga_page.as_mut().unwrap().clean_up();
+                    self.manga_page = None;
+                }
+                self.current_tab = SelectedTabs::Feed;
+            }
 
             _ => {}
         }
@@ -170,6 +178,7 @@ impl App {
         App {
             current_tab: SelectedTabs::default(),
             search_page: SearchPage::init(global_event_tx.clone()),
+            feed_page: Feed::new(global_event_tx.clone()),
             home_page: Home::new(global_event_tx.clone()),
             manga_page: None,
             manga_reader_page: None,
@@ -200,9 +209,14 @@ impl App {
             SelectedTabs::Search => self.render_search_page(area, frame),
             SelectedTabs::MangaTab => self.render_manga_page(area, frame),
             SelectedTabs::Home => self.render_home_page(area, frame),
+            SelectedTabs::Feed => self.render_feed_page(area, frame),
             // Reader tab should be on full screen
             SelectedTabs::ReaderTab => {}
         }
+    }
+
+    fn render_feed_page(&mut self, area: Rect, frame: &mut Frame<'_>) {
+        self.feed_page.render(area, frame);
     }
 
     pub fn render_search_page(&mut self, area: Rect, frame: &mut Frame<'_>) {

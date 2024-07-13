@@ -1,6 +1,6 @@
 pub mod fetch;
 pub mod tui;
-pub mod history;
+pub mod database;
 
 use std::collections::HashMap;
 
