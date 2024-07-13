@@ -1,5 +1,5 @@
 use crate::backend::fetch::MangadexClient;
-use crate::backend::history::save_history;
+use crate::backend::history::{self, get_manga_history, save_history, MangaReadingHistoryRetrieve};
 use crate::backend::tui::Events;
 use crate::backend::{ChapterResponse, Languages, MangaStatisticsResponse, Statistics};
 use crate::utils::{set_status_style, set_tags_style};
@@ -444,9 +444,21 @@ impl MangaPage {
 
                             list_state.select(Some(0));
 
+                            let mut chapter_widget = ChaptersListWidget::from_response(&response);
+
+                            let history = get_manga_history(&self.id);
+
+                            if let Ok(his) = history {
+                                for chapter in chapter_widget.chapters.iter_mut() {
+                                    if his.iter().any(|chap| chap.id == chapter.id) {
+                                        chapter.is_read = true
+                                    }
+                                }
+                            }
+
                             self.chapters = Some(ChaptersData {
                                 state: list_state,
-                                widget: ChaptersListWidget::from_response(&response),
+                                widget: chapter_widget,
                                 page: 1,
                                 total_result: response.total as u32,
                             });

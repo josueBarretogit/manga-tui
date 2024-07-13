@@ -1,3 +1,4 @@
+use crate::backend::history::get_manga_history;
 use crate::backend::{ChapterResponse, Languages};
 use ratatui::{prelude::*, widgets::*};
 use tui_widget_list::PreRender;
@@ -92,6 +93,7 @@ pub struct ChaptersListWidget {
 impl ChaptersListWidget {
     pub fn from_response(response: &ChapterResponse) -> Self {
         let mut chapters: Vec<ChapterItem> = vec![];
+
 
         for chapter in response.data.iter() {
             let id = chapter.id.clone();

@@ -91,16 +91,28 @@ pub fn save_history(manga_read: MangaReadingHistorySave<'_>) -> rusqlite::Result
     Ok(())
 }
 
-pub struct MangaReadingHistoryRetrieve<'a> {
-    pub chapters_read: Vec<&'a str>,
+pub struct MangaReadingHistoryRetrieve {
+    pub id: String,
 }
 
-pub fn get_manga_history(id: &str) -> MangaReadingHistoryRetrieve<'_> {
-    let db_connection = Connection::open("./db_test.db").unwrap();
+pub fn get_manga_history(id: &str) -> rusqlite::Result<Vec<MangaReadingHistoryRetrieve>> {
+    let binding = DBCONN.lock().unwrap();
+    let conn = binding.as_ref().unwrap();
 
-    let mut result = db_connection.prepare("SELECT id from mangas ").unwrap();
+    let mut chapter_ids: Vec<MangaReadingHistoryRetrieve> = vec![];
 
-    MangaReadingHistoryRetrieve {
-        chapters_read: vec![],
+    let mut result = conn
+        .prepare("SELECT chapters.id from chapters INNER JOIN mangas ON mangas.id = chapters.manga_id WHERE mangas.id = ?1")?;
+
+    let result_iter = result.query_map(params![id], |row| {
+        Ok(MangaReadingHistoryRetrieve { id: row.get(0)? })
+    })?;
+
+    for chapter_id in result_iter {
+        if let Ok(id) = chapter_id {
+            chapter_ids.push(id);
+        }
     }
+
+    Ok(chapter_ids)
 }
