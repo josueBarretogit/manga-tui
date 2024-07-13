@@ -34,7 +34,7 @@ impl Widget for ChapterItem {
 
         let translated_language: Languages = self.translated_language.as_str().into();
 
-        let is_read_icon = if !self.is_read {
+        let is_read_icon = if self.is_read {
             "👀".to_string()
         } else {
             "".to_string()

@@ -1,5 +1,6 @@
 pub mod fetch;
 pub mod tui;
+pub mod history;
 
 use std::collections::HashMap;
 

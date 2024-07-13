@@ -9,6 +9,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{prelude::*, widgets::*};
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::{Resize, StatefulImage};
+use rusqlite::Connection;
 use strum::Display;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
@@ -116,6 +117,8 @@ impl MangaPage {
 
         local_event_tx.send(MangaPageEvents::FetchChapters).ok();
         local_event_tx.send(MangaPageEvents::FethStatistics).ok();
+
+        let db_connection = Connection::open("./db_test.db").unwrap();
 
         Self {
             id,
