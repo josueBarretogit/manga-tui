@@ -124,7 +124,7 @@ pub fn get_reading_history() -> rusqlite::Result<Vec<MangaHistory>> {
     let binding = DBCONN.lock().unwrap();
     let conn = binding.as_ref().unwrap();
 
-    let mut statement = conn.prepare("SELECT id, title from mangas LIMIT 6")?;
+    let mut statement = conn.prepare("SELECT id, title from mangas")?;
 
     let mut manga_history: Vec<MangaHistory> = vec![];
 

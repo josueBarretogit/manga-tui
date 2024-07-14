@@ -16,7 +16,6 @@ use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
 use tui_widget_list::ListState;
 
-use self::style::Styled;
 
 /// Determine wheter or not mangas are being searched
 /// if so then this should not make a request until the most recent one finishes

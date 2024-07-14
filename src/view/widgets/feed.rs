@@ -71,7 +71,7 @@ impl HistoryWidget {
         self.state.previous();
     }
 
-    pub fn get_current_manga_selected(&mut self) -> Option<&MangasRead> {
+    pub fn get_current_manga_selected(&self) -> Option<&MangasRead> {
         match self.state.selected {
             Some(index) => self.mangas_read.get(index),
             None => None,

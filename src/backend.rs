@@ -1,10 +1,9 @@
+pub mod database;
 pub mod fetch;
 pub mod tui;
-pub mod database;
-
-use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -234,4 +233,16 @@ pub struct Statistics {
 #[serde(rename_all = "camelCase")]
 pub struct Rating {
     pub average: Option<f64>,
+}
+
+pub mod feed {
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct OneMangaResponse {
+        pub result: String,
+        pub response: String,
+        pub data: super::Data,
+    }
 }

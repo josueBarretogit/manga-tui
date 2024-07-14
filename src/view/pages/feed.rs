@@ -1,4 +1,7 @@
+use std::io::Cursor;
+
 use crossterm::event::{KeyCode, KeyEvent};
+use image::io::Reader;
 use ratatui::{prelude::*, widgets::*};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
@@ -6,8 +9,11 @@ use tokio::task::JoinSet;
 use crate::backend::database::{get_reading_history, MangaHistory};
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
+use crate::utils::from_manga_response;
 use crate::view::widgets::feed::{FeedTabs, HistoryWidget};
+use crate::view::widgets::search::MangaItem;
 use crate::view::widgets::Component;
+use crate::PICKER;
 
 pub enum FeedActions {
     ScrollHistoryUp,
@@ -133,8 +139,63 @@ impl Feed {
         if let Some(history) = self.history.as_mut() {
             if let Some(currently_selected_manga) = history.get_current_manga_selected() {
                 let tx = self.global_event_tx.clone();
+                let manga_id = currently_selected_manga.id.clone();
+
                 self.tasks.spawn(async move {
-                    let response = MangadexClient::global();
+                    let response = MangadexClient::global().get_one_manga(&manga_id).await;
+                    match response {
+                        Ok(manga) => {
+                            let manga_found = from_manga_response(manga.data);
+
+                            let cover = MangadexClient::global()
+                                .get_cover_for_manga(
+                                    &manga_id,
+                                    manga_found.img_url.unwrap_or_default().as_str(),
+                                )
+                                .await;
+
+                            match cover {
+                                Ok(bytes) => {
+                                    let dyn_img = Reader::new(Cursor::new(bytes))
+                                        .with_guessed_format()
+                                        .unwrap();
+
+                                    let maybe_decoded = dyn_img.decode().unwrap();
+                                    let image = PICKER.unwrap().new_resize_protocol(maybe_decoded);
+
+                                    tx.send(Events::GoToMangaPage(MangaItem::new(
+                                        manga_found.id,
+                                        manga_found.title,
+                                        manga_found.description,
+                                        manga_found.tags,
+                                        manga_found.content_rating,
+                                        manga_found.status,
+                                        None,
+                                        manga_found.author,
+                                        manga_found.artist,
+                                        Some(image),
+                                    )))
+                                    .ok();
+                                }
+                                Err(_) => {
+                                    tx.send(Events::GoToMangaPage(MangaItem::new(
+                                        manga_found.id,
+                                        manga_found.title,
+                                        manga_found.description,
+                                        manga_found.tags,
+                                        manga_found.content_rating,
+                                        manga_found.status,
+                                        None,
+                                        manga_found.author,
+                                        manga_found.artist,
+                                        None,
+                                    )))
+                                    .ok();
+                                }
+                            }
+                        }
+                        Err(e) => println!("an error ocurred : {e}"),
+                    }
                 });
             }
         }

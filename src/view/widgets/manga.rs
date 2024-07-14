@@ -1,4 +1,3 @@
-use crate::backend::database::get_manga_history;
 use crate::backend::{ChapterResponse, Languages};
 use ratatui::{prelude::*, widgets::*};
 use tui_widget_list::PreRender;
@@ -9,7 +8,7 @@ pub struct ChapterItem {
     pub title: String,
     pub chapter_number: String,
     pub is_read: bool,
-    pub is_downlowaded: bool,
+    pub is_downloaded: bool,
     pub translated_language: String,
     style: Style,
 }
@@ -78,7 +77,7 @@ impl ChapterItem {
             title,
             chapter_number,
             is_read,
-            is_downlowaded: false,
+            is_downloaded: false,
             translated_language,
             style: Style::default(),
         }

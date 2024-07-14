@@ -170,12 +170,12 @@ impl MangadexClient {
     pub async fn get_one_manga(
         &self,
         manga_id: &str,
-    ) -> Result<SearchMangaResponse, reqwest::Error> {
-        let endpoint = format!("{}/manga/{}", API_URL_BASE, manga_id);
+    ) -> Result<super::feed::OneMangaResponse, reqwest::Error> {
+        let endpoint = format!("{}/manga/{}?includes[]=cover_art&includes[]=author&includes[]=artist", API_URL_BASE, manga_id);
 
         let response = self.client.get(endpoint).send().await?;
 
-        let data: SearchMangaResponse = response.json().await?;
+        let data: super::feed::OneMangaResponse = response.json().await?;
 
         Ok(data)
     }
