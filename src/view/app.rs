@@ -151,6 +151,7 @@ impl Component for App {
                     self.manga_page.as_mut().unwrap().clean_up();
                     self.manga_page = None;
                 }
+                self.feed_page.init_search();
                 self.current_tab = SelectedTabs::Feed;
             }
 

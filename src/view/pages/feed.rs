@@ -1,10 +1,10 @@
-use std::thread::JoinHandle;
-
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{prelude::*, widgets::*};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use tokio::task::JoinSet;
 
 use crate::backend::database::{get_reading_history, MangaHistory};
+use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
 use crate::view::widgets::feed::{FeedTabs, HistoryWidget};
 use crate::view::widgets::Component;
@@ -12,10 +12,13 @@ use crate::view::widgets::Component;
 pub enum FeedActions {
     ScrollHistoryUp,
     ScrollHistoryDown,
+    ChangeTab,
+    GoToMangaPage,
 }
 
 pub enum FeedEvents {
     SearchHistory,
+    SearchRecentChapters,
     LoadHistory(Option<Vec<MangaHistory>>),
 }
 
@@ -27,11 +30,11 @@ pub struct Feed {
     pub local_action_rx: UnboundedReceiver<FeedActions>,
     pub local_event_tx: UnboundedSender<FeedEvents>,
     pub local_event_rx: UnboundedReceiver<FeedEvents>,
-    tasks: Vec<JoinHandle<()>>,
+    tasks: JoinSet<()>,
 }
 
 impl Feed {
-    pub fn new( global_event_tx: UnboundedSender<Events>) -> Self {
+    pub fn new(global_event_tx: UnboundedSender<Events>) -> Self {
         let (local_action_tx, local_action_rx) = mpsc::unbounded_channel::<FeedActions>();
         let (local_event_tx, local_event_rx) = mpsc::unbounded_channel::<FeedEvents>();
         Self {
@@ -42,7 +45,7 @@ impl Feed {
             local_action_rx,
             local_event_tx,
             local_event_rx,
-            tasks: vec![],
+            tasks: JoinSet::new(),
         }
     }
 
@@ -71,6 +74,9 @@ impl Feed {
             KeyCode::Char('k') | KeyCode::Up => {
                 self.local_action_tx.send(FeedActions::ScrollHistoryUp).ok();
             }
+            KeyCode::Char('r') => {
+                self.local_action_tx.send(FeedActions::GoToMangaPage).ok();
+            }
             _ => {}
         }
     }
@@ -80,17 +86,18 @@ impl Feed {
             match local_event {
                 FeedEvents::SearchHistory => self.search_history(),
                 FeedEvents::LoadHistory(maybe_history) => self.load_history(maybe_history),
+                FeedEvents::SearchRecentChapters => todo!(),
             }
         }
     }
 
     fn search_history(&mut self) {
         let tx = self.local_event_tx.clone();
-        self.tasks.push(std::thread::spawn(move || {
+        self.tasks.spawn(async move {
             let maybe_reading_history = get_reading_history();
             tx.send(FeedEvents::LoadHistory(maybe_reading_history.ok()))
                 .ok();
-        }));
+        });
     }
 
     fn load_history(&mut self, maybe_history: Option<Vec<MangaHistory>>) {
@@ -99,8 +106,38 @@ impl Feed {
         }
     }
 
+    fn select_next_manga(&mut self) {
+        if let Some(mangas) = self.history.as_mut() {
+            mangas.select_next();
+        }
+    }
+
+    fn select_previous_manga(&mut self) {
+        if let Some(mangas) = self.history.as_mut() {
+            mangas.select_previous();
+        }
+    }
+
+    fn change_tab(&mut self) {
+        match self.tabs {
+            FeedTabs::History => self.tabs = FeedTabs::PlantToRead,
+            FeedTabs::PlantToRead => self.tabs = FeedTabs::History,
+        }
+    }
+
     fn search_plan_to_read(&mut self) {
         todo!()
+    }
+
+    fn go_to_manga_page(&mut self) {
+        if let Some(history) = self.history.as_mut() {
+            if let Some(currently_selected_manga) = history.get_current_manga_selected() {
+                let tx = self.global_event_tx.clone();
+                self.tasks.spawn(async move {
+                    let response = MangadexClient::global();
+                });
+            }
+        }
     }
 }
 
@@ -108,16 +145,31 @@ impl Component for Feed {
     type Actions = FeedActions;
     fn render(&mut self, area: ratatui::prelude::Rect, frame: &mut Frame<'_>) {
         let buf = frame.buffer_mut();
+        let layout = Layout::vertical([Constraint::Percentage(10), Constraint::Percentage(90)]);
+
+        let [tabs_area, history_area] = layout.areas(area);
+
+        let selected_tab = match self.tabs {
+            FeedTabs::History => 0,
+            FeedTabs::PlantToRead => 1,
+        };
+
+        Tabs::new(vec!["History", "Plan to Read"])
+            .select(selected_tab)
+            .render(tabs_area, buf);
+
         match self.tabs {
-            FeedTabs::History => self.render_history(area, buf),
+            FeedTabs::History => self.render_history(history_area, buf),
             FeedTabs::PlantToRead => todo!(),
         }
     }
 
     fn update(&mut self, action: Self::Actions) {
         match action {
-            FeedActions::ScrollHistoryUp => {}
-            FeedActions::ScrollHistoryDown => {}
+            FeedActions::GoToMangaPage => self.go_to_manga_page(),
+            FeedActions::ScrollHistoryUp => self.select_previous_manga(),
+            FeedActions::ScrollHistoryDown => self.select_next_manga(),
+            FeedActions::ChangeTab => self.change_tab(),
         }
     }
 
