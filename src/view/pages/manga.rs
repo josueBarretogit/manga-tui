@@ -1,5 +1,5 @@
 use crate::backend::database::MangaReadingHistorySave;
-use crate::backend::database::{get_manga_history, save_history, DBCONN};
+use crate::backend::database::{get_chapters_read, save_history, DBCONN};
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
 use crate::backend::{ChapterResponse, Languages, MangaStatisticsResponse, Statistics};
@@ -166,9 +166,10 @@ impl MangaPage {
         let statistics = match &self.statistics {
             Some(statistics) => Span::raw(format!(
                 "⭐ {} follows : {} ",
-                statistics.rating, statistics.follows
+                statistics.rating.round(),
+                statistics.follows
             )),
-            None => Span::raw("⭐ follows : ".to_string()),
+            None => Span::raw("⭐ follows : "),
         };
 
         let author_and_artist = Span::raw(format!(
@@ -436,7 +437,7 @@ impl MangaPage {
     }
 
     fn check_chapters_read(&mut self) {
-        let history = get_manga_history(&self.id);
+        let history = get_chapters_read(&self.id);
 
         if let Ok(his) = history {
             for chapter in self.chapters.as_mut().unwrap().widget.chapters.iter_mut() {

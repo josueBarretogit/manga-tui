@@ -92,7 +92,7 @@ pub struct MangaReadingHistoryRetrieve {
     pub id: String,
 }
 
-pub fn get_manga_history(id: &str) -> rusqlite::Result<Vec<MangaReadingHistoryRetrieve>> {
+pub fn get_chapters_read(id: &str) -> rusqlite::Result<Vec<MangaReadingHistoryRetrieve>> {
     let binding = DBCONN.lock().unwrap();
     let conn = binding.as_ref().unwrap();
 
@@ -120,13 +120,24 @@ pub struct MangaHistory {
     // img_url: Option<String>,
 }
 
-pub fn get_reading_history() -> rusqlite::Result<Vec<MangaHistory>> {
+pub fn get_reading_history() -> rusqlite::Result<(Vec<MangaHistory>, u32)> {
     let binding = DBCONN.lock().unwrap();
     let conn = binding.as_ref().unwrap();
 
-    let mut statement = conn.prepare("SELECT id, title from mangas")?;
+    let mut statement = conn.prepare("SELECT  id, title from mangas LIMIT 5 OFFSET 0")?;
 
     let mut manga_history: Vec<MangaHistory> = vec![];
+
+    let mut binding = conn.prepare("SELECT COUNT(*) from mangas")?;
+
+    let mut binding = binding.query([])?;
+    let total_amount_statement = binding.next()?;
+
+    let mut total = 0;
+
+    if let Some(row) = total_amount_statement {
+        total = row.get(0)?
+    }
 
     let iter_mangas = statement.query_map([], |row| {
         Ok(MangaHistory {
@@ -140,5 +151,5 @@ pub fn get_reading_history() -> rusqlite::Result<Vec<MangaHistory>> {
         manga_history.push(manga?);
     }
 
-    Ok(manga_history)
+    Ok((manga_history, total))
 }

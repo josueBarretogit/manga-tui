@@ -58,7 +58,9 @@ impl PreRender for MangasRead {
 
 #[derive(Clone)]
 pub struct HistoryWidget {
-    pub mangas_read: Vec<MangasRead>,
+    pub page: i32,
+    pub total_results: u32,
+    pub mangas: Vec<MangasRead>,
     pub state: tui_widget_list::ListState,
 }
 
@@ -73,22 +75,43 @@ impl HistoryWidget {
 
     pub fn get_current_manga_selected(&self) -> Option<&MangasRead> {
         match self.state.selected {
-            Some(index) => self.mangas_read.get(index),
+            Some(index) => self.mangas.get(index),
             None => None,
         }
     }
 
     pub fn set_manga_recent_chapters(&mut self, id: &str, chapters: Vec<String>) {
-        if let Some(manga) = self.mangas_read.iter_mut().find(|manga| manga.id == id) {
+        if let Some(manga) = self.mangas.iter_mut().find(|manga| manga.id == id) {
             manga.recent_chapters = Some(chapters);
         }
     }
+
+    pub fn next_page(&mut self) {
+        self.page += 1;
+    }
+
+    pub fn previous_page(&mut self) {
+        self.page = self.page.saturating_sub(1);
+    }
+
+    fn render_pagination_data(&mut self, area: Rect, buf: &mut Buffer) {
+        let amount_pages = self.total_results as f64 / 5_f64;
+        Paragraph::new(Line::from(vec![
+            "Total results ".into(),
+            self.total_results.to_string().into(),
+            format!(" page : {} of {}", self.page, amount_pages.ceil()).into(),
+        ]))
+        .render(area, buf);
+    }
 }
 
-impl From<Vec<MangaHistory>> for HistoryWidget {
-    fn from(value: Vec<MangaHistory>) -> Self {
+impl From<(Vec<MangaHistory>, u32)> for HistoryWidget {
+    fn from(value: (Vec<MangaHistory>, u32)) -> Self {
         Self {
-            mangas_read: value
+            total_results: value.1,
+            page: 0,
+            mangas: value
+                .0
                 .iter()
                 .map(|history| MangasRead {
                     id: history.id.clone(),
@@ -105,12 +128,16 @@ impl From<Vec<MangaHistory>> for HistoryWidget {
 impl StatefulWidget for HistoryWidget {
     type State = tui_widget_list::ListState;
     fn render(
-        self,
+        mut self,
         area: ratatui::prelude::Rect,
         buf: &mut ratatui::prelude::Buffer,
         state: &mut Self::State,
     ) {
-        let list = tui_widget_list::List::new(self.mangas_read);
-        StatefulWidget::render(list, area, buf, state);
+        let layout = Layout::vertical([Constraint::Percentage(10), Constraint::Percentage(90)]);
+        let [total_results_area, list_area] = layout.areas(area);
+
+        self.render_pagination_data(total_results_area, buf);
+        let list = tui_widget_list::List::new(self.mangas);
+        StatefulWidget::render(list, list_area, buf, state);
     }
 }

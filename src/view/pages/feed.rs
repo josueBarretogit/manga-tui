@@ -1,8 +1,7 @@
-use std::io::Cursor;
-
 use crossterm::event::{KeyCode, KeyEvent};
 use image::io::Reader;
 use ratatui::{prelude::*, widgets::*};
+use std::io::Cursor;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
@@ -25,7 +24,7 @@ pub enum FeedActions {
 pub enum FeedEvents {
     SearchHistory,
     SearchRecentChapters,
-    LoadHistory(Option<Vec<MangaHistory>>),
+    LoadHistory(Option<(Vec<MangaHistory>, u32)>),
 }
 
 pub struct Feed {
@@ -106,7 +105,7 @@ impl Feed {
         });
     }
 
-    fn load_history(&mut self, maybe_history: Option<Vec<MangaHistory>>) {
+    fn load_history(&mut self, maybe_history: Option<(Vec<MangaHistory>, u32)>) {
         if let Some(history) = maybe_history {
             self.history = Some(HistoryWidget::from(history));
         }
@@ -147,54 +146,71 @@ impl Feed {
                         Ok(manga) => {
                             let manga_found = from_manga_response(manga.data);
 
-                            let cover = MangadexClient::global()
-                                .get_cover_for_manga(
-                                    &manga_id,
-                                    manga_found.img_url.unwrap_or_default().as_str(),
-                                )
-                                .await;
+                            if PICKER.is_some() {
+                                let cover = MangadexClient::global()
+                                    .get_cover_for_manga(
+                                        &manga_id,
+                                        manga_found.img_url.unwrap_or_default().as_str(),
+                                    )
+                                    .await;
 
-                            match cover {
-                                Ok(bytes) => {
-                                    let dyn_img = Reader::new(Cursor::new(bytes))
-                                        .with_guessed_format()
-                                        .unwrap();
+                                match cover {
+                                    Ok(bytes) => {
+                                        let dyn_img = Reader::new(Cursor::new(bytes))
+                                            .with_guessed_format()
+                                            .unwrap();
 
-                                    let maybe_decoded = dyn_img.decode().unwrap();
-                                    let image = PICKER.unwrap().new_resize_protocol(maybe_decoded);
+                                        let maybe_decoded = dyn_img.decode().unwrap();
+                                        let image =
+                                            PICKER.unwrap().new_resize_protocol(maybe_decoded);
 
-                                    tx.send(Events::GoToMangaPage(MangaItem::new(
-                                        manga_found.id,
-                                        manga_found.title,
-                                        manga_found.description,
-                                        manga_found.tags,
-                                        manga_found.content_rating,
-                                        manga_found.status,
-                                        None,
-                                        manga_found.author,
-                                        manga_found.artist,
-                                        Some(image),
-                                    )))
-                                    .ok();
+                                        tx.send(Events::GoToMangaPage(MangaItem::new(
+                                            manga_found.id,
+                                            manga_found.title,
+                                            manga_found.description,
+                                            manga_found.tags,
+                                            manga_found.content_rating,
+                                            manga_found.status,
+                                            None,
+                                            manga_found.author,
+                                            manga_found.artist,
+                                            Some(image),
+                                        )))
+                                        .ok();
+                                    }
+                                    Err(_) => {
+                                        tx.send(Events::GoToMangaPage(MangaItem::new(
+                                            manga_found.id,
+                                            manga_found.title,
+                                            manga_found.description,
+                                            manga_found.tags,
+                                            manga_found.content_rating,
+                                            manga_found.status,
+                                            None,
+                                            manga_found.author,
+                                            manga_found.artist,
+                                            None,
+                                        )))
+                                        .ok();
+                                    }
                                 }
-                                Err(_) => {
-                                    tx.send(Events::GoToMangaPage(MangaItem::new(
-                                        manga_found.id,
-                                        manga_found.title,
-                                        manga_found.description,
-                                        manga_found.tags,
-                                        manga_found.content_rating,
-                                        manga_found.status,
-                                        None,
-                                        manga_found.author,
-                                        manga_found.artist,
-                                        None,
-                                    )))
-                                    .ok();
-                                }
+                            } else {
+                                tx.send(Events::GoToMangaPage(MangaItem::new(
+                                    manga_found.id,
+                                    manga_found.title,
+                                    manga_found.description,
+                                    manga_found.tags,
+                                    manga_found.content_rating,
+                                    manga_found.status,
+                                    None,
+                                    manga_found.author,
+                                    manga_found.artist,
+                                    None,
+                                )))
+                                .ok();
                             }
                         }
-                        Err(e) => println!("an error ocurred : {e}"),
+                        Err(e) => println!("Could not get manga info : {e}"),
                     }
                 });
             }
