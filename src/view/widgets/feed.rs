@@ -11,7 +11,7 @@ pub struct MangasRead {
     pub id: String,
     pub title: String,
     pub style: Style,
-    pub recent_chapters: Option<Vec<String>>,
+    pub recent_chapters: Vec<String>,
 }
 
 impl Widget for MangasRead {
@@ -30,10 +30,10 @@ impl Widget for MangasRead {
             .wrap(Wrap { trim: true })
             .render(title_area, buf);
 
-        if let Some(chapters) = self.recent_chapters.as_mut() {
+        if !self.recent_chapters.is_empty() {
             Widget::render(
                 List::new(
-                    chapters
+                    self.recent_chapters
                         .iter()
                         .map(|chap| chap.to_owned())
                         .collect::<Vec<String>>(),
@@ -78,9 +78,9 @@ impl HistoryWidget {
         }
     }
 
-    pub fn set_manga_recent_chapters(&mut self, id: &str, chapters: Vec<String>) {
+    pub fn set_manga_recent_chapters(&mut self, id: &str, chapters: String) {
         if let Some(manga) = self.mangas.iter_mut().find(|manga| manga.id == id) {
-            manga.recent_chapters = Some(chapters);
+            manga.recent_chapters.push(chapters);
         }
     }
 

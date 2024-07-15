@@ -9,6 +9,7 @@ use tokio::task::JoinSet;
 use crate::backend::database::{get_history, MangaHistory, MangaHistoryType};
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
+use crate::backend::ChapterResponse;
 use crate::utils::from_manga_response;
 use crate::view::widgets::feed::{FeedTabs, HistoryWidget, MangasRead};
 use crate::view::widgets::search::MangaItem;
@@ -34,7 +35,9 @@ pub enum FeedActions {
 pub enum FeedEvents {
     SearchHistory,
     SearchRecentChapters,
+    LoadRecentChapters(Option<ChapterResponse>),
     ErrorSearchingMangaData,
+    /// page , (history_data, total_results)
     LoadHistory(u32, Option<(Vec<MangaHistory>, u32)>),
 }
 
@@ -148,9 +151,51 @@ impl Feed {
                 FeedEvents::LoadHistory(page, maybe_history) => {
                     self.load_history(page, maybe_history)
                 }
-                FeedEvents::SearchRecentChapters => todo!(),
+                FeedEvents::SearchRecentChapters => self.search_latest_chapters(),
+                FeedEvents::LoadRecentChapters(maybe_chapters) => {
+                    self.load_recent_chapters(maybe_chapters)
+                }
             }
         }
+    }
+
+    fn load_recent_chapters(&mut self, maybe_history: Option<ChapterResponse>) {
+        match maybe_history {
+            Some(chapters_response) => {
+                let history = self.history.as_mut().unwrap();
+                for chapter in chapters_response.data {
+                    history.set_manga_recent_chapters(
+                        &chapter.id,
+                        chapter.attributes.title.unwrap_or_default(),
+                    );
+                }
+            }
+            None => {}
+        }
+    }
+
+    fn search_latest_chapters(&mut self) {
+        let tx = self.local_event_tx.clone();
+        let ids: Vec<String> = self
+            .history
+            .clone()
+            .unwrap()
+            .mangas
+            .iter()
+            .map(|man| man.id.to_string())
+            .collect();
+
+        self.tasks.spawn(async move {
+            let latest_chapter_response = MangadexClient::global().get_latest_chapters(ids).await;
+            match latest_chapter_response {
+                Ok(chapters) => {
+                    tx.send(FeedEvents::LoadRecentChapters(Some(chapters))).ok();
+                }
+                Err(e) => {
+                    panic!("error getting recent chapters :{e}")
+                }
+            }
+        });
     }
 
     // Todo! display that manga data could not be found
@@ -207,12 +252,15 @@ impl Feed {
                     .map(|history| MangasRead {
                         id: history.id.clone(),
                         title: history.title.clone(),
-                        recent_chapters: None,
+                        recent_chapters: vec![],
                         style: Style::default(),
                     })
                     .collect(),
                 state: tui_widget_list::ListState::default(),
             });
+            self.local_event_tx
+                .send(FeedEvents::SearchRecentChapters)
+                .ok();
         }
     }
 

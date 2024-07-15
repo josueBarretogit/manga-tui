@@ -171,11 +171,36 @@ impl MangadexClient {
         &self,
         manga_id: &str,
     ) -> Result<super::feed::OneMangaResponse, reqwest::Error> {
-        let endpoint = format!("{}/manga/{}?includes[]=cover_art&includes[]=author&includes[]=artist", API_URL_BASE, manga_id);
+        let endpoint = format!(
+            "{}/manga/{}?includes[]=cover_art&includes[]=author&includes[]=artist",
+            API_URL_BASE, manga_id
+        );
 
         let response = self.client.get(endpoint).send().await?;
 
         let data: super::feed::OneMangaResponse = response.json().await?;
+
+        Ok(data)
+    }
+
+    pub async fn get_latest_chapters(
+        &self,
+        manga_ids: Vec<String>,
+    ) -> Result<ChapterResponse, reqwest::Error> {
+        let mut ids = String::new();
+
+        for id in manga_ids {
+            ids.push_str(format!("ids[]={}&", id).as_str());
+        }
+
+        // remove the last '&'
+        ids.pop();
+
+        let endpoint = format!("{}/chapter?limit=10&offset=0&includes[]=scanlation_group&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&contentRating[]=pornographic&order[readableAt]=desc&{}", API_URL_BASE, ids);
+
+        let response = self.client.get(endpoint).send().await?.text().await?;
+
+        let data: ChapterResponse = serde_json::from_str(&response).unwrap();
 
         Ok(data)
     }

@@ -1,6 +1,5 @@
 use crate::backend::database::save_plan_to_read;
 use crate::backend::database::MangaPlanToReadSave;
-use crate::backend::database::MangaReadingHistorySave;
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
 use crate::backend::SearchMangaResponse;
@@ -137,7 +136,7 @@ impl Component for SearchPage {
                 if let Some(manga) = manga_selected {
                     self.global_event_tx
                         .send(Events::GoToMangaPage(manga.clone()))
-                        .unwrap();
+                        .ok();
                 }
             }
             SearchPageActions::PlanToRead => self.plan_to_read(),
