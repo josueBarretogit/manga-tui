@@ -120,11 +120,13 @@ pub struct MangaHistory {
     // img_url: Option<String>,
 }
 
-pub fn get_reading_history() -> rusqlite::Result<(Vec<MangaHistory>, u32)> {
+pub fn get_reading_history(offset: u32) -> rusqlite::Result<(Vec<MangaHistory>, u32)> {
+    let offset = (offset - 1) * 5;
     let binding = DBCONN.lock().unwrap();
     let conn = binding.as_ref().unwrap();
 
-    let mut statement = conn.prepare("SELECT  id, title from mangas LIMIT 5 OFFSET 0")?;
+    let mut statement =
+        conn.prepare(format!("SELECT  id, title from mangas LIMIT 5 OFFSET {}", offset).as_str())?;
 
     let mut manga_history: Vec<MangaHistory> = vec![];
 

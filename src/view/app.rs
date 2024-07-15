@@ -98,6 +98,8 @@ impl Component for App {
                     self.manga_reader_page = None;
                 }
 
+                self.feed_page.clean_up();
+
                 self.current_tab = SelectedTabs::MangaTab;
                 self.manga_page = Some(MangaPage::new(
                     manga.id,
@@ -116,6 +118,7 @@ impl Component for App {
 
             Events::ReadChapter(chapter_response) => {
                 self.home_page.clean_up();
+                self.feed_page.clean_up();
                 self.current_tab = SelectedTabs::ReaderTab;
                 self.manga_reader_page = Some(MangaReader::new(
                     self.global_event_tx.clone(),
@@ -131,6 +134,8 @@ impl Component for App {
                     self.manga_page.as_mut().unwrap().clean_up();
                     self.manga_page = None;
                 }
+
+                self.feed_page.clean_up();
                 self.current_tab = SelectedTabs::Search;
             }
 
@@ -139,6 +144,8 @@ impl Component for App {
                     self.manga_page.as_mut().unwrap().clean_up();
                     self.manga_page = None;
                 }
+
+                self.feed_page.clean_up();
 
                 if self.home_page.require_search() {
                     self.home_page.init_search();

@@ -2,6 +2,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 use image::io::Reader;
 use ratatui::{prelude::*, widgets::*};
 use std::io::Cursor;
+use throbber_widgets_tui::ThrobberState;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
@@ -9,7 +10,7 @@ use crate::backend::database::{get_reading_history, MangaHistory};
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
 use crate::utils::from_manga_response;
-use crate::view::widgets::feed::{FeedTabs, HistoryWidget};
+use crate::view::widgets::feed::{FeedTabs, HistoryWidget, MangasRead};
 use crate::view::widgets::search::MangaItem;
 use crate::view::widgets::Component;
 use crate::PICKER;
@@ -17,6 +18,8 @@ use crate::PICKER;
 pub enum FeedActions {
     ScrollHistoryUp,
     ScrollHistoryDown,
+    NextPage,
+    PreviousPage,
     ChangeTab,
     GoToMangaPage,
 }
@@ -24,12 +27,13 @@ pub enum FeedActions {
 pub enum FeedEvents {
     SearchHistory,
     SearchRecentChapters,
-    LoadHistory(Option<(Vec<MangaHistory>, u32)>),
+    LoadHistory(u32, Option<(Vec<MangaHistory>, u32)>),
 }
 
 pub struct Feed {
     pub tabs: FeedTabs,
     pub history: Option<HistoryWidget>,
+    pub loading_state: Option<ThrobberState>,
     pub global_event_tx: UnboundedSender<Events>,
     pub local_action_tx: UnboundedSender<FeedActions>,
     pub local_action_rx: UnboundedReceiver<FeedActions>,
@@ -44,6 +48,7 @@ impl Feed {
         let (local_event_tx, local_event_rx) = mpsc::unbounded_channel::<FeedEvents>();
         Self {
             tabs: FeedTabs::History,
+            loading_state: None,
             history: None,
             global_event_tx,
             local_action_tx,
@@ -79,6 +84,13 @@ impl Feed {
             KeyCode::Char('k') | KeyCode::Up => {
                 self.local_action_tx.send(FeedActions::ScrollHistoryUp).ok();
             }
+            KeyCode::Char('w') => {
+                self.local_action_tx.send(FeedActions::NextPage).ok();
+            }
+
+            KeyCode::Char('b') => {
+                self.local_action_tx.send(FeedActions::PreviousPage).ok();
+            }
             KeyCode::Char('r') => {
                 self.local_action_tx.send(FeedActions::GoToMangaPage).ok();
             }
@@ -90,7 +102,9 @@ impl Feed {
         if let Ok(local_event) = self.local_event_rx.try_recv() {
             match local_event {
                 FeedEvents::SearchHistory => self.search_history(),
-                FeedEvents::LoadHistory(maybe_history) => self.load_history(maybe_history),
+                FeedEvents::LoadHistory(page, maybe_history) => {
+                    self.load_history(page, maybe_history)
+                }
                 FeedEvents::SearchRecentChapters => todo!(),
             }
         }
@@ -98,16 +112,50 @@ impl Feed {
 
     fn search_history(&mut self) {
         let tx = self.local_event_tx.clone();
+
+        let page = match &self.history {
+            Some(history) => history.page,
+            None => 1,
+        };
+
         self.tasks.spawn(async move {
-            let maybe_reading_history = get_reading_history();
-            tx.send(FeedEvents::LoadHistory(maybe_reading_history.ok()))
+            let maybe_reading_history = get_reading_history(page);
+            tx.send(FeedEvents::LoadHistory(page, maybe_reading_history.ok()))
                 .ok();
         });
     }
 
-    fn load_history(&mut self, maybe_history: Option<(Vec<MangaHistory>, u32)>) {
+    fn search_next_page(&mut self) {
+        if let Some(history) = self.history.as_mut() {
+            history.next_page();
+            self.search_history();
+        }
+    }
+
+    fn search_previous_page(&mut self) {
+        if let Some(history) = self.history.as_mut() {
+            history.previous_page();
+            self.search_history();
+        }
+    }
+
+    fn load_history(&mut self, page: u32, maybe_history: Option<(Vec<MangaHistory>, u32)>) {
         if let Some(history) = maybe_history {
-            self.history = Some(HistoryWidget::from(history));
+            self.history = Some(HistoryWidget {
+                page,
+                total_results: history.1,
+                mangas: history
+                    .0
+                    .iter()
+                    .map(|history| MangasRead {
+                        id: history.id.clone(),
+                        title: history.title.clone(),
+                        recent_chapters: None,
+                        style: Style::default(),
+                    })
+                    .collect(),
+                state: tui_widget_list::ListState::default(),
+            });
         }
     }
 
@@ -243,6 +291,8 @@ impl Component for Feed {
 
     fn update(&mut self, action: Self::Actions) {
         match action {
+            FeedActions::NextPage => self.search_next_page(),
+            FeedActions::PreviousPage => self.search_previous_page(),
             FeedActions::GoToMangaPage => self.go_to_manga_page(),
             FeedActions::ScrollHistoryUp => self.select_previous_manga(),
             FeedActions::ScrollHistoryDown => self.select_next_manga(),

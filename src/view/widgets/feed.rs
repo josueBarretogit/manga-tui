@@ -1,7 +1,6 @@
 use ratatui::{prelude::*, widgets::*};
+use throbber_widgets_tui::{Throbber, ThrobberState};
 use tui_widget_list::PreRender;
-
-use crate::backend::database::MangaHistory;
 
 pub enum FeedTabs {
     History,
@@ -58,7 +57,7 @@ impl PreRender for MangasRead {
 
 #[derive(Clone)]
 pub struct HistoryWidget {
-    pub page: i32,
+    pub page: u32,
     pub total_results: u32,
     pub mangas: Vec<MangasRead>,
     pub state: tui_widget_list::ListState,
@@ -87,11 +86,15 @@ impl HistoryWidget {
     }
 
     pub fn next_page(&mut self) {
-        self.page += 1;
+        if self.page as f64 != (self.total_results as f64 / 5_f64).ceil() {
+            self.page += 1
+        }
     }
 
     pub fn previous_page(&mut self) {
-        self.page = self.page.saturating_sub(1);
+        if self.page != 1 {
+            self.page -= 1;
+        }
     }
 
     fn render_pagination_data(&mut self, area: Rect, buf: &mut Buffer) {
@@ -99,29 +102,11 @@ impl HistoryWidget {
         Paragraph::new(Line::from(vec![
             "Total results ".into(),
             self.total_results.to_string().into(),
-            format!(" page : {} of {}", self.page, amount_pages.ceil()).into(),
+            format!(" page : {} of {} ", self.page, amount_pages.ceil()).into(),
+            " Next page: <w> ".into(),
+            " Previous page : <b> ".into(),
         ]))
         .render(area, buf);
-    }
-}
-
-impl From<(Vec<MangaHistory>, u32)> for HistoryWidget {
-    fn from(value: (Vec<MangaHistory>, u32)) -> Self {
-        Self {
-            total_results: value.1,
-            page: 0,
-            mangas: value
-                .0
-                .iter()
-                .map(|history| MangasRead {
-                    id: history.id.clone(),
-                    title: history.title.clone(),
-                    recent_chapters: None,
-                    style: Style::default(),
-                })
-                .collect(),
-            state: tui_widget_list::ListState::default(),
-        }
     }
 }
 
