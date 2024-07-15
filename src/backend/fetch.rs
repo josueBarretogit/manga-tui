@@ -96,7 +96,7 @@ impl MangadexClient {
 
         let order = format!("order[volume]={order}&order[chapter]={order}");
         let endpoint = format!(
-            "{}/manga/{}/feed?limit=50&{}&translatedLanguage[]={}&offset=0",
+            "{}/manga/{}/feed?limit=50&{}&translatedLanguage[]={}&includes[]=scanlation_group&offset=0",
             API_URL_BASE, id, order, language
         );
 
@@ -185,18 +185,14 @@ impl MangadexClient {
 
     pub async fn get_latest_chapters(
         &self,
-        manga_ids: Vec<String>,
+        manga_id: &str,
     ) -> Result<ChapterResponse, reqwest::Error> {
-        let mut ids = String::new();
+        let order = format!("order[volume]=desc&order[chapter]=desc");
 
-        for id in manga_ids {
-            ids.push_str(format!("ids[]={}&", id).as_str());
-        }
-
-        // remove the last '&'
-        ids.pop();
-
-        let endpoint = format!("{}/chapter?limit=10&offset=0&includes[]=scanlation_group&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&contentRating[]=pornographic&order[readableAt]=desc&{}", API_URL_BASE, ids);
+        let endpoint = format!(
+            "{}/manga/{}/feed?limit=5&{}&translatedLanguage[]=en&includes[]=scanlation_group&offset=0",
+            API_URL_BASE, manga_id, order
+        );
 
         let response = self.client.get(endpoint).send().await?.text().await?;
 

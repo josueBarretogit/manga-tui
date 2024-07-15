@@ -1,9 +1,30 @@
 use ratatui::{prelude::*, widgets::*};
 use tui_widget_list::PreRender;
 
+use crate::backend::ChapterResponse;
+use crate::utils::display_dates_since_publication;
+
 pub enum FeedTabs {
     History,
     PlantToRead,
+}
+
+#[derive(Clone)]
+pub struct RecentChapters {
+    pub title: String,
+    pub readeable_at: String,
+}
+
+impl From<RecentChapters> for ListItem<'_> {
+    fn from(value: RecentChapters) -> Self {
+        let line = Line::from(vec![
+            value.title.bold(),
+            " ".into(),
+            value.readeable_at.into(),
+        ]);
+
+        ListItem::new(line)
+    }
 }
 
 #[derive(Clone)]
@@ -11,15 +32,15 @@ pub struct MangasRead {
     pub id: String,
     pub title: String,
     pub style: Style,
-    pub recent_chapters: Vec<String>,
+    pub recent_chapters: Vec<RecentChapters>,
 }
 
 impl Widget for MangasRead {
-    fn render(mut self, area: Rect, buf: &mut Buffer)
+    fn render(self, area: Rect, buf: &mut Buffer)
     where
         Self: Sized,
     {
-        let layout = Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)]);
+        let layout = Layout::horizontal([Constraint::Fill(1), Constraint::Fill(2)]);
 
         let [title_area, recent_chapters_area] = layout.margin(1).areas(area);
 
@@ -31,16 +52,7 @@ impl Widget for MangasRead {
             .render(title_area, buf);
 
         if !self.recent_chapters.is_empty() {
-            Widget::render(
-                List::new(
-                    self.recent_chapters
-                        .iter()
-                        .map(|chap| chap.to_owned())
-                        .collect::<Vec<String>>(),
-                ),
-                recent_chapters_area,
-                buf,
-            );
+            Widget::render(List::new(self.recent_chapters), recent_chapters_area, buf);
         }
     }
 }
@@ -78,12 +90,6 @@ impl HistoryWidget {
         }
     }
 
-    pub fn set_manga_recent_chapters(&mut self, id: &str, chapters: String) {
-        if let Some(manga) = self.mangas.iter_mut().find(|manga| manga.id == id) {
-            manga.recent_chapters.push(chapters);
-        }
-    }
-
     pub fn next_page(&mut self) {
         if self.page as f64 != (self.total_results as f64 / 5_f64).ceil() && !self.mangas.is_empty()
         {
@@ -94,6 +100,31 @@ impl HistoryWidget {
     pub fn previous_page(&mut self) {
         if self.page != 1 && !self.mangas.is_empty() {
             self.page -= 1;
+        }
+    }
+
+    pub fn set_chapter(&mut self, manga_id: String, response: ChapterResponse) {
+        if let Some(manga) = self.mangas.iter_mut().find(|manga| manga.id == manga_id) {
+            let today = chrono::offset::Local::now().date_naive();
+            for chapter in response.data {
+                let parse_date =
+                    chrono::DateTime::parse_from_rfc3339(&chapter.attributes.readable_at)
+                        .unwrap_or_default();
+
+                let difference = today - parse_date.date_naive();
+
+                let num_days = difference.num_days();
+
+                let recent_chapter = RecentChapters {
+                    title: chapter.attributes.title.unwrap_or("No title ".to_string()),
+                    readeable_at: display_dates_since_publication(
+                        num_days,
+                        (num_days as f64 / 30.44) as i64,
+                        (num_days as f64 / 365_f64) as i64,
+                    ),
+                };
+                manga.recent_chapters.push(recent_chapter);
+            }
         }
     }
 

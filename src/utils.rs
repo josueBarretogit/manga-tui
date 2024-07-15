@@ -135,3 +135,13 @@ pub fn from_manga_response(value: Data) -> Manga {
         artist,
     }
 }
+
+pub fn display_dates_since_publication(day: i64, month: i64, year: i64) -> String {
+    if day <= 31 {
+        format!("{} days ago", day)
+    } else if month <= 12 {
+        return format!("{} months ago", month);
+    } else {
+        return format!("{} years ago", year);
+    }
+}

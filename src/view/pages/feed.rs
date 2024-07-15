@@ -11,7 +11,7 @@ use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
 use crate::backend::ChapterResponse;
 use crate::utils::from_manga_response;
-use crate::view::widgets::feed::{FeedTabs, HistoryWidget, MangasRead};
+use crate::view::widgets::feed::{FeedTabs, HistoryWidget, MangasRead, RecentChapters};
 use crate::view::widgets::search::MangaItem;
 use crate::view::widgets::Component;
 use crate::PICKER;
@@ -35,7 +35,7 @@ pub enum FeedActions {
 pub enum FeedEvents {
     SearchHistory,
     SearchRecentChapters,
-    LoadRecentChapters(Option<ChapterResponse>),
+    LoadRecentChapters(String, Option<ChapterResponse>),
     ErrorSearchingMangaData,
     /// page , (history_data, total_results)
     LoadHistory(u32, Option<(Vec<MangaHistory>, u32)>),
@@ -152,50 +152,41 @@ impl Feed {
                     self.load_history(page, maybe_history)
                 }
                 FeedEvents::SearchRecentChapters => self.search_latest_chapters(),
-                FeedEvents::LoadRecentChapters(maybe_chapters) => {
-                    self.load_recent_chapters(maybe_chapters)
+                FeedEvents::LoadRecentChapters(manga_id, maybe_chapters) => {
+                    self.load_recent_chapters(manga_id, maybe_chapters);
                 }
             }
         }
     }
 
-    fn load_recent_chapters(&mut self, maybe_history: Option<ChapterResponse>) {
-        match maybe_history {
-            Some(chapters_response) => {
-                let history = self.history.as_mut().unwrap();
-                for chapter in chapters_response.data {
-                    history.set_manga_recent_chapters(
-                        &chapter.id,
-                        chapter.attributes.title.unwrap_or_default(),
-                    );
-                }
-            }
-            None => {}
+    fn load_recent_chapters(&mut self, manga_id: String, maybe_history: Option<ChapterResponse>) {
+        if let Some(chapters_response) = maybe_history {
+            let history = self.history.as_mut().unwrap();
+            history.set_chapter(manga_id, chapters_response);
         }
     }
 
     fn search_latest_chapters(&mut self) {
-        let tx = self.local_event_tx.clone();
-        let ids: Vec<String> = self
-            .history
-            .clone()
-            .unwrap()
-            .mangas
-            .iter()
-            .map(|man| man.id.to_string())
-            .collect();
+        let history = self.history.as_ref().unwrap();
 
-        self.tasks.spawn(async move {
-            let latest_chapter_response = MangadexClient::global().get_latest_chapters(ids).await;
-            match latest_chapter_response {
-                Ok(chapters) => {
-                    tx.send(FeedEvents::LoadRecentChapters(Some(chapters))).ok();
+        for manga in history.mangas.clone() {
+            let manga_id = manga.id;
+            let tx = self.local_event_tx.clone();
+            self.tasks.spawn(async move {
+                let latest_chapter_response = MangadexClient::global()
+                    .get_latest_chapters(&manga_id)
+                    .await;
+                match latest_chapter_response {
+                    Ok(chapters) => {
+                        tx.send(FeedEvents::LoadRecentChapters(manga_id, Some(chapters)))
+                            .ok();
+                    }
+                    Err(e) => {
+                        panic!("error getting recent chapters :{e}")
+                    }
                 }
-                Err(e) => {
-                    panic!("error getting recent chapters :{e}")
-                }
-            }
-        });
+            });
+        }
     }
 
     // Todo! display that manga data could not be found
