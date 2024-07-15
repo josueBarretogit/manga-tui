@@ -1,5 +1,4 @@
 use ratatui::{prelude::*, widgets::*};
-use throbber_widgets_tui::{Throbber, ThrobberState};
 use tui_widget_list::PreRender;
 
 pub enum FeedTabs {
@@ -86,13 +85,14 @@ impl HistoryWidget {
     }
 
     pub fn next_page(&mut self) {
-        if self.page as f64 != (self.total_results as f64 / 5_f64).ceil() {
+        if self.page as f64 != (self.total_results as f64 / 5_f64).ceil() && !self.mangas.is_empty()
+        {
             self.page += 1
         }
     }
 
     pub fn previous_page(&mut self) {
-        if self.page != 1 {
+        if self.page != 1 && !self.mangas.is_empty() {
             self.page -= 1;
         }
     }

@@ -2,11 +2,11 @@ use crossterm::event::{KeyCode, KeyEvent};
 use image::io::Reader;
 use ratatui::{prelude::*, widgets::*};
 use std::io::Cursor;
-use throbber_widgets_tui::ThrobberState;
+use throbber_widgets_tui::{Throbber, ThrobberState};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
-use crate::backend::database::{get_reading_history, MangaHistory};
+use crate::backend::database::{get_history, MangaHistory, MangaHistoryType};
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
 use crate::utils::from_manga_response;
@@ -14,6 +14,13 @@ use crate::view::widgets::feed::{FeedTabs, HistoryWidget, MangasRead};
 use crate::view::widgets::search::MangaItem;
 use crate::view::widgets::Component;
 use crate::PICKER;
+
+#[derive(Eq, PartialEq)]
+pub enum FeedState {
+    SearchingMangaData,
+    MangaDataNotFound,
+    Normal,
+}
 
 pub enum FeedActions {
     ScrollHistoryUp,
@@ -27,11 +34,13 @@ pub enum FeedActions {
 pub enum FeedEvents {
     SearchHistory,
     SearchRecentChapters,
+    ErrorSearchingMangaData,
     LoadHistory(u32, Option<(Vec<MangaHistory>, u32)>),
 }
 
 pub struct Feed {
     pub tabs: FeedTabs,
+    state: FeedState,
     pub history: Option<HistoryWidget>,
     pub loading_state: Option<ThrobberState>,
     pub global_event_tx: UnboundedSender<Events>,
@@ -50,6 +59,7 @@ impl Feed {
             tabs: FeedTabs::History,
             loading_state: None,
             history: None,
+            state: FeedState::Normal,
             global_event_tx,
             local_action_tx,
             local_action_rx,
@@ -68,6 +78,33 @@ impl Feed {
         }
     }
 
+    fn render_tabs_area(&mut self, area: Rect, buf: &mut Buffer) {
+        let [tabs_area, loading_state_area] =
+            Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)]).areas(area);
+        let selected_tab = match self.tabs {
+            FeedTabs::History => 0,
+            FeedTabs::PlantToRead => 1,
+        };
+
+        Tabs::new(vec!["History", "Plan to Read"])
+            .select(selected_tab)
+            .render(tabs_area, buf);
+
+        if let Some(state) = self.loading_state.as_mut() {
+            let loader = Throbber::default()
+                .label("Searching manga data, please wait ")
+                .style(Style::default().fg(Color::Yellow))
+                .throbber_set(throbber_widgets_tui::BRAILLE_SIX)
+                .use_type(throbber_widgets_tui::WhichUse::Spin);
+
+            StatefulWidget::render(loader, loading_state_area, buf, state);
+        }
+
+        if self.state == FeedState::MangaDataNotFound {
+            Paragraph::new("Error, could not get manga data, please try another time")
+                .render(loading_state_area, buf);
+        }
+    }
     pub fn init_search(&mut self) {
         self.local_event_tx.send(FeedEvents::SearchHistory).ok();
     }
@@ -99,8 +136,12 @@ impl Feed {
     }
 
     pub fn tick(&mut self) {
+        if let Some(loader_state) = self.loading_state.as_mut() {
+            loader_state.calc_next();
+        }
         if let Ok(local_event) = self.local_event_rx.try_recv() {
             match local_event {
+                FeedEvents::ErrorSearchingMangaData => self.display_error_searching_manga(),
                 FeedEvents::SearchHistory => self.search_history(),
                 FeedEvents::LoadHistory(page, maybe_history) => {
                     self.load_history(page, maybe_history)
@@ -108,6 +149,12 @@ impl Feed {
                 FeedEvents::SearchRecentChapters => todo!(),
             }
         }
+    }
+
+    // Todo! display that manga data could not be found
+    fn display_error_searching_manga(&mut self) {
+        self.loading_state = None;
+        self.state = FeedState::MangaDataNotFound;
     }
 
     fn search_history(&mut self) {
@@ -119,7 +166,7 @@ impl Feed {
         };
 
         self.tasks.spawn(async move {
-            let maybe_reading_history = get_reading_history(page);
+            let maybe_reading_history = get_history(MangaHistoryType::ReadingHistory, page);
             tx.send(FeedEvents::LoadHistory(page, maybe_reading_history.ok()))
                 .ok();
         });
@@ -183,6 +230,7 @@ impl Feed {
     }
 
     fn go_to_manga_page(&mut self) {
+        self.loading_state = Some(ThrobberState::default());
         if let Some(history) = self.history.as_mut() {
             if let Some(currently_selected_manga) = history.get_current_manga_selected() {
                 let tx = self.global_event_tx.clone();
@@ -274,14 +322,7 @@ impl Component for Feed {
 
         let [tabs_area, history_area] = layout.areas(area);
 
-        let selected_tab = match self.tabs {
-            FeedTabs::History => 0,
-            FeedTabs::PlantToRead => 1,
-        };
-
-        Tabs::new(vec!["History", "Plan to Read"])
-            .select(selected_tab)
-            .render(tabs_area, buf);
+        self.render_tabs_area(tabs_area, buf);
 
         match self.tabs {
             FeedTabs::History => self.render_history(history_area, buf),
@@ -290,18 +331,21 @@ impl Component for Feed {
     }
 
     fn update(&mut self, action: Self::Actions) {
-        match action {
-            FeedActions::NextPage => self.search_next_page(),
-            FeedActions::PreviousPage => self.search_previous_page(),
-            FeedActions::GoToMangaPage => self.go_to_manga_page(),
-            FeedActions::ScrollHistoryUp => self.select_previous_manga(),
-            FeedActions::ScrollHistoryDown => self.select_next_manga(),
-            FeedActions::ChangeTab => self.change_tab(),
+        if self.state != FeedState::SearchingMangaData {
+            match action {
+                FeedActions::NextPage => self.search_next_page(),
+                FeedActions::PreviousPage => self.search_previous_page(),
+                FeedActions::GoToMangaPage => self.go_to_manga_page(),
+                FeedActions::ScrollHistoryUp => self.select_previous_manga(),
+                FeedActions::ScrollHistoryDown => self.select_next_manga(),
+                FeedActions::ChangeTab => self.change_tab(),
+            }
         }
     }
 
     fn clean_up(&mut self) {
         self.history = None;
+        self.loading_state = None;
     }
 
     fn handle_events(&mut self, events: crate::backend::tui::Events) {
