@@ -1,3 +1,6 @@
+use crate::backend::database::save_plan_to_read;
+use crate::backend::database::MangaPlanToReadSave;
+use crate::backend::database::MangaReadingHistorySave;
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
 use crate::backend::SearchMangaResponse;
@@ -15,7 +18,6 @@ use tokio::task::JoinSet;
 use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
 use tui_widget_list::ListState;
-
 
 /// Determine wheter or not mangas are being searched
 /// if so then this should not make a request until the most recent one finishes
@@ -54,6 +56,7 @@ pub enum SearchPageActions {
     NextPage,
     PreviousPage,
     GoToMangaPage,
+    PlanToRead,
 }
 
 #[derive(Default, PartialEq, Eq, PartialOrd, Ord)]
@@ -137,6 +140,7 @@ impl Component for SearchPage {
                         .unwrap();
                 }
             }
+            SearchPageActions::PlanToRead => self.plan_to_read(),
         }
     }
     fn handle_events(&mut self, events: Events) {
@@ -235,6 +239,8 @@ impl SearchPage {
                     "<j> ".bold().blue(),
                     "Go up ".into(),
                     "<k> ".bold().blue(),
+                    "Plan to read ".into(),
+                    "<p> ".bold().fg(Color::Yellow),
                     "Read ".into(),
                     "<r> ".bold().fg(Color::Yellow),
                 ]);
@@ -314,6 +320,17 @@ impl SearchPage {
         None
     }
 
+    fn plan_to_read(&mut self) {
+        if let Some(manga) = self.get_current_manga_selected() {
+            save_plan_to_read(MangaPlanToReadSave {
+                id: &manga.id,
+                title: &manga.title,
+                img_url: manga.img_url.as_deref(),
+            })
+            .unwrap();
+        }
+    }
+
     fn abort_search_cover_handles(&mut self) {
         self.search_cover_handles.abort_all();
     }
@@ -339,6 +356,11 @@ impl SearchPage {
                     .local_action_tx
                     .send(SearchPageActions::NextPage)
                     .unwrap(),
+                KeyCode::Char('p') => {
+                    self.local_action_tx
+                        .send(SearchPageActions::PlanToRead)
+                        .ok();
+                }
                 KeyCode::Char('b') => self
                     .local_action_tx
                     .send(SearchPageActions::PreviousPage)

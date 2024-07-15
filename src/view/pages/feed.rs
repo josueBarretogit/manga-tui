@@ -88,6 +88,7 @@ impl Feed {
 
         Tabs::new(vec!["History", "Plan to Read"])
             .select(selected_tab)
+            .highlight_style(Style::default().fg(Color::Yellow))
             .render(tabs_area, buf);
 
         if let Some(state) = self.loading_state.as_mut() {
@@ -109,10 +110,11 @@ impl Feed {
         self.local_event_tx.send(FeedEvents::SearchHistory).ok();
     }
 
-    fn render_plan_to_read(&mut self, area: Rect, buf: &mut Buffer) {}
-
     fn handle_key_events(&mut self, key_event: KeyEvent) {
         match key_event.code {
+            KeyCode::Tab => {
+                self.local_action_tx.send(FeedActions::ChangeTab).ok();
+            }
             KeyCode::Char('j') | KeyCode::Down => {
                 self.local_action_tx
                     .send(FeedActions::ScrollHistoryDown)
@@ -165,10 +167,18 @@ impl Feed {
             None => 1,
         };
 
+        let history_type = match self.tabs {
+            FeedTabs::History => MangaHistoryType::ReadingHistory,
+            FeedTabs::PlantToRead => MangaHistoryType::PlanToRead,
+        };
+
         self.tasks.spawn(async move {
-            let maybe_reading_history = get_history(MangaHistoryType::ReadingHistory, page);
-            tx.send(FeedEvents::LoadHistory(page, maybe_reading_history.ok()))
-                .ok();
+            let maybe_reading_history = get_history(history_type, page);
+            tx.send(FeedEvents::LoadHistory(
+                page,
+                Some(maybe_reading_history.unwrap()),
+            ))
+            .ok();
         });
     }
 
@@ -324,10 +334,7 @@ impl Component for Feed {
 
         self.render_tabs_area(tabs_area, buf);
 
-        match self.tabs {
-            FeedTabs::History => self.render_history(history_area, buf),
-            FeedTabs::PlantToRead => todo!(),
-        }
+        self.render_history(history_area, buf);
     }
 
     fn update(&mut self, action: Self::Actions) {
@@ -338,7 +345,13 @@ impl Component for Feed {
                 FeedActions::GoToMangaPage => self.go_to_manga_page(),
                 FeedActions::ScrollHistoryUp => self.select_previous_manga(),
                 FeedActions::ScrollHistoryDown => self.select_next_manga(),
-                FeedActions::ChangeTab => self.change_tab(),
+                FeedActions::ChangeTab => {
+                    if let Some(history) = self.history.as_mut() {
+                        history.page = 1;
+                    }
+                    self.change_tab();
+                    self.search_history();
+                }
             }
         }
     }

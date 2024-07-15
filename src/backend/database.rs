@@ -34,31 +34,11 @@ pub static DBCONN: Lazy<Mutex<Option<Connection>>> = Lazy::new(|| {
     )
     .unwrap();
 
-    let already_has_data: i32 = conn
-        .query_row("SELECT COUNT(*) from history_types", [], |row| row.get(0))
-        .unwrap();
-
-    if already_has_data == 0 {
-        conn.execute(
-            "INSERT INTO history_types(name) VALUES (?1) ",
-            [MangaHistoryType::ReadingHistory.to_string()],
-        )
-        .unwrap();
-
-        conn.execute(
-            "INSERT INTO history_types(name) VALUES (?1) ",
-            [MangaHistoryType::PlanToRead.to_string()],
-        )
-        .unwrap();
-    }
-
     conn.execute(
         "CREATE TABLE if not exists mangas (
                 id    TEXT  PRIMARY KEY,
                 title TEXT  NOT NULL,
-                img_url TEXT   NULL,
-                manga_type_id INTEGER NOT NULL,
-                FOREIGN KEY (manga_type_id) REFERENCES history_types (id)
+                img_url TEXT NULL
              )",
         (),
     )
@@ -74,6 +54,36 @@ pub static DBCONN: Lazy<Mutex<Option<Connection>>> = Lazy::new(|| {
         (),
     )
     .unwrap();
+
+    conn.execute(
+        "CREATE TABLE if not exists manga_history_union (
+                manga_id TEXT, 
+                type_id INTEGER, 
+                PRIMARY KEY (manga_id, type_id),
+                FOREIGN KEY (manga_id) REFERENCES mangas (id),
+                FOREIGN KEY (type_id) REFERENCES history_types (id)
+             )",
+        (),
+    )
+    .unwrap();
+
+    let already_has_data: i32 = conn
+        .query_row("SELECT COUNT(*) from history_types", [], |row| row.get(0))
+        .unwrap();
+
+    if already_has_data < 2 {
+        conn.execute(
+            "INSERT INTO history_types(name) VALUES (?1) ",
+            [MangaHistoryType::ReadingHistory.to_string()],
+        )
+        .unwrap();
+
+        conn.execute(
+            "INSERT INTO history_types(name) VALUES (?1) ",
+            [MangaHistoryType::PlanToRead.to_string()],
+        )
+        .unwrap();
+    }
 
     Mutex::new(Some(conn))
 });
@@ -103,9 +113,10 @@ pub fn save_history(manga_read: MangaReadingHistorySave<'_>) -> rusqlite::Result
 
     let conn = binding.as_ref().unwrap();
 
-    let mut manga_exists_statement = conn.prepare("SELECT id FROM mangas WHERE id = ?1")?;
+    let mut manga_exists_already_exists_statement =
+        conn.prepare("SELECT id FROM mangas WHERE id = ?1")?;
 
-    let mut manga_exists = manga_exists_statement
+    let mut manga_exists = manga_exists_already_exists_statement
         .query_map(params![manga_read.id], |row| Ok(Manga { id: row.get(0)? }))?;
 
     if let Some(manga) = manga_exists.next() {
@@ -124,13 +135,13 @@ pub fn save_history(manga_read: MangaReadingHistorySave<'_>) -> rusqlite::Result
     )?;
 
     conn.execute(
-        "INSERT INTO mangas VALUES (?1, ?2, ?3, ?4)",
-        (
-            manga_read.id,
-            manga_read.title,
-            manga_read.img_url,
-            history_type,
-        ),
+        "INSERT INTO mangas VALUES (?1, ?2, ?3)",
+        (manga_read.id, manga_read.title, manga_read.img_url),
+    )?;
+
+    conn.execute(
+        "INSERT INTO manga_history_union VALUES (?1, ?2)",
+        (manga_read.id, history_type),
     )?;
 
     conn.execute(
@@ -185,34 +196,98 @@ pub fn get_history(
     let binding = DBCONN.lock().unwrap();
     let conn = binding.as_ref().unwrap();
 
-    match hist_type {
-        MangaHistoryType::ReadingHistory => {
-            let total_mangas: u32 =
-                conn.query_row("SELECT COUNT(*) from mangas", [], |row| row.get(0))?;
-            let mut statement = conn.prepare(
-                format!(
-                    "SELECT  id, title from mangas WHERE manga_type_id = 2 LIMIT 5 OFFSET {}",
-                    offset
-                )
-                .as_str(),
-            )?;
+    let history_type_id: i32 = conn.query_row(
+        "SELECT id from history_types WHERE name = ?1",
+        params![hist_type.to_string()],
+        |row| row.get(0),
+    )?;
 
-            let mut manga_history: Vec<MangaHistory> = vec![];
+    let total_mangas: u32 = conn.query_row(
+        "
+                SELECT COUNT(*) from mangas
+                INNER JOIN manga_history_union ON mangas.id = manga_history_union.manga_id 
+                WHERE manga_history_union.type_id = ?1",
+        params![history_type_id],
+        |row| row.get(0),
+    )?;
 
-            let iter_mangas = statement.query_map([], |row| {
-                Ok(MangaHistory {
-                    id: row.get(0)?,
-                    title: row.get(1)?,
-                    // img_url: row.get(2)?,
-                })
-            })?;
+    let mut statement = conn.prepare(
+        format!(
+            "SELECT  mangas.id, mangas.title from mangas 
+                     INNER JOIN manga_history_union ON mangas.id = manga_history_union.manga_id 
+                     WHERE manga_history_union.type_id = ?1
+                     LIMIT 5 OFFSET {}",
+            offset
+        )
+        .as_str(),
+    )?;
 
-            for manga in iter_mangas {
-                manga_history.push(manga?);
-            }
+    let mut manga_history: Vec<MangaHistory> = vec![];
 
-            Ok((manga_history, total_mangas))
-        }
-        MangaHistoryType::PlanToRead => todo!(),
+    let iter_mangas = statement.query_map(params![history_type_id], |row| {
+        Ok(MangaHistory {
+            id: row.get(0)?,
+            title: row.get(1)?,
+            // img_url: row.get(2)?,
+        })
+    })?;
+
+    for manga in iter_mangas {
+        manga_history.push(manga?);
     }
+
+    Ok((manga_history, total_mangas))
+}
+
+pub struct MangaPlanToReadSave<'a> {
+    pub id: &'a str,
+    pub title: &'a str,
+    pub img_url: Option<&'a str>,
+}
+
+pub fn save_plan_to_read(manga: MangaPlanToReadSave<'_>) -> rusqlite::Result<()> {
+    let binding = DBCONN.lock().unwrap();
+    let conn = binding.as_ref().unwrap();
+
+    let history_type: i32 = conn.query_row(
+        "SELECT id FROM history_types where name = ?1",
+        params![MangaHistoryType::PlanToRead.to_string()],
+        |row| row.get(0),
+    )?;
+
+    let is_already_plan_to_read: i32 = conn.query_row(
+        "SELECT COUNT(*) FROM manga_history_union WHERE manga_id = ?1 AND type_id = ?2",
+        params![manga.id, history_type],
+        |row| row.get(0),
+    )?;
+
+    if is_already_plan_to_read == 0 {
+        let mut manga_exists_already_exists_statement =
+            conn.prepare("SELECT id FROM mangas WHERE id = ?1")?;
+
+        let mut manga_exists = manga_exists_already_exists_statement
+            .query_map(params![manga.id], |row| Ok(Manga { id: row.get(0)? }))?;
+
+        if let Some(manga) = manga_exists.next() {
+            let manga = manga?;
+            conn.execute(
+                "INSERT INTO manga_history_union VALUES (?1, ?2)",
+                (manga.id, history_type),
+            )?;
+            return Ok(());
+        }
+
+        conn.execute(
+            "INSERT INTO mangas VALUES (?1, ?2, ?3)",
+            (manga.id, manga.title, manga.img_url),
+        )?;
+
+        conn.execute(
+            "INSERT INTO manga_history_union VALUES (?1, ?2)",
+            (manga.id, history_type),
+        )?;
+
+        return Ok(());
+    }
+    Ok(())
 }
