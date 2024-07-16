@@ -1,22 +1,24 @@
+use manga_tui::exists;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
-use strum::Display;
 use std::collections::HashMap;
 use std::fs::{create_dir, create_dir_all};
 use std::path::{Path, PathBuf};
+use strum::Display;
 
 pub mod database;
-pub mod fetch;
-pub mod tui;
 pub mod download;
 pub mod error_log;
+pub mod fetch;
+pub mod tui;
 
 #[derive(Display)]
 pub enum AppDirectories {
+    #[strum(to_string = "mangaDownloads")]
     MangaDownloads,
+    #[strum(to_string = "errorLogs")]
     ErrorLogs,
 }
-
 
 pub static APP_DATA_DIR: Lazy<Option<PathBuf>> = Lazy::new(|| {
     directories::ProjectDirs::from(
@@ -32,11 +34,12 @@ pub fn build_data_dir() -> Result<(), std::io::Error> {
 
     match data_dir {
         Some(dir) => {
-            if Path::new(&dir).try_exists().is_ok_and(|is_true| is_true) {
+            if exists!(dir) {
                 Ok(())
             } else {
                 create_dir_all(dir)?;
                 create_dir(dir.join(AppDirectories::MangaDownloads.to_string()))?;
+                create_dir(dir.join(AppDirectories::ErrorLogs.to_string()))?;
                 Ok(())
             }
         }

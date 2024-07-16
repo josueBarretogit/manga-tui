@@ -235,7 +235,7 @@ impl MangaPage {
                 let total = format!("Total chapters {}", chapters.total_result);
 
                 let chapter_instructions = vec![
-                    "Scroll Up/Down ".into(),
+                    "Scroll Down/Up ".into(),
                     " <j>/<k> ".bold().fg(Color::Yellow),
                     " Download chapter ".into(),
                     " <d> ".bold().fg(Color::Yellow),

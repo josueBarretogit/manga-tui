@@ -10,8 +10,9 @@ pub struct DownloadChapter<'a> {
 pub fn download_chapter(chapter: DownloadChapter<'_>) {
     // need directory with the manga's title,
 
-
     let dir_manga_downloads = APP_DATA_DIR.as_ref().unwrap().join("mangaDownloads");
+
+
 
     // need directory with chapter's title and scanlator
     // create images and store them in the directory

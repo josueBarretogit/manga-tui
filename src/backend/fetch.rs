@@ -97,7 +97,7 @@ impl MangadexClient {
 
         let order = format!("order[volume]={order}&order[chapter]={order}");
         let endpoint = format!(
-            "{}/manga/{}/feed?limit=50&{}&translatedLanguage[]={}&includes[]=scanlation_group&offset=0",
+            "{}/manga/{}/feed?limit=50&{}&translatedLanguage[]={}&includes[]=scanlation_group&offset=0&includeExternalUrl=0",
             API_URL_BASE, id, order, language
         );
 

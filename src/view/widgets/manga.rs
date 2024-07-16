@@ -29,12 +29,10 @@ impl Widget for ChapterItem {
 
         Block::bordered().border_style(self.style).render(area, buf);
 
-        let [title_area, scanlator_area, readable_at_area] =
-
-            layout.areas(area.inner(Margin {
-                horizontal: 1,
-                vertical: 1,
-            }));
+        let [title_area, scanlator_area, readable_at_area] = layout.areas(area.inner(Margin {
+            horizontal: 1,
+            vertical: 1,
+        }));
 
         let translated_language: Languages = self.translated_language.as_str().into();
 
@@ -54,11 +52,17 @@ impl Widget for ChapterItem {
             // when it was uploaded
             // and if the chapters has been downloaded by user
         ]))
+        .wrap(Wrap { trim: true })
         .style(self.style)
         .render(title_area, buf);
 
-        Paragraph::new(self.scanlator).render(scanlator_area, buf);
-        Paragraph::new(self.readable_at).render(readable_at_area, buf);
+        Paragraph::new(self.scanlator)
+            .wrap(Wrap { trim: true })
+            .render(scanlator_area, buf);
+
+        Paragraph::new(self.readable_at)
+            .wrap(Wrap { trim: true })
+            .render(readable_at_area, buf);
     }
 }
 
