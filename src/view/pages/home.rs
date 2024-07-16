@@ -10,6 +10,7 @@ use std::io::Cursor;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
+use crate::backend::error_log::{write_to_error_log, ErrorType};
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
 use crate::backend::SearchMangaResponse;
@@ -331,7 +332,7 @@ impl Home {
                     tx.send(HomeEvents::LoadPopularMangas(Some(mangas))).ok();
                 }
                 Err(e) => {
-                    panic!("error fetching mangas {e}");
+                    write_to_error_log(ErrorType::FromError(Box::new(e)));
                     tx.send(HomeEvents::LoadPopularMangas(None)).ok();
                 }
             }
@@ -364,7 +365,7 @@ impl Home {
                         .ok();
                 }
                 Err(e) => {
-                    panic!("error fetching mangas {e}");
+                    write_to_error_log(ErrorType::FromError(Box::new(e)));
                     tx.send(HomeEvents::LoadRecentlyAddedMangas(None)).ok();
                 }
             }

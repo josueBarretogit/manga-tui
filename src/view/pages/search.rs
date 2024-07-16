@@ -1,5 +1,7 @@
 use crate::backend::database::save_plan_to_read;
 use crate::backend::database::MangaPlanToReadSave;
+use crate::backend::error_log::write_to_error_log;
+use crate::backend::error_log::ErrorType;
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
 use crate::backend::SearchMangaResponse;
@@ -321,12 +323,15 @@ impl SearchPage {
 
     fn plan_to_read(&mut self) {
         if let Some(manga) = self.get_current_manga_selected() {
-            save_plan_to_read(MangaPlanToReadSave {
+            let plan_to_read_op = save_plan_to_read(MangaPlanToReadSave {
                 id: &manga.id,
                 title: &manga.title,
                 img_url: manga.img_url.as_deref(),
-            })
-            .unwrap();
+            });
+
+            if let Err(e) = plan_to_read_op {
+                write_to_error_log(ErrorType::FromError(Box::new(e)));
+            }
         }
     }
 
@@ -415,8 +420,8 @@ impl SearchPage {
                     }
                 }
                 Err(e) => {
-                    panic!("could not fetch mangas : {e}");
-                    tx.send(SearchPageEvents::LoadMangasFound(None)).unwrap();
+                    write_to_error_log(ErrorType::FromError(Box::new(e)));
+                    tx.send(SearchPageEvents::LoadMangasFound(None)).ok();
                 }
             }
         });

@@ -1,8 +1,7 @@
-use ratatui::{prelude::*, widgets::*};
-use tui_widget_list::PreRender;
-
 use crate::backend::ChapterResponse;
 use crate::utils::display_dates_since_publication;
+use ratatui::{prelude::*, widgets::*};
+use tui_widget_list::PreRender;
 
 pub enum FeedTabs {
     History,

@@ -1,8 +1,8 @@
-use std::sync::Mutex;
+use super::APP_DATA_DIR;
 use once_cell::sync::Lazy;
 use rusqlite::{params, Connection};
+use std::sync::Mutex;
 use strum::Display;
-use super::APP_DATA_DIR;
 
 pub static DBCONN: Lazy<Mutex<Option<Connection>>> = Lazy::new(|| {
     let conn = Connection::open(APP_DATA_DIR.as_ref().unwrap().join("manga-tui-history.db"));

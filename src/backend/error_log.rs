@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::panic::PanicInfo;
@@ -5,28 +6,33 @@ use std::path::Path;
 
 use chrono::offset;
 use color_eyre::config::HookBuilder;
+use manga_tui::exists;
 
 use super::tui::restore;
 use super::{AppDirectories, APP_DATA_DIR};
 
-pub fn write_to_error_log(e: &PanicInfo) {
+pub enum ErrorType<'a> {
+    FromPanic(&'a PanicInfo<'a>),
+    FromError(Box<dyn Error>),
+}
+
+pub fn write_to_error_log(e: ErrorType<'_>) {
     let error_file_name = APP_DATA_DIR
         .as_ref()
         .unwrap()
         .join(AppDirectories::ErrorLogs.to_string())
         .join("manga-tui-error-logs.txt");
 
-    println!("{}", error_file_name.to_str().unwrap());
-
     let now = offset::Local::now();
 
-    let error_format = format!("{} | {} \n", now, e);
-
-    println!("writing to error log");
+    let error_format = match e {
+        ErrorType::FromPanic(panic_info) => format!("{} | {} \n", now, panic_info),
+        ErrorType::FromError(boxed_err) => format!("{} | {} \n", now, boxed_err),
+    };
 
     let error_format_bytes = error_format.as_bytes();
 
-    if !Path::try_exists(&error_file_name).is_ok_and(|is_true| is_true) {
+    if !exists!(&error_file_name) {
         let mut error_logs = File::create_new(error_file_name).unwrap();
 
         error_logs.write_all(error_format_bytes).unwrap();
@@ -52,7 +58,7 @@ pub fn init_error_hooks() -> color_eyre::Result<()> {
 
     std::panic::set_hook(Box::new(move |info| {
         let _ = restore();
-        write_to_error_log(info);
+        write_to_error_log(ErrorType::FromPanic(info));
         panic(info);
     }));
 

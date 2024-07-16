@@ -1,12 +1,5 @@
-use crossterm::event::{KeyCode, KeyEvent};
-use image::io::Reader;
-use ratatui::{prelude::*, widgets::*};
-use std::io::Cursor;
-use throbber_widgets_tui::{Throbber, ThrobberState};
-use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
-use tokio::task::JoinSet;
-
 use crate::backend::database::{get_history, MangaHistory, MangaHistoryType};
+use crate::backend::error_log::{write_to_error_log, ErrorType};
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
 use crate::backend::ChapterResponse;
@@ -15,6 +8,13 @@ use crate::view::widgets::feed::{FeedTabs, HistoryWidget, MangasRead, RecentChap
 use crate::view::widgets::search::MangaItem;
 use crate::view::widgets::Component;
 use crate::PICKER;
+use crossterm::event::{KeyCode, KeyEvent};
+use image::io::Reader;
+use ratatui::{prelude::*, widgets::*};
+use std::io::Cursor;
+use throbber_widgets_tui::{Throbber, ThrobberState};
+use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use tokio::task::JoinSet;
 
 #[derive(Eq, PartialEq)]
 pub enum FeedState {
@@ -184,7 +184,9 @@ impl Feed {
                             .ok();
                     }
                     Err(e) => {
-                        panic!("error getting recent chapters :{e}")
+                        write_to_error_log(ErrorType::FromError(Box::new(e)));
+
+                        tx.send(FeedEvents::LoadRecentChapters(manga_id, None)).ok();
                     }
                 }
             });
@@ -358,7 +360,10 @@ impl Feed {
                                 .ok();
                             }
                         }
-                        Err(e) => println!("Could not get manga info : {e}"),
+                        Err(e) => {
+                            write_to_error_log(ErrorType::FromError(Box::new(e)));
+                            loca_tx.send(FeedEvents::ErrorSearchingMangaData).ok();
+                        }
                     }
                 });
             }

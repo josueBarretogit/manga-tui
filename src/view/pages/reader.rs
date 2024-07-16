@@ -1,3 +1,4 @@
+use crate::backend::error_log::{write_to_error_log, ErrorType};
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
 use crate::view::widgets::reader::{PageItemState, PagesItem, PagesList};
@@ -118,14 +119,14 @@ impl Component for MangaReader {
     fn handle_events(&mut self, events: crate::backend::tui::Events) {
         match events {
             Events::Key(key_event) => match key_event.code {
-                KeyCode::Down | KeyCode::Char('j') => self
-                    .local_action_tx
-                    .send(MangaReaderActions::NextPage)
-                    .unwrap(),
-                KeyCode::Up | KeyCode::Char('k') => self
-                    .local_action_tx
-                    .send(MangaReaderActions::PreviousPage)
-                    .unwrap(),
+                KeyCode::Down | KeyCode::Char('j') => {
+                    self.local_action_tx.send(MangaReaderActions::NextPage).ok();
+                }
+                KeyCode::Up | KeyCode::Char('k') => {
+                    self.local_action_tx
+                        .send(MangaReaderActions::PreviousPage)
+                        .ok();
+                }
 
                 _ => {}
             },
@@ -221,10 +222,15 @@ impl MangaReader {
                             match image_response {
                                 Ok(bytes) => {
                                     let dyn_img = Reader::new(std::io::Cursor::new(bytes))
-                                        .with_guessed_format()
-                                        .unwrap();
+                                        .with_guessed_format();
 
-                                    let maybe_decoded = dyn_img.decode();
+                                    if let Err(err) = dyn_img {
+                                        return write_to_error_log(ErrorType::FromError(Box::new(
+                                            err,
+                                        )));
+                                    }
+
+                                    let maybe_decoded = dyn_img.unwrap().decode();
 
                                     match maybe_decoded {
                                         Ok(image) => {
@@ -232,15 +238,17 @@ impl MangaReader {
                                                 Some(image),
                                                 index,
                                             ))
-                                            .unwrap();
+                                            .ok();
                                         }
-                                        Err(_) => {
-                                            tx.send(MangaReaderEvents::LoadPage(None, index))
-                                                .unwrap();
+                                        Err(e) => {
+                                            write_to_error_log(ErrorType::FromError(Box::new(e)));
+                                            tx.send(MangaReaderEvents::LoadPage(None, index)).ok();
                                         }
                                     };
                                 }
-                                Err(_) => {}
+                                Err(e) => {
+                                    write_to_error_log(ErrorType::FromError(Box::new(e)));
+                                }
                             };
                         });
                     }

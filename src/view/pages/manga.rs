@@ -1,5 +1,6 @@
 use crate::backend::database::MangaReadingHistorySave;
 use crate::backend::database::{get_chapters_read, save_history, DBCONN};
+use crate::backend::error_log::{self, write_to_error_log};
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
 use crate::backend::{ChapterResponse, Languages, MangaStatisticsResponse, Statistics};
@@ -384,9 +385,8 @@ impl MangaPage {
                         chapter_title: &chapter_selected.title,
                     });
 
-                    match save_response {
-                        Ok(_) => {}
-                        Err(e) => panic!("error saving history : {e}"),
+                    if let Err(e) = save_response {
+                        write_to_error_log(error_log::ErrorType::FromError(Box::new(e)));
                     }
                 }
 
@@ -403,10 +403,11 @@ impl MangaPage {
                             local_tx
                                 .send(MangaPageEvents::StoppedSearchingChapterData)
                                 .ok();
+
                             local_tx.send(MangaPageEvents::CheckChaptersRead).ok();
                         }
                         Err(e) => {
-                            panic!("{e}");
+                            write_to_error_log(error_log::ErrorType::FromError(Box::new(e)));
                         }
                     }
                 });
@@ -430,7 +431,10 @@ impl MangaPage {
                 Ok(chapters_response) => tx
                     .send(MangaPageEvents::LoadChapters(Some(chapters_response)))
                     .unwrap(),
-                Err(_e) => tx.send(MangaPageEvents::LoadChapters(None)).unwrap(),
+                Err(e) => {
+                    write_to_error_log(error_log::ErrorType::FromError(Box::new(e)));
+                    tx.send(MangaPageEvents::LoadChapters(None)).unwrap()
+                }
             }
         });
     }
@@ -447,7 +451,8 @@ impl MangaPage {
                 Ok(res) => {
                     tx.send(MangaPageEvents::LoadStatistics(Some(res))).ok();
                 }
-                Err(_) => {
+                Err(e) => {
+                    write_to_error_log(error_log::ErrorType::FromError(Box::new(e)));
                     tx.send(MangaPageEvents::LoadStatistics(None)).ok();
                 }
             };
@@ -456,12 +461,16 @@ impl MangaPage {
 
     fn check_chapters_read(&mut self) {
         let history = get_chapters_read(&self.id);
-
-        if let Ok(his) = history {
-            for chapter in self.chapters.as_mut().unwrap().widget.chapters.iter_mut() {
-                if his.iter().any(|chap| chap.id == chapter.id) {
-                    chapter.is_read = true
+        match history {
+            Ok(his) => {
+                for chapter in self.chapters.as_mut().unwrap().widget.chapters.iter_mut() {
+                    if his.iter().any(|chap| chap.id == chapter.id) {
+                        chapter.is_read = true
+                    }
                 }
+            }
+            Err(e) => {
+                write_to_error_log(error_log::ErrorType::FromError(Box::new(e)));
             }
         }
     }
@@ -529,7 +538,6 @@ impl Component for MangaPage {
     }
     fn update(&mut self, action: Self::Actions) {
         match action {
-
             MangaPageActions::ScrollChapterUp => self.scroll_chapter_up(),
             MangaPageActions::ScrollChapterDown => self.scroll_chapter_down(),
             MangaPageActions::ToggleOrder => {

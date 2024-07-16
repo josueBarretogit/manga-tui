@@ -2,7 +2,7 @@ use manga_tui::exists;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fs::{create_dir, create_dir_all};
+use std::fs::{create_dir, create_dir_all, File, FileType};
 use std::path::{Path, PathBuf};
 use strum::Display;
 
@@ -40,6 +40,11 @@ pub fn build_data_dir() -> Result<(), std::io::Error> {
                 create_dir_all(dir)?;
                 create_dir(dir.join(AppDirectories::MangaDownloads.to_string()))?;
                 create_dir(dir.join(AppDirectories::ErrorLogs.to_string()))?;
+                File::create(
+                    dir.join(AppDirectories::ErrorLogs.to_string())
+                        .join("manga-tui-error-logs.txt"),
+                )?;
+
                 Ok(())
             }
         }

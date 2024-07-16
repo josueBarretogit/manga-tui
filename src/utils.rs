@@ -1,3 +1,4 @@
+use crate::backend::error_log::write_to_error_log;
 use crate::backend::fetch::MangadexClient;
 use crate::backend::Data;
 use crate::view::widgets::ImageHandler;
@@ -47,16 +48,25 @@ pub fn search_manga_cover<IM: ImageHandler>(
                     .unwrap();
 
                 let maybe_decoded = dyn_img.decode();
+
                 match maybe_decoded {
                     Ok(image) => {
                         tx.send(IM::load(image, manga_id)).unwrap();
                     }
-                    Err(_) => {
+                    Err(e) => {
+                        write_to_error_log(
+                            crate::backend::error_log::ErrorType::FromError(Box::new(e)),
+                        );
                         tx.send(IM::not_found(manga_id)).unwrap();
                     }
                 };
             }
-            Err(_) => tx.send(IM::not_found(manga_id)).unwrap(),
+            Err(e) => {
+                write_to_error_log(crate::backend::error_log::ErrorType::FromError(
+                    Box::new(e),
+                ));
+                tx.send(IM::not_found(manga_id)).unwrap()
+            }
         }
     });
 }
