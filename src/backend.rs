@@ -2,8 +2,37 @@ pub mod database;
 pub mod fetch;
 pub mod tui;
 
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fs::{create_dir, create_dir_all};
+use std::path::{Path, PathBuf};
+
+pub static APP_DATA_DIR: Lazy<Option<PathBuf>> = Lazy::new(|| {
+    directories::ProjectDirs::from(
+        env!("CARGO_PKG_NAME"),
+        env!("CARGO_CRATE_NAME"),
+        "manga-tui",
+    )
+    .map(|dirs| dirs.data_dir().to_path_buf())
+});
+
+pub fn build_data_dir() -> Result<(), std::io::Error> {
+    let data_dir = APP_DATA_DIR.as_ref();
+
+    match data_dir {
+        Some(dir) => {
+            if Path::new(&dir).try_exists().is_ok_and(|is_true| is_true) {
+                Ok(())
+            } else {
+                create_dir_all(dir)?;
+                create_dir(dir.join("mangaDownloads"))?;
+                Ok(())
+            }
+        }
+        None => Err(std::io::Error::other("data dir could not be found")),
+    }
+}
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

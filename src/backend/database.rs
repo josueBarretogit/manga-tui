@@ -25,6 +25,18 @@ pub static DBCONN: Lazy<Mutex<Option<Connection>>> = Lazy::new(|| {
     )
     .unwrap();
 
+    let already_has_data: i32 = conn
+        .query_row("SELECT COUNT(*) from app_version", [], |row| row.get(0))
+        .unwrap();
+
+    if already_has_data == 0 {
+        conn.execute(
+            "INSERT INTO app_version(version) VALUES (?1) ",
+            [env!("CARGO_PKG_VERSION")],
+        )
+        .unwrap();
+    }
+
     conn.execute(
         "CREATE TABLE if not exists history_types (
                 id    INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -38,6 +50,9 @@ pub static DBCONN: Lazy<Mutex<Option<Connection>>> = Lazy::new(|| {
         "CREATE TABLE if not exists mangas (
                 id    TEXT  PRIMARY KEY,
                 title TEXT  NOT NULL,
+                created_at  DATETIME DEFAULT (datetime('now')),
+                updated_at  DATETIME DEFAULT (datetime('now')),
+                deleted_at  DATETIME NULL,
                 img_url TEXT NULL
              )",
         (),

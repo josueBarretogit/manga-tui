@@ -3,6 +3,7 @@ use ratatui::backend::CrosstermBackend;
 use ratatui_image::picker::Picker;
 use reqwest::Client;
 
+use self::backend::build_data_dir;
 use self::backend::fetch::{MangadexClient, MANGADEX_CLIENT_INSTANCE};
 use self::backend::tui::{init, init_error_hooks, restore, run_app};
 
@@ -25,6 +26,9 @@ pub static PICKER: Lazy<Option<Picker>> = Lazy::new(|| {
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 7)]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    build_data_dir()
+        .unwrap_or_else(|error| panic!("Data dir could not be created, details : {error}"));
+
     let user_agent = format!(
         "manga-tui/0.beta-testing1.0 ({}/{}/{})",
         std::env::consts::FAMILY,

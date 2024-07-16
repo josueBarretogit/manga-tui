@@ -197,6 +197,7 @@ impl Feed {
 
     fn search_history(&mut self) {
         let tx = self.local_event_tx.clone();
+        self.tasks.abort_all();
 
         let page = match &self.history {
             Some(history) => history.page,
@@ -274,17 +275,14 @@ impl Feed {
         }
     }
 
-    fn search_plan_to_read(&mut self) {
-        todo!()
-    }
 
     fn go_to_manga_page(&mut self) {
-        self.loading_state = Some(ThrobberState::default());
         if let Some(history) = self.history.as_mut() {
             if let Some(currently_selected_manga) = history.get_current_manga_selected() {
                 let tx = self.global_event_tx.clone();
                 let manga_id = currently_selected_manga.id.clone();
 
+                self.loading_state = Some(ThrobberState::default());
                 self.tasks.spawn(async move {
                     let response = MangadexClient::global().get_one_manga(&manga_id).await;
                     match response {

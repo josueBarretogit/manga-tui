@@ -12,14 +12,16 @@ pub enum FeedTabs {
 #[derive(Clone)]
 pub struct RecentChapters {
     pub title: String,
+    pub number: String,
     pub readeable_at: String,
 }
 
 impl From<RecentChapters> for ListItem<'_> {
     fn from(value: RecentChapters) -> Self {
         let line = Line::from(vec![
+            format!("Ch. {} ", value.number).into(),
             value.title.bold(),
-            " ".into(),
+            " | ".into(),
             value.readeable_at.into(),
         ]);
 
@@ -117,6 +119,7 @@ impl HistoryWidget {
 
                 let recent_chapter = RecentChapters {
                     title: chapter.attributes.title.unwrap_or("No title ".to_string()),
+                    number: chapter.attributes.chapter.unwrap_or_default(),
                     readeable_at: display_dates_since_publication(
                         num_days,
                         (num_days as f64 / 30.44) as i64,
@@ -134,8 +137,10 @@ impl HistoryWidget {
             "Total results ".into(),
             self.total_results.to_string().into(),
             format!(" page : {} of {} ", self.page, amount_pages.ceil()).into(),
-            " Next page: <w> ".into(),
-            " Previous page : <b> ".into(),
+            " Next page: ".into(),
+            " <w> ".bold().fg(Color::Yellow),
+            " Previous page: ".into(),
+            " <b> ".bold().fg(Color::Yellow),
         ]))
         .render(area, buf);
     }
