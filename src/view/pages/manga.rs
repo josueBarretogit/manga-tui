@@ -145,15 +145,19 @@ impl MangaPage {
         }
     }
     fn render_cover(&mut self, area: Rect, buf: &mut Buffer) {
+        let [cover_area, more_details_area] =
+            Layout::vertical([Constraint::Percentage(80), Constraint::Percentage(20)]).areas(area);
         match self.image_state.as_mut() {
             Some(state) => {
                 let image = StatefulImage::new(None).resize(Resize::Fit(None));
-                StatefulWidget::render(image, area, buf, state);
+                StatefulWidget::render(image, cover_area, buf, state);
             }
             None => {
                 Block::bordered().render(area, buf);
             }
         }
+
+        Paragraph::new("More of the author : <a>").render(more_details_area, buf);
     }
 
     fn render_manga_information(&mut self, area: Rect, frame: &mut Frame<'_>) {
@@ -177,9 +181,12 @@ impl MangaPage {
             self.author, self.artist
         ));
 
+        let instructions = Span::raw("More about author/artist <u>/<a>").into_right_aligned_line();
+
         Block::bordered()
             .title_top(Line::from(vec![self.title.clone().into()]))
             .title_bottom(Line::from(vec![statistics, "".into(), author_and_artist]))
+            .title_bottom(instructions)
             .render(manga_information_area, buf);
 
         self.render_details(manga_information_area, frame.buffer_mut());

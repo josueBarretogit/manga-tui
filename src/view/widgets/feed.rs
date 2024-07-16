@@ -107,8 +107,8 @@ impl HistoryWidget {
 
     pub fn set_chapter(&mut self, manga_id: String, response: ChapterResponse) {
         if let Some(manga) = self.mangas.iter_mut().find(|manga| manga.id == manga_id) {
-            let today = chrono::offset::Local::now().date_naive();
             for chapter in response.data {
+                let today = chrono::offset::Local::now().date_naive();
                 let parse_date =
                     chrono::DateTime::parse_from_rfc3339(&chapter.attributes.readable_at)
                         .unwrap_or_default();
@@ -120,11 +120,7 @@ impl HistoryWidget {
                 let recent_chapter = RecentChapters {
                     title: chapter.attributes.title.unwrap_or("No title ".to_string()),
                     number: chapter.attributes.chapter.unwrap_or_default(),
-                    readeable_at: display_dates_since_publication(
-                        num_days,
-                        (num_days as f64 / 30.44) as i64,
-                        (num_days as f64 / 365_f64) as i64,
-                    ),
+                    readeable_at: display_dates_since_publication(num_days),
                 };
                 manga.recent_chapters.push(recent_chapter);
             }

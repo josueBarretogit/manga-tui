@@ -8,8 +8,10 @@ use once_cell::sync::Lazy;
 use rusqlite::{params, Connection};
 use strum::Display;
 
+use super::APP_DATA_DIR;
+
 pub static DBCONN: Lazy<Mutex<Option<Connection>>> = Lazy::new(|| {
-    let conn = Connection::open("./db_test.db");
+    let conn = Connection::open(APP_DATA_DIR.as_ref().unwrap().join("manga-tui-history.db"));
 
     if conn.is_err() {
         return Mutex::new(None);
@@ -134,23 +136,29 @@ pub fn save_history(manga_read: MangaReadingHistorySave<'_>) -> rusqlite::Result
     let mut manga_exists = manga_exists_already_exists_statement
         .query_map(params![manga_read.id], |row| Ok(Manga { id: row.get(0)? }))?;
 
-    if let Some(manga) = manga_exists.next() {
-        let manga = manga?;
-        conn.execute(
-            "INSERT INTO chapters VALUES (?1, ?2, ?3)",
-            (manga_read.chapter_id, manga_read.chapter_title, manga.id),
-        )?;
-        return Ok(());
-    }
-
     let history_type: i32 = conn.query_row(
         "SELECT id FROM history_types where name = ?1",
         params![MangaHistoryType::ReadingHistory.to_string()],
         |row| row.get(0),
     )?;
 
+    if let Some(manga) = manga_exists.next() {
+        let manga = manga?;
+        conn.execute(
+            "INSERT INTO chapters VALUES (?1, ?2, ?3)",
+            (manga_read.chapter_id, manga_read.chapter_title, manga.id),
+        )?;
+
+        conn.execute(
+            "INSERT INTO manga_history_union VALUES (?1, ?2)",
+            (manga_read.id, history_type),
+        )?;
+
+        return Ok(());
+    }
+
     conn.execute(
-        "INSERT INTO mangas VALUES (?1, ?2, ?3)",
+        "INSERT INTO mangas(id, title, img_url) VALUES (?1, ?2, ?3)",
         (manga_read.id, manga_read.title, manga_read.img_url),
     )?;
 
@@ -203,6 +211,7 @@ pub struct MangaHistory {
     // img_url: Option<String>,
 }
 
+/// This is used in the feed page to retrieve the mangas the user is currently reading
 pub fn get_history(
     hist_type: MangaHistoryType,
     offset: u32,
@@ -231,6 +240,7 @@ pub fn get_history(
             "SELECT  mangas.id, mangas.title from mangas 
                      INNER JOIN manga_history_union ON mangas.id = manga_history_union.manga_id 
                      WHERE manga_history_union.type_id = ?1
+                    ORDER BY mangas.created_at DESC
                      LIMIT 5 OFFSET {}",
             offset
         )
@@ -293,7 +303,7 @@ pub fn save_plan_to_read(manga: MangaPlanToReadSave<'_>) -> rusqlite::Result<()>
         }
 
         conn.execute(
-            "INSERT INTO mangas VALUES (?1, ?2, ?3)",
+            "INSERT INTO mangas(id, title, img_url) VALUES (?1, ?2, ?3)",
             (manga.id, manga.title, manga.img_url),
         )?;
 

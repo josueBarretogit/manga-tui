@@ -89,7 +89,7 @@ impl Feed {
             FeedTabs::PlantToRead => 1,
         };
 
-        Tabs::new(vec!["History", "Plan to Read"])
+        Tabs::new(vec!["Reading history", "Plan to Read"])
             .select(selected_tab)
             .highlight_style(Style::default().fg(Color::Yellow))
             .render(tabs_area, buf);

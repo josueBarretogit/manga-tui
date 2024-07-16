@@ -1,4 +1,5 @@
 use crate::backend::{ChapterResponse, Languages};
+use crate::utils::display_dates_since_publication;
 use ratatui::{prelude::*, widgets::*};
 use tui_widget_list::PreRender;
 
@@ -6,6 +7,8 @@ use tui_widget_list::PreRender;
 pub struct ChapterItem {
     pub id: String,
     pub title: String,
+    pub readable_at: String,
+    pub scanlator: String,
     pub chapter_number: String,
     pub is_read: bool,
     pub is_downloaded: bool,
@@ -26,7 +29,7 @@ impl Widget for ChapterItem {
 
         Block::bordered().border_style(self.style).render(area, buf);
 
-        let [title_area, chapter_number_area, translated_language_area] =
+        let [title_area, scanlator_area, readable_at_area] =
             layout.areas(area.inner(Margin {
                 horizontal: 1,
                 vertical: 1,
@@ -52,6 +55,9 @@ impl Widget for ChapterItem {
         ]))
         .style(self.style)
         .render(title_area, buf);
+
+        Paragraph::new(self.scanlator).render(scanlator_area, buf);
+        Paragraph::new(self.readable_at).render(readable_at_area, buf);
     }
 }
 
@@ -69,14 +75,17 @@ impl ChapterItem {
         id: String,
         title: String,
         chapter_number: String,
-        is_read: bool,
+        readable_at: String,
+        scanlator: String,
         translated_language: String,
     ) -> Self {
         Self {
             id,
             title,
+            readable_at,
+            scanlator,
             chapter_number,
-            is_read,
+            is_read: false,
             is_downloaded: false,
             translated_language,
             style: Style::default(),
@@ -93,7 +102,7 @@ impl ChaptersListWidget {
     pub fn from_response(response: &ChapterResponse) -> Self {
         let mut chapters: Vec<ChapterItem> = vec![];
 
-
+        let today = chrono::offset::Local::now().date_naive();
         for chapter in response.data.iter() {
             let id = chapter.id.clone();
             let title = chapter
@@ -110,11 +119,23 @@ impl ChaptersListWidget {
 
             let translated_language = chapter.attributes.translated_language.clone();
 
+            let parse_date = chrono::DateTime::parse_from_rfc3339(&chapter.attributes.readable_at)
+                .unwrap_or_default();
+
+            let difference = today - parse_date.date_naive();
+
+            let scanlator = chapter
+                .relationships
+                .iter()
+                .find(|rel| rel.type_field == "scanlation_group")
+                .map(|rel| rel.attributes.as_ref().unwrap().name.to_string());
+
             chapters.push(ChapterItem::new(
                 id,
                 title,
                 chapter_number,
-                false,
+                display_dates_since_publication(difference.num_days()),
+                scanlator.unwrap_or_default(),
                 translated_language,
             ))
         }

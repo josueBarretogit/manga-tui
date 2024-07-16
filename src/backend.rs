@@ -166,6 +166,13 @@ pub struct Relationship {
     pub id: String,
     #[serde(rename = "type")]
     pub type_field: String,
+    pub attributes: Option<ChapterRelationshipAttribute>,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChapterRelationshipAttribute {
+    pub name: String,
 }
 
 // Translations

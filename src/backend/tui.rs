@@ -178,7 +178,7 @@ pub fn handle_events(tick_rate: Duration, event_tx: UnboundedSender<Events>) -> 
 
                 }
                     _ = delay => {
-                        event_tx.send(Events::Tick).unwrap();
+                        event_tx.send(Events::Tick).ok();
                     }
             }
         }
