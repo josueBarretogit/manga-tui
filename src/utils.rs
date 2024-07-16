@@ -140,7 +140,7 @@ pub fn display_dates_since_publication(day: i64) -> String {
     let month = (day as f64 / 30.44) as i64;
     let year = (day as f64 / 364.0) as i64;
     if day <= 31 {
-        format!("{} days ago", day)
+        format!("{} days ago", day.abs())
     } else if month <= 12 {
         return format!("{} months ago", month);
     } else {

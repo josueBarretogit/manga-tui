@@ -22,14 +22,15 @@ impl Widget for ChapterItem {
         Self: Sized,
     {
         let layout = Layout::horizontal([
-            Constraint::Percentage(60),
-            Constraint::Percentage(20),
+            Constraint::Percentage(50),
+            Constraint::Percentage(30),
             Constraint::Percentage(20),
         ]);
 
         Block::bordered().border_style(self.style).render(area, buf);
 
         let [title_area, scanlator_area, readable_at_area] =
+
             layout.areas(area.inner(Margin {
                 horizontal: 1,
                 vertical: 1,

@@ -23,6 +23,7 @@ pub enum PageState {
 }
 
 pub enum MangaPageActions {
+    DownloadChapter(String),
     ScrollChapterDown,
     ScrollChapterUp,
     ToggleOrder,
@@ -156,8 +157,6 @@ impl MangaPage {
                 Block::bordered().render(area, buf);
             }
         }
-
-        Paragraph::new("More of the author : <a>").render(more_details_area, buf);
     }
 
     fn render_manga_information(&mut self, area: Rect, frame: &mut Frame<'_>) {
@@ -181,12 +180,15 @@ impl MangaPage {
             self.author, self.artist
         ));
 
-        let instructions = Span::raw("More about author/artist <u>/<a>").into_right_aligned_line();
+        let instructions = vec![
+            "More about author/artist ".into(),
+            "<u>/<a>".bold().fg(Color::Yellow),
+        ];
 
         Block::bordered()
             .title_top(Line::from(vec![self.title.clone().into()]))
             .title_bottom(Line::from(vec![statistics, "".into(), author_and_artist]))
-            .title_bottom(instructions)
+            .title_bottom(Line::from(instructions).right_aligned())
             .render(manga_information_area, buf);
 
         self.render_details(manga_information_area, frame.buffer_mut());
@@ -216,7 +218,7 @@ impl MangaPage {
 
     fn render_chapters_area(&mut self, area: Rect, frame: &mut Frame<'_>) {
         let layout =
-            Layout::vertical([Constraint::Percentage(10), Constraint::Percentage(90)]).margin(1);
+            Layout::vertical([Constraint::Percentage(10), Constraint::Percentage(90)]).margin(2);
 
         let [sorting_buttons_area, chapters_area] = layout.areas(area);
 
@@ -231,7 +233,16 @@ impl MangaPage {
             Some(chapters) => {
                 let page = format!("Page {}", chapters.page);
                 let total = format!("Total chapters {}", chapters.total_result);
+
+                let chapter_instructions = vec![
+                    "Scroll Up/Down ".into(),
+                    " <j>/<k> ".bold().fg(Color::Yellow),
+                    " Download chapter ".into(),
+                    " <d> ".bold().fg(Color::Yellow),
+                ];
+
                 Block::bordered()
+                    .title_top(Line::from(chapter_instructions))
                     .title_bottom(Line::from(page).left_aligned())
                     .title_bottom(Line::from(total).right_aligned())
                     .render(area, frame.buffer_mut());
@@ -518,6 +529,7 @@ impl Component for MangaPage {
     }
     fn update(&mut self, action: Self::Actions) {
         match action {
+
             MangaPageActions::ScrollChapterUp => self.scroll_chapter_up(),
             MangaPageActions::ScrollChapterDown => self.scroll_chapter_down(),
             MangaPageActions::ToggleOrder => {
@@ -534,6 +546,7 @@ impl Component for MangaPage {
                 self.clean_up();
                 self.global_event_tx.send(Events::GoSearchPage).unwrap();
             }
+            MangaPageActions::DownloadChapter(chapter_id) => todo!(),
         }
     }
     fn handle_events(&mut self, events: Events) {

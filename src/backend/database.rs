@@ -1,13 +1,7 @@
-// save what mangas the user is reading and which chapters where read
-// need a file to store that data,
-// need to update it
-
 use std::sync::Mutex;
-
 use once_cell::sync::Lazy;
 use rusqlite::{params, Connection};
 use strum::Display;
-
 use super::APP_DATA_DIR;
 
 pub static DBCONN: Lazy<Mutex<Option<Connection>>> = Lazy::new(|| {
@@ -130,18 +124,25 @@ pub fn save_history(manga_read: MangaReadingHistorySave<'_>) -> rusqlite::Result
 
     let conn = binding.as_ref().unwrap();
 
-    let mut manga_exists_already_exists_statement =
-        conn.prepare("SELECT id FROM mangas WHERE id = ?1")?;
-
-    let mut manga_exists = manga_exists_already_exists_statement
-        .query_map(params![manga_read.id], |row| Ok(Manga { id: row.get(0)? }))?;
-
     let history_type: i32 = conn.query_row(
         "SELECT id FROM history_types where name = ?1",
         params![MangaHistoryType::ReadingHistory.to_string()],
         |row| row.get(0),
     )?;
 
+    let is_already_reading: i32 = conn.query_row(
+        "SELECT COUNT(*) FROM manga_history_union WHERE manga_id = ?1 AND type_id = ?2",
+        params![manga_read.id, history_type],
+        |row| row.get(0),
+    )?;
+
+    let mut manga_exists_already_exists_statement =
+        conn.prepare("SELECT id FROM mangas WHERE id = ?1")?;
+
+    let mut manga_exists = manga_exists_already_exists_statement
+        .query_map(params![manga_read.id], |row| Ok(Manga { id: row.get(0)? }))?;
+
+    // Check if manga already exists in table mangas
     if let Some(manga) = manga_exists.next() {
         let manga = manga?;
         conn.execute(
@@ -149,11 +150,12 @@ pub fn save_history(manga_read: MangaReadingHistorySave<'_>) -> rusqlite::Result
             (manga_read.chapter_id, manga_read.chapter_title, manga.id),
         )?;
 
-        conn.execute(
-            "INSERT INTO manga_history_union VALUES (?1, ?2)",
-            (manga_read.id, history_type),
-        )?;
-
+        if is_already_reading == 0 {
+            conn.execute(
+                "INSERT INTO manga_history_union VALUES (?1, ?2)",
+                (manga_read.id, history_type),
+            )?;
+        }
         return Ok(());
     }
 

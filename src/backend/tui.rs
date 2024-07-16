@@ -50,20 +50,6 @@ pub fn restore() -> std::io::Result<()> {
     Ok(())
 }
 
-pub fn init_error_hooks() -> color_eyre::Result<()> {
-    let (panic, error) = HookBuilder::default().into_hooks();
-    let panic = panic.into_panic_hook();
-    let error = error.into_eyre_hook();
-    color_eyre::eyre::set_hook(Box::new(move |e| {
-        let _ = restore();
-        error(e)
-    }))?;
-    std::panic::set_hook(Box::new(move |info| {
-        let _ = restore();
-        panic(info);
-    }));
-    Ok(())
-}
 
 ///Start app's main loop
 pub async fn run_app(backend: impl Backend) -> Result<(), Box<dyn Error>> {
@@ -160,11 +146,11 @@ pub fn handle_events(tick_rate: Duration, event_tx: UnboundedSender<Events>) -> 
                             match evt {
                                 crossterm::event::Event::Key(key) => {
                                     if key.kind == crossterm::event::KeyEventKind::Press {
-                                        event_tx.send(Events::Key(key)).unwrap();
+                                        event_tx.send(Events::Key(key)).ok();
                                     }
                                 },
                                 crossterm::event::Event::Mouse(mouse_event) => {
-                                    event_tx.send(Events::Mouse(mouse_event)).unwrap();
+                                    event_tx.send(Events::Mouse(mouse_event)).ok();
                                 }
                                 _ => {}
                             }

@@ -33,6 +33,7 @@ pub enum FeedActions {
 }
 
 pub enum FeedEvents {
+    SearchingFinalized,
     SearchHistory,
     SearchRecentChapters,
     LoadRecentChapters(String, Option<ChapterResponse>),
@@ -146,6 +147,7 @@ impl Feed {
         }
         if let Ok(local_event) = self.local_event_rx.try_recv() {
             match local_event {
+                FeedEvents::SearchingFinalized => self.state = FeedState::Normal,
                 FeedEvents::ErrorSearchingMangaData => self.display_error_searching_manga(),
                 FeedEvents::SearchHistory => self.search_history(),
                 FeedEvents::LoadHistory(page, maybe_history) => {
@@ -275,11 +277,12 @@ impl Feed {
         }
     }
 
-
     fn go_to_manga_page(&mut self) {
         if let Some(history) = self.history.as_mut() {
             if let Some(currently_selected_manga) = history.get_current_manga_selected() {
+                self.state = FeedState::SearchingMangaData;
                 let tx = self.global_event_tx.clone();
+                let loca_tx = self.local_event_tx.clone();
                 let manga_id = currently_selected_manga.id.clone();
 
                 self.loading_state = Some(ThrobberState::default());
@@ -296,6 +299,8 @@ impl Feed {
                                         manga_found.img_url.unwrap_or_default().as_str(),
                                     )
                                     .await;
+
+                                loca_tx.send(FeedEvents::SearchingFinalized).ok();
 
                                 match cover {
                                     Ok(bytes) => {

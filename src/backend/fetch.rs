@@ -1,6 +1,7 @@
 use bytes::Bytes;
 use chrono::Months;
 use once_cell::sync::OnceCell;
+use rusqlite::ToSql;
 
 use crate::view::pages::manga::ChapterOrder;
 
@@ -176,9 +177,9 @@ impl MangadexClient {
             API_URL_BASE, manga_id
         );
 
-        let response = self.client.get(endpoint).send().await?;
+        let response = self.client.get(endpoint).send().await?.text().await?;
 
-        let data: super::feed::OneMangaResponse = response.json().await?;
+        let data: super::feed::OneMangaResponse = serde_json::from_str(&response).unwrap();
 
         Ok(data)
     }
@@ -187,7 +188,7 @@ impl MangadexClient {
         &self,
         manga_id: &str,
     ) -> Result<ChapterResponse, reqwest::Error> {
-        let order = format!("order[volume]=desc&order[chapter]=desc");
+        let order = "order[volume]=desc&order[chapter]=desc";
 
         let endpoint = format!(
             "{}/manga/{}/feed?limit=5&{}&translatedLanguage[]=en&includes[]=scanlation_group&offset=0",

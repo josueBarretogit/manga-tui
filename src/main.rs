@@ -4,8 +4,9 @@ use ratatui_image::picker::Picker;
 use reqwest::Client;
 
 use self::backend::build_data_dir;
+use self::backend::error_log::init_error_hooks;
 use self::backend::fetch::{MangadexClient, MANGADEX_CLIENT_INSTANCE};
-use self::backend::tui::{init, init_error_hooks, restore, run_app};
+use self::backend::tui::{init, restore, run_app};
 
 mod utils;
 
@@ -43,6 +44,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     init_error_hooks()?;
     init()?;
+    panic!("aaa");
     run_app(CrosstermBackend::new(std::io::stdout())).await?;
     restore()?;
     Ok(())
