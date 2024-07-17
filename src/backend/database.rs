@@ -60,6 +60,7 @@ pub static DBCONN: Lazy<Mutex<Option<Connection>>> = Lazy::new(|| {
                 id    TEXT  PRIMARY KEY,
                 title TEXT  NOT NULL,
                 manga_id TEXT  NOT NULL,
+                is_downloaded BOOLEAN NOT NULL DEFAULT 0,
                 FOREIGN KEY (manga_id) REFERENCES mangas (id)
             )",
         (),
@@ -146,7 +147,7 @@ pub fn save_history(manga_read: MangaReadingHistorySave<'_>) -> rusqlite::Result
     if let Some(manga) = manga_exists.next() {
         let manga = manga?;
         conn.execute(
-            "INSERT INTO chapters VALUES (?1, ?2, ?3)",
+            "INSERT INTO chapters(id, title, manga_id) VALUES (?1, ?2, ?3)",
             (manga_read.chapter_id, manga_read.chapter_title, manga.id),
         )?;
 
@@ -170,7 +171,7 @@ pub fn save_history(manga_read: MangaReadingHistorySave<'_>) -> rusqlite::Result
     )?;
 
     conn.execute(
-        "INSERT INTO chapters VALUES (?1, ?2, ?3)",
+        "INSERT INTO chapters(id, title, manga_id) VALUES (?1, ?2, ?3)",
         (
             manga_read.chapter_id,
             manga_read.chapter_title,
@@ -185,6 +186,7 @@ pub struct MangaReadingHistoryRetrieve {
     pub id: String,
 }
 
+// retrieve the `is_reading` status for a chapter
 pub fn get_chapters_read(id: &str) -> rusqlite::Result<Vec<MangaReadingHistoryRetrieve>> {
     let binding = DBCONN.lock().unwrap();
     let conn = binding.as_ref().unwrap();
@@ -213,7 +215,7 @@ pub struct MangaHistory {
     // img_url: Option<String>,
 }
 
-/// This is used in the feed page to retrieve the mangas the user is currently reading
+/// This is used in the `feed` page to retrieve the mangas the user is currently reading
 pub fn get_history(
     hist_type: MangaHistoryType,
     offset: u32,
@@ -316,5 +318,15 @@ pub fn save_plan_to_read(manga: MangaPlanToReadSave<'_>) -> rusqlite::Result<()>
 
         return Ok(());
     }
+    Ok(())
+}
+
+pub fn set_chapter_downloaded(id: &str) -> rusqlite::Result<()> {
+    let binding = DBCONN.lock().unwrap();
+    let conn = binding.as_ref().unwrap();
+    conn.execute(
+        "UPDATE chapters SET is_downloaded = ?1 WHERE id = ?2",
+        params![true, id],
+    )?;
     Ok(())
 }

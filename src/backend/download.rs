@@ -2,7 +2,10 @@ use manga_tui::exists;
 use std::fs::{create_dir, File};
 use std::io::Write;
 use std::path::Path;
+use tokio::sync::mpsc::UnboundedSender;
 use tokio::task::JoinHandle;
+
+use crate::view::pages::manga::MangaPageEvents;
 
 use super::error_log::{write_to_error_log, ErrorType};
 use super::fetch::MangadexClient;
@@ -20,13 +23,15 @@ pub struct DownloadChapter<'a> {
 pub fn download_chapter(
     chapter: DownloadChapter<'_>,
     chapter_data: ChapterPagesResponse,
-) -> Result<JoinHandle<()>, std::io::Error> {
+    tx: UnboundedSender<MangaPageEvents>,
+) -> Result<(), std::io::Error> {
     // need directory with the manga's title, and its id to make it unique
+    let chapter_id = chapter.id_chapter.to_string();
 
     let dir_manga_downloads = APP_DATA_DIR.as_ref().unwrap().join("mangaDownloads");
 
     let dir_manga =
-        dir_manga_downloads.join(format!("{}_{}", chapter.manga_id, chapter.manga_title));
+        dir_manga_downloads.join(format!("{} {}", chapter.manga_title, chapter.manga_id));
 
     if !exists!(&dir_manga) {
         create_dir(&dir_manga)?;
@@ -35,19 +40,17 @@ pub fn download_chapter(
     // need directory with chapter's title, number and scanlator
 
     let chapter_dir = dir_manga.join(format!(
-        "Ch. {} {} {}",
-        chapter.number, chapter.title, chapter.scanlator
+        "Ch. {} {} {} {}",
+        chapter.number, chapter.title, chapter.scanlator, chapter_id
     ));
 
     if !exists!(&chapter_dir) {
         create_dir(&chapter_dir)?;
     }
 
-    let chapter_id = chapter.id_chapter.to_string();
-
     // create images and store them in the directory
 
-    let task = tokio::spawn(async move {
+    tokio::spawn(async move {
         for file_name in chapter_data.chapter.data {
             let endpoint = format!(
                 "{}/data/{}",
@@ -66,7 +69,9 @@ pub fn download_chapter(
                 Err(e) => write_to_error_log(ErrorType::FromError(Box::new(e))),
             }
         }
+        tx.send(MangaPageEvents::ChapterFinishedDownloading(chapter_id))
+            .ok();
     });
 
-    Ok(task)
+    Ok(())
 }

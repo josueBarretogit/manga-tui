@@ -14,11 +14,13 @@ use ratatui::{prelude::*, widgets::*};
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::{Resize, StatefulImage};
 use strum::Display;
+use throbber_widgets_tui::ThrobberState;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
-use tokio::task::JoinSet;
+use tokio::task::{JoinHandle, JoinSet};
 
 #[derive(PartialEq, Eq)]
 pub enum PageState {
+    DownloadingChapters,
     SearchingChapters,
     SearchingChapterData,
     SearchingStopped,
@@ -36,6 +38,7 @@ pub enum MangaPageEvents {
     FetchChapters,
     FethStatistics,
     CheckChaptersRead,
+    ChapterFinishedDownloading(String),
     StoppedSearchingChapterData,
     LoadChapters(Option<ChapterResponse>),
     LoadStatistics(Option<MangaStatisticsResponse>),
@@ -356,6 +359,21 @@ impl MangaPage {
         self.search_chapters();
     }
 
+    fn get_current_selected_chapter_mut(&mut self) -> Option<&mut ChapterItem> {
+        match self.chapters.as_mut() {
+            Some(chapters_data) => match chapters_data.state.selected {
+                Some(selected_chapter_index) => {
+                    return chapters_data
+                        .widget
+                        .chapters
+                        .get_mut(selected_chapter_index)
+                }
+                None => None,
+            },
+            None => None,
+        }
+    }
+
     fn get_current_selected_chapter(&self) -> Option<&ChapterItem> {
         match self.chapters.as_ref() {
             Some(chapters_data) => match chapters_data.state.selected {
@@ -474,13 +492,17 @@ impl MangaPage {
     }
 
     fn download_chapter_selected(&mut self) {
-        if let Some(chapter) = self.get_current_selected_chapter() {
+        let manga_id = self.id.clone();
+        let manga_title = self.title.clone();
+        let tx = self.local_event_tx.clone();
+        self.state = PageState::DownloadingChapters;
+        if let Some(chapter) = self.get_current_selected_chapter_mut() {
             let title = chapter.title.clone();
-            let manga_id = self.id.clone();
-            let manga_title = self.title.clone();
             let number = chapter.chapter_number.clone();
             let scanlator = chapter.scanlator.clone();
             let chapter_id = chapter.id.clone();
+
+            chapter.download_loading_state = Some(ThrobberState::default());
 
             self.tasks.spawn(async move {
                 let manga_response = MangadexClient::global()
@@ -488,7 +510,7 @@ impl MangaPage {
                     .await;
                 match manga_response {
                     Ok(res) => {
-                        let download_proccess = download_chapter(
+                        download_chapter(
                             DownloadChapter {
                                 id_chapter: &chapter_id,
                                 manga_id: &manga_id,
@@ -498,30 +520,48 @@ impl MangaPage {
                                 scanlator: &scanlator,
                             },
                             res,
-                        );
-
-                        match download_proccess {
-                            Ok(handle) => {
-                                //todo
-                            }
-                            Err(e) => {
-                                write_to_error_log(error_log::ErrorType::FromError(Box::new(e)));
-                            }
-                        }
+                            tx,
+                        )
+                        .unwrap();
                     }
                     Err(e) => {
                         write_to_error_log(error_log::ErrorType::FromError(Box::new(e)));
                     }
                 }
             });
+        }
+    }
 
-            // download_chapter(chapter_to_download, chapter_data)
+    fn stop_loader_for_chapter(&mut self, chapter_id: String) {
+        let chapters = self.chapters.as_mut().unwrap();
+        if let Some(chap) = chapters
+            .widget
+            .chapters
+            .iter_mut()
+            .find(|chap| chap.id == chapter_id)
+        {
+            chap.download_loading_state = None;
         }
     }
 
     fn tick(&mut self) {
+        if self.state == PageState::DownloadingChapters {
+            let chapters = self.chapters.as_mut().unwrap();
+            for chapt in chapters
+                .widget
+                .chapters
+                .iter_mut()
+                .filter(|chap| chap.download_loading_state.is_some())
+            {
+                chapt.download_loading_state.as_mut().unwrap().calc_next();
+            }
+        }
+
         if let Ok(background_event) = self.local_event_rx.try_recv() {
             match background_event {
+                MangaPageEvents::ChapterFinishedDownloading(id_chapter) => {
+                    self.stop_loader_for_chapter(id_chapter)
+                }
                 MangaPageEvents::FethStatistics => self.fetch_statistics(),
                 MangaPageEvents::FetchChapters => self.search_chapters(),
                 MangaPageEvents::LoadChapters(response) => {

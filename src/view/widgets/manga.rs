@@ -1,6 +1,7 @@
 use crate::backend::{ChapterResponse, Languages};
 use crate::utils::display_dates_since_publication;
 use ratatui::{prelude::*, widgets::*};
+use throbber_widgets_tui::{Throbber, ThrobberState};
 use tui_widget_list::PreRender;
 
 #[derive(Clone)]
@@ -12,12 +13,13 @@ pub struct ChapterItem {
     pub chapter_number: String,
     pub is_read: bool,
     pub is_downloaded: bool,
+    pub download_loading_state: Option<ThrobberState>,
     pub translated_language: String,
     style: Style,
 }
 
 impl Widget for ChapterItem {
-    fn render(self, area: Rect, buf: &mut Buffer)
+    fn render(mut self, area: Rect, buf: &mut Buffer)
     where
         Self: Sized,
     {
@@ -56,13 +58,26 @@ impl Widget for ChapterItem {
         .style(self.style)
         .render(title_area, buf);
 
-        Paragraph::new(self.scanlator)
-            .wrap(Wrap { trim: true })
-            .render(scanlator_area, buf);
+        match self.download_loading_state.as_mut() {
+            Some(state) => {
+                let loader = Throbber::default()
+                    .label("Downloading, please wait a moment")
+                    .style(Style::default().fg(Color::Yellow))
+                    .throbber_set(throbber_widgets_tui::BRAILLE_SIX)
+                    .use_type(throbber_widgets_tui::WhichUse::Spin);
 
-        Paragraph::new(self.readable_at)
-            .wrap(Wrap { trim: true })
-            .render(readable_at_area, buf);
+                StatefulWidget::render(loader, scanlator_area, buf, state);
+            }
+            None => {
+                Paragraph::new(self.scanlator)
+                    .wrap(Wrap { trim: true })
+                    .render(scanlator_area, buf);
+
+                Paragraph::new(self.readable_at)
+                    .wrap(Wrap { trim: true })
+                    .render(readable_at_area, buf);
+            }
+        }
     }
 }
 
@@ -92,6 +107,7 @@ impl ChapterItem {
             chapter_number,
             is_read: false,
             is_downloaded: false,
+            download_loading_state: None,
             translated_language,
             style: Style::default(),
         }
