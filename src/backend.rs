@@ -18,6 +18,8 @@ pub enum AppDirectories {
     MangaDownloads,
     #[strum(to_string = "errorLogs")]
     ErrorLogs,
+    #[strum(to_string = "history")]
+    History,
 }
 
 pub static APP_DATA_DIR: Lazy<Option<PathBuf>> = Lazy::new(|| {
@@ -41,8 +43,13 @@ pub fn build_data_dir() -> Result<(), std::io::Error> {
             if !exists!(&dir.join(AppDirectories::MangaDownloads.to_string())) {
                 create_dir(dir.join(AppDirectories::MangaDownloads.to_string()))?;
             }
+
             if !exists!(&dir.join(AppDirectories::ErrorLogs.to_string())) {
                 create_dir(dir.join(AppDirectories::ErrorLogs.to_string()))?;
+            }
+
+            if !exists!(&dir.join(AppDirectories::History.to_string())) {
+                create_dir(dir.join(AppDirectories::History.to_string()))?;
             }
 
             if !exists!(&dir

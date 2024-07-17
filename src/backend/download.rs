@@ -51,19 +51,26 @@ pub fn download_chapter(
     // create images and store them in the directory
 
     tokio::spawn(async move {
-        for file_name in chapter_data.chapter.data {
+        for (index, file_name) in chapter_data.chapter.data.iter().enumerate() {
             let endpoint = format!(
                 "{}/data/{}",
                 chapter_data.base_url, chapter_data.chapter.hash
             );
 
             let image_response = MangadexClient::global()
-                .get_chapter_page(&endpoint, &file_name)
+                .get_chapter_page(&endpoint, file_name)
                 .await;
+
+            let file_name = Path::new(&file_name);
 
             match image_response {
                 Ok(bytes) => {
-                    let mut image_created = File::create(chapter_dir.join(file_name)).unwrap();
+                    let mut image_created = File::create(chapter_dir.join(format!(
+                        "{}.{}",
+                        index + 1,
+                        file_name.extension().unwrap().to_str().unwrap()
+                    )))
+                    .unwrap();
                     image_created.write_all(&bytes).unwrap();
                 }
                 Err(e) => write_to_error_log(ErrorType::FromError(Box::new(e))),

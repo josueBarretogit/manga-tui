@@ -1,5 +1,5 @@
-use crate::backend::database::MangaReadingHistorySave;
-use crate::backend::database::{get_chapters_read, save_history, DBCONN};
+use crate::backend::database::{get_chapters_read, save_history, SetChapterDownloaded, DBCONN};
+use crate::backend::database::{set_chapter_downloaded, MangaReadingHistorySave};
 use crate::backend::download::{download_chapter, DownloadChapter};
 use crate::backend::error_log::{self, write_to_error_log};
 use crate::backend::fetch::MangadexClient;
@@ -16,7 +16,7 @@ use ratatui_image::{Resize, StatefulImage};
 use strum::Display;
 use throbber_widgets_tui::ThrobberState;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
-use tokio::task::{JoinHandle, JoinSet};
+use tokio::task::JoinSet;
 
 #[derive(PartialEq, Eq)]
 pub enum PageState {
@@ -480,8 +480,10 @@ impl MangaPage {
         match history {
             Ok(his) => {
                 for chapter in self.chapters.as_mut().unwrap().widget.chapters.iter_mut() {
-                    if his.iter().any(|chap| chap.id == chapter.id) {
-                        chapter.is_read = true
+                    let chapter_found = his.iter().find(|chap| chap.id == chapter.id);
+                    if let Some(chapt) = chapter_found {
+                        chapter.is_read = chapt.is_read;
+                        chapter.is_downloaded = chapt.is_downloaded
                     }
                 }
             }
@@ -541,6 +543,18 @@ impl MangaPage {
             .find(|chap| chap.id == chapter_id)
         {
             chap.download_loading_state = None;
+
+            let save_download_operation = set_chapter_downloaded(SetChapterDownloaded {
+                id: &chap.id,
+                title: &chap.title,
+                manga_id: &self.id,
+                manga_title: &self.title,
+                img_url: self.img_url.as_deref(),
+            });
+
+            if let Err(e) = save_download_operation {
+                write_to_error_log(error_log::ErrorType::FromError(Box::new(e)));
+            }
         }
     }
 

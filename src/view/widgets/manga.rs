@@ -38,14 +38,14 @@ impl Widget for ChapterItem {
 
         let translated_language: Languages = self.translated_language.as_str().into();
 
-        let is_read_icon = if self.is_read {
-            "👀".to_string()
-        } else {
-            "".to_string()
-        };
+        let is_read_icon = if self.is_read { "👀" } else { "" };
+
+        let is_downloaded_icon = if self.is_downloaded { "📥" } else { "" };
 
         Paragraph::new(Line::from(vec![
             is_read_icon.into(),
+            " ".into(),
+            is_downloaded_icon.into(),
             " ".into(),
             translated_language.to_string().into(),
             format!(" Ch. {} ", self.chapter_number).into(),

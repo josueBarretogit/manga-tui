@@ -27,8 +27,12 @@ pub static PICKER: Lazy<Option<Picker>> = Lazy::new(|| {
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 7)]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    build_data_dir()
-        .unwrap_or_else(|error| panic!("Data dir could not be created, details : {error}"));
+    match build_data_dir() {
+        Ok(_) => {}
+        Err(e) => {
+            panic!("Data dir could not be created, details : {e}")
+        }
+    }
 
     let user_agent = format!(
         "manga-tui/0.beta-testing1.0 ({}/{}/{})",
