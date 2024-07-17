@@ -1,5 +1,6 @@
 use crate::backend::database::MangaReadingHistorySave;
 use crate::backend::database::{get_chapters_read, save_history, DBCONN};
+use crate::backend::download::{download_chapter, DownloadChapter};
 use crate::backend::error_log::{self, write_to_error_log};
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
@@ -24,12 +25,11 @@ pub enum PageState {
 }
 
 pub enum MangaPageActions {
-    DownloadChapter(String),
+    DownloadChapter,
     ScrollChapterDown,
     ScrollChapterUp,
     ToggleOrder,
     ReadChapter,
-    GoBackSearchPage,
 }
 
 pub enum MangaPageEvents {
@@ -293,13 +293,6 @@ impl MangaPage {
 
     fn handle_key_events(&mut self, key_event: KeyEvent) {
         match key_event.code {
-            KeyCode::Tab => {
-                if self.state != PageState::SearchingChapterData {
-                    self.local_action_tx
-                        .send(MangaPageActions::GoBackSearchPage)
-                        .ok();
-                }
-            }
             KeyCode::Char('j') => {
                 if self.state != PageState::SearchingChapterData {
                     self.local_action_tx
@@ -327,6 +320,11 @@ impl MangaPage {
                         .send(MangaPageActions::ReadChapter)
                         .ok();
                 }
+            }
+            KeyCode::Char('d') => {
+                self.local_action_tx
+                    .send(MangaPageActions::DownloadChapter)
+                    .ok();
             }
             _ => {}
         }
@@ -475,6 +473,52 @@ impl MangaPage {
         }
     }
 
+    fn download_chapter_selected(&mut self) {
+        if let Some(chapter) = self.get_current_selected_chapter() {
+            let title = chapter.title.clone();
+            let manga_id = self.id.clone();
+            let manga_title = self.title.clone();
+            let number = chapter.chapter_number.clone();
+            let scanlator = chapter.scanlator.clone();
+            let chapter_id = chapter.id.clone();
+
+            self.tasks.spawn(async move {
+                let manga_response = MangadexClient::global()
+                    .get_chapter_pages(&chapter_id)
+                    .await;
+                match manga_response {
+                    Ok(res) => {
+                        let download_proccess = download_chapter(
+                            DownloadChapter {
+                                id_chapter: &chapter_id,
+                                manga_id: &manga_id,
+                                manga_title: &manga_title,
+                                title: &title,
+                                number: &number,
+                                scanlator: &scanlator,
+                            },
+                            res,
+                        );
+
+                        match download_proccess {
+                            Ok(handle) => {
+                                //todo
+                            }
+                            Err(e) => {
+                                write_to_error_log(error_log::ErrorType::FromError(Box::new(e)));
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        write_to_error_log(error_log::ErrorType::FromError(Box::new(e)));
+                    }
+                }
+            });
+
+            // download_chapter(chapter_to_download, chapter_data)
+        }
+    }
+
     fn tick(&mut self) {
         if let Ok(background_event) = self.local_event_rx.try_recv() {
             match background_event {
@@ -550,13 +594,11 @@ impl Component for MangaPage {
                     self.read_chapter();
                 }
             }
-            MangaPageActions::GoBackSearchPage => {
-                self.clean_up();
-                self.global_event_tx.send(Events::GoSearchPage).unwrap();
-            }
-            MangaPageActions::DownloadChapter(chapter_id) => todo!(),
+
+            MangaPageActions::DownloadChapter => self.download_chapter_selected(),
         }
     }
+
     fn handle_events(&mut self, events: Events) {
         match events {
             Events::Key(key_event) => self.handle_key_events(key_event),

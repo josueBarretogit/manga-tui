@@ -2,23 +2,25 @@ use manga_tui::exists;
 use std::fs::{create_dir, File};
 use std::io::Write;
 use std::path::Path;
+use tokio::task::JoinHandle;
 
 use super::error_log::{write_to_error_log, ErrorType};
 use super::fetch::MangadexClient;
 use super::{ChapterPagesResponse, APP_DATA_DIR};
 
 pub struct DownloadChapter<'a> {
-    manga_id: &'a str,
-    manga_title: &'a str,
-    title: &'a str,
-    number: &'a u32,
-    scanlator: &'a str,
+    pub id_chapter: &'a str,
+    pub manga_id: &'a str,
+    pub manga_title: &'a str,
+    pub title: &'a str,
+    pub number: &'a str,
+    pub scanlator: &'a str,
 }
 
 pub fn download_chapter(
     chapter: DownloadChapter<'_>,
     chapter_data: ChapterPagesResponse,
-) -> Result<(), std::io::Error> {
+) -> Result<JoinHandle<()>, std::io::Error> {
     // need directory with the manga's title, and its id to make it unique
 
     let dir_manga_downloads = APP_DATA_DIR.as_ref().unwrap().join("mangaDownloads");
@@ -30,22 +32,30 @@ pub fn download_chapter(
         create_dir(&dir_manga)?;
     }
 
-    // need directory with chapter's title and scanlator
+    // need directory with chapter's title, number and scanlator
 
-    let chapter_dir = dir_manga.join(format!("{}_{}", chapter.title, chapter.scanlator));
+    let chapter_dir = dir_manga.join(format!(
+        "Ch. {} {} {}",
+        chapter.number, chapter.title, chapter.scanlator
+    ));
 
     if !exists!(&chapter_dir) {
         create_dir(&chapter_dir)?;
     }
 
+    let chapter_id = chapter.id_chapter.to_string();
+
     // create images and store them in the directory
 
-    tokio::spawn(async move {
+    let task = tokio::spawn(async move {
         for file_name in chapter_data.chapter.data {
-            let endpoint = &chapter_data.base_url;
+            let endpoint = format!(
+                "{}/data/{}",
+                chapter_data.base_url, chapter_data.chapter.hash
+            );
 
             let image_response = MangadexClient::global()
-                .get_chapter_page(endpoint, &file_name)
+                .get_chapter_page(&endpoint, &file_name)
                 .await;
 
             match image_response {
@@ -58,5 +68,5 @@ pub fn download_chapter(
         }
     });
 
-    Ok(())
+    Ok(task)
 }

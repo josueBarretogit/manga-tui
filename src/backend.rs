@@ -34,19 +34,28 @@ pub fn build_data_dir() -> Result<(), std::io::Error> {
 
     match data_dir {
         Some(dir) => {
-            if exists!(dir) {
-                Ok(())
-            } else {
+            if !exists!(dir) {
                 create_dir_all(dir)?;
+            }
+
+            if !exists!(&dir.join(AppDirectories::MangaDownloads.to_string())) {
                 create_dir(dir.join(AppDirectories::MangaDownloads.to_string()))?;
+            }
+            if !exists!(&dir.join(AppDirectories::ErrorLogs.to_string())) {
                 create_dir(dir.join(AppDirectories::ErrorLogs.to_string()))?;
+            }
+
+            if !exists!(&dir
+                .join(AppDirectories::ErrorLogs.to_string())
+                .join("manga-tui-error-logs.txt"))
+            {
                 File::create(
                     dir.join(AppDirectories::ErrorLogs.to_string())
                         .join("manga-tui-error-logs.txt"),
                 )?;
-
-                Ok(())
             }
+
+            Ok(())
         }
         None => Err(std::io::Error::other("data dir could not be found")),
     }
