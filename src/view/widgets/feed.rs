@@ -53,7 +53,14 @@ impl Widget for MangasRead {
             .render(title_area, buf);
 
         if !self.recent_chapters.is_empty() {
-            Widget::render(List::new(self.recent_chapters), recent_chapters_area, buf);
+            Widget::render(
+                List::new(self.recent_chapters).block(Block::bordered().title("Latest chapters")),
+                recent_chapters_area.inner(Margin {
+                    horizontal: 1,
+                    vertical: 1,
+                }),
+                buf,
+            );
         }
     }
 }

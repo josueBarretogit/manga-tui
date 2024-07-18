@@ -26,7 +26,12 @@ pub fn write_to_error_log(e: ErrorType<'_>) {
     let now = offset::Local::now();
 
     let error_format = match e {
-        ErrorType::FromPanic(panic_info) => format!("{} | {} \n", now, panic_info),
+        ErrorType::FromPanic(panic_info) => format!(
+            "{} | {} | {} \n",
+            now,
+            panic_info,
+            panic_info.location().unwrap()
+        ),
         ErrorType::FromError(boxed_err) => format!("{} | {} \n", now, boxed_err),
     };
 

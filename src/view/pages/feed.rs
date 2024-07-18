@@ -4,7 +4,7 @@ use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
 use crate::backend::ChapterResponse;
 use crate::utils::from_manga_response;
-use crate::view::widgets::feed::{FeedTabs, HistoryWidget, MangasRead, RecentChapters};
+use crate::view::widgets::feed::{FeedTabs, HistoryWidget, MangasRead};
 use crate::view::widgets::search::MangaItem;
 use crate::view::widgets::Component;
 use crate::PICKER;
@@ -92,6 +92,7 @@ impl Feed {
 
         Tabs::new(vec!["Reading history", "Plan to Read"])
             .select(selected_tab)
+            .block(Block::bordered().title("Switch tab: <tab>"))
             .highlight_style(Style::default().fg(Color::Yellow))
             .render(tabs_area, buf);
 

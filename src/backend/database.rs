@@ -1,7 +1,7 @@
 use super::{AppDirectories, APP_DATA_DIR};
 use manga_tui::build_check_exists_function;
 use once_cell::sync::Lazy;
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, Connection};
 use std::sync::Mutex;
 use strum::Display;
 
@@ -111,6 +111,21 @@ pub static DBCONN: Lazy<Mutex<Option<Connection>>> = Lazy::new(|| {
 build_check_exists_function!(check_chapter_exists, "chapters");
 build_check_exists_function!(check_manga_already_exists, "mangas");
 
+fn manga_is_reading(id: &str, conn: &Connection) -> rusqlite::Result<bool> {
+    let history_type: i32 = conn.query_row(
+        "SELECT id FROM history_types where name = ?1",
+        params![MangaHistoryType::ReadingHistory.to_string()],
+        |row| row.get(0),
+    )?;
+
+    let exists: bool = conn.query_row(
+        "SELECT EXISTS(SELECT * FROM manga_history_union WHERE manga_id = ?1 AND type_id = ?2)",
+        rusqlite::params![id, history_type],
+        |row| row.get(0),
+    )?;
+    Ok(exists)
+}
+
 pub struct MangaInsert<'a> {
     pub id: &'a str,
     pub title: &'a str,
@@ -133,12 +148,14 @@ pub struct ChapterInsert<'a> {
     pub id: &'a str,
     pub title: &'a str,
     pub manga_id: &'a str,
+    pub is_read: bool,
+    pub is_downloaded: bool,
 }
 
 fn insert_chapter(chap: ChapterInsert<'_>, conn: &Connection) -> rusqlite::Result<()> {
     conn.execute(
-        "INSERT INTO chapters(id, title, is_read, manga_id) VALUES (?1, ?2, ?3, ?4)",
-        (chap.id, chap.title, true, chap.manga_id),
+        "INSERT INTO chapters(id, title, is_read, is_downloaded, manga_id) VALUES (?1, ?2, ?3, ?4, ?5)",
+        (chap.id, chap.title, chap.is_read, chap.is_downloaded, chap.manga_id),
     )?;
     Ok(())
 }
@@ -173,24 +190,20 @@ pub fn save_history(manga_read: MangaReadingHistorySave<'_>) -> rusqlite::Result
         |row| row.get(0),
     )?;
 
-    let is_already_reading: i32 = conn.query_row(
-        "SELECT COUNT(*) FROM manga_history_union WHERE manga_id = ?1 AND type_id = ?2",
-        params![manga_read.id, history_type],
-        |row| row.get(0),
-    )?;
-
     // Check if manga already exists in table mangas
     if check_manga_already_exists(manga_read.id, conn)? {
         insert_chapter(
             ChapterInsert {
                 id: manga_read.chapter_id,
                 title: manga_read.chapter_title,
+                is_downloaded: false,
+                is_read: true,
                 manga_id: manga_read.id,
             },
             conn,
         )?;
 
-        if is_already_reading == 0 {
+        if !manga_is_reading(manga_read.id, conn)? {
             conn.execute(
                 "INSERT INTO manga_history_union VALUES (?1, ?2)",
                 (manga_read.id, history_type),
@@ -217,6 +230,8 @@ pub fn save_history(manga_read: MangaReadingHistorySave<'_>) -> rusqlite::Result
         ChapterInsert {
             id: manga_read.chapter_id,
             title: manga_read.chapter_title,
+            is_read: true,
+            is_downloaded: false,
             manga_id: manga_read.id,
         },
         conn,
@@ -232,7 +247,7 @@ pub struct MangaReadingHistoryRetrieve {
 }
 
 // retrieve the `is_reading` and `is_downloaded` data for a chapter
-pub fn get_chapters_read(id: &str) -> rusqlite::Result<Vec<MangaReadingHistoryRetrieve>> {
+pub fn get_chapters_history_status(id: &str) -> rusqlite::Result<Vec<MangaReadingHistoryRetrieve>> {
     let binding = DBCONN.lock().unwrap();
     let conn = binding.as_ref().unwrap();
 
@@ -331,21 +346,14 @@ pub fn save_plan_to_read(manga: MangaPlanToReadSave<'_>) -> rusqlite::Result<()>
         |row| row.get(0),
     )?;
 
-    let is_already_plan_to_read: i32 = conn.query_row(
-        "SELECT COUNT(*) FROM manga_history_union WHERE manga_id = ?1 AND type_id = ?2",
+    let is_already_plan_to_read: bool = conn.query_row(
+        "SELECT EXISTS(SELECT * FROM manga_history_union WHERE manga_id = ?1 AND type_id = ?2)",
         params![manga.id, history_type],
         |row| row.get(0),
     )?;
 
-    if is_already_plan_to_read == 0 {
-        let mut manga_exists_already_exists_statement =
-            conn.prepare("SELECT id FROM mangas WHERE id = ?1")?;
-
-        let mut manga_exists = manga_exists_already_exists_statement
-            .query_map(params![manga.id], |row| Ok(Manga { id: row.get(0)? }))?;
-
-        if let Some(manga) = manga_exists.next() {
-            let manga = manga?;
+    if !is_already_plan_to_read {
+        if check_manga_already_exists(manga.id, conn)? {
             conn.execute(
                 "INSERT INTO manga_history_union VALUES (?1, ?2)",
                 (manga.id, history_type),
@@ -353,9 +361,13 @@ pub fn save_plan_to_read(manga: MangaPlanToReadSave<'_>) -> rusqlite::Result<()>
             return Ok(());
         }
 
-        conn.execute(
-            "INSERT INTO mangas(id, title, img_url) VALUES (?1, ?2, ?3)",
-            (manga.id, manga.title, manga.img_url),
+        insert_manga(
+            MangaInsert {
+                id: manga.id,
+                title: manga.title,
+                img_url: manga.img_url,
+            },
+            conn,
         )?;
 
         conn.execute(
@@ -386,41 +398,76 @@ pub fn set_chapter_downloaded(chapter: SetChapterDownloaded<'_>) -> rusqlite::Re
     let binding = DBCONN.lock().unwrap();
     let conn = binding.as_ref().unwrap();
 
-    let is_already_downloaded: Option<ChapterDownloaded> = conn
+    let history_type: i32 = conn
         .query_row(
-            "SELECT is_downloaded FROM chapters WHERE id = ?1",
-            params![chapter.id],
-            |row| {
-                Ok(Some(ChapterDownloaded {
-                    is_downloaded: row.get(0)?,
-                }))
-            },
+            "SELECT id FROM history_types where name = ?1",
+            params![MangaHistoryType::ReadingHistory.to_string()],
+            |row| row.get(0),
         )
-        .optional()
-        .ok()
-        .flatten()
-        .flatten();
+        .unwrap();
 
-    match is_already_downloaded {
-        Some(_chapter) => {
+    if check_chapter_exists(chapter.id, conn)?
+        && check_manga_already_exists(chapter.manga_id, conn)?
+    {
+        if !manga_is_reading(chapter.manga_id, conn)? {
             conn.execute(
-                "UPDATE chapters SET is_downloaded = ?1, is_read = ?2 WHERE id = ?3",
-                params![true, true, chapter.id],
-            )?;
-            Ok(())
+                "INSERT INTO manga_history_union VALUES (?1, ?2)",
+                (chapter.manga_id, history_type),
+            )
+            .unwrap();
         }
-        None => {
-            conn.execute(
-                "INSERT INTO mangas(id, title, img_url) VALUES (?1, ?2, ?3)",
-                (chapter.manga_id, chapter.manga_title, chapter.img_url),
-            )?;
+        conn.execute(
+            "UPDATE chapters SET is_downloaded = ?1, is_read = ?2 WHERE id = ?3",
+            params![true, true, chapter.id],
+        )?;
+        Ok(())
+    } else if !check_manga_already_exists(chapter.manga_id, conn)? {
+        insert_manga(
+            MangaInsert {
+                id: chapter.manga_id,
+                title: chapter.manga_title,
+                img_url: chapter.img_url,
+            },
+            conn,
+        )
+        .unwrap();
 
+        insert_chapter(
+            ChapterInsert {
+                id: chapter.id,
+                title: chapter.title,
+                manga_id: chapter.manga_id,
+                is_read: true,
+                is_downloaded: true,
+            },
+            conn,
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO manga_history_union VALUES (?1, ?2)",
+            (chapter.manga_id, history_type),
+        )
+        .unwrap();
+        Ok(())
+    } else {
+        insert_chapter(
+            ChapterInsert {
+                id: chapter.id,
+                title: chapter.title,
+                manga_id: chapter.manga_id,
+                is_read: true,
+                is_downloaded: true,
+            },
+            conn,
+        )
+        .unwrap();
+        if !manga_is_reading(chapter.manga_id, conn)? {
             conn.execute(
-                "INSERT INTO chapters(id, title, is_read, is_downloaded, manga_id) VALUES (?1, ?2, ?3, ?4, ?5)",
-                params![chapter.id, chapter.title, true, true, chapter.manga_id],
-            )?;
-
-            Ok(())
+                "INSERT INTO manga_history_union VALUES (?1, ?2)",
+                (chapter.manga_id, history_type),
+            )
+            .unwrap();
         }
+        Ok(())
     }
 }

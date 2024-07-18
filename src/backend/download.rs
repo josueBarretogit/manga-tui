@@ -3,7 +3,6 @@ use std::fs::{create_dir, File};
 use std::io::Write;
 use std::path::Path;
 use tokio::sync::mpsc::UnboundedSender;
-use tokio::task::JoinHandle;
 
 use crate::view::pages::manga::MangaPageEvents;
 
@@ -18,6 +17,7 @@ pub struct DownloadChapter<'a> {
     pub title: &'a str,
     pub number: &'a str,
     pub scanlator: &'a str,
+    pub lang: &'a str,
 }
 
 pub fn download_chapter(
@@ -34,18 +34,26 @@ pub fn download_chapter(
         dir_manga_downloads.join(format!("{} {}", chapter.manga_title, chapter.manga_id));
 
     if !exists!(&dir_manga) {
-        create_dir(&dir_manga)?;
+        create_dir(&dir_manga).unwrap();
+    }
+
+    // need directory to store the language the chapter is in
+    // todo!
+    let chapter_language_dir = dir_manga.join(chapter.lang);
+
+    if !exists!(&chapter_language_dir) {
+        create_dir(&chapter_language_dir).unwrap();
     }
 
     // need directory with chapter's title, number and scanlator
 
-    let chapter_dir = dir_manga.join(format!(
+    let chapter_dir = chapter_language_dir.join(format!(
         "Ch. {} {} {} {}",
         chapter.number, chapter.title, chapter.scanlator, chapter_id
     ));
 
     if !exists!(&chapter_dir) {
-        create_dir(&chapter_dir)?;
+        create_dir(&chapter_dir).unwrap();
     }
 
     // create images and store them in the directory
