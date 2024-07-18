@@ -1,4 +1,5 @@
 use super::{AppDirectories, APP_DATA_DIR};
+use manga_tui::build_check_exists_function;
 use once_cell::sync::Lazy;
 use rusqlite::{params, Connection, OptionalExtension};
 use std::sync::Mutex;
@@ -107,9 +108,40 @@ pub static DBCONN: Lazy<Mutex<Option<Connection>>> = Lazy::new(|| {
     Mutex::new(Some(conn))
 });
 
-fn check_manga_already_exists() {}
+build_check_exists_function!(check_chapter_exists, "chapters");
+build_check_exists_function!(check_manga_already_exists, "mangas");
 
-fn insert_manga() {}
+pub struct MangaInsert<'a> {
+    pub id: &'a str,
+    pub title: &'a str,
+    pub img_url: Option<&'a str>,
+}
+
+fn insert_manga(manga_to_insert: MangaInsert<'_>, conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute(
+        "INSERT INTO mangas(id, title, img_url) VALUES (?1, ?2, ?3)",
+        (
+            manga_to_insert.id,
+            manga_to_insert.title,
+            manga_to_insert.img_url,
+        ),
+    )?;
+    Ok(())
+}
+
+pub struct ChapterInsert<'a> {
+    pub id: &'a str,
+    pub title: &'a str,
+    pub manga_id: &'a str,
+}
+
+fn insert_chapter(chap: ChapterInsert<'_>, conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute(
+        "INSERT INTO chapters(id, title, is_read, manga_id) VALUES (?1, ?2, ?3, ?4)",
+        (chap.id, chap.title, true, chap.manga_id),
+    )?;
+    Ok(())
+}
 
 #[derive(Display)]
 pub enum MangaHistoryType {
@@ -133,7 +165,6 @@ struct Manga {
 // current chapter that is read, else just save the chapter and associate the manga,
 pub fn save_history(manga_read: MangaReadingHistorySave<'_>) -> rusqlite::Result<()> {
     let binding = DBCONN.lock().unwrap();
-
     let conn = binding.as_ref().unwrap();
 
     let history_type: i32 = conn.query_row(
@@ -148,23 +179,15 @@ pub fn save_history(manga_read: MangaReadingHistorySave<'_>) -> rusqlite::Result
         |row| row.get(0),
     )?;
 
-    let mut manga_exists_already_exists_statement =
-        conn.prepare("SELECT id FROM mangas WHERE id = ?1")?;
-
-    let mut manga_exists = manga_exists_already_exists_statement
-        .query_map(params![manga_read.id], |row| Ok(Manga { id: row.get(0)? }))?;
-
     // Check if manga already exists in table mangas
-    if let Some(manga) = manga_exists.next() {
-        let manga = manga?;
-        conn.execute(
-            "INSERT INTO chapters(id, title, is_read, manga_id) VALUES (?1, ?2, ?3, ?4)",
-            (
-                manga_read.chapter_id,
-                manga_read.chapter_title,
-                true,
-                manga.id,
-            ),
+    if check_manga_already_exists(manga_read.id, conn)? {
+        insert_chapter(
+            ChapterInsert {
+                id: manga_read.chapter_id,
+                title: manga_read.chapter_title,
+                manga_id: manga_read.id,
+            },
+            conn,
         )?;
 
         if is_already_reading == 0 {
@@ -176,9 +199,13 @@ pub fn save_history(manga_read: MangaReadingHistorySave<'_>) -> rusqlite::Result
         return Ok(());
     }
 
-    conn.execute(
-        "INSERT INTO mangas(id, title, img_url) VALUES (?1, ?2, ?3)",
-        (manga_read.id, manga_read.title, manga_read.img_url),
+    insert_manga(
+        MangaInsert {
+            id: manga_read.id,
+            title: manga_read.title,
+            img_url: manga_read.img_url,
+        },
+        conn,
     )?;
 
     conn.execute(
@@ -186,14 +213,13 @@ pub fn save_history(manga_read: MangaReadingHistorySave<'_>) -> rusqlite::Result
         (manga_read.id, history_type),
     )?;
 
-    conn.execute(
-        "INSERT INTO chapters(id, title, is_read, manga_id) VALUES (?1, ?2, ?3)",
-        (
-            manga_read.chapter_id,
-            manga_read.chapter_title,
-            true,
-            manga_read.id,
-        ),
+    insert_chapter(
+        ChapterInsert {
+            id: manga_read.chapter_id,
+            title: manga_read.chapter_title,
+            manga_id: manga_read.id,
+        },
+        conn,
     )?;
 
     Ok(())
@@ -362,7 +388,7 @@ pub fn set_chapter_downloaded(chapter: SetChapterDownloaded<'_>) -> rusqlite::Re
 
     let is_already_downloaded: Option<ChapterDownloaded> = conn
         .query_row(
-            "SELECT is_downloaded from chapters WHERE id = ?1",
+            "SELECT is_downloaded FROM chapters WHERE id = ?1",
             params![chapter.id],
             |row| {
                 Ok(Some(ChapterDownloaded {
