@@ -2,6 +2,7 @@ use crate::backend::error_log::write_to_error_log;
 use crate::backend::fetch::MangadexClient;
 use crate::backend::Data;
 use crate::view::widgets::ImageHandler;
+use image::io::Reader;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Stylize};
 use ratatui::text::Span;

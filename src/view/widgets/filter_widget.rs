@@ -1,49 +1,77 @@
-use ratatui::widgets::{Clear, Widget};
-use tui_menu::{Menu, MenuEvent, MenuItem, MenuState};
+use crossterm::event::{KeyCode, KeyEvent};
+use ratatui::{prelude::*, widgets::*};
 
-use crate::filter::ContentRating;
+use crate::filter::{ContentRating, Filters};
 use crate::utils::centered_rect;
 
-pub struct FilterWidget {
+pub struct FilterWidgetState {
     pub is_open: bool,
-    pub content_rating: ContentRatingInput,
+    pub content_rating_state: Vec<ContentRating>,
 }
 
-pub struct ContentRatingInput {
-    pub state: MenuState<ContentRating>,
-    pub widget: Menu<ContentRating>,
-}
+impl FilterWidgetState {
+    pub fn toggle(&mut self) {
+        self.is_open = !self.is_open;
+    }
 
-impl Widget for FilterWidget {
-    fn render(self, area: ratatui::prelude::Rect, buf: &mut ratatui::prelude::Buffer)
-    where
-        Self: Sized,
-    {
-        let popup_are = centered_rect(area, 70, 50);
-
-
-        Clear.render(popup_are, buf);
+    pub fn handle_key_events(&mut self, key_event: KeyEvent) {
+        match key_event.code {
+            KeyCode::Char('f') => self.toggle(),
+            KeyCode::Esc => self.toggle(),
+            KeyCode::Char('j') => todo!(),
+            KeyCode::Char('k') => todo!(),
+            KeyCode::Enter => {}
+            _ => {}
+        }
     }
 }
 
-impl FilterWidget {
-    pub fn new() -> Self {
-        let content_rating_items = vec![
-            MenuItem::item("safe", ContentRating::Safe),
-            MenuItem::item("suggestive", ContentRating::Suggestive),
-            MenuItem::item("erotic", ContentRating::Erotic),
-            MenuItem::item("pornographic", ContentRating::Pornographic),
-        ];
+impl Default for FilterWidgetState {
+    fn default() -> Self {
         Self {
             is_open: false,
-            content_rating: ContentRatingInput {
-                state: MenuState::new(content_rating_items),
-                widget: Menu::<ContentRating>::new(),
-            },
+            content_rating_state: Filters::default().content_rating,
+        }
+    }
+}
+
+pub struct FilterWidget<'a> {
+    pub block: Option<Block<'a>>,
+    pub style: Style,
+}
+
+impl<'a> StatefulWidget for FilterWidget<'a> {
+    type State = FilterWidgetState;
+    fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+        let popup_area = centered_rect(area, 80, 50);
+
+        Clear.render(popup_area, buf);
+
+        if let Some(block) = self.block {
+            block.render(popup_area, buf);
+        }
+
+        let inner = popup_area.inner(Margin {
+            horizontal: 2,
+            vertical: 2,
+        });
+
+        Tabs::new(vec!["Content Rating", "Publication Status"]).render(inner, buf);
+    }
+}
+
+impl<'a> FilterWidget<'a> {
+    pub fn new() -> Self {
+        Self {
+            block: None,
+            style: Style::default(),
         }
     }
 
-    pub fn toggle(&mut self) {
-        self.is_open = !self.is_open;
+    pub fn block(self, block: Block<'a>) -> Self {
+        Self {
+            block: Some(block),
+            style: self.style,
+        }
     }
 }

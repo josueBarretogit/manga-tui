@@ -23,7 +23,7 @@ impl MangadexClient {
     pub fn global() -> &'static MangadexClient {
         MANGADEX_CLIENT_INSTANCE
             .get()
-            .expect("could not get mangadex client")
+            .expect("could not build mangadex client")
     }
 
     pub fn new(client: reqwest::Client) -> Self {
@@ -37,9 +37,6 @@ impl MangadexClient {
         page: i32,
         filters: Filters,
     ) -> Result<SearchMangaResponse, reqwest::Error> {
-        let content_rating =
-            "contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica";
-
         let offset = (page - 1) * 10;
 
         let search_by_title = if search_term.trim().is_empty() {
@@ -49,7 +46,7 @@ impl MangadexClient {
         };
 
         let url = format!(
-            "{}/manga?{}&includes[]=cover_art&includes[]=author&includes[]=artist&limit=10&offset={}&{}&includedTagsMode=AND&excludedTagsMode=OR",
+            "{}/manga?{}&includes[]=cover_art&includes[]=author&includes[]=artist&limit=10&offset={}&{}&includedTagsMode=AND&excludedTagsMode=OR&hasAvailableChapters=true&availableTranslatedLanguage[]=en",
             API_URL_BASE,
             search_by_title,
             offset,
@@ -98,7 +95,7 @@ impl MangadexClient {
 
         let order = format!("order[volume]={order}&order[chapter]={order}");
         let endpoint = format!(
-            "{}/manga/{}/feed?limit=50&{}&translatedLanguage[]={}&includes[]=scanlation_group&offset=0&includeExternalUrl=0",
+            "{}/manga/{}/feed?limit=50&{}&translatedLanguage[]={}&includes[]=scanlation_group&offset=0&includeExternalUrl=0&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&contentRating[]=pornographic",
             API_URL_BASE, id, order, language
         );
 
@@ -192,7 +189,7 @@ impl MangadexClient {
         let order = "order[volume]=desc&order[chapter]=desc";
 
         let endpoint = format!(
-            "{}/manga/{}/feed?limit=3&{}&translatedLanguage[]=en&includes[]=scanlation_group&offset=0",
+            "{}/manga/{}/feed?limit=3&{}&translatedLanguage[]=en&includes[]=scanlation_group&offset=0&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&contentRating[]=pornographic",
             API_URL_BASE, manga_id, order
         );
 

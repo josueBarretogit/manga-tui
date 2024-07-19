@@ -32,7 +32,7 @@ impl IntoParam for Vec<ContentRating> {
 
 #[derive(Clone)]
 pub struct Filters {
-    content_rating: Vec<ContentRating>,
+    pub content_rating: Vec<ContentRating>,
 }
 
 impl IntoParam for Filters {

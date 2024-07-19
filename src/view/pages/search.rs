@@ -7,6 +7,8 @@ use crate::backend::tui::Events;
 use crate::backend::SearchMangaResponse;
 use crate::filter::Filters;
 use crate::utils::search_manga_cover;
+use crate::view::widgets::filter_widget::FilterWidget;
+use crate::view::widgets::filter_widget::FilterWidgetState;
 use crate::view::widgets::search::*;
 use crate::view::widgets::Component;
 use crate::view::widgets::ImageHandler;
@@ -55,6 +57,7 @@ pub enum SearchPageActions {
     Search,
     ScrollUp,
     ScrollDown,
+    ToggleFilters,
     NextPage,
     PreviousPage,
     GoToMangaPage,
@@ -80,7 +83,7 @@ pub struct SearchPage {
     search_bar: Input,
     state: PageState,
     mangas_found_list: MangasFoundList,
-    filters: Filters,
+    filter_state: FilterWidgetState,
     search_cover_handles: JoinSet<()>,
 }
 
@@ -109,6 +112,7 @@ impl Component for SearchPage {
 
     fn update(&mut self, action: SearchPageActions) {
         match action {
+            SearchPageActions::ToggleFilters => self.open_advanced_filters(),
             SearchPageActions::StartTyping => self.focus_search_bar(),
             SearchPageActions::StopTyping => self.input_mode = InputMode::Idle,
             SearchPageActions::Search => {
@@ -148,7 +152,13 @@ impl Component for SearchPage {
     }
     fn handle_events(&mut self, events: Events) {
         match events {
-            Events::Key(key_event) => self.handle_key_events(key_event),
+            Events::Key(key_event) => {
+                if self.filter_state.is_open {
+                    self.filter_state.handle_key_events(key_event);
+                } else {
+                    self.handle_key_events(key_event);
+                }
+            }
             Events::Tick => self.tick(),
             _ => {}
         }
@@ -180,7 +190,7 @@ impl SearchPage {
             state: PageState::default(),
             mangas_found_list: MangasFoundList::default(),
             search_cover_handles: JoinSet::new(),
-            filters: Filters::default(),
+            filter_state: FilterWidgetState::default(),
         }
     }
 
@@ -297,6 +307,15 @@ impl SearchPage {
                         &mut manga_selected.image_state,
                     )
                 }
+
+                if self.filter_state.is_open {
+                    StatefulWidget::render(
+                        FilterWidget::new().block(Block::bordered()),
+                        area,
+                        buf,
+                        &mut self.filter_state,
+                    );
+                }
             }
         }
     }
@@ -311,6 +330,10 @@ impl SearchPage {
 
     fn scroll_up(&mut self) {
         self.mangas_found_list.state.previous();
+    }
+
+    fn open_advanced_filters(&mut self) {
+        self.filter_state.toggle();
     }
 
     fn get_current_manga_selected_mut(&mut self) -> Option<&mut MangaItem> {
@@ -375,6 +398,11 @@ impl SearchPage {
                     .local_action_tx
                     .send(SearchPageActions::PreviousPage)
                     .unwrap(),
+                KeyCode::Char('f') => {
+                    self.local_action_tx
+                        .send(SearchPageActions::ToggleFilters)
+                        .ok();
+                }
                 KeyCode::Char('r') => self
                     .local_action_tx
                     .send(SearchPageActions::GoToMangaPage)
@@ -411,7 +439,7 @@ impl SearchPage {
 
         let manga_to_search = self.search_bar.value().to_string();
 
-        let filters = self.filters.clone();
+        let filters = Filters::default();
 
         tokio::spawn(async move {
             let search_response = MangadexClient::global()
