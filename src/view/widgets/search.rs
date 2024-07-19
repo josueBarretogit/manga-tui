@@ -125,7 +125,8 @@ impl Widget for MangaItem {
         Self: Sized,
     {
         Paragraph::new(self.title)
-            .block(Block::default().borders(Borders::BOTTOM))
+            .wrap(Wrap { trim: true })
+            .block(Block::bordered().style(self.style))
             .style(self.style)
             .render(area, buf);
     }
@@ -134,11 +135,9 @@ impl Widget for MangaItem {
 impl PreRender for MangaItem {
     fn pre_render(&mut self, context: &tui_widget_list::PreRenderContext) -> u16 {
         if context.is_selected {
-            self.style = Style::default()
-                .bg(Color::Rgb(255, 153, 0))
-                .fg(Color::Rgb(28, 28, 32));
+            self.style = Style::default().fg(Color::Yellow);
         }
-        2
+        4
     }
 }
 
@@ -196,10 +195,6 @@ pub struct ListMangasFoundWidget {
 }
 
 impl ListMangasFoundWidget {
-    pub fn new(items: Vec<MangaItem>) -> Self {
-        Self { mangas: items }
-    }
-
     pub fn from_response(search_response: Vec<Data>) -> Self {
         let mut mangas: Vec<MangaItem> = vec![];
 

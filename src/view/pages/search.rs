@@ -185,7 +185,10 @@ impl SearchPage {
         let layout = Layout::vertical([Constraint::Max(1), Constraint::Max(5)]).split(area);
 
         let (input_help, input_style) = match self.input_mode {
-            InputMode::Idle => ("Press <s> to type ", Style::default()),
+            InputMode::Idle => (
+                "Press <s> to type, open advanced filters: <f> ",
+                Style::default(),
+            ),
             InputMode::Typing => (
                 "Press <enter> to search, <esc> to stop typing",
                 Style::default().fg(Color::Yellow),

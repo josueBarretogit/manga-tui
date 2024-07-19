@@ -1,4 +1,5 @@
 use super::{AppDirectories, APP_DATA_DIR};
+use chrono::Utc;
 use manga_tui::build_check_exists_function;
 use once_cell::sync::Lazy;
 use rusqlite::{params, Connection};
@@ -55,6 +56,7 @@ pub static DBCONN: Lazy<Mutex<Option<Connection>>> = Lazy::new(|| {
                 title TEXT  NOT NULL,
                 created_at  DATETIME DEFAULT (datetime('now')),
                 updated_at  DATETIME DEFAULT (datetime('now')),
+                last_read  DATETIME DEFAULT (datetime('now')),
                 deleted_at  DATETIME NULL,
                 img_url TEXT NULL
              )",
@@ -174,10 +176,6 @@ pub struct MangaReadingHistorySave<'a> {
     pub chapter_title: &'a str,
 }
 
-struct Manga {
-    id: String,
-}
-
 // if it's the first time the user is reading a manga then save it to mangas table and save the
 // current chapter that is read, else just save the chapter and associate the manga,
 pub fn save_history(manga_read: MangaReadingHistorySave<'_>) -> rusqlite::Result<()> {
@@ -207,6 +205,12 @@ pub fn save_history(manga_read: MangaReadingHistorySave<'_>) -> rusqlite::Result
             conn.execute(
                 "INSERT INTO manga_history_union VALUES (?1, ?2)",
                 (manga_read.id, history_type),
+            )?;
+        } else {
+            let now = Utc::now().naive_utc();
+            conn.execute(
+                "UPDATE mangas SET last_read = ?1 WHERE id = ?2",
+                params![now.to_string(), manga_read.id],
             )?;
         }
         return Ok(());
@@ -306,7 +310,7 @@ pub fn get_history(
             "SELECT  mangas.id, mangas.title from mangas 
                      INNER JOIN manga_history_union ON mangas.id = manga_history_union.manga_id 
                      WHERE manga_history_union.type_id = ?1
-                    ORDER BY mangas.created_at DESC
+                     ORDER BY mangas.last_read DESC
                      LIMIT 5 OFFSET {}",
             offset
         )
@@ -380,10 +384,6 @@ pub fn save_plan_to_read(manga: MangaPlanToReadSave<'_>) -> rusqlite::Result<()>
     Ok(())
 }
 
-struct ChapterDownloaded {
-    is_downloaded: bool,
-}
-
 pub struct SetChapterDownloaded<'a> {
     pub id: &'a str,
     pub title: &'a str,
@@ -448,6 +448,7 @@ pub fn set_chapter_downloaded(chapter: SetChapterDownloaded<'_>) -> rusqlite::Re
             (chapter.manga_id, history_type),
         )
         .unwrap();
+
         Ok(())
     } else {
         insert_chapter(
@@ -467,6 +468,12 @@ pub fn set_chapter_downloaded(chapter: SetChapterDownloaded<'_>) -> rusqlite::Re
                 (chapter.manga_id, history_type),
             )
             .unwrap();
+        } else {
+            let now = Utc::now().naive_utc();
+            conn.execute(
+                "UPDATE mangas SET last_read = ?1 WHERE id = ?2",
+                params![now.to_string(), chapter.manga_id],
+            )?;
         }
         Ok(())
     }

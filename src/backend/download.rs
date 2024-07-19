@@ -1,4 +1,5 @@
 use manga_tui::exists;
+use ratatui::widgets::ListState;
 use std::fs::{create_dir, File};
 use std::io::Write;
 use std::path::Path;
@@ -30,8 +31,11 @@ pub fn download_chapter(
 
     let dir_manga_downloads = APP_DATA_DIR.as_ref().unwrap().join("mangaDownloads");
 
-    let dir_manga =
-        dir_manga_downloads.join(format!("{} {}", chapter.manga_title, chapter.manga_id));
+    let dir_manga = dir_manga_downloads.join(format!(
+        "{} {}",
+        chapter.manga_title.trim(),
+        chapter.manga_id
+    ));
 
     if !exists!(&dir_manga) {
         create_dir(&dir_manga).unwrap();
@@ -49,7 +53,10 @@ pub fn download_chapter(
 
     let chapter_dir = chapter_language_dir.join(format!(
         "Ch. {} {} {} {}",
-        chapter.number, chapter.title, chapter.scanlator, chapter_id
+        chapter.number,
+        chapter.title.trim().replace('/', "-"),
+        chapter.scanlator.trim().replace('/', "-"),
+        chapter_id
     ));
 
     if !exists!(&chapter_dir) {

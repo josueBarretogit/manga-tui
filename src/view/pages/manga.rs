@@ -426,6 +426,10 @@ impl MangaPage {
                             local_tx.send(MangaPageEvents::CheckChapterStatus).ok();
                         }
                         Err(e) => {
+                            local_tx
+                                .send(MangaPageEvents::StoppedSearchingChapterData)
+                                .ok();
+
                             write_to_error_log(error_log::ErrorType::FromError(Box::new(e)));
                         }
                     }

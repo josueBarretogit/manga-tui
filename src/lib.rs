@@ -6,6 +6,7 @@ macro_rules! exists {
     };
 }
 
+
 #[macro_export]
 macro_rules! build_check_exists_function {
     ($func_name:ident, $target_table:expr) => {

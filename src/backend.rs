@@ -2,7 +2,7 @@ use manga_tui::exists;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fs::{create_dir, create_dir_all, File, FileType};
+use std::fs::{create_dir, create_dir_all, File};
 use std::path::{Path, PathBuf};
 use strum::Display;
 
@@ -28,7 +28,10 @@ pub static APP_DATA_DIR: Lazy<Option<PathBuf>> = Lazy::new(|| {
         env!("CARGO_CRATE_NAME"),
         "manga-tui",
     )
-    .map(|dirs| dirs.data_dir().to_path_buf())
+    .map(|dirs| match std::env::var("MANGA_TUI_DATA_DIR") {
+        Ok(data_dir) => PathBuf::from(data_dir),
+        Err(_) => dirs.data_dir().to_path_buf(),
+    })
 });
 
 pub fn build_data_dir() -> Result<(), std::io::Error> {

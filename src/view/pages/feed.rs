@@ -103,7 +103,15 @@ impl Feed {
                 .throbber_set(throbber_widgets_tui::BRAILLE_SIX)
                 .use_type(throbber_widgets_tui::WhichUse::Spin);
 
-            StatefulWidget::render(loader, loading_state_area, buf, state);
+            StatefulWidget::render(
+                loader,
+                loading_state_area.inner(Margin {
+                    horizontal: 1,
+                    vertical: 1,
+                }),
+                buf,
+                state,
+            );
         }
 
         if self.state == FeedState::MangaDataNotFound {

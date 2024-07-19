@@ -1,7 +1,6 @@
 use bytes::Bytes;
 use chrono::Months;
 use once_cell::sync::OnceCell;
-use rusqlite::ToSql;
 
 use crate::view::pages::manga::ChapterOrder;
 
@@ -41,7 +40,7 @@ impl MangadexClient {
 
         let offset = (page - 1) * 10;
 
-        let search_by_title = if search_term.is_empty() {
+        let search_by_title = if search_term.trim().is_empty() {
             "".to_string()
         } else {
             format!("title={search_term}")
