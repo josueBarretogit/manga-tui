@@ -1,4 +1,3 @@
-use color_eyre::config::HookBuilder;
 use crossterm::event::{DisableMouseCapture, EnableMouseCapture, KeyEvent, MouseEvent};
 use crossterm::execute;
 use crossterm::terminal::{
@@ -49,7 +48,6 @@ pub fn restore() -> std::io::Result<()> {
     disable_raw_mode()?;
     Ok(())
 }
-
 
 ///Start app's main loop
 pub async fn run_app(backend: impl Backend) -> Result<(), Box<dyn Error>> {

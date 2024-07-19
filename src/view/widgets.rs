@@ -7,6 +7,7 @@ pub mod home;
 pub mod manga;
 pub mod reader;
 pub mod search;
+pub mod filter_widget;
 
 pub trait Component {
     type Actions;

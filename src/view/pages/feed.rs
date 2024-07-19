@@ -172,8 +172,10 @@ impl Feed {
 
     fn load_recent_chapters(&mut self, manga_id: String, maybe_history: Option<ChapterResponse>) {
         if let Some(chapters_response) = maybe_history {
-            let history = self.history.as_mut().unwrap();
-            history.set_chapter(manga_id, chapters_response);
+            // todo! handle this unwrap
+            if let Some(history) = self.history.as_mut() {
+                history.set_chapter(manga_id, chapters_response);
+            }
         }
     }
 

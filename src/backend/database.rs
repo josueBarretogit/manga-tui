@@ -162,6 +162,35 @@ fn insert_chapter(chap: ChapterInsert<'_>, conn: &Connection) -> rusqlite::Resul
     Ok(())
 }
 
+fn update_or_insert_manga_most_recent_read(
+    manga_id: &str,
+    conn: &Connection,
+) -> rusqlite::Result<()> {
+    let history_type: i32 = conn
+        .query_row(
+            "SELECT id FROM history_types where name = ?1",
+            params![MangaHistoryType::ReadingHistory.to_string()],
+            |row| row.get(0),
+        )
+        .unwrap();
+
+    if !manga_is_reading(manga_id, conn)? {
+        conn.execute(
+            "INSERT INTO manga_history_union VALUES (?1, ?2)",
+            (manga_id, history_type),
+        )
+        .unwrap();
+        Ok(())
+    } else {
+        let now = Utc::now().naive_utc();
+        conn.execute(
+            "UPDATE mangas SET last_read = ?1 WHERE id = ?2",
+            params![now.to_string(), manga_id],
+        )?;
+        Ok(())
+    }
+}
+
 #[derive(Display)]
 pub enum MangaHistoryType {
     PlanToRead,
@@ -409,13 +438,7 @@ pub fn set_chapter_downloaded(chapter: SetChapterDownloaded<'_>) -> rusqlite::Re
     if check_chapter_exists(chapter.id, conn)?
         && check_manga_already_exists(chapter.manga_id, conn)?
     {
-        if !manga_is_reading(chapter.manga_id, conn)? {
-            conn.execute(
-                "INSERT INTO manga_history_union VALUES (?1, ?2)",
-                (chapter.manga_id, history_type),
-            )
-            .unwrap();
-        }
+        update_or_insert_manga_most_recent_read(chapter.manga_id, conn).unwrap();
         conn.execute(
             "UPDATE chapters SET is_downloaded = ?1, is_read = ?2 WHERE id = ?3",
             params![true, true, chapter.id],
@@ -443,11 +466,13 @@ pub fn set_chapter_downloaded(chapter: SetChapterDownloaded<'_>) -> rusqlite::Re
             conn,
         )
         .unwrap();
+
         conn.execute(
             "INSERT INTO manga_history_union VALUES (?1, ?2)",
             (chapter.manga_id, history_type),
         )
         .unwrap();
+
 
         Ok(())
     } else {
@@ -462,19 +487,9 @@ pub fn set_chapter_downloaded(chapter: SetChapterDownloaded<'_>) -> rusqlite::Re
             conn,
         )
         .unwrap();
-        if !manga_is_reading(chapter.manga_id, conn)? {
-            conn.execute(
-                "INSERT INTO manga_history_union VALUES (?1, ?2)",
-                (chapter.manga_id, history_type),
-            )
-            .unwrap();
-        } else {
-            let now = Utc::now().naive_utc();
-            conn.execute(
-                "UPDATE mangas SET last_read = ?1 WHERE id = ?2",
-                params![now.to_string(), chapter.manga_id],
-            )?;
-        }
+
+        update_or_insert_manga_most_recent_read(chapter.manga_id, conn).unwrap();
+
         Ok(())
     }
 }

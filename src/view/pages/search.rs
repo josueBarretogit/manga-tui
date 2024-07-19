@@ -5,6 +5,7 @@ use crate::backend::error_log::ErrorType;
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
 use crate::backend::SearchMangaResponse;
+use crate::filter::Filters;
 use crate::utils::search_manga_cover;
 use crate::view::widgets::search::*;
 use crate::view::widgets::Component;
@@ -79,6 +80,7 @@ pub struct SearchPage {
     search_bar: Input,
     state: PageState,
     mangas_found_list: MangasFoundList,
+    filters: Filters,
     search_cover_handles: JoinSet<()>,
 }
 
@@ -178,6 +180,7 @@ impl SearchPage {
             state: PageState::default(),
             mangas_found_list: MangasFoundList::default(),
             search_cover_handles: JoinSet::new(),
+            filters: Filters::default(),
         }
     }
 
@@ -408,9 +411,11 @@ impl SearchPage {
 
         let manga_to_search = self.search_bar.value().to_string();
 
+        let filters = self.filters.clone();
+
         tokio::spawn(async move {
             let search_response = MangadexClient::global()
-                .search_mangas(&manga_to_search, page)
+                .search_mangas(&manga_to_search, page, filters)
                 .await;
 
             match search_response {

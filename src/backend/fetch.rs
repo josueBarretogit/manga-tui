@@ -2,6 +2,7 @@ use bytes::Bytes;
 use chrono::Months;
 use once_cell::sync::OnceCell;
 
+use crate::filter::{Filters, IntoParam};
 use crate::view::pages::manga::ChapterOrder;
 
 use super::{
@@ -34,6 +35,7 @@ impl MangadexClient {
         &self,
         search_term: &str,
         page: i32,
+        filters: Filters,
     ) -> Result<SearchMangaResponse, reqwest::Error> {
         let content_rating =
             "contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica";
@@ -51,7 +53,7 @@ impl MangadexClient {
             API_URL_BASE,
             search_by_title,
             offset,
-            content_rating
+            filters.into_param(),
         );
 
         self.client.get(url).send().await?.json().await

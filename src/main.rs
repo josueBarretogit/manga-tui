@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 use once_cell::sync::Lazy;
 use ratatui::backend::CrosstermBackend;
 use ratatui_image::picker::Picker;
@@ -13,6 +14,7 @@ mod utils;
 mod backend;
 /// These would be like the frontend
 mod view;
+mod filter;
 
 pub static PICKER: Lazy<Option<Picker>> = Lazy::new(|| {
     let maybe_picker = Picker::from_termios();

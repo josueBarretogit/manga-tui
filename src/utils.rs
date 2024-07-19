@@ -2,7 +2,7 @@ use crate::backend::error_log::write_to_error_log;
 use crate::backend::fetch::MangadexClient;
 use crate::backend::Data;
 use crate::view::widgets::ImageHandler;
-use image::io::Reader;
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Stylize};
 use ratatui::text::Span;
 use std::io::Cursor;
@@ -54,17 +54,15 @@ pub fn search_manga_cover<IM: ImageHandler>(
                         tx.send(IM::load(image, manga_id)).unwrap();
                     }
                     Err(e) => {
-                        write_to_error_log(
-                            crate::backend::error_log::ErrorType::FromError(Box::new(e)),
-                        );
+                        write_to_error_log(crate::backend::error_log::ErrorType::FromError(
+                            Box::new(e),
+                        ));
                         tx.send(IM::not_found(manga_id)).unwrap();
                     }
                 };
             }
             Err(e) => {
-                write_to_error_log(crate::backend::error_log::ErrorType::FromError(
-                    Box::new(e),
-                ));
+                write_to_error_log(crate::backend::error_log::ErrorType::FromError(Box::new(e)));
                 tx.send(IM::not_found(manga_id)).unwrap()
             }
         }
@@ -156,4 +154,24 @@ pub fn display_dates_since_publication(day: i64) -> String {
     } else {
         return format!("{} years ago", year);
     }
+}
+
+pub fn centered_rect(r: Rect, percent_x: u16, percent_y: u16) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(r);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(popup_layout[1])[1]
 }
