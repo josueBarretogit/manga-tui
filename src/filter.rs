@@ -6,14 +6,26 @@ pub trait IntoParam {
 
 #[derive(Display, Clone)]
 pub enum ContentRating {
-    #[strum(to_string = "contentRating[]=safe")]
+    #[strum(to_string = "safe")]
     Safe,
-    #[strum(to_string = "contentRating[]=suggestive")]
+    #[strum(to_string = "suggestive")]
     Suggestive,
-    #[strum(to_string = "contentRating[]=erotica")]
+    #[strum(to_string = "erotica")]
     Erotic,
-    #[strum(to_string = "contentRating[]=pornographic")]
+    #[strum(to_string = "pornographic")]
     Pornographic,
+}
+
+impl From<&str> for ContentRating {
+    fn from(value: &str) -> Self {
+        match value {
+            "safe" => Self::Safe,
+            "suggestive" => Self::Suggestive,
+            "erotica" => Self::Erotic,
+            "pornographic" => Self::Pornographic,
+            _ => Self::Safe,
+        }
+    }
 }
 
 #[derive(Display, Clone)]
@@ -35,11 +47,11 @@ impl IntoParam for Vec<ContentRating> {
         let mut result = String::new();
 
         if self.is_empty() {
-            return format!("{}", ContentRating::Safe);
+            return format!("contentRating[]={}", ContentRating::Safe);
         }
 
         for cont in self {
-            result.push_str(format!("{}&", cont).as_str());
+            result.push_str(format!("contentRating[]={}&", cont).as_str());
         }
 
         result.pop();

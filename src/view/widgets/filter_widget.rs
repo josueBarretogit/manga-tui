@@ -1,25 +1,83 @@
-use crate::filter::Filters;
+use crate::filter::{ContentRating, Filters};
 use crate::utils::centered_rect;
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{prelude::*, widgets::*};
 use strum::Display;
 
 #[derive(Display)]
-enum FilterTypes {
+enum MangaFilters {
     ContentRating,
     SortBy,
 }
 
-impl From<FilterTypes> for Line<'_> {
-    fn from(value: FilterTypes) -> Self {
+#[derive(Clone)]
+enum FilterTypes {
+    Input,
+    List,
+}
+
+impl From<MangaFilters> for Line<'_> {
+    fn from(value: MangaFilters) -> Self {
         Line::from(value.to_string())
     }
 }
 
-const FILTERS: [FilterTypes; 2] = [FilterTypes::ContentRating, FilterTypes::SortBy];
+const FILTERS: [MangaFilters; 2] = [MangaFilters::ContentRating, MangaFilters::SortBy];
 
-struct ContentRatingList {
-    is_selected: bool,
+#[derive(Clone)]
+pub struct ContentRatingListItem {
+    pub is_selected: bool,
+    pub name: String,
+}
+
+impl ContentRatingListItem {
+    pub fn toggle(&mut self) {
+        self.is_selected = !self.is_selected;
+    }
+}
+
+pub struct ContentRatingState {
+    pub filter_type: FilterTypes,
+    pub items: Vec<ContentRatingListItem>,
+    pub state: ListState,
+}
+
+impl Default for ContentRatingState {
+    fn default() -> Self {
+        Self {
+            filter_type: FilterTypes::List,
+            items: vec![
+                ContentRatingListItem {
+                    is_selected: true,
+                    name: ContentRating::Safe.to_string(),
+                },
+                ContentRatingListItem {
+                    is_selected: true,
+                    name: ContentRating::Suggestive.to_string(),
+                },
+                ContentRatingListItem {
+                    is_selected: false,
+                    name: ContentRating::Erotic.to_string(),
+                },
+                ContentRatingListItem {
+                    is_selected: false,
+                    name: ContentRating::Pornographic.to_string(),
+                },
+            ],
+            state: ListState::default(),
+        }
+    }
+}
+
+impl From<ContentRatingListItem> for ListItem<'_> {
+    fn from(value: ContentRatingListItem) -> Self {
+        let line = if value.is_selected {
+            Line::from(value.name).fg(Color::Green)
+        } else {
+            Line::from(value.name)
+        };
+        ListItem::new(line)
+    }
 }
 
 #[derive(Default)]
@@ -27,7 +85,7 @@ pub struct FilterWidgetState {
     pub is_open: bool,
     pub id_filter: usize,
     pub filters: Filters,
-    pub content_rating_list_state: ListState,
+    pub content_rating_list_state: ContentRatingState,
 }
 
 impl FilterWidgetState {
@@ -39,21 +97,53 @@ impl FilterWidgetState {
         match key_event.code {
             KeyCode::Char('f') => self.toggle(),
             KeyCode::Esc => self.toggle(),
-            KeyCode::Char('j') => todo!(),
-            KeyCode::Char('k') => todo!(),
+            KeyCode::Char('j') => self.next_content_rating(),
+            KeyCode::Char('k') => self.previous_content_rating(),
             KeyCode::Tab => self.next_filter(),
             KeyCode::BackTab => self.previous_filter(),
-            KeyCode::Enter => {}
+            KeyCode::Enter => self.toggle_content_rating(),
             _ => {}
         }
     }
 
-    pub fn next_filter(&mut self) {
+    fn next_filter(&mut self) {
         self.id_filter += 1;
     }
 
-    pub fn previous_filter(&mut self) {
+    fn previous_filter(&mut self) {
         self.id_filter -= 1;
+    }
+
+    fn next_content_rating(&mut self) {
+        self.content_rating_list_state.state.select_next();
+    }
+
+    fn previous_content_rating(&mut self) {
+        self.content_rating_list_state.state.select_previous();
+    }
+
+    fn toggle_content_rating(&mut self) {
+        if let Some(index) = self.content_rating_list_state.state.selected() {
+            if let Some(content_rating) = self.content_rating_list_state.items.get_mut(index) {
+                content_rating.toggle();
+                self.set_content_rating();
+            }
+        }
+    }
+
+    fn set_content_rating(&mut self) {
+        self.filters.set_content_rating(
+            self.content_rating_list_state
+                .items
+                .iter()
+                .filter_map(|item| {
+                    if item.is_selected {
+                        return Some(item.name.as_str().into());
+                    }
+                    None
+                })
+                .collect(),
+        )
     }
 }
 
@@ -80,27 +170,30 @@ impl<'a> StatefulWidget for FilterWidget<'a> {
 
         Tabs::new(FILTERS)
             .select(state.id_filter)
-            .highlight_style(Style::default().bg(Color::Yellow))
+            .highlight_style(Style::default().fg(Color::Yellow))
             .render(tabs_area, buf);
 
         if let Some(filter) = FILTERS.get(state.id_filter) {
             match filter {
-                FilterTypes::ContentRating => {
-                    let list = List::new(vec!["safe", "suggestive", "erotica"]);
+                MangaFilters::ContentRating => {
+                    let list = List::new(state.content_rating_list_state.items.clone())
+                        .highlight_style(Style::default().bg(Color::Blue))
+                        .highlight_symbol(">>");
+
                     StatefulWidget::render(
                         list,
                         current_filter_area,
                         buf,
-                        &mut state.content_rating_list_state,
+                        &mut state.content_rating_list_state.state,
                     );
                 }
-                FilterTypes::SortBy => {
+                MangaFilters::SortBy => {
                     let list = List::new(vec!["best match", "highest rating"]);
                     StatefulWidget::render(
                         list,
                         current_filter_area,
                         buf,
-                        &mut state.content_rating_list_state,
+                        &mut state.content_rating_list_state.state,
                     );
                 }
             }

@@ -438,7 +438,7 @@ impl SearchPage {
 
         let manga_to_search = self.search_bar.value().to_string();
 
-        let filters = Filters::default();
+        let filters = self.filter_state.filters.clone();
 
         tokio::spawn(async move {
             let search_response = MangadexClient::global()
