@@ -5,7 +5,6 @@ use crate::backend::error_log::ErrorType;
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
 use crate::backend::SearchMangaResponse;
-use crate::filter::Filters;
 use crate::utils::search_manga_cover;
 use crate::view::widgets::filter_widget::FilterWidget;
 use crate::view::widgets::filter_widget::FilterWidgetState;
@@ -311,7 +310,10 @@ impl SearchPage {
         }
         if self.filter_state.is_open {
             StatefulWidget::render(
-                FilterWidget::new().block(Block::bordered()),
+                FilterWidget::new().block(
+                    Block::bordered()
+                        .title(Line::from(vec!["Close ".into(), "<f>".bold().yellow()])),
+                ),
                 area,
                 buf,
                 &mut self.filter_state,

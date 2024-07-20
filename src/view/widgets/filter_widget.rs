@@ -1,19 +1,16 @@
 use crate::filter::{ContentRating, Filters};
 use crate::utils::centered_rect;
+use color_eyre::owo_colors::OwoColorize;
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{prelude::*, widgets::*};
 use strum::Display;
 
 #[derive(Display)]
 enum MangaFilters {
+    #[strum(to_string = "Content rating")]
     ContentRating,
+    #[strum(to_string = "Sort by")]
     SortBy,
-}
-
-#[derive(Clone)]
-enum FilterTypes {
-    Input,
-    List,
 }
 
 impl From<MangaFilters> for Line<'_> {
@@ -37,7 +34,6 @@ impl ContentRatingListItem {
 }
 
 pub struct ContentRatingState {
-    pub filter_type: FilterTypes,
     pub items: Vec<ContentRatingListItem>,
     pub state: ListState,
 }
@@ -45,7 +41,6 @@ pub struct ContentRatingState {
 impl Default for ContentRatingState {
     fn default() -> Self {
         Self {
-            filter_type: FilterTypes::List,
             items: vec![
                 ContentRatingListItem {
                     is_selected: true,
@@ -72,7 +67,7 @@ impl Default for ContentRatingState {
 impl From<ContentRatingListItem> for ListItem<'_> {
     fn from(value: ContentRatingListItem) -> Self {
         let line = if value.is_selected {
-            Line::from(value.name).fg(Color::Green)
+            Line::from(format!("🟡 {} ", value.name)).fg(Color::Yellow)
         } else {
             Line::from(value.name)
         };
@@ -101,17 +96,25 @@ impl FilterWidgetState {
             KeyCode::Char('k') => self.previous_content_rating(),
             KeyCode::Tab => self.next_filter(),
             KeyCode::BackTab => self.previous_filter(),
-            KeyCode::Enter => self.toggle_content_rating(),
+            KeyCode::Char('s') => self.toggle_content_rating(),
             _ => {}
         }
     }
 
     fn next_filter(&mut self) {
-        self.id_filter += 1;
+        if self.id_filter + 1 < FILTERS.len() {
+            self.id_filter += 1;
+        } else {
+            self.id_filter = 0;
+        }
     }
 
     fn previous_filter(&mut self) {
-        self.id_filter -= 1;
+        if self.id_filter == 0 {
+            self.id_filter = FILTERS.len() - 1;
+        } else {
+            self.id_filter = self.id_filter.saturating_sub(1);
+        }
     }
 
     fn next_content_rating(&mut self) {
@@ -164,8 +167,8 @@ impl<'a> StatefulWidget for FilterWidget<'a> {
         }
 
         let [tabs_area, current_filter_area] =
-            Layout::vertical([Constraint::Fill(1), Constraint::Fill(1)])
-                .margin(1)
+            Layout::vertical([Constraint::Percentage(20), Constraint::Percentage(80)])
+                .margin(2)
                 .areas(popup_area);
 
         Tabs::new(FILTERS)
@@ -176,9 +179,16 @@ impl<'a> StatefulWidget for FilterWidget<'a> {
         if let Some(filter) = FILTERS.get(state.id_filter) {
             match filter {
                 MangaFilters::ContentRating => {
+                    let list_block = Block::bordered().title(Line::from(vec![
+                        " Up/Down ".into(),
+                        " <j>/<k> ".bold().yellow(),
+                        " Select ".into(),
+                        "<s>".bold().yellow(),
+                    ]));
+
                     let list = List::new(state.content_rating_list_state.items.clone())
-                        .highlight_style(Style::default().bg(Color::Blue))
-                        .highlight_symbol(">>");
+                        .block(list_block)
+                        .highlight_symbol(" >> ");
 
                     StatefulWidget::render(
                         list,
@@ -209,10 +219,8 @@ impl<'a> FilterWidget<'a> {
         }
     }
 
-    pub fn block(self, block: Block<'a>) -> Self {
-        Self {
-            block: Some(block),
-            style: self.style,
-        }
+    pub fn block(mut self, block: Block<'a>) -> Self {
+        self.block = Some(block);
+        self
     }
 }

@@ -30,16 +30,28 @@ impl From<&str> for ContentRating {
 
 #[derive(Display, Clone)]
 pub enum SortBy {
-    #[strum(to_string = "")]
+    #[strum(to_string = "order[relevance]=desc")]
     BestMatch,
-    #[strum(to_string = "")]
+    #[strum(to_string = "order[latestUploadedChapter]=desc")]
     LatestUpload,
-    #[strum(to_string = "")]
+    #[strum(to_string = "order[latestUploadedChapter]=asc")]
     OldestUpload,
-    #[strum(to_string = "")]
+    #[strum(to_string = "order[rating]=desc")]
     HighestRating,
-    #[strum(to_string = "")]
+    #[strum(to_string = "order[rating]=asc")]
     LowestRating,
+    #[strum(to_string = "order[title]=asc")]
+    TitleAscending,
+    #[strum(to_string = "order[title]=desc")]
+    TitleDescending,
+    #[strum(to_string = "order[createdAt]=asc")]
+    OldestAdded,
+    #[strum(to_string = "order[createdAt]=desc")]
+    RecentlyAdded,
+    #[strum(to_string = "order[followedCount]=desc")]
+    MostFollows,
+    #[strum(to_string = "order[followedCount]=asc")]
+    FewestFollows,
 }
 
 impl IntoParam for Vec<ContentRating> {
@@ -94,5 +106,8 @@ impl Default for Filters {
 impl Filters {
     pub fn set_content_rating(&mut self, ratings: Vec<ContentRating>) {
         self.content_rating = ratings;
+    }
+    pub fn set_sort_by(&mut self, sort_by: SortBy) {
+        self.sort_by = sort_by;
     }
 }
