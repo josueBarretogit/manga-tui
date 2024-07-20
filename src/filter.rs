@@ -16,9 +16,27 @@ pub enum ContentRating {
     Pornographic,
 }
 
+#[derive(Display, Clone)]
+pub enum SortBy {
+    #[strum(to_string = "")]
+    BestMatch,
+    #[strum(to_string = "")]
+    LatestUpload,
+    #[strum(to_string = "")]
+    OldestUpload,
+    #[strum(to_string = "")]
+    HighestRating,
+    #[strum(to_string = "")]
+    LowestRating,
+}
+
 impl IntoParam for Vec<ContentRating> {
     fn into_param(self) -> String {
         let mut result = String::new();
+
+        if self.is_empty() {
+            return format!("{}", ContentRating::Safe);
+        }
 
         for cont in self {
             result.push_str(format!("{}&", cont).as_str());
@@ -30,24 +48,33 @@ impl IntoParam for Vec<ContentRating> {
     }
 }
 
+impl IntoParam for SortBy {
+    fn into_param(self) -> String {
+        format!("{}", self)
+    }
+}
+
 #[derive(Clone)]
 pub struct Filters {
     pub content_rating: Vec<ContentRating>,
+    pub sort_by: SortBy,
 }
 
 impl IntoParam for Filters {
     fn into_param(self) -> String {
-        self.content_rating.into_param()
+        format!(
+            "{}&{}",
+            self.content_rating.into_param(),
+            self.sort_by.into_param()
+        )
     }
 }
 
 impl Default for Filters {
     fn default() -> Self {
         Self {
-            content_rating: vec![
-                ContentRating::Safe,
-                ContentRating::Suggestive,
-            ],
+            content_rating: vec![ContentRating::Safe, ContentRating::Suggestive],
+            sort_by: SortBy::BestMatch,
         }
     }
 }

@@ -1,12 +1,33 @@
+use crate::filter::Filters;
+use crate::utils::centered_rect;
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{prelude::*, widgets::*};
+use strum::Display;
 
-use crate::filter::{ContentRating, Filters};
-use crate::utils::centered_rect;
+#[derive(Display)]
+enum FilterTypes {
+    ContentRating,
+    SortBy,
+}
 
+impl From<FilterTypes> for Line<'_> {
+    fn from(value: FilterTypes) -> Self {
+        Line::from(value.to_string())
+    }
+}
+
+const FILTERS: [FilterTypes; 2] = [FilterTypes::ContentRating, FilterTypes::SortBy];
+
+struct ContentRatingList {
+    is_selected: bool,
+}
+
+#[derive(Default)]
 pub struct FilterWidgetState {
     pub is_open: bool,
-    pub content_rating_state: Vec<ContentRating>,
+    pub id_filter: usize,
+    pub filters: Filters,
+    pub content_rating_list_state: ListState,
 }
 
 impl FilterWidgetState {
@@ -20,18 +41,19 @@ impl FilterWidgetState {
             KeyCode::Esc => self.toggle(),
             KeyCode::Char('j') => todo!(),
             KeyCode::Char('k') => todo!(),
+            KeyCode::Tab => self.next_filter(),
+            KeyCode::BackTab => self.previous_filter(),
             KeyCode::Enter => {}
             _ => {}
         }
     }
-}
 
-impl Default for FilterWidgetState {
-    fn default() -> Self {
-        Self {
-            is_open: false,
-            content_rating_state: Filters::default().content_rating,
-        }
+    pub fn next_filter(&mut self) {
+        self.id_filter += 1;
+    }
+
+    pub fn previous_filter(&mut self) {
+        self.id_filter -= 1;
     }
 }
 
@@ -51,12 +73,38 @@ impl<'a> StatefulWidget for FilterWidget<'a> {
             block.render(popup_area, buf);
         }
 
-        let inner = popup_area.inner(Margin {
-            horizontal: 2,
-            vertical: 2,
-        });
+        let [tabs_area, current_filter_area] =
+            Layout::vertical([Constraint::Fill(1), Constraint::Fill(1)])
+                .margin(1)
+                .areas(popup_area);
 
-        Tabs::new(vec!["Content Rating", "Publication Status"]).render(inner, buf);
+        Tabs::new(FILTERS)
+            .select(state.id_filter)
+            .highlight_style(Style::default().bg(Color::Yellow))
+            .render(tabs_area, buf);
+
+        if let Some(filter) = FILTERS.get(state.id_filter) {
+            match filter {
+                FilterTypes::ContentRating => {
+                    let list = List::new(vec!["safe", "suggestive", "erotica"]);
+                    StatefulWidget::render(
+                        list,
+                        current_filter_area,
+                        buf,
+                        &mut state.content_rating_list_state,
+                    );
+                }
+                FilterTypes::SortBy => {
+                    let list = List::new(vec!["best match", "highest rating"]);
+                    StatefulWidget::render(
+                        list,
+                        current_filter_area,
+                        buf,
+                        &mut state.content_rating_list_state,
+                    );
+                }
+            }
+        }
     }
 }
 

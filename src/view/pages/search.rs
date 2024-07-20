@@ -307,16 +307,15 @@ impl SearchPage {
                         &mut manga_selected.image_state,
                     )
                 }
-
-                if self.filter_state.is_open {
-                    StatefulWidget::render(
-                        FilterWidget::new().block(Block::bordered()),
-                        area,
-                        buf,
-                        &mut self.filter_state,
-                    );
-                }
             }
+        }
+        if self.filter_state.is_open {
+            StatefulWidget::render(
+                FilterWidget::new().block(Block::bordered()),
+                area,
+                buf,
+                &mut self.filter_state,
+            );
         }
     }
 
