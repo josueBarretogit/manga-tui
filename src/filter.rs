@@ -1,4 +1,4 @@
-use strum::Display;
+use strum::{Display, IntoEnumIterator};
 
 pub trait IntoParam {
     fn into_param(self) -> String;
@@ -30,28 +30,32 @@ impl From<&str> for ContentRating {
 
 #[derive(Display, Clone, strum_macros::EnumIter, PartialEq, Eq)]
 pub enum SortBy {
-    #[strum(to_string = "order[relevance]=desc")]
+    #[strum(to_string = "Best match")]
     BestMatch,
-    #[strum(to_string = "order[latestUploadedChapter]=desc")]
+    #[strum(to_string = "Latest upload")]
     LatestUpload,
-    #[strum(to_string = "order[latestUploadedChapter]=asc")]
+    #[strum(to_string = "Oldest upload")]
     OldestUpload,
-    #[strum(to_string = "order[rating]=desc")]
+    #[strum(to_string = "Highest rating")]
     HighestRating,
-    #[strum(to_string = "order[rating]=asc")]
+    #[strum(to_string = "Lowest rating")]
     LowestRating,
-    #[strum(to_string = "order[title]=asc")]
+    #[strum(to_string = "Title ascending")]
     TitleAscending,
-    #[strum(to_string = "order[title]=desc")]
+    #[strum(to_string = "Title descending")]
     TitleDescending,
-    #[strum(to_string = "order[createdAt]=asc")]
+    #[strum(to_string = "Oldest added")]
     OldestAdded,
-    #[strum(to_string = "order[createdAt]=desc")]
+    #[strum(to_string = "Recently added")]
     RecentlyAdded,
-    #[strum(to_string = "order[followedCount]=desc")]
+    #[strum(to_string = "Most follows")]
     MostFollows,
-    #[strum(to_string = "order[followedCount]=asc")]
+    #[strum(to_string = "Fewest follows")]
     FewestFollows,
+    #[strum(to_string = "Year descending")]
+    YearDescending,
+    #[strum(to_string = "Year ascending")]
+    YearAscending,
 }
 
 impl IntoParam for Vec<ContentRating> {
@@ -72,6 +76,14 @@ impl IntoParam for Vec<ContentRating> {
     }
 }
 
+impl From<&str> for SortBy {
+    fn from(value: &str) -> Self {
+        SortBy::iter()
+            .find(|sort_by| sort_by.to_string() == value)
+            .unwrap()
+    }
+}
+
 impl IntoParam for SortBy {
     fn into_param(self) -> String {
         match self {
@@ -86,6 +98,8 @@ impl IntoParam for SortBy {
             Self::FewestFollows => "order[followedCount]=asc".to_string(),
             Self::TitleAscending => "order[title]=asc".to_string(),
             Self::TitleDescending => "order[title]=desc".to_string(),
+            Self::YearAscending => "order[year]=asc".to_string(),
+            Self::YearDescending => "order[year]=desc".to_string(),
         }
     }
 }

@@ -10,6 +10,7 @@ enum MangaFilters {
     ContentRating,
     #[strum(to_string = "Sort by")]
     SortBy,
+    Language,
 }
 
 impl From<MangaFilters> for Line<'_> {
@@ -18,12 +19,27 @@ impl From<MangaFilters> for Line<'_> {
     }
 }
 
-const FILTERS: [MangaFilters; 2] = [MangaFilters::ContentRating, MangaFilters::SortBy];
+const FILTERS: [MangaFilters; 3] = [
+    MangaFilters::ContentRating,
+    MangaFilters::SortBy,
+    MangaFilters::Language,
+];
 
 #[derive(Clone)]
 pub struct FilterListItem {
     pub is_selected: bool,
     pub name: String,
+}
+
+impl From<FilterListItem> for ListItem<'_> {
+    fn from(value: FilterListItem) -> Self {
+        let line = if value.is_selected {
+            Line::from(format!("🟡 {} ", value.name)).fg(Color::Yellow)
+        } else {
+            Line::from(value.name)
+        };
+        ListItem::new(line)
+    }
 }
 
 impl FilterListItem {
@@ -78,6 +94,20 @@ pub struct SortByState {
     pub state: ListState,
 }
 
+impl SortByState {
+    pub fn toggle(&mut self) {
+        for item in self.items.iter_mut() {
+            item.is_selected = false;
+        }
+
+        if let Some(index) = self.state.selected() {
+            if let Some(sort_by) = self.items.get_mut(index) {
+                sort_by.toggle();
+            }
+        }
+    }
+}
+
 impl Default for SortByState {
     fn default() -> Self {
         let sort_by_items = SortBy::iter().map(|sort_by_elem| FilterListItem {
@@ -92,16 +122,13 @@ impl Default for SortByState {
     }
 }
 
-impl From<FilterListItem> for ListItem<'_> {
-    fn from(value: FilterListItem) -> Self {
-        let line = if value.is_selected {
-            Line::from(format!("🟡 {} ", value.name)).fg(Color::Yellow)
-        } else {
-            Line::from(value.name)
-        };
-        ListItem::new(line)
-    }
+
+pub struct LanguageState {
+    pub items: Vec<FilterListItem>,
+    pub state: ListState,
 }
+
+
 
 #[derive(Default)]
 pub struct FilterState {
@@ -109,6 +136,8 @@ pub struct FilterState {
     pub id_filter: usize,
     pub filters: Filters,
     pub content_rating_list_state: ContentRatingState,
+    pub sort_by_state: SortByState,
+    
 }
 
 impl FilterState {
@@ -152,6 +181,9 @@ impl FilterState {
                     self.content_rating_list_state.state.select_next();
                 }
                 MangaFilters::SortBy => {
+                    self.sort_by_state.state.select_next();
+                }
+                MangaFilters::Language => {
                     todo!()
                 }
             }
@@ -165,6 +197,9 @@ impl FilterState {
                     self.content_rating_list_state.state.select_previous();
                 }
                 MangaFilters::SortBy => {
+                    self.sort_by_state.state.select_previous();
+                }
+                MangaFilters::Language => {
                     todo!()
                 }
             }
@@ -179,9 +214,25 @@ impl FilterState {
                     self.set_content_rating();
                 }
                 MangaFilters::SortBy => {
+                    self.sort_by_state.toggle();
+                    self.set_sort_by();
+                }
+                MangaFilters::Language => {
                     todo!()
                 }
             }
+        }
+    }
+
+    fn set_sort_by(&mut self) {
+        let sort_by_selected = self
+            .sort_by_state
+            .items
+            .iter()
+            .find(|item| item.is_selected);
+
+        if let Some(sort_by) = sort_by_selected {
+            self.filters.set_sort_by(sort_by.name.as_str().into());
         }
     }
 
@@ -230,32 +281,23 @@ impl<'a> StatefulWidget for FilterWidget<'a> {
         if let Some(filter) = FILTERS.get(state.id_filter) {
             match filter {
                 MangaFilters::ContentRating => {
-                    let list_block = Block::bordered().title(Line::from(vec![
-                        " Up/Down ".into(),
-                        " <j>/<k> ".bold().yellow(),
-                        " Select ".into(),
-                        "<s>".bold().yellow(),
-                    ]));
-
-                    let list = List::new(state.content_rating_list_state.items.clone())
-                        .block(list_block)
-                        .highlight_symbol(" >> ");
-
-                    StatefulWidget::render(
-                        list,
+                    render_filter_list(
+                        state.content_rating_list_state.items.clone(),
                         current_filter_area,
                         buf,
                         &mut state.content_rating_list_state.state,
                     );
                 }
                 MangaFilters::SortBy => {
-                    let list = List::new(vec!["best match", "highest rating"]);
-                    StatefulWidget::render(
-                        list,
+                    render_filter_list(
+                        state.sort_by_state.items.clone(),
                         current_filter_area,
                         buf,
-                        &mut state.content_rating_list_state.state,
+                        &mut state.sort_by_state.state,
                     );
+                }
+                MangaFilters::Language => {
+                    todo!()
                 }
             }
         }
@@ -274,4 +316,21 @@ impl<'a> FilterWidget<'a> {
         self.block = Some(block);
         self
     }
+}
+
+fn render_filter_list<'a, T>(items: T, area: Rect, buf: &mut Buffer, state: &mut ListState)
+where
+    T: IntoIterator,
+    T::Item: Into<ListItem<'a>>,
+{
+    let list_block = Block::bordered().title(Line::from(vec![
+        " Up/Down ".into(),
+        " <j>/<k> ".bold().yellow(),
+        " Select ".into(),
+        "<s>".bold().yellow(),
+    ]));
+
+    let list = List::new(items).block(list_block).highlight_symbol(">> ");
+
+    StatefulWidget::render(list, area, buf, state);
 }

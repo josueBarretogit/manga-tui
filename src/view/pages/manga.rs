@@ -20,6 +20,8 @@ use throbber_widgets_tui::ThrobberState;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
+// Todo! add publication year of the manga
+
 #[derive(PartialEq, Eq)]
 pub enum PageState {
     DownloadingChapters,
