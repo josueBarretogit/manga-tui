@@ -1,11 +1,10 @@
-use crate::filter::{ContentRating, Filters};
+use crate::filter::{ContentRating, Filters, SortBy};
 use crate::utils::centered_rect;
-use color_eyre::owo_colors::OwoColorize;
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{prelude::*, widgets::*};
-use strum::Display;
+use strum::{Display, IntoEnumIterator};
 
-#[derive(Display)]
+#[derive(Display, PartialEq, Eq)]
 enum MangaFilters {
     #[strum(to_string = "Content rating")]
     ContentRating,
@@ -22,39 +21,49 @@ impl From<MangaFilters> for Line<'_> {
 const FILTERS: [MangaFilters; 2] = [MangaFilters::ContentRating, MangaFilters::SortBy];
 
 #[derive(Clone)]
-pub struct ContentRatingListItem {
+pub struct FilterListItem {
     pub is_selected: bool,
     pub name: String,
 }
 
-impl ContentRatingListItem {
+impl FilterListItem {
     pub fn toggle(&mut self) {
         self.is_selected = !self.is_selected;
     }
 }
 
 pub struct ContentRatingState {
-    pub items: Vec<ContentRatingListItem>,
+    pub items: Vec<FilterListItem>,
     pub state: ListState,
+}
+
+impl ContentRatingState {
+    pub fn toggle(&mut self) {
+        if let Some(index) = self.state.selected() {
+            if let Some(content_rating) = self.items.get_mut(index) {
+                content_rating.toggle();
+            }
+        }
+    }
 }
 
 impl Default for ContentRatingState {
     fn default() -> Self {
         Self {
             items: vec![
-                ContentRatingListItem {
+                FilterListItem {
                     is_selected: true,
                     name: ContentRating::Safe.to_string(),
                 },
-                ContentRatingListItem {
+                FilterListItem {
                     is_selected: true,
                     name: ContentRating::Suggestive.to_string(),
                 },
-                ContentRatingListItem {
+                FilterListItem {
                     is_selected: false,
                     name: ContentRating::Erotic.to_string(),
                 },
-                ContentRatingListItem {
+                FilterListItem {
                     is_selected: false,
                     name: ContentRating::Pornographic.to_string(),
                 },
@@ -64,8 +73,27 @@ impl Default for ContentRatingState {
     }
 }
 
-impl From<ContentRatingListItem> for ListItem<'_> {
-    fn from(value: ContentRatingListItem) -> Self {
+pub struct SortByState {
+    pub items: Vec<FilterListItem>,
+    pub state: ListState,
+}
+
+impl Default for SortByState {
+    fn default() -> Self {
+        let sort_by_items = SortBy::iter().map(|sort_by_elem| FilterListItem {
+            is_selected: sort_by_elem == SortBy::BestMatch,
+            name: sort_by_elem.to_string(),
+        });
+
+        Self {
+            items: sort_by_items.collect(),
+            state: ListState::default(),
+        }
+    }
+}
+
+impl From<FilterListItem> for ListItem<'_> {
+    fn from(value: FilterListItem) -> Self {
         let line = if value.is_selected {
             Line::from(format!("🟡 {} ", value.name)).fg(Color::Yellow)
         } else {
@@ -76,14 +104,14 @@ impl From<ContentRatingListItem> for ListItem<'_> {
 }
 
 #[derive(Default)]
-pub struct FilterWidgetState {
+pub struct FilterState {
     pub is_open: bool,
     pub id_filter: usize,
     pub filters: Filters,
     pub content_rating_list_state: ContentRatingState,
 }
 
-impl FilterWidgetState {
+impl FilterState {
     pub fn toggle(&mut self) {
         self.is_open = !self.is_open;
     }
@@ -92,11 +120,11 @@ impl FilterWidgetState {
         match key_event.code {
             KeyCode::Char('f') => self.toggle(),
             KeyCode::Esc => self.toggle(),
-            KeyCode::Char('j') => self.next_content_rating(),
-            KeyCode::Char('k') => self.previous_content_rating(),
+            KeyCode::Char('j') => self.scroll_down_filter_list(),
+            KeyCode::Char('k') => self.scroll_up_filter_list(),
             KeyCode::Tab => self.next_filter(),
             KeyCode::BackTab => self.previous_filter(),
-            KeyCode::Char('s') => self.toggle_content_rating(),
+            KeyCode::Char('s') => self.toggle_filter_list(),
             _ => {}
         }
     }
@@ -117,19 +145,42 @@ impl FilterWidgetState {
         }
     }
 
-    fn next_content_rating(&mut self) {
-        self.content_rating_list_state.state.select_next();
+    fn scroll_down_filter_list(&mut self) {
+        if let Some(filter) = FILTERS.get(self.id_filter) {
+            match filter {
+                MangaFilters::ContentRating => {
+                    self.content_rating_list_state.state.select_next();
+                }
+                MangaFilters::SortBy => {
+                    todo!()
+                }
+            }
+        }
     }
 
-    fn previous_content_rating(&mut self) {
-        self.content_rating_list_state.state.select_previous();
+    fn scroll_up_filter_list(&mut self) {
+        if let Some(filter) = FILTERS.get(self.id_filter) {
+            match filter {
+                MangaFilters::ContentRating => {
+                    self.content_rating_list_state.state.select_previous();
+                }
+                MangaFilters::SortBy => {
+                    todo!()
+                }
+            }
+        }
     }
 
-    fn toggle_content_rating(&mut self) {
-        if let Some(index) = self.content_rating_list_state.state.selected() {
-            if let Some(content_rating) = self.content_rating_list_state.items.get_mut(index) {
-                content_rating.toggle();
-                self.set_content_rating();
+    fn toggle_filter_list(&mut self) {
+        if let Some(filter) = FILTERS.get(self.id_filter) {
+            match filter {
+                MangaFilters::ContentRating => {
+                    self.content_rating_list_state.toggle();
+                    self.set_content_rating();
+                }
+                MangaFilters::SortBy => {
+                    todo!()
+                }
             }
         }
     }
@@ -156,7 +207,7 @@ pub struct FilterWidget<'a> {
 }
 
 impl<'a> StatefulWidget for FilterWidget<'a> {
-    type State = FilterWidgetState;
+    type State = FilterState;
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         let popup_area = centered_rect(area, 80, 50);
 

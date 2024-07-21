@@ -7,7 +7,7 @@ use crate::backend::tui::Events;
 use crate::backend::SearchMangaResponse;
 use crate::utils::search_manga_cover;
 use crate::view::widgets::filter_widget::FilterWidget;
-use crate::view::widgets::filter_widget::FilterWidgetState;
+use crate::view::widgets::filter_widget::FilterState;
 use crate::view::widgets::search::*;
 use crate::view::widgets::Component;
 use crate::view::widgets::ImageHandler;
@@ -82,7 +82,7 @@ pub struct SearchPage {
     search_bar: Input,
     state: PageState,
     mangas_found_list: MangasFoundList,
-    filter_state: FilterWidgetState,
+    filter_state: FilterState,
     search_cover_handles: JoinSet<()>,
 }
 
@@ -189,7 +189,7 @@ impl SearchPage {
             state: PageState::default(),
             mangas_found_list: MangasFoundList::default(),
             search_cover_handles: JoinSet::new(),
-            filter_state: FilterWidgetState::default(),
+            filter_state: FilterState::default(),
         }
     }
 

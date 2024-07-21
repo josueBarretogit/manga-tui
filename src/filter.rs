@@ -28,7 +28,7 @@ impl From<&str> for ContentRating {
     }
 }
 
-#[derive(Display, Clone)]
+#[derive(Display, Clone, strum_macros::EnumIter, PartialEq, Eq)]
 pub enum SortBy {
     #[strum(to_string = "order[relevance]=desc")]
     BestMatch,
@@ -74,7 +74,19 @@ impl IntoParam for Vec<ContentRating> {
 
 impl IntoParam for SortBy {
     fn into_param(self) -> String {
-        format!("{}", self)
+        match self {
+            Self::BestMatch => "order[relevance]=desc".to_string(),
+            Self::LatestUpload => "order[latestUploadedChapter]=desc".to_string(),
+            Self::OldestUpload => "order[latestUploadedChapter]=asc".to_string(),
+            Self::OldestAdded => "order[createdAt]=asc".to_string(),
+            Self::MostFollows => "order[followedCount]=desc".to_string(),
+            Self::LowestRating => "order[rating]=asc".to_string(),
+            Self::HighestRating => "order[rating]=desc".to_string(),
+            Self::RecentlyAdded => "order[createdAt]=desc".to_string(),
+            Self::FewestFollows => "order[followedCount]=asc".to_string(),
+            Self::TitleAscending => "order[title]=asc".to_string(),
+            Self::TitleDescending => "order[title]=desc".to_string(),
+        }
     }
 }
 
@@ -107,6 +119,7 @@ impl Filters {
     pub fn set_content_rating(&mut self, ratings: Vec<ContentRating>) {
         self.content_rating = ratings;
     }
+
     pub fn set_sort_by(&mut self, sort_by: SortBy) {
         self.sort_by = sort_by;
     }
