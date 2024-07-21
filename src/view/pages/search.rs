@@ -3,11 +3,12 @@ use crate::backend::database::MangaPlanToReadSave;
 use crate::backend::error_log::write_to_error_log;
 use crate::backend::error_log::ErrorType;
 use crate::backend::fetch::MangadexClient;
+use crate::backend::tags::TagsResponse;
 use crate::backend::tui::Events;
 use crate::backend::SearchMangaResponse;
 use crate::utils::search_manga_cover;
-use crate::view::widgets::filter_widget::FilterWidget;
 use crate::view::widgets::filter_widget::FilterState;
+use crate::view::widgets::filter_widget::FilterWidget;
 use crate::view::widgets::search::*;
 use crate::view::widgets::Component;
 use crate::view::widgets::ImageHandler;
@@ -36,6 +37,8 @@ enum PageState {
 /// These happens in the background
 pub enum SearchPageEvents {
     SearchCovers,
+    SearchTags,
+    LoadTags(TagsResponse),
     LoadCover(Option<DynamicImage>, String),
     LoadMangasFound(Option<SearchMangaResponse>),
 }
@@ -83,7 +86,7 @@ pub struct SearchPage {
     state: PageState,
     mangas_found_list: MangasFoundList,
     filter_state: FilterState,
-    search_cover_handles: JoinSet<()>,
+    tasks: JoinSet<()>,
 }
 
 /// This contains the data the application gets when doing a search
@@ -165,7 +168,7 @@ impl Component for SearchPage {
     fn clean_up(&mut self) {
         self.state = PageState::default();
         self.input_mode = InputMode::Idle;
-        self.abort_search_cover_handles();
+        self.abort_tasks();
         self.mangas_found_list.state = ListState::default();
         if !self.mangas_found_list.widget.mangas.is_empty() {
             self.mangas_found_list.widget.mangas.clear();
@@ -178,6 +181,8 @@ impl SearchPage {
         let (action_tx, action_rx) = mpsc::unbounded_channel::<SearchPageActions>();
         let (local_event_tx, local_event) = mpsc::unbounded_channel::<SearchPageEvents>();
 
+        local_event_tx.send(SearchPageEvents::SearchTags).ok();
+
         Self {
             global_event_tx: event_tx,
             local_action_tx: action_tx,
@@ -188,9 +193,16 @@ impl SearchPage {
             search_bar: Input::default(),
             state: PageState::default(),
             mangas_found_list: MangasFoundList::default(),
-            search_cover_handles: JoinSet::new(),
+            tasks: JoinSet::new(),
             filter_state: FilterState::default(),
         }
+    }
+
+    fn search_tags(&mut self) {
+
+        self.tasks.spawn(async move {
+            
+        });
     }
 
     fn render_input_area(&self, area: Rect, frame: &mut Frame<'_>) {
@@ -365,8 +377,8 @@ impl SearchPage {
         }
     }
 
-    fn abort_search_cover_handles(&mut self) {
-        self.search_cover_handles.abort_all();
+    fn abort_tasks(&mut self) {
+        self.tasks.abort_all();
     }
 
     fn handle_key_events(&mut self, key_event: KeyEvent) {
@@ -441,8 +453,7 @@ impl SearchPage {
         let manga_to_search = self.search_bar.value().to_string();
 
         let filters = self.filter_state.filters.clone();
-
-        tokio::spawn(async move {
+        self.tasks.spawn(async move {
             let search_response = MangadexClient::global()
                 .search_mangas(&manga_to_search, page, filters)
                 .await;
@@ -467,6 +478,8 @@ impl SearchPage {
     pub fn tick(&mut self) {
         if let Ok(event) = self.local_event_rx.try_recv() {
             match event {
+                SearchPageEvents::LoadTags(response) => todo!(),
+                SearchPageEvents::SearchTags => todo!(),
                 SearchPageEvents::LoadMangasFound(response) => {
                     match response {
                         Some(response) => {
@@ -495,12 +508,7 @@ impl SearchPage {
                         match manga.img_url.as_ref() {
                             Some(file_name) => {
                                 let file_name = file_name.clone();
-                                search_manga_cover(
-                                    file_name,
-                                    manga_id,
-                                    &mut self.search_cover_handles,
-                                    tx,
-                                );
+                                search_manga_cover(file_name, manga_id, &mut self.tasks, tx);
                             }
                             None => {
                                 tx.send(SearchPageEvents::LoadCover(None, manga_id))

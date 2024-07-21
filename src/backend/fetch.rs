@@ -5,6 +5,7 @@ use once_cell::sync::OnceCell;
 use crate::filter::{Filters, IntoParam};
 use crate::view::pages::manga::ChapterOrder;
 
+use super::tags::TagsResponse;
 use super::{
     ChapterPagesResponse, ChapterResponse, Languages, MangaStatisticsResponse, SearchMangaResponse,
 };
@@ -196,6 +197,16 @@ impl MangadexClient {
         let response = self.client.get(endpoint).send().await?.text().await?;
 
         let data: ChapterResponse = serde_json::from_str(&response).unwrap();
+
+        Ok(data)
+    }
+
+    pub async fn get_tags(&self) -> Result<super::tags::TagsResponse, reqwest::Error> {
+        let endpoint = format!("{}/manga/tag", API_URL_BASE);
+
+        let response = self.client.get(endpoint).send().await?.text().await?;
+
+        let data: TagsResponse = serde_json::from_str(&response).unwrap();
 
         Ok(data)
     }

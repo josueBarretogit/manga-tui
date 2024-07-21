@@ -1,3 +1,6 @@
+use std::arch::global_asm;
+
+use crate::backend::tags::TagsResponse;
 use crate::filter::{ContentRating, Filters, SortBy};
 use crate::utils::centered_rect;
 use crossterm::event::{KeyCode, KeyEvent};
@@ -10,7 +13,7 @@ enum MangaFilters {
     ContentRating,
     #[strum(to_string = "Sort by")]
     SortBy,
-    Language,
+    Tags,
 }
 
 impl From<MangaFilters> for Line<'_> {
@@ -22,7 +25,7 @@ impl From<MangaFilters> for Line<'_> {
 const FILTERS: [MangaFilters; 3] = [
     MangaFilters::ContentRating,
     MangaFilters::SortBy,
-    MangaFilters::Language,
+    MangaFilters::Tags,
 ];
 
 #[derive(Clone)]
@@ -122,13 +125,22 @@ impl Default for SortByState {
     }
 }
 
-
 pub struct LanguageState {
     pub items: Vec<FilterListItem>,
     pub state: ListState,
 }
 
+pub struct TagListItem {
+    pub id: String,
+    pub name: String,
+    pub is_selected: bool,
+}
 
+#[derive(Default)]
+pub struct TagsState {
+    pub items: Option<Vec<TagListItem>>,
+    pub state: ListState,
+}
 
 #[derive(Default)]
 pub struct FilterState {
@@ -137,7 +149,7 @@ pub struct FilterState {
     pub filters: Filters,
     pub content_rating_list_state: ContentRatingState,
     pub sort_by_state: SortByState,
-    
+    pub tags: TagsState,
 }
 
 impl FilterState {
@@ -183,7 +195,7 @@ impl FilterState {
                 MangaFilters::SortBy => {
                     self.sort_by_state.state.select_next();
                 }
-                MangaFilters::Language => {
+                MangaFilters::Tags => {
                     todo!()
                 }
             }
@@ -199,7 +211,7 @@ impl FilterState {
                 MangaFilters::SortBy => {
                     self.sort_by_state.state.select_previous();
                 }
-                MangaFilters::Language => {
+                MangaFilters::Tags => {
                     todo!()
                 }
             }
@@ -217,11 +229,25 @@ impl FilterState {
                     self.sort_by_state.toggle();
                     self.set_sort_by();
                 }
-                MangaFilters::Language => {
+                MangaFilters::Tags => {
                     todo!()
                 }
             }
         }
+    }
+
+    fn set_tags(&mut self, tags_response: TagsResponse) {
+        let tags: Vec<TagListItem> = tags_response
+            .data
+            .into_iter()
+            .map(|data| TagListItem {
+                is_selected: false,
+                id: data.id,
+                name: data.attributes.name.en,
+            })
+            .collect();
+
+        self.tags.items = Some(tags);
     }
 
     fn set_sort_by(&mut self) {
@@ -296,7 +322,7 @@ impl<'a> StatefulWidget for FilterWidget<'a> {
                         &mut state.sort_by_state.state,
                     );
                 }
-                MangaFilters::Language => {
+                MangaFilters::Tags => {
                     todo!()
                 }
             }

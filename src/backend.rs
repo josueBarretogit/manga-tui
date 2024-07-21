@@ -319,3 +319,39 @@ pub mod feed {
         pub data: super::Data,
     }
 }
+
+pub mod tags {
+
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct TagsResponse {
+        pub result: String,
+        pub response: String,
+        pub data: Vec<TagsData>,
+    }
+
+    #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct TagsData {
+        pub id: String,
+        #[serde(rename = "type")]
+        pub type_field: String,
+        pub attributes: Attributes,
+    }
+
+    #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct Attributes {
+        pub name: Name,
+        pub group: String,
+        pub version: i64,
+    }
+
+    #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct Name {
+        pub en: String,
+    }
+}

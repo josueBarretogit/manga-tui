@@ -58,6 +58,28 @@ pub enum SortBy {
     YearAscending,
 }
 
+#[derive(Display, Clone, strum_macros::EnumIter, PartialEq, Eq)]
+pub enum Language {
+    English,
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub struct Tags(Vec<String>);
+
+impl IntoParam for Tags {
+    fn into_param(self) -> String {
+        let mut param = String::new();
+
+        for id_tag in self.0 {
+            param.push_str(format!("includedTags[]={}&", id_tag).as_str());
+        }
+
+        param.pop();
+
+        param
+    }
+}
+
 impl IntoParam for Vec<ContentRating> {
     fn into_param(self) -> String {
         let mut result = String::new();
@@ -108,6 +130,7 @@ impl IntoParam for SortBy {
 pub struct Filters {
     pub content_rating: Vec<ContentRating>,
     pub sort_by: SortBy,
+    pub tags: Tags,
 }
 
 impl IntoParam for Filters {
@@ -125,6 +148,7 @@ impl Default for Filters {
         Self {
             content_rating: vec![ContentRating::Safe, ContentRating::Suggestive],
             sort_by: SortBy::BestMatch,
+            tags: Tags(vec![]),
         }
     }
 }
