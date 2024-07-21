@@ -3,11 +3,11 @@ use image::DynamicImage;
 use ratatui::Frame;
 
 pub mod feed;
+pub mod filter_widget;
 pub mod home;
 pub mod manga;
 pub mod reader;
 pub mod search;
-pub mod filter_widget;
 
 pub trait Component {
     type Actions;
@@ -18,6 +18,16 @@ pub trait Component {
 
     /// This is intended for stuff like aborting tasks and clearing vec's
     fn clean_up(&mut self);
+}
+
+pub trait StatefulWidgetFrame {
+    type State;
+    fn render(
+        &mut self,
+        area: ratatui::prelude::Rect,
+        frame: &mut Frame<'_>,
+        state: &mut Self::State,
+    );
 }
 
 pub trait ImageHandler: Send + 'static {

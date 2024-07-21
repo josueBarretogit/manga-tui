@@ -12,6 +12,7 @@ use crate::view::widgets::filter_widget::FilterWidget;
 use crate::view::widgets::search::*;
 use crate::view::widgets::Component;
 use crate::view::widgets::ImageHandler;
+use crate::view::widgets::StatefulWidgetFrame;
 use crate::PICKER;
 use crossterm::event::KeyEvent;
 use crossterm::event::{self, KeyCode};
@@ -22,6 +23,10 @@ use tokio::task::JoinSet;
 use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
 use tui_widget_list::ListState;
+
+// Todo! display cover area loading
+// Todo! display loading search
+// Todo! indicate a manga has been added to plan to read
 
 /// Determine wheter or not mangas are being searched
 /// if so then this should not make a request until the most recent one finishes
@@ -109,7 +114,7 @@ impl Component for SearchPage {
 
         self.render_input_area(input_area, frame);
 
-        self.render_manga_found_area(manga_area, frame.buffer_mut());
+        self.render_manga_found_area(manga_area, frame);
     }
 
     fn update(&mut self, action: SearchPageActions) {
@@ -247,7 +252,8 @@ impl SearchPage {
         }
     }
 
-    fn render_manga_found_area(&mut self, area: Rect, buf: &mut Buffer) {
+    fn render_manga_found_area(&mut self, area: Rect, frame: &mut Frame<'_>) {
+        let buf = frame.buffer_mut();
         let layout = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Percentage(40), Constraint::Percentage(60)]);
@@ -328,16 +334,16 @@ impl SearchPage {
             }
         }
         if self.filter_state.is_open {
-            StatefulWidget::render(
-                FilterWidget::new().block(
-                    Block::bordered()
-                        .title(Line::from(vec!["Close ".into(), "<f>".bold().yellow()])),
-                ),
-                area,
-                buf,
-                &mut self.filter_state,
-            );
+            self.render_filters(area, frame);
         }
+    }
+
+    fn render_filters(&mut self, area: Rect, frame: &mut Frame<'_>) {
+        FilterWidget::new()
+            .block(
+                Block::bordered().title(Line::from(vec!["Close ".into(), "<f>".bold().yellow()])),
+            )
+            .render(area, frame, &mut self.filter_state);
     }
 
     fn focus_search_bar(&mut self) {

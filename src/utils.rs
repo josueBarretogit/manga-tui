@@ -6,9 +6,12 @@ use image::io::Reader;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Stylize};
 use ratatui::text::Span;
+use ratatui::widgets::Block;
+use ratatui::Frame;
 use std::io::Cursor;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::task::JoinSet;
+use tui_input::Input;
 
 pub fn set_tags_style(tag: &str) -> Span<'_> {
     match tag.to_lowercase().as_str() {
@@ -175,4 +178,18 @@ pub fn centered_rect(r: Rect, percent_x: u16, percent_y: u16) -> Rect {
             Constraint::Percentage((100 - percent_x) / 2),
         ])
         .split(popup_layout[1])[1]
+}
+
+pub fn render_search_bar(is_typing: bool, input: &Input, frame: &mut Frame<'_>, area: Rect) {
+    let width = area.width.max(3) - 3;
+
+    let scroll = input.visual_scroll(width as usize);
+
+    match is_typing {
+        true => {}
+        false => frame.set_cursor(
+            area.x + ((input.visual_cursor()).max(scroll) - scroll) as u16 + 1,
+            area.y + 1,
+        ),
+    }
 }

@@ -1,10 +1,12 @@
 use crate::backend::tags::TagsResponse;
 use crate::filter::{ContentRating, Filters, SortBy};
-use crate::utils::centered_rect;
+use crate::utils::{centered_rect, render_search_bar};
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{prelude::*, widgets::*};
 use strum::{Display, IntoEnumIterator};
 use tui_input::Input;
+
+use super::StatefulWidgetFrame;
 
 #[derive(Display, PartialEq, Eq)]
 enum MangaFilters {
@@ -151,7 +153,7 @@ impl From<TagListItem> for ListItem<'_> {
 pub struct TagsState {
     pub items: Option<Vec<TagListItem>>,
     pub state: ListState,
-    pub search_bar : Input,
+    pub search_bar: Input,
 }
 
 impl TagsState {
@@ -174,6 +176,7 @@ pub struct FilterState {
     pub content_rating_list_state: ContentRatingState,
     pub sort_by_state: SortByState,
     pub tags: TagsState,
+    pub is_typing: bool,
 }
 
 impl FilterState {
@@ -182,15 +185,22 @@ impl FilterState {
     }
 
     pub fn handle_key_events(&mut self, key_event: KeyEvent) {
-        match key_event.code {
-            KeyCode::Char('f') => self.toggle(),
-            KeyCode::Esc => self.toggle(),
-            KeyCode::Char('j') => self.scroll_down_filter_list(),
-            KeyCode::Char('k') => self.scroll_up_filter_list(),
-            KeyCode::Tab => self.next_filter(),
-            KeyCode::BackTab => self.previous_filter(),
-            KeyCode::Char('s') => self.toggle_filter_list(),
-            _ => {}
+        if !self.is_typing {
+            match key_event.code {
+                KeyCode::Char('f') => self.toggle(),
+                KeyCode::Esc => self.toggle(),
+                KeyCode::Char('j') => self.scroll_down_filter_list(),
+                KeyCode::Char('k') => self.scroll_up_filter_list(),
+                KeyCode::Tab => self.next_filter(),
+                KeyCode::BackTab => self.previous_filter(),
+                KeyCode::Char('s') => self.toggle_filter_list(),
+                _ => {}
+            }
+        } else {
+            match key_event.code {
+                KeyCode::Esc => self.next_filter(),
+                _ => {}
+            }
         }
     }
 
@@ -328,14 +338,21 @@ pub struct FilterWidget<'a> {
     pub style: Style,
 }
 
-impl<'a> StatefulWidget for FilterWidget<'a> {
+impl<'a> StatefulWidgetFrame for FilterWidget<'a> {
     type State = FilterState;
-    fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        let popup_area = centered_rect(area, 80, 50);
+
+    fn render(
+        &mut self,
+        area: ratatui::prelude::Rect,
+        frame: &mut Frame<'_>,
+        state: &mut Self::State,
+    ) {
+        let buf = frame.buffer_mut();
+        let popup_area = centered_rect(area, 80, 70);
 
         Clear.render(popup_area, buf);
 
-        if let Some(block) = self.block {
+        if let Some(block) = self.block.as_ref() {
             block.render(popup_area, buf);
         }
 
@@ -368,8 +385,44 @@ impl<'a> StatefulWidget for FilterWidget<'a> {
                     );
                 }
                 MangaFilters::Tags => {
+                    let [list_area, input_area] =
+                        Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)])
+                            .areas(current_filter_area);
+
                     if let Some(tags) = state.tags.items.as_ref().cloned() {
-                        render_filter_list(tags, current_filter_area, buf, &mut state.tags.state);
+                        render_filter_list(tags, list_area, buf, &mut state.tags.state);
+
+                        let (input_help, style) = if state.is_typing {
+                            (
+                                "Press <s> to type, open advanced filters: <f> ",
+                                Style::default().fg(Color::Yellow),
+                            )
+                        } else {
+                            (
+                                "Press <s> to type, open advanced filters: <f> ",
+                                Style::default(),
+                            )
+                        };
+
+                        let input_bar = Paragraph::new(state.tags.search_bar.value())
+                            .block(Block::bordered().title(input_help).border_style(style));
+
+                        input_bar.render(
+                            Rect::new(
+                                input_area.x,
+                                input_area.y,
+                                input_area.width,
+                                input_area.height - 12,
+                            ),
+                            buf,
+                        );
+
+                        render_search_bar(
+                            state.is_typing,
+                            &state.tags.search_bar,
+                            frame,
+                            input_area,
+                        );
                     }
                 }
             }
