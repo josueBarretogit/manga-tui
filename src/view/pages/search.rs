@@ -199,10 +199,17 @@ impl SearchPage {
     }
 
     fn search_tags(&mut self) {
-
+        let tx = self.local_event_tx.clone();
         self.tasks.spawn(async move {
-            
+            let response = MangadexClient::global().get_tags().await;
+            if let Ok(res) = response {
+                tx.send(SearchPageEvents::LoadTags(res)).ok();
+            }
         });
+    }
+
+    fn load_tags(&mut self, response: TagsResponse) {
+        self.filter_state.set_tags_from_response(response);
     }
 
     fn render_input_area(&self, area: Rect, frame: &mut Frame<'_>) {
@@ -478,8 +485,8 @@ impl SearchPage {
     pub fn tick(&mut self) {
         if let Ok(event) = self.local_event_rx.try_recv() {
             match event {
-                SearchPageEvents::LoadTags(response) => todo!(),
-                SearchPageEvents::SearchTags => todo!(),
+                SearchPageEvents::LoadTags(response) => self.load_tags(response),
+                SearchPageEvents::SearchTags => self.search_tags(),
                 SearchPageEvents::LoadMangasFound(response) => {
                     match response {
                         Some(response) => {

@@ -70,6 +70,10 @@ impl IntoParam for Tags {
     fn into_param(self) -> String {
         let mut param = String::new();
 
+        if self.0.is_empty() {
+            return param;
+        }
+
         for id_tag in self.0 {
             param.push_str(format!("includedTags[]={}&", id_tag).as_str());
         }
@@ -135,10 +139,19 @@ pub struct Filters {
 
 impl IntoParam for Filters {
     fn into_param(self) -> String {
+        if self.tags.0.is_empty() {
+            return format!(
+                "{}&{}",
+                self.content_rating.into_param(),
+                self.sort_by.into_param()
+            );
+        }
+
         format!(
-            "{}&{}",
+            "{}&{}&{}",
             self.content_rating.into_param(),
-            self.sort_by.into_param()
+            self.sort_by.into_param(),
+            self.tags.into_param()
         )
     }
 }
@@ -160,5 +173,8 @@ impl Filters {
 
     pub fn set_sort_by(&mut self, sort_by: SortBy) {
         self.sort_by = sort_by;
+    }
+    pub fn set_tags(&mut self, tags: Vec<String>) {
+        self.tags.0 = tags;
     }
 }

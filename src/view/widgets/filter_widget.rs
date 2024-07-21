@@ -1,11 +1,10 @@
-use std::arch::global_asm;
-
 use crate::backend::tags::TagsResponse;
 use crate::filter::{ContentRating, Filters, SortBy};
 use crate::utils::centered_rect;
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{prelude::*, widgets::*};
 use strum::{Display, IntoEnumIterator};
+use tui_input::Input;
 
 #[derive(Display, PartialEq, Eq)]
 enum MangaFilters {
@@ -130,16 +129,41 @@ pub struct LanguageState {
     pub state: ListState,
 }
 
+#[derive(Clone)]
 pub struct TagListItem {
     pub id: String,
     pub name: String,
     pub is_selected: bool,
 }
 
+impl From<TagListItem> for ListItem<'_> {
+    fn from(value: TagListItem) -> Self {
+        let line = if value.is_selected {
+            Line::from(format!("🟡 {} ", value.name)).fg(Color::Yellow)
+        } else {
+            Line::from(value.name)
+        };
+        ListItem::new(line)
+    }
+}
+
 #[derive(Default)]
 pub struct TagsState {
     pub items: Option<Vec<TagListItem>>,
     pub state: ListState,
+    pub search_bar : Input,
+}
+
+impl TagsState {
+    pub fn toggle(&mut self) {
+        if let Some(items) = self.items.as_mut() {
+            if let Some(index) = self.state.selected() {
+                if let Some(tag) = items.get_mut(index) {
+                    tag.is_selected = !tag.is_selected;
+                }
+            }
+        }
+    }
 }
 
 #[derive(Default)]
@@ -196,7 +220,9 @@ impl FilterState {
                     self.sort_by_state.state.select_next();
                 }
                 MangaFilters::Tags => {
-                    todo!()
+                    if self.tags.items.is_some() {
+                        self.tags.state.select_next();
+                    }
                 }
             }
         }
@@ -212,7 +238,9 @@ impl FilterState {
                     self.sort_by_state.state.select_previous();
                 }
                 MangaFilters::Tags => {
-                    todo!()
+                    if self.tags.items.is_some() {
+                        self.tags.state.select_previous();
+                    }
                 }
             }
         }
@@ -230,13 +258,14 @@ impl FilterState {
                     self.set_sort_by();
                 }
                 MangaFilters::Tags => {
-                    todo!()
+                    self.tags.toggle();
+                    self.set_tags();
                 }
             }
         }
     }
 
-    fn set_tags(&mut self, tags_response: TagsResponse) {
+    pub fn set_tags_from_response(&mut self, tags_response: TagsResponse) {
         let tags: Vec<TagListItem> = tags_response
             .data
             .into_iter()
@@ -248,6 +277,22 @@ impl FilterState {
             .collect();
 
         self.tags.items = Some(tags);
+    }
+
+    fn set_tags(&mut self) {
+        if let Some(items) = self.tags.items.as_ref() {
+            let tag_ids: Vec<String> = items
+                .iter()
+                .filter_map(|tag| {
+                    if tag.is_selected {
+                        return Some(tag.id.to_string());
+                    }
+                    None
+                })
+                .collect();
+
+            self.filters.set_tags(tag_ids);
+        }
     }
 
     fn set_sort_by(&mut self) {
@@ -323,7 +368,9 @@ impl<'a> StatefulWidget for FilterWidget<'a> {
                     );
                 }
                 MangaFilters::Tags => {
-                    todo!()
+                    if let Some(tags) = state.tags.items.as_ref().cloned() {
+                        render_filter_list(tags, current_filter_area, buf, &mut state.tags.state);
+                    }
                 }
             }
         }
