@@ -188,6 +188,10 @@ impl Author {
 
         self.0.push(id_author);
     }
+
+    pub fn reset(&mut self) {
+        self.0.clear();
+    }
 }
 
 #[derive(Clone)]

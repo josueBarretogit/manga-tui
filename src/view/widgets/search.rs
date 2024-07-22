@@ -113,8 +113,8 @@ pub struct MangaItem {
     pub content_rating: String,
     pub status: String,
     pub img_url: Option<String>,
-    pub author: Option<String>,
-    pub artist: Option<String>,
+    pub author: (String, Option<String>),
+    pub artist: (String, Option<String>),
     pub style: Style,
     pub image_state: Option<Box<dyn StatefulProtocol>>,
 }
@@ -169,8 +169,8 @@ impl MangaItem {
         content_rating: String,
         status: String,
         img_url: Option<String>,
-        author: Option<String>,
-        artist: Option<String>,
+        author: (String, Option<String>),
+        artist: (String, Option<String>),
         image_state: Option<Box<dyn StatefulProtocol>>,
     ) -> Self {
         Self {

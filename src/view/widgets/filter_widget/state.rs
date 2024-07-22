@@ -13,6 +13,8 @@ use tui_input::Input;
 pub enum FilterEvents {
     SearchAuthors,
     LoadAuthors(Option<AuthorsResponse>),
+    SearchTags,
+    LoadTags(TagsResponse),
 }
 
 #[derive(Display, PartialEq, Eq)]
@@ -289,6 +291,7 @@ pub struct FilterState {
 impl FilterState {
     pub fn new() -> Self {
         let (tx, rx) = mpsc::unbounded_channel::<FilterEvents>();
+        tx.send(FilterEvents::SearchTags).ok();
         Self {
             is_open: false,
             id_filter: 0,
@@ -311,10 +314,26 @@ impl FilterState {
     fn tick(&mut self) {
         if let Ok(event) = self.rx.try_recv() {
             match event {
+                FilterEvents::SearchTags => self.search_tags(),
+                FilterEvents::LoadTags(res) => self.load_tags(res),
                 FilterEvents::SearchAuthors => self.search(),
                 FilterEvents::LoadAuthors(res) => self.load_authors(res),
             }
         }
+    }
+
+    fn search_tags(&mut self) {
+        let tx = self.tx.clone();
+        tokio::spawn(async move {
+            let response = MangadexClient::global().get_tags().await;
+            if let Ok(res) = response {
+                tx.send(FilterEvents::LoadTags(res)).ok();
+            }
+        });
+    }
+
+    fn load_tags(&mut self, response: TagsResponse) {
+        self.set_tags_from_response(response);
     }
 
     fn search(&mut self) {
@@ -584,5 +603,9 @@ impl FilterState {
 
     pub fn set_author(&mut self, id_author: String) {
         self.filters.authors.set_one_author(id_author);
+    }
+
+    pub fn reset_authors(&mut self) {
+        self.filters.authors.reset();
     }
 }

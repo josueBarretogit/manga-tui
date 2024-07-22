@@ -21,8 +21,8 @@ pub struct CarrouselItem {
     pub content_rating: String,
     pub status: String,
     pub img_url: Option<String>,
-    pub author: Option<String>,
-    pub artist: Option<String>,
+    pub author: (String, Option<String>),
+    pub artist: (String, Option<String>),
     pub cover_state: Option<Box<dyn StatefulProtocol>>,
 }
 
@@ -36,8 +36,8 @@ impl CarrouselItem {
         content_rating: String,
         status: String,
         img_url: Option<String>,
-        author: Option<String>,
-        artist: Option<String>,
+        author: (String, Option<String>),
+        artist: (String, Option<String>),
         cover_state: Option<Box<dyn StatefulProtocol>>,
     ) -> Self {
         Self {
@@ -75,7 +75,7 @@ impl CarrouselItem {
 
         Block::bordered()
             .title(self.title.clone())
-            .title_bottom(self.author.as_deref().unwrap_or_default())
+            .title_bottom(self.author.1.as_deref().unwrap_or_default())
             .render(area, buf);
 
         let mut tags: Vec<Span<'_>> = self.tags.iter().map(|tag| set_tags_style(tag)).collect();

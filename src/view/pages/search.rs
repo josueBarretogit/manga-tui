@@ -3,7 +3,6 @@ use crate::backend::database::MangaPlanToReadSave;
 use crate::backend::error_log::write_to_error_log;
 use crate::backend::error_log::ErrorType;
 use crate::backend::fetch::MangadexClient;
-use crate::backend::tags::TagsResponse;
 use crate::backend::tui::Events;
 use crate::backend::SearchMangaResponse;
 use crate::utils::search_manga_cover;
@@ -42,8 +41,6 @@ enum PageState {
 /// These happens in the background
 pub enum SearchPageEvents {
     SearchCovers,
-    SearchTags,
-    LoadTags(TagsResponse),
     LoadCover(Option<DynamicImage>, String),
     LoadMangasFound(Option<SearchMangaResponse>),
 }
@@ -186,8 +183,6 @@ impl SearchPage {
         let (action_tx, action_rx) = mpsc::unbounded_channel::<SearchPageActions>();
         let (local_event_tx, local_event) = mpsc::unbounded_channel::<SearchPageEvents>();
 
-        local_event_tx.send(SearchPageEvents::SearchTags).ok();
-
         Self {
             global_event_tx: event_tx,
             local_action_tx: action_tx,
@@ -201,20 +196,6 @@ impl SearchPage {
             tasks: JoinSet::new(),
             filter_state: FilterState::new(),
         }
-    }
-
-    fn search_tags(&mut self) {
-        let tx = self.local_event_tx.clone();
-        self.tasks.spawn(async move {
-            let response = MangadexClient::global().get_tags().await;
-            if let Ok(res) = response {
-                tx.send(SearchPageEvents::LoadTags(res)).ok();
-            }
-        });
-    }
-
-    fn load_tags(&mut self, response: TagsResponse) {
-        self.filter_state.set_tags_from_response(response);
     }
 
     fn render_input_area(&self, area: Rect, frame: &mut Frame<'_>) {
@@ -491,11 +472,16 @@ impl SearchPage {
         });
     }
 
+    pub fn search_mangas_of_author(&mut self, id_author: String) {
+        self.filter_state.set_author(id_author);
+        self.search_bar.reset();
+        self.search_mangas(1);
+        self.filter_state.reset_authors();
+    }
+
     pub fn tick(&mut self) {
         if let Ok(event) = self.local_event_rx.try_recv() {
             match event {
-                SearchPageEvents::LoadTags(response) => self.load_tags(response),
-                SearchPageEvents::SearchTags => self.search_tags(),
                 SearchPageEvents::LoadMangasFound(response) => {
                     match response {
                         Some(response) => {

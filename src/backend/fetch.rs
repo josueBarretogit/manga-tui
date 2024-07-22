@@ -17,8 +17,8 @@ pub struct MangadexClient {
 
 pub static MANGADEX_CLIENT_INSTANCE: OnceCell<MangadexClient> = once_cell::sync::OnceCell::new();
 
-static API_URL_BASE: &str = "https://api.mangadex.dev";
-static COVER_IMG_URL_BASE: &str = "https://uploads.mangadex.dev/covers";
+static API_URL_BASE: &str = "https://api.mangadex.org";
+static COVER_IMG_URL_BASE: &str = "https://uploads.mangadex.org/covers";
 
 impl MangadexClient {
     pub fn global() -> &'static MangadexClient {

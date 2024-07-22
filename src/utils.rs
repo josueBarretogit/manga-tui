@@ -77,8 +77,8 @@ pub struct Manga {
     pub tags: Vec<String>,
     pub status: String,
     pub img_url: Option<String>,
-    pub author: Option<String>,
-    pub artist: Option<String>,
+    pub author: (String, Option<String>),
+    pub artist: (String, Option<String>),
 }
 
 pub fn from_manga_response(value: Data) -> Manga {
@@ -115,14 +115,24 @@ pub fn from_manga_response(value: Data) -> Manga {
         .collect();
 
     let mut img_url: Option<String> = Option::default();
-    let mut author: Option<String> = Option::default();
-    let mut artist: Option<String> = Option::default();
+    let mut author: (String, Option<String>) = (String::new(), None);
+    let mut artist: (String, Option<String>) = (String::new(), None);
 
     for rel in &value.relationships {
         if let Some(attributes) = &rel.attributes {
             match rel.type_field.as_str() {
-                "author" => author = Some(attributes.name.as_ref().unwrap().to_string()),
-                "artist" => artist = Some(attributes.name.as_ref().unwrap().to_string()),
+                "author" => {
+                    author = (
+                        rel.id.to_string(),
+                        Some(attributes.name.as_ref().unwrap().to_string()),
+                    )
+                }
+                "artist" => {
+                    artist = (
+                        rel.id.to_string(),
+                        Some(attributes.name.as_ref().unwrap().to_string()),
+                    )
+                }
                 "cover_art" => img_url = Some(attributes.file_name.as_ref().unwrap().to_string()),
                 _ => {}
             }

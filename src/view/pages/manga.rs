@@ -36,6 +36,7 @@ pub enum MangaPageActions {
     ScrollChapterUp,
     ToggleOrder,
     ReadChapter,
+    GoMangasAuthor,
 }
 
 pub enum MangaPageEvents {
@@ -67,6 +68,16 @@ impl ChapterOrder {
     }
 }
 
+pub struct Author {
+    pub id: String,
+    pub name: String,
+}
+
+pub struct Artist {
+    pub id: String,
+    pub name: String,
+}
+
 pub struct MangaPage {
     id: String,
     pub title: String,
@@ -76,8 +87,8 @@ pub struct MangaPage {
     image_state: Option<Box<dyn StatefulProtocol>>,
     status: String,
     content_rating: String,
-    author: String,
-    artist: String,
+    author: Author,
+    artist: Artist,
     global_event_tx: UnboundedSender<Events>,
     local_action_tx: UnboundedSender<MangaPageActions>,
     pub local_action_rx: UnboundedReceiver<MangaPageActions>,
@@ -120,8 +131,8 @@ impl MangaPage {
         image_state: Option<Box<dyn StatefulProtocol>>,
         status: String,
         content_rating: String,
-        author: String,
-        artist: String,
+        author: Author,
+        artist: Artist,
         global_event_tx: UnboundedSender<Events>,
     ) -> Self {
         let (local_action_tx, local_action_rx) = mpsc::unbounded_channel::<MangaPageActions>();
@@ -186,7 +197,7 @@ impl MangaPage {
 
         let author_and_artist = Span::raw(format!(
             "Author : {} | Artist : {}",
-            self.author, self.artist
+            self.author.name, self.artist.name
         ));
 
         let instructions = vec![
@@ -332,6 +343,11 @@ impl MangaPage {
             KeyCode::Char('d') => {
                 self.local_action_tx
                     .send(MangaPageActions::DownloadChapter)
+                    .ok();
+            }
+            KeyCode::Char('u') => {
+                self.local_action_tx
+                    .send(MangaPageActions::GoMangasAuthor)
                     .ok();
             }
             _ => {}
@@ -583,6 +599,12 @@ impl MangaPage {
         }
     }
 
+    fn go_mangas_author(&mut self) {
+        self.global_event_tx
+            .send(Events::GoSearchMangasAuthor(self.author.id.to_string()))
+            .ok();
+    }
+
     fn tick(&mut self) {
         if self.state == PageState::DownloadingChapters {
             let chapters = self.chapters.as_mut().unwrap();
@@ -664,6 +686,7 @@ impl Component for MangaPage {
     }
     fn update(&mut self, action: Self::Actions) {
         match action {
+            MangaPageActions::GoMangasAuthor => self.go_mangas_author(),
             MangaPageActions::ScrollChapterUp => self.scroll_chapter_up(),
             MangaPageActions::ScrollChapterDown => self.scroll_chapter_down(),
             MangaPageActions::ToggleOrder => {
