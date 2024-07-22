@@ -1,3 +1,4 @@
+use std::fmt::Write;
 use strum::{Display, EnumIter, IntoEnumIterator};
 
 pub trait IntoParam {
@@ -165,18 +166,44 @@ impl IntoParam for Vec<MagazineDemographic> {
     }
 }
 
+#[derive(Clone, PartialEq, Eq, Default)]
+pub struct Author(Vec<String>);
+
+impl IntoParam for Author {
+    fn into_param(self) -> String {
+        self.0
+            .into_iter()
+            .fold(String::new(), |mut ids, id_author| {
+                let _ = write!(ids, "&authors[]={id_author}");
+                ids
+            })
+    }
+}
+
+impl Author {
+    pub fn set_one_author(&mut self, id_author: String) {
+        if !self.0.is_empty() {
+            self.0.clear();
+        }
+
+        self.0.push(id_author);
+    }
+}
+
 #[derive(Clone)]
 pub struct Filters {
     pub content_rating: Vec<ContentRating>,
     pub sort_by: SortBy,
     pub tags: Tags,
     pub magazine_demographic: Vec<MagazineDemographic>,
+    pub authors: Author,
 }
 
 impl IntoParam for Filters {
     fn into_param(self) -> String {
         format!(
-            "{}{}{}{}",
+            "{}{}{}{}{}",
+            self.authors.into_param(),
             self.content_rating.into_param(),
             self.sort_by.into_param(),
             self.tags.into_param(),
@@ -192,6 +219,7 @@ impl Default for Filters {
             sort_by: SortBy::default(),
             tags: Tags(vec![]),
             magazine_demographic: vec![],
+            authors: Author::default(),
         }
     }
 }
@@ -207,7 +235,12 @@ impl Filters {
     pub fn set_tags(&mut self, tags: Vec<String>) {
         self.tags.0 = tags;
     }
+
     pub fn set_magazine_demographic(&mut self, magazine_demographics: Vec<MagazineDemographic>) {
         self.magazine_demographic = magazine_demographics;
+    }
+
+    pub fn set_authors(&mut self, author_ids: Vec<String>) {
+        self.authors.0 = author_ids;
     }
 }

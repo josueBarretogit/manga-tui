@@ -7,7 +7,7 @@ use crate::backend::tags::TagsResponse;
 use crate::backend::tui::Events;
 use crate::backend::SearchMangaResponse;
 use crate::utils::search_manga_cover;
-use crate::view::widgets::filter_widget::FilterState;
+use crate::view::widgets::filter_widget::state::FilterState;
 use crate::view::widgets::filter_widget::FilterWidget;
 use crate::view::widgets::search::*;
 use crate::view::widgets::Component;
@@ -158,16 +158,16 @@ impl Component for SearchPage {
         }
     }
     fn handle_events(&mut self, events: Events) {
-        match events {
-            Events::Key(key_event) => {
-                if self.filter_state.is_open {
-                    self.filter_state.handle_key_events(key_event);
-                } else {
+        if self.filter_state.is_open {
+            self.filter_state.handle_events(events);
+        } else {
+            match events {
+                Events::Key(key_event) => {
                     self.handle_key_events(key_event);
                 }
+                Events::Tick => self.tick(),
+                _ => {}
             }
-            Events::Tick => self.tick(),
-            _ => {}
         }
     }
     fn clean_up(&mut self) {
@@ -199,7 +199,7 @@ impl SearchPage {
             state: PageState::default(),
             mangas_found_list: MangasFoundList::default(),
             tasks: JoinSet::new(),
-            filter_state: FilterState::default(),
+            filter_state: FilterState::new(),
         }
     }
 

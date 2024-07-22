@@ -11,6 +11,7 @@ pub mod download;
 pub mod error_log;
 pub mod fetch;
 pub mod tui;
+pub mod filter;
 
 #[derive(Display)]
 pub enum AppDirectories {
@@ -352,5 +353,35 @@ pub mod tags {
     #[serde(rename_all = "camelCase")]
     pub struct Name {
         pub en: String,
+    }
+}
+
+pub mod authors {
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct AuthorsResponse {
+        pub result: String,
+        pub response: String,
+        pub data: Vec<Data>,
+    }
+
+    #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct Data {
+        pub id: String,
+        #[serde(rename = "type")]
+        pub type_field: String,
+        pub attributes: Attributes,
+    }
+
+    #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct Attributes {
+        pub name: String,
+        pub created_at: String,
+        pub updated_at: String,
+        pub version: i64,
     }
 }

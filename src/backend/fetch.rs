@@ -1,10 +1,10 @@
+use crate::backend::filter::{Filters, IntoParam};
+use crate::view::pages::manga::ChapterOrder;
 use bytes::Bytes;
 use chrono::Months;
 use once_cell::sync::OnceCell;
 
-use crate::filter::{Filters, IntoParam};
-use crate::view::pages::manga::ChapterOrder;
-
+use super::authors::AuthorsResponse;
 use super::tags::TagsResponse;
 use super::{
     ChapterPagesResponse, ChapterResponse, Languages, MangaStatisticsResponse, SearchMangaResponse,
@@ -17,8 +17,8 @@ pub struct MangadexClient {
 
 pub static MANGADEX_CLIENT_INSTANCE: OnceCell<MangadexClient> = once_cell::sync::OnceCell::new();
 
-static API_URL_BASE: &str = "https://api.mangadex.org";
-static COVER_IMG_URL_BASE: &str = "https://uploads.mangadex.org/covers";
+static API_URL_BASE: &str = "https://api.mangadex.dev";
+static COVER_IMG_URL_BASE: &str = "https://uploads.mangadex.dev/covers";
 
 impl MangadexClient {
     pub fn global() -> &'static MangadexClient {
@@ -207,6 +207,19 @@ impl MangadexClient {
         let response = self.client.get(endpoint).send().await?.text().await?;
 
         let data: TagsResponse = serde_json::from_str(&response).unwrap();
+
+        Ok(data)
+    }
+
+    pub async fn get_authors(
+        &self,
+        name: &str,
+    ) -> Result<super::authors::AuthorsResponse, reqwest::Error> {
+        let endpoint = format!("{}/author?name={}", API_URL_BASE, name);
+
+        let response = self.client.get(endpoint).send().await?.text().await?;
+
+        let data: AuthorsResponse = serde_json::from_str(&response).unwrap();
 
         Ok(data)
     }

@@ -176,21 +176,17 @@ pub fn centered_rect(r: Rect, percent_x: u16, percent_y: u16) -> Rect {
         .split(popup_layout[1])[1]
 }
 
-pub fn render_search_bar(is_typing: bool, input: &Input, frame: &mut Frame<'_>, area: Rect) {
-    let (input_help, style) = if is_typing {
-        (
-            Line::from(vec!["Press <esc> to stop typing".into()]),
-            Style::default().fg(Color::Yellow),
-        )
+pub fn render_search_bar(
+    is_typing: bool,
+    input_help: Line<'_>,
+    input: &Input,
+    frame: &mut Frame<'_>,
+    area: Rect,
+) {
+    let style = if is_typing {
+        Style::default().fg(Color::Yellow)
     } else {
-        (
-            Line::from(vec![
-                "Press".into(),
-                " <l> ".bold().yellow(),
-                "to type".into(),
-            ]),
-            Style::default(),
-        )
+        Style::default()
     };
 
     let input_bar = Paragraph::new(input.value())
