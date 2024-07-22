@@ -1,4 +1,4 @@
-use strum::{Display, IntoEnumIterator};
+use strum::{Display, EnumIter, IntoEnumIterator};
 
 pub trait IntoParam {
     fn into_param(self) -> String;
@@ -59,7 +59,7 @@ pub enum SortBy {
     YearAscending,
 }
 
-#[derive(Display, Clone, strum_macros::EnumIter, PartialEq, Eq)]
+#[derive(Display, Clone, EnumIter, PartialEq, Eq)]
 pub enum Language {
     English,
 }
@@ -76,10 +76,8 @@ impl IntoParam for Tags {
         }
 
         for id_tag in self.0 {
-            param.push_str(format!("includedTags[]={}&", id_tag).as_str());
+            param.push_str(format!("&includedTags[]={}", id_tag).as_str());
         }
-
-        param.pop();
 
         param
     }
@@ -90,14 +88,12 @@ impl IntoParam for Vec<ContentRating> {
         let mut result = String::new();
 
         if self.is_empty() {
-            return format!("contentRating[]={}", ContentRating::Safe);
+            return format!("&contentRating[]={}", ContentRating::Safe);
         }
 
         for cont in self {
-            result.push_str(format!("contentRating[]={}&", cont).as_str());
+            result.push_str(format!("&contentRating[]={}", cont).as_str());
         }
-
-        result.pop();
 
         result
     }
@@ -114,20 +110,58 @@ impl From<&str> for SortBy {
 impl IntoParam for SortBy {
     fn into_param(self) -> String {
         match self {
-            Self::BestMatch => "order[relevance]=desc".to_string(),
-            Self::LatestUpload => "order[latestUploadedChapter]=desc".to_string(),
-            Self::OldestUpload => "order[latestUploadedChapter]=asc".to_string(),
-            Self::OldestAdded => "order[createdAt]=asc".to_string(),
-            Self::MostFollows => "order[followedCount]=desc".to_string(),
-            Self::LowestRating => "order[rating]=asc".to_string(),
-            Self::HighestRating => "order[rating]=desc".to_string(),
-            Self::RecentlyAdded => "order[createdAt]=desc".to_string(),
-            Self::FewestFollows => "order[followedCount]=asc".to_string(),
-            Self::TitleAscending => "order[title]=asc".to_string(),
-            Self::TitleDescending => "order[title]=desc".to_string(),
-            Self::YearAscending => "order[year]=asc".to_string(),
-            Self::YearDescending => "order[year]=desc".to_string(),
+            Self::BestMatch => "&order[relevance]=desc".to_string(),
+            Self::LatestUpload => "&order[latestUploadedChapter]=desc".to_string(),
+            Self::OldestUpload => "&order[latestUploadedChapter]=asc".to_string(),
+            Self::OldestAdded => "&order[createdAt]=asc".to_string(),
+            Self::MostFollows => "&order[followedCount]=desc".to_string(),
+            Self::LowestRating => "&order[rating]=asc".to_string(),
+            Self::HighestRating => "&order[rating]=desc".to_string(),
+            Self::RecentlyAdded => "&order[createdAt]=desc".to_string(),
+            Self::FewestFollows => "&order[followedCount]=asc".to_string(),
+            Self::TitleAscending => "&order[title]=asc".to_string(),
+            Self::TitleDescending => "&order[title]=desc".to_string(),
+            Self::YearAscending => "&order[year]=asc".to_string(),
+            Self::YearDescending => "&order[year]=desc".to_string(),
         }
+    }
+}
+
+#[derive(Display, Clone, EnumIter, PartialEq, Eq)]
+pub enum MagazineDemographic {
+    Shounen,
+    Shoujo,
+    Seinen,
+    Josei,
+}
+
+impl From<&str> for MagazineDemographic {
+    fn from(value: &str) -> Self {
+        Self::iter()
+            .find(|mag| mag.to_string().to_lowercase() == value.to_lowercase())
+            .unwrap()
+    }
+}
+
+impl IntoParam for Vec<MagazineDemographic> {
+    fn into_param(self) -> String {
+        let mut param = String::new();
+
+        if self.is_empty() {
+            return param;
+        }
+
+        for magazine in self {
+            param.push_str(
+                format!(
+                    "&publicationDemographic[]={}",
+                    magazine.to_string().to_lowercase()
+                )
+                .as_str(),
+            );
+        }
+
+        param
     }
 }
 
@@ -136,23 +170,17 @@ pub struct Filters {
     pub content_rating: Vec<ContentRating>,
     pub sort_by: SortBy,
     pub tags: Tags,
+    pub magazine_demographic: Vec<MagazineDemographic>,
 }
 
 impl IntoParam for Filters {
     fn into_param(self) -> String {
-        if self.tags.0.is_empty() {
-            return format!(
-                "{}&{}",
-                self.content_rating.into_param(),
-                self.sort_by.into_param()
-            );
-        }
-
         format!(
-            "{}&{}&{}",
+            "{}{}{}{}",
             self.content_rating.into_param(),
             self.sort_by.into_param(),
-            self.tags.into_param()
+            self.tags.into_param(),
+            self.magazine_demographic.into_param()
         )
     }
 }
@@ -163,6 +191,7 @@ impl Default for Filters {
             content_rating: vec![ContentRating::Safe, ContentRating::Suggestive],
             sort_by: SortBy::default(),
             tags: Tags(vec![]),
+            magazine_demographic: vec![],
         }
     }
 }
@@ -177,5 +206,8 @@ impl Filters {
     }
     pub fn set_tags(&mut self, tags: Vec<String>) {
         self.tags.0 = tags;
+    }
+    pub fn set_magazine_demographic(&mut self, magazine_demographics: Vec<MagazineDemographic>) {
+        self.magazine_demographic = magazine_demographics;
     }
 }

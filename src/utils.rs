@@ -184,7 +184,11 @@ pub fn render_search_bar(is_typing: bool, input: &Input, frame: &mut Frame<'_>, 
         )
     } else {
         (
-            Line::from(vec!["Press <Enter> to type".into()]),
+            Line::from(vec![
+                "Press".into(),
+                " <l> ".bold().yellow(),
+                "to type".into(),
+            ]),
             Style::default(),
         )
     };

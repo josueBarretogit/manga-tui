@@ -1,5 +1,5 @@
 use crate::backend::tags::TagsResponse;
-use crate::filter::{ContentRating, Filters, SortBy};
+use crate::filter::{ContentRating, Filters, MagazineDemographic, SortBy};
 use crate::utils::{centered_rect, render_search_bar};
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{prelude::*, widgets::*};
@@ -15,6 +15,8 @@ enum MangaFilters {
     ContentRating,
     #[strum(to_string = "Sort by")]
     SortBy,
+    #[strum(to_string = "Magazine demographic")]
+    MagazineDemographic,
     Tags,
 }
 
@@ -24,10 +26,11 @@ impl From<MangaFilters> for Line<'_> {
     }
 }
 
-const FILTERS: [MangaFilters; 3] = [
+const FILTERS: [MangaFilters; 4] = [
     MangaFilters::ContentRating,
     MangaFilters::SortBy,
     MangaFilters::Tags,
+    MangaFilters::MagazineDemographic,
 ];
 
 #[derive(Clone)]
@@ -127,9 +130,33 @@ impl Default for SortByState {
     }
 }
 
-pub struct LanguageState {
+pub struct MagazineDemographicState {
     pub items: Vec<FilterListItem>,
     pub state: ListState,
+}
+
+impl Default for MagazineDemographicState {
+    fn default() -> Self {
+        let items = MagazineDemographic::iter().map(|mag| FilterListItem {
+            name: mag.to_string(),
+            is_selected: false,
+        });
+
+        Self {
+            items: items.collect(),
+            state: ListState::default(),
+        }
+    }
+}
+
+impl MagazineDemographicState {
+    fn toggle(&mut self) {
+        if let Some(index) = self.state.selected() {
+            if let Some(magazine) = self.items.get_mut(index) {
+                magazine.toggle();
+            }
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -198,6 +225,7 @@ pub struct FilterState {
     pub content_rating_list_state: ContentRatingState,
     pub sort_by_state: SortByState,
     pub tags: TagsState,
+    pub magazine_demographic: MagazineDemographicState,
     pub is_typing: bool,
 }
 
@@ -221,7 +249,7 @@ impl FilterState {
                 KeyCode::Tab => self.next_filter(),
                 KeyCode::BackTab => self.previous_filter(),
                 KeyCode::Char('s') => self.toggle_filter_list(),
-                KeyCode::Enter => self.toggle_focus_input(),
+                KeyCode::Char('l') | KeyCode::Right => self.toggle_focus_input(),
                 _ => {}
             }
         }
@@ -267,6 +295,9 @@ impl FilterState {
                         self.tags.state.select_next();
                     }
                 }
+                MangaFilters::MagazineDemographic => {
+                    self.magazine_demographic.state.select_next();
+                }
             }
         }
     }
@@ -284,6 +315,9 @@ impl FilterState {
                     if self.tags.items.is_some() {
                         self.tags.state.select_previous();
                     }
+                }
+                MangaFilters::MagazineDemographic => {
+                    self.magazine_demographic.state.select_previous();
                 }
             }
         }
@@ -303,6 +337,10 @@ impl FilterState {
                 MangaFilters::Tags => {
                     self.tags.toggle();
                     self.set_tags();
+                }
+
+                MangaFilters::MagazineDemographic => {
+                    self.magazine_demographic.toggle();
                 }
             }
         }
@@ -353,6 +391,21 @@ impl FilterState {
     fn set_content_rating(&mut self) {
         self.filters.set_content_rating(
             self.content_rating_list_state
+                .items
+                .iter()
+                .filter_map(|item| {
+                    if item.is_selected {
+                        return Some(item.name.as_str().into());
+                    }
+                    None
+                })
+                .collect(),
+        )
+    }
+
+    fn set_magazine_demographic(&mut self) {
+        self.filters.set_magazine_demographic(
+            self.magazine_demographic
                 .items
                 .iter()
                 .filter_map(|item| {
@@ -454,6 +507,14 @@ impl<'a> StatefulWidgetFrame for FilterWidget<'a> {
                             input_area,
                         );
                     }
+                }
+                MangaFilters::MagazineDemographic => {
+                    render_filter_list(
+                        state.magazine_demographic.items.clone(),
+                        current_filter_area,
+                        buf,
+                        &mut state.magazine_demographic.state,
+                    );
                 }
             }
         }

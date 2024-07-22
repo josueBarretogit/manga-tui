@@ -455,6 +455,9 @@ impl SearchPage {
             },
         }
     }
+    pub fn is_typing_filter(&mut self) -> bool {
+        self.filter_state.is_typing
+    }
 
     fn search_mangas(&mut self, page: i32) {
         self.clean_up();

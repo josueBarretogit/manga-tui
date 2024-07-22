@@ -57,7 +57,9 @@ impl Component for App {
     fn handle_events(&mut self, events: Events) {
         match events {
             Events::Key(key_event) => {
-                if self.search_page.input_mode != InputMode::Typing {
+                if self.search_page.input_mode != InputMode::Typing
+                    && !self.search_page.is_typing_filter()
+                {
                     match key_event.code {
                         KeyCode::Char('c') => {
                             if let KeyModifiers::CONTROL = key_event.modifiers {
