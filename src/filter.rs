@@ -28,11 +28,12 @@ impl From<&str> for ContentRating {
     }
 }
 
-#[derive(Display, Clone, strum_macros::EnumIter, PartialEq, Eq)]
+#[derive(Display, Clone, strum_macros::EnumIter, PartialEq, Eq, Default)]
 pub enum SortBy {
     #[strum(to_string = "Best match")]
     BestMatch,
     #[strum(to_string = "Latest upload")]
+    #[default]
     LatestUpload,
     #[strum(to_string = "Oldest upload")]
     OldestUpload,
@@ -160,7 +161,7 @@ impl Default for Filters {
     fn default() -> Self {
         Self {
             content_rating: vec![ContentRating::Safe, ContentRating::Suggestive],
-            sort_by: SortBy::BestMatch,
+            sort_by: SortBy::default(),
             tags: Tags(vec![]),
         }
     }

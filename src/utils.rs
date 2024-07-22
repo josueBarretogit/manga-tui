@@ -3,11 +3,7 @@ use crate::backend::fetch::MangadexClient;
 use crate::backend::Data;
 use crate::view::widgets::ImageHandler;
 use image::io::Reader;
-use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::style::{Color, Stylize};
-use ratatui::text::Span;
-use ratatui::widgets::Block;
-use ratatui::Frame;
+use ratatui::{prelude::*, widgets::*};
 use std::io::Cursor;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::task::JoinSet;
@@ -181,15 +177,35 @@ pub fn centered_rect(r: Rect, percent_x: u16, percent_y: u16) -> Rect {
 }
 
 pub fn render_search_bar(is_typing: bool, input: &Input, frame: &mut Frame<'_>, area: Rect) {
+    let (input_help, style) = if is_typing {
+        (
+            Line::from(vec!["Press <esc> to stop typing".into()]),
+            Style::default().fg(Color::Yellow),
+        )
+    } else {
+        (
+            Line::from(vec!["Press <Enter> to type".into()]),
+            Style::default(),
+        )
+    };
+
+    let input_bar = Paragraph::new(input.value())
+        .block(Block::bordered().title(input_help).border_style(style));
+
+    input_bar.render(
+        Rect::new(area.x, area.y, area.width, area.height - 8),
+        frame.buffer_mut(),
+    );
+
     let width = area.width.max(3) - 3;
 
     let scroll = input.visual_scroll(width as usize);
 
     match is_typing {
-        true => {}
-        false => frame.set_cursor(
+        true => frame.set_cursor(
             area.x + ((input.visual_cursor()).max(scroll) - scroll) as u16 + 1,
             area.y + 1,
         ),
+        false => {}
     }
 }

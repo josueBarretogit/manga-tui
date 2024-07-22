@@ -4,6 +4,7 @@ use crate::utils::{centered_rect, render_search_bar};
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{prelude::*, widgets::*};
 use strum::{Display, IntoEnumIterator};
+use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
 
 use super::StatefulWidgetFrame;
@@ -115,7 +116,7 @@ impl SortByState {
 impl Default for SortByState {
     fn default() -> Self {
         let sort_by_items = SortBy::iter().map(|sort_by_elem| FilterListItem {
-            is_selected: sort_by_elem == SortBy::BestMatch,
+            is_selected: sort_by_elem == SortBy::default(),
             name: sort_by_elem.to_string(),
         });
 
@@ -157,10 +158,31 @@ pub struct TagsState {
 }
 
 impl TagsState {
+    fn is_search_bar_empty(&mut self) -> bool {
+        self.search_bar.value().trim().is_empty()
+    }
+
     pub fn toggle(&mut self) {
-        if let Some(items) = self.items.as_mut() {
-            if let Some(index) = self.state.selected() {
-                if let Some(tag) = items.get_mut(index) {
+        if self.is_search_bar_empty() {
+            if let Some(items) = self.items.as_mut() {
+                if let Some(index) = self.state.selected() {
+                    if let Some(tag) = items.get_mut(index) {
+                        tag.is_selected = !tag.is_selected;
+                    }
+                }
+            }
+        } else if let Some(index) = self.state.selected() {
+            if let Some(items) = self.items.as_mut() {
+                if let Some(tag) = items
+                    .iter_mut()
+                    .filter(|tag| {
+                        tag.name
+                            .to_lowercase()
+                            .contains(&self.search_bar.value().to_lowercase())
+                    })
+                    .collect::<Vec<&mut TagListItem>>()
+                    .get_mut(index)
+                {
                     tag.is_selected = !tag.is_selected;
                 }
             }
@@ -185,7 +207,12 @@ impl FilterState {
     }
 
     pub fn handle_key_events(&mut self, key_event: KeyEvent) {
-        if !self.is_typing {
+        if self.is_typing {
+            match key_event.code {
+                KeyCode::Esc => self.toggle_focus_input(),
+                _ => self.handle_key_events_for_input(key_event),
+            }
+        } else {
             match key_event.code {
                 KeyCode::Char('f') => self.toggle(),
                 KeyCode::Esc => self.toggle(),
@@ -194,14 +221,20 @@ impl FilterState {
                 KeyCode::Tab => self.next_filter(),
                 KeyCode::BackTab => self.previous_filter(),
                 KeyCode::Char('s') => self.toggle_filter_list(),
-                _ => {}
-            }
-        } else {
-            match key_event.code {
-                KeyCode::Esc => self.next_filter(),
+                KeyCode::Enter => self.toggle_focus_input(),
                 _ => {}
             }
         }
+    }
+
+    fn handle_key_events_for_input(&mut self, key_event: KeyEvent) {
+        self.tags
+            .search_bar
+            .handle_event(&crossterm::event::Event::Key(key_event));
+    }
+
+    fn toggle_focus_input(&mut self) {
+        self.is_typing = !self.is_typing;
     }
 
     fn next_filter(&mut self) {
@@ -390,33 +423,30 @@ impl<'a> StatefulWidgetFrame for FilterWidget<'a> {
                             .areas(current_filter_area);
 
                     if let Some(tags) = state.tags.items.as_ref().cloned() {
-                        render_filter_list(tags, list_area, buf, &mut state.tags.state);
-
-                        let (input_help, style) = if state.is_typing {
-                            (
-                                "Press <s> to type, open advanced filters: <f> ",
-                                Style::default().fg(Color::Yellow),
-                            )
+                        if state.tags.is_search_bar_empty() {
+                            render_filter_list(tags, list_area, buf, &mut state.tags.state);
                         } else {
-                            (
-                                "Press <s> to type, open advanced filters: <f> ",
-                                Style::default(),
-                            )
-                        };
+                            let filtered_tags: Vec<TagListItem> = tags
+                                .iter()
+                                .filter_map(|tag| {
+                                    if tag
+                                        .name
+                                        .to_lowercase()
+                                        .contains(&state.tags.search_bar.value().to_lowercase())
+                                    {
+                                        return Some(tag.clone());
+                                    }
+                                    None
+                                })
+                                .collect();
 
-                        let input_bar = Paragraph::new(state.tags.search_bar.value())
-                            .block(Block::bordered().title(input_help).border_style(style));
-
-                        input_bar.render(
-                            Rect::new(
-                                input_area.x,
-                                input_area.y,
-                                input_area.width,
-                                input_area.height - 12,
-                            ),
-                            buf,
-                        );
-
+                            render_filter_list(
+                                filtered_tags,
+                                list_area,
+                                buf,
+                                &mut state.tags.state,
+                            );
+                        }
                         render_search_bar(
                             state.is_typing,
                             &state.tags.search_bar,
@@ -456,7 +486,10 @@ where
         "<s>".bold().yellow(),
     ]));
 
-    let list = List::new(items).block(list_block).highlight_symbol(">> ");
+    let list = List::new(items)
+        .block(list_block)
+        .highlight_spacing(HighlightSpacing::Always)
+        .highlight_symbol(">> ");
 
     StatefulWidget::render(list, area, buf, state);
 }

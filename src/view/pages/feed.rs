@@ -236,6 +236,7 @@ impl Feed {
 
     fn search_next_page(&mut self) {
         if let Some(history) = self.history.as_mut() {
+            self.tasks.abort_all();
             history.next_page();
             self.search_history();
         }
@@ -243,6 +244,7 @@ impl Feed {
 
     fn search_previous_page(&mut self) {
         if let Some(history) = self.history.as_mut() {
+            self.tasks.abort_all();
             history.previous_page();
             self.search_history();
         }
