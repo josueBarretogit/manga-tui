@@ -479,29 +479,30 @@ impl SearchPage {
         self.search_mangas(1);
     }
 
+    fn load_mangas_found(&mut self, response: Option<SearchMangaResponse>) {
+        match response {
+            Some(response) => {
+                self.mangas_found_list.widget = ListMangasFoundWidget::from_response(response.data);
+                self.mangas_found_list.total_result = response.total;
+                self.state = PageState::DisplayingMangasFound;
+                if PICKER.is_some() {
+                    self.local_event_tx
+                        .send(SearchPageEvents::SearchCovers)
+                        .ok();
+                }
+            }
+            // Todo indicate that mangas where not found
+            None => {
+                self.state = PageState::NotFound;
+                self.mangas_found_list.total_result = 0;
+            }
+        }
+    }
+
     pub fn tick(&mut self) {
         if let Ok(event) = self.local_event_rx.try_recv() {
             match event {
-                SearchPageEvents::LoadMangasFound(response) => {
-                    match response {
-                        Some(response) => {
-                            self.mangas_found_list.widget =
-                                ListMangasFoundWidget::from_response(response.data);
-                            self.mangas_found_list.total_result = response.total;
-                            self.state = PageState::DisplayingMangasFound;
-                            if PICKER.is_some() {
-                                self.local_event_tx
-                                    .send(SearchPageEvents::SearchCovers)
-                                    .ok();
-                            }
-                        }
-                        // Todo indicate that mangas where not found
-                        None => {
-                            self.state = PageState::NotFound;
-                            self.mangas_found_list.total_result = 0;
-                        }
-                    }
-                }
+                SearchPageEvents::LoadMangasFound(response) => self.load_mangas_found(response),
                 SearchPageEvents::SearchCovers => {
                     for manga in self.mangas_found_list.widget.mangas.iter() {
                         let manga_id = manga.id.clone();

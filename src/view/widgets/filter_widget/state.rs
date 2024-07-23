@@ -1,9 +1,8 @@
 use crate::backend::authors::AuthorsResponse;
 use crate::backend::fetch::MangadexClient;
-use crate::backend::filter::{ContentRating, Filters, MagazineDemographic, SortBy};
+use crate::backend::filter::{Author, ContentRating, Filters, MagazineDemographic, SortBy};
 use crate::backend::tags::TagsResponse;
 use crate::backend::tui::Events;
-use crate::common::Author;
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{prelude::*, widgets::*};
 use strum::{Display, IntoEnumIterator};
@@ -36,12 +35,13 @@ impl From<MangaFilters> for Line<'_> {
     }
 }
 
-pub const FILTERS: [MangaFilters; 5] = [
+pub const FILTERS: [MangaFilters; 6] = [
     MangaFilters::ContentRating,
     MangaFilters::SortBy,
     MangaFilters::Tags,
     MangaFilters::MagazineDemographic,
     MangaFilters::Authors,
+    MangaFilters::Artists,
 ];
 
 #[derive(Clone)]
@@ -261,6 +261,7 @@ impl AuthorState {
     }
 
     fn set_authors_not_found(&mut self) {
+        self.items = None;
         self.message = "No authors were found".to_string();
     }
 
@@ -340,12 +341,20 @@ impl FilterState {
         if let Some(filter) = FILTERS.get(self.id_filter) {
             if *filter == MangaFilters::Authors {
                 let tx = self.tx.clone();
-                let author_name = self.author_state.search_bar.value().to_string();
+                let author_name = self
+                    .author_state
+                    .search_bar
+                    .value()
+                    .to_string()
+                    .trim()
+                    .to_lowercase();
                 tokio::spawn(async move {
                     let res = MangadexClient::global().get_authors(&author_name).await;
-
                     tx.send(FilterEvents::LoadAuthors(res.ok())).ok();
                 });
+            }
+            if *filter == MangaFilters::Artists {
+                todo!()
             }
         }
     }
@@ -455,7 +464,7 @@ impl FilterState {
                         self.author_state.state.select_next();
                     }
                 }
-                MangaFilters::Artists => todo!()
+                MangaFilters::Artists => todo!(),
             }
         }
     }
@@ -482,7 +491,7 @@ impl FilterState {
                         self.author_state.state.select_previous();
                     }
                 }
-                MangaFilters::Artists => todo!()
+                MangaFilters::Artists => todo!(),
             }
         }
     }
@@ -511,7 +520,7 @@ impl FilterState {
                     self.author_state.toggle_author();
                     self.set_authors();
                 }
-                MangaFilters::Artists => todo!()
+                MangaFilters::Artists => todo!(),
             }
         }
     }
@@ -595,7 +604,7 @@ impl FilterState {
                     .iter()
                     .filter_map(|item| {
                         if item.is_selected {
-                            return Some(item.id.to_string());
+                            return Some(Author::new(item.id.to_string()));
                         }
                         None
                     })
@@ -604,12 +613,13 @@ impl FilterState {
         }
     }
 
-    pub fn set_author(&mut self, author: Author) {
+    pub fn set_author(&mut self, author: crate::common::Author) {
         self.author_state.items = Some(vec![ListItemId {
             id: author.id.clone(),
             is_selected: true,
             name: author.name,
         }]);
-        self.filters.authors.set_one_author(author.id);
+
+        self.filters.authors.set_one_user(Author::new(author.id))
     }
 }

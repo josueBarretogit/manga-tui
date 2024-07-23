@@ -29,7 +29,7 @@ impl From<&str> for ContentRating {
     }
 }
 
-#[derive(Display, Clone, strum_macros::EnumIter, PartialEq, Eq, Default)]
+#[derive(Display, Clone, EnumIter, PartialEq, Eq, Default)]
 pub enum SortBy {
     #[strum(to_string = "Best match")]
     BestMatch,
@@ -166,31 +166,51 @@ impl IntoParam for Vec<MagazineDemographic> {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Default)]
-pub struct Author(Vec<String>);
+#[derive(Default, Clone)]
+pub struct Author(String);
 
-impl IntoParam for Author {
-    fn into_param(self) -> String {
-        self.0
-            .into_iter()
-            .fold(String::new(), |mut ids, id_author| {
-                let _ = write!(ids, "&authors[]={id_author}");
-                ids
-            })
+impl Author {
+    pub fn new(id_author: String) -> Self {
+        Author(id_author)
     }
 }
 
-impl Author {
-    pub fn set_one_author(&mut self, id_author: String) {
-        if !self.0.is_empty() {
-            self.0.clear();
-        }
+#[derive(Default, Clone)]
+pub struct Artist(String);
 
-        self.0.push(id_author);
+impl Artist {
+    pub fn new(id_artist: String) -> Self {
+        Artist(id_artist)
     }
+}
 
-    pub fn reset(&mut self) {
-        self.0.clear();
+#[derive(Default, Clone)]
+pub struct User<T: Clone + Default>(pub Vec<T>);
+
+impl IntoParam for User<Author> {
+    fn into_param(self) -> String {
+        self.0.into_iter().fold(String::new(), |mut ids, author| {
+            let _ = write!(ids, "&authors[]={}", author.0);
+            ids
+        })
+    }
+}
+
+impl IntoParam for User<Artist> {
+    fn into_param(self) -> String {
+        self.0.into_iter().fold(String::new(), |mut ids, artist| {
+            let _ = write!(ids, "&artists[]={}", artist.0);
+            ids
+        })
+    }
+}
+
+impl<T> User<T>
+where
+    T: Clone + Default,
+{
+    pub fn set_one_user(&mut self, user: T) {
+        self.0.push(user);
     }
 }
 
@@ -200,7 +220,8 @@ pub struct Filters {
     pub sort_by: SortBy,
     pub tags: Tags,
     pub magazine_demographic: Vec<MagazineDemographic>,
-    pub authors: Author,
+    pub authors: User<Author>,
+    pub artists: User<Artist>,
 }
 
 impl IntoParam for Filters {
@@ -208,10 +229,10 @@ impl IntoParam for Filters {
         format!(
             "{}{}{}{}{}",
             self.authors.into_param(),
+            self.tags.into_param(),
+            self.magazine_demographic.into_param(),
             self.content_rating.into_param(),
             self.sort_by.into_param(),
-            self.tags.into_param(),
-            self.magazine_demographic.into_param()
         )
     }
 }
@@ -223,7 +244,8 @@ impl Default for Filters {
             sort_by: SortBy::default(),
             tags: Tags(vec![]),
             magazine_demographic: vec![],
-            authors: Author::default(),
+            authors: User::<Author>::default(),
+            artists: User::<Artist>::default(),
         }
     }
 }
@@ -244,7 +266,11 @@ impl Filters {
         self.magazine_demographic = magazine_demographics;
     }
 
-    pub fn set_authors(&mut self, author_ids: Vec<String>) {
+    pub fn set_authors(&mut self, author_ids: Vec<Author>) {
         self.authors.0 = author_ids;
+    }
+
+    pub fn set_artists(&mut self, artist_ids: Vec<Artist>) {
+        self.artists.0 = artist_ids;
     }
 }
