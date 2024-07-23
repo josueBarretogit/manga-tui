@@ -1,4 +1,5 @@
 use crate::backend::Data;
+use crate::common::{Artist, Author};
 use crate::utils::{from_manga_response, set_status_style, set_tags_style};
 use ratatui::{prelude::*, widgets::*};
 use ratatui_image::protocol::StatefulProtocol;
@@ -113,8 +114,8 @@ pub struct MangaItem {
     pub content_rating: String,
     pub status: String,
     pub img_url: Option<String>,
-    pub author: (String, Option<String>),
-    pub artist: (String, Option<String>),
+    pub author: Author,
+    pub artist: Artist,
     pub style: Style,
     pub image_state: Option<Box<dyn StatefulProtocol>>,
 }
@@ -169,8 +170,8 @@ impl MangaItem {
         content_rating: String,
         status: String,
         img_url: Option<String>,
-        author: (String, Option<String>),
-        artist: (String, Option<String>),
+        author: Author,
+        artist: Artist,
         image_state: Option<Box<dyn StatefulProtocol>>,
     ) -> Self {
         Self {

@@ -113,7 +113,7 @@ impl Component for Home {
                             manga.content_rating.clone(),
                             manga.status.clone(),
                             manga.img_url.clone(),
-                            (manga.author.0.to_string(), manga.author.1.clone()),
+                            manga.author.clone(),
                             manga.artist.clone(),
                             manga.cover_state.clone(),
                         )))

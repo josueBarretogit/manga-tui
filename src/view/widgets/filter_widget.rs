@@ -65,7 +65,7 @@ impl<'a> StatefulWidgetFrame for FilterWidget<'a> {
                         if state.tags.is_search_bar_empty() {
                             render_filter_list(tags, list_area, buf, &mut state.tags.state);
                         } else {
-                            let filtered_tags: Vec<TagListItem> = tags
+                            let filtered_tags: Vec<ListItemId> = tags
                                 .iter()
                                 .filter_map(|tag| {
                                     if tag
@@ -139,7 +139,7 @@ impl<'a> StatefulWidgetFrame for FilterWidget<'a> {
                     let input_help = if state.is_typing {
                         Line::from(vec![
                             "Press ".into(),
-                            " <Enter> to search authors".bold().yellow(),
+                            " <Enter> ".bold().yellow(),
                             "to search ".into(),
                             " <Esc> ".bold().yellow(),
                             "to stop typing".into(),
@@ -160,6 +160,7 @@ impl<'a> StatefulWidgetFrame for FilterWidget<'a> {
                         input_area,
                     );
                 }
+                MangaFilters::Artists => todo!(),
             }
         }
     }

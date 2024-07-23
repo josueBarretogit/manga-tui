@@ -1,6 +1,6 @@
 use self::feed::Feed;
 use self::home::Home;
-use self::manga::{Artist, Author, MangaPage};
+use self::manga::MangaPage;
 use self::reader::MangaReader;
 use self::search::{InputMode, SearchPage};
 use crate::backend::tui::{Action, Events};
@@ -111,14 +111,8 @@ impl Component for App {
                     manga.image_state,
                     manga.status,
                     manga.content_rating,
-                    Author {
-                        id: manga.author.0,
-                        name: manga.author.1.unwrap_or_default(),
-                    },
-                    Artist {
-                        id: manga.artist.0,
-                        name: manga.artist.1.unwrap_or_default(),
-                    },
+                    manga.author,
+                    manga.artist,
                     self.global_event_tx.clone(),
                 ));
             }
@@ -163,9 +157,9 @@ impl Component for App {
                 self.current_tab = SelectedTabs::Feed;
             }
 
-            Events::GoSearchMangasAuthor(id) => {
+            Events::GoSearchMangasAuthor(author) => {
                 self.go_search_page();
-                self.search_page.search_mangas_of_author(id);
+                self.search_page.search_mangas_of_author(author);
             }
 
             _ => {}

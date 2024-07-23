@@ -15,6 +15,8 @@ mod backend;
 /// These would be like the frontend
 mod view;
 
+mod common;
+
 pub static PICKER: Lazy<Option<Picker>> = Lazy::new(|| {
     let maybe_picker = Picker::from_termios();
     match maybe_picker {

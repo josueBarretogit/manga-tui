@@ -1,4 +1,5 @@
 use crate::backend::{Data, SearchMangaResponse};
+use crate::common::{Artist, Author};
 use crate::utils::{from_manga_response, set_status_style, set_tags_style};
 use ratatui::{prelude::*, widgets::*};
 use ratatui_image::protocol::StatefulProtocol;
@@ -21,8 +22,8 @@ pub struct CarrouselItem {
     pub content_rating: String,
     pub status: String,
     pub img_url: Option<String>,
-    pub author: (String, Option<String>),
-    pub artist: (String, Option<String>),
+    pub author: Author,
+    pub artist: Artist,
     pub cover_state: Option<Box<dyn StatefulProtocol>>,
 }
 
@@ -36,8 +37,8 @@ impl CarrouselItem {
         content_rating: String,
         status: String,
         img_url: Option<String>,
-        author: (String, Option<String>),
-        artist: (String, Option<String>),
+        author: Author,
+        artist: Artist,
         cover_state: Option<Box<dyn StatefulProtocol>>,
     ) -> Self {
         Self {
@@ -75,7 +76,7 @@ impl CarrouselItem {
 
         Block::bordered()
             .title(self.title.clone())
-            .title_bottom(self.author.1.as_deref().unwrap_or_default())
+            .title_bottom(self.author.name.clone())
             .render(area, buf);
 
         let mut tags: Vec<Span<'_>> = self.tags.iter().map(|tag| set_tags_style(tag)).collect();

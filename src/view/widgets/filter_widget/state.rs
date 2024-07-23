@@ -1,8 +1,9 @@
 use crate::backend::authors::AuthorsResponse;
 use crate::backend::fetch::MangadexClient;
-use crate::backend::filter::{self, ContentRating, Filters, MagazineDemographic, SortBy};
+use crate::backend::filter::{ContentRating, Filters, MagazineDemographic, SortBy};
 use crate::backend::tags::TagsResponse;
 use crate::backend::tui::Events;
+use crate::common::Author;
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{prelude::*, widgets::*};
 use strum::{Display, IntoEnumIterator};
@@ -11,7 +12,6 @@ use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
 
 pub enum FilterEvents {
-    SearchAuthors,
     LoadAuthors(Option<AuthorsResponse>),
     SearchTags,
     LoadTags(TagsResponse),
@@ -27,6 +27,7 @@ pub enum MangaFilters {
     MagazineDemographic,
     Tags,
     Authors,
+    Artists,
 }
 
 impl From<MangaFilters> for Line<'_> {
@@ -170,14 +171,14 @@ impl MagazineDemographicState {
 }
 
 #[derive(Clone)]
-pub struct TagListItem {
+pub struct ListItemId {
     pub id: String,
     pub name: String,
     pub is_selected: bool,
 }
 
-impl From<TagListItem> for ListItem<'_> {
-    fn from(value: TagListItem) -> Self {
+impl From<ListItemId> for ListItem<'_> {
+    fn from(value: ListItemId) -> Self {
         let line = if value.is_selected {
             Line::from(format!("🟡 {} ", value.name)).fg(Color::Yellow)
         } else {
@@ -189,7 +190,7 @@ impl From<TagListItem> for ListItem<'_> {
 
 #[derive(Default)]
 pub struct TagsState {
-    pub items: Option<Vec<TagListItem>>,
+    pub items: Option<Vec<ListItemId>>,
     pub state: ListState,
     pub search_bar: Input,
 }
@@ -217,7 +218,7 @@ impl TagsState {
                             .to_lowercase()
                             .contains(&self.search_bar.value().to_lowercase())
                     })
-                    .collect::<Vec<&mut TagListItem>>()
+                    .collect::<Vec<&mut ListItemId>>()
                     .get_mut(index)
                 {
                     tag.is_selected = !tag.is_selected;
@@ -228,7 +229,7 @@ impl TagsState {
 }
 
 pub struct AuthorState {
-    pub items: Option<Vec<TagListItem>>,
+    pub items: Option<Vec<ListItemId>>,
     pub state: ListState,
     pub search_bar: Input,
     pub message: String,
@@ -250,7 +251,7 @@ impl AuthorState {
         self.items = Some(
             res.data
                 .into_iter()
-                .map(|data| TagListItem {
+                .map(|data| ListItemId {
                     is_selected: false,
                     id: data.id,
                     name: data.attributes.name,
@@ -316,7 +317,6 @@ impl FilterState {
             match event {
                 FilterEvents::SearchTags => self.search_tags(),
                 FilterEvents::LoadTags(res) => self.load_tags(res),
-                FilterEvents::SearchAuthors => self.search(),
                 FilterEvents::LoadAuthors(res) => self.load_authors(res),
             }
         }
@@ -455,6 +455,7 @@ impl FilterState {
                         self.author_state.state.select_next();
                     }
                 }
+                MangaFilters::Artists => todo!()
             }
         }
     }
@@ -481,6 +482,7 @@ impl FilterState {
                         self.author_state.state.select_previous();
                     }
                 }
+                MangaFilters::Artists => todo!()
             }
         }
     }
@@ -509,15 +511,16 @@ impl FilterState {
                     self.author_state.toggle_author();
                     self.set_authors();
                 }
+                MangaFilters::Artists => todo!()
             }
         }
     }
 
     pub fn set_tags_from_response(&mut self, tags_response: TagsResponse) {
-        let tags: Vec<TagListItem> = tags_response
+        let tags: Vec<ListItemId> = tags_response
             .data
             .into_iter()
-            .map(|data| TagListItem {
+            .map(|data| ListItemId {
                 is_selected: false,
                 id: data.id,
                 name: data.attributes.name.en,
@@ -601,11 +604,12 @@ impl FilterState {
         }
     }
 
-    pub fn set_author(&mut self, id_author: String) {
-        self.filters.authors.set_one_author(id_author);
-    }
-
-    pub fn reset_authors(&mut self) {
-        self.filters.authors.reset();
+    pub fn set_author(&mut self, author: Author) {
+        self.author_state.items = Some(vec![ListItemId {
+            id: author.id.clone(),
+            is_selected: true,
+            name: author.name,
+        }]);
+        self.filters.authors.set_one_author(author.id);
     }
 }

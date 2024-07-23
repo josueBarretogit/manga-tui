@@ -5,6 +5,7 @@ use crate::backend::error_log::ErrorType;
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
 use crate::backend::SearchMangaResponse;
+use crate::common::Author;
 use crate::utils::search_manga_cover;
 use crate::view::widgets::filter_widget::state::FilterState;
 use crate::view::widgets::filter_widget::FilterWidget;
@@ -472,11 +473,10 @@ impl SearchPage {
         });
     }
 
-    pub fn search_mangas_of_author(&mut self, id_author: String) {
-        self.filter_state.set_author(id_author);
+    pub fn search_mangas_of_author(&mut self, author: Author) {
+        self.filter_state.set_author(author);
         self.search_bar.reset();
         self.search_mangas(1);
-        self.filter_state.reset_authors();
     }
 
     pub fn tick(&mut self) {

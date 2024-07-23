@@ -7,6 +7,7 @@ use crate::backend::error_log::{self, write_to_error_log};
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
 use crate::backend::{ChapterResponse, Languages, MangaStatisticsResponse, Statistics};
+use crate::common::{Artist, Author};
 use crate::utils::{set_status_style, set_tags_style};
 use crate::view::widgets::manga::{ChapterItem, ChaptersListWidget};
 use crate::view::widgets::Component;
@@ -66,16 +67,6 @@ impl ChapterOrder {
             ChapterOrder::Descending => ChapterOrder::Ascending,
         }
     }
-}
-
-pub struct Author {
-    pub id: String,
-    pub name: String,
-}
-
-pub struct Artist {
-    pub id: String,
-    pub name: String,
 }
 
 pub struct MangaPage {
@@ -601,7 +592,7 @@ impl MangaPage {
 
     fn go_mangas_author(&mut self) {
         self.global_event_tx
-            .send(Events::GoSearchMangasAuthor(self.author.id.to_string()))
+            .send(Events::GoSearchMangasAuthor(self.author.clone()))
             .ok();
     }
 

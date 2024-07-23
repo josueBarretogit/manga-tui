@@ -1,6 +1,7 @@
 use crate::backend::error_log::write_to_error_log;
 use crate::backend::fetch::MangadexClient;
 use crate::backend::Data;
+use crate::common::{Artist, Author};
 use crate::view::widgets::ImageHandler;
 use image::io::Reader;
 use ratatui::{prelude::*, widgets::*};
@@ -77,8 +78,8 @@ pub struct Manga {
     pub tags: Vec<String>,
     pub status: String,
     pub img_url: Option<String>,
-    pub author: (String, Option<String>),
-    pub artist: (String, Option<String>),
+    pub author: Author,
+    pub artist: Artist,
 }
 
 pub fn from_manga_response(value: Data) -> Manga {
@@ -115,23 +116,23 @@ pub fn from_manga_response(value: Data) -> Manga {
         .collect();
 
     let mut img_url: Option<String> = Option::default();
-    let mut author: (String, Option<String>) = (String::new(), None);
-    let mut artist: (String, Option<String>) = (String::new(), None);
+    let mut author = Author::default();
+    let mut artist = Artist::default();
 
     for rel in &value.relationships {
         if let Some(attributes) = &rel.attributes {
             match rel.type_field.as_str() {
                 "author" => {
-                    author = (
-                        rel.id.to_string(),
-                        Some(attributes.name.as_ref().unwrap().to_string()),
-                    )
+                    author = Author {
+                        id: rel.id.to_string(),
+                        name: attributes.name.as_ref().cloned().unwrap_or_default(),
+                    };
                 }
                 "artist" => {
-                    artist = (
-                        rel.id.to_string(),
-                        Some(attributes.name.as_ref().unwrap().to_string()),
-                    )
+                    artist = Artist {
+                        id: rel.id.to_string(),
+                        name: attributes.name.as_ref().cloned().unwrap_or_default(),
+                    }
                 }
                 "cover_art" => img_url = Some(attributes.file_name.as_ref().unwrap().to_string()),
                 _ => {}
