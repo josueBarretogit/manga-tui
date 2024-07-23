@@ -185,7 +185,7 @@ impl Artist {
 }
 
 #[derive(Default, Clone)]
-pub struct User<T: Clone + Default>(pub Vec<T>);
+pub struct User<T: Clone + Default + Sized>(pub Vec<T>);
 
 impl IntoParam for User<Author> {
     fn into_param(self) -> String {
@@ -207,7 +207,7 @@ impl IntoParam for User<Artist> {
 
 impl<T> User<T>
 where
-    T: Clone + Default,
+    T: Clone + Default + Sized,
 {
     pub fn set_one_user(&mut self, user: T) {
         self.0.push(user);
@@ -227,8 +227,9 @@ pub struct Filters {
 impl IntoParam for Filters {
     fn into_param(self) -> String {
         format!(
-            "{}{}{}{}{}",
+            "{}{}{}{}{}{}",
             self.authors.into_param(),
+            self.artists.into_param(),
             self.tags.into_param(),
             self.magazine_demographic.into_param(),
             self.content_rating.into_param(),

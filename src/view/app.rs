@@ -162,6 +162,11 @@ impl Component for App {
                 self.search_page.search_mangas_of_author(author);
             }
 
+            Events::GoSearchMangasArtist(artist) => {
+                self.go_search_page();
+                self.search_page.search_mangas_of_artist(artist);
+            }
+
             _ => {}
         }
     }

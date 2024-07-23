@@ -38,6 +38,7 @@ pub enum MangaPageActions {
     ToggleOrder,
     ReadChapter,
     GoMangasAuthor,
+    GoMangasArtist,
 }
 
 pub enum MangaPageEvents {
@@ -341,6 +342,11 @@ impl MangaPage {
                     .send(MangaPageActions::GoMangasAuthor)
                     .ok();
             }
+            KeyCode::Char('a') => {
+                self.local_action_tx
+                    .send(MangaPageActions::GoMangasArtist)
+                    .ok();
+            }
             _ => {}
         }
     }
@@ -596,6 +602,12 @@ impl MangaPage {
             .ok();
     }
 
+    fn go_mangas_artist(&mut self) {
+        self.global_event_tx
+            .send(Events::GoSearchMangasArtist(self.artist.clone()))
+            .ok();
+    }
+
     fn tick(&mut self) {
         if self.state == PageState::DownloadingChapters {
             let chapters = self.chapters.as_mut().unwrap();
@@ -677,6 +689,7 @@ impl Component for MangaPage {
     }
     fn update(&mut self, action: Self::Actions) {
         match action {
+            MangaPageActions::GoMangasArtist => self.go_mangas_artist(),
             MangaPageActions::GoMangasAuthor => self.go_mangas_author(),
             MangaPageActions::ScrollChapterUp => self.scroll_chapter_up(),
             MangaPageActions::ScrollChapterDown => self.scroll_chapter_down(),

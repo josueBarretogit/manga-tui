@@ -11,7 +11,7 @@ use std::time::Duration;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::task::JoinHandle;
 
-use crate::common::Author;
+use crate::common::{Artist, Author};
 use crate::view::app::{App, AppState};
 use crate::view::pages::SelectedTabs;
 use crate::view::widgets::search::MangaItem;
@@ -34,6 +34,7 @@ pub enum Events {
     GoToHome,
     GoSearchPage,
     GoSearchMangasAuthor(Author),
+    GoSearchMangasArtist(Artist),
     GoFeedPage,
     ReadChapter(ChapterPagesResponse),
 }

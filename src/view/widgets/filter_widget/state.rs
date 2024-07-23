@@ -1,10 +1,11 @@
 use crate::backend::authors::AuthorsResponse;
 use crate::backend::fetch::MangadexClient;
-use crate::backend::filter::{Author, ContentRating, Filters, MagazineDemographic, SortBy};
+use crate::backend::filter::{Artist, Author, ContentRating, Filters, MagazineDemographic, SortBy};
 use crate::backend::tags::TagsResponse;
 use crate::backend::tui::Events;
 use crossterm::event::{KeyCode, KeyEvent};
-use ratatui::{prelude::*, widgets::*};
+use ratatui::widgets::*;
+use std::marker::PhantomData;
 use strum::{Display, IntoEnumIterator};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tui_input::backend::crossterm::EventHandler;
@@ -12,6 +13,7 @@ use tui_input::Input;
 
 pub enum FilterEvents {
     LoadAuthors(Option<AuthorsResponse>),
+    LoadArtists(Option<AuthorsResponse>),
     SearchTags,
     LoadTags(TagsResponse),
 }
@@ -29,12 +31,6 @@ pub enum MangaFilters {
     Artists,
 }
 
-impl From<MangaFilters> for Line<'_> {
-    fn from(value: MangaFilters) -> Self {
-        Line::from(value.to_string())
-    }
-}
-
 pub const FILTERS: [MangaFilters; 6] = [
     MangaFilters::ContentRating,
     MangaFilters::SortBy,
@@ -48,17 +44,6 @@ pub const FILTERS: [MangaFilters; 6] = [
 pub struct FilterListItem {
     pub is_selected: bool,
     pub name: String,
-}
-
-impl From<FilterListItem> for ListItem<'_> {
-    fn from(value: FilterListItem) -> Self {
-        let line = if value.is_selected {
-            Line::from(format!("🟡 {} ", value.name)).fg(Color::Yellow)
-        } else {
-            Line::from(value.name)
-        };
-        ListItem::new(line)
-    }
 }
 
 impl FilterListItem {
@@ -177,17 +162,6 @@ pub struct ListItemId {
     pub is_selected: bool,
 }
 
-impl From<ListItemId> for ListItem<'_> {
-    fn from(value: ListItemId) -> Self {
-        let line = if value.is_selected {
-            Line::from(format!("🟡 {} ", value.name)).fg(Color::Yellow)
-        } else {
-            Line::from(value.name)
-        };
-        ListItem::new(line)
-    }
-}
-
 #[derive(Default)]
 pub struct TagsState {
     pub items: Option<Vec<ListItemId>>,
@@ -228,28 +202,66 @@ impl TagsState {
     }
 }
 
-pub struct AuthorState {
+pub struct AuthorState;
+pub struct ArtistState;
+
+pub struct UserState<T> {
     pub items: Option<Vec<ListItemId>>,
     pub state: ListState,
     pub search_bar: Input,
     pub message: String,
+    _state: PhantomData<T>,
 }
 
-impl Default for AuthorState {
+impl Default for UserState<AuthorState> {
     fn default() -> Self {
         Self {
             items: None,
             state: ListState::default(),
             search_bar: Input::default(),
             message: "Search authors".to_string(),
+            _state: PhantomData::<AuthorState>,
         }
     }
 }
 
-impl AuthorState {
-    fn set_authors_found(&mut self, res: AuthorsResponse) {
+impl Default for UserState<ArtistState> {
+    fn default() -> Self {
+        Self {
+            items: None,
+            state: ListState::default(),
+            search_bar: Input::default(),
+            message: "Search artists".to_string(),
+            _state: PhantomData::<ArtistState>,
+        }
+    }
+}
+
+impl UserState<AuthorState> {
+    fn search_authors(&mut self, tx: UnboundedSender<FilterEvents>) {
+        let name = self.get_name();
+        tokio::spawn(async move {
+            let res = MangadexClient::global().get_authors(&name).await;
+            tx.send(FilterEvents::LoadAuthors(res.ok())).ok();
+        });
+    }
+}
+
+impl UserState<ArtistState> {
+    fn search_artists(&mut self, tx: UnboundedSender<FilterEvents>) {
+        let name = self.get_name();
+        tokio::spawn(async move {
+            let res = MangadexClient::global().get_authors(&name).await;
+            tx.send(FilterEvents::LoadArtists(res.ok())).ok();
+        });
+    }
+}
+
+impl<T> UserState<T> {
+    pub fn set_users_found(&mut self, response: AuthorsResponse) {
         self.items = Some(
-            res.data
+            response
+                .data
                 .into_iter()
                 .map(|data| ListItemId {
                     is_selected: false,
@@ -260,17 +272,36 @@ impl AuthorState {
         );
     }
 
-    fn set_authors_not_found(&mut self) {
-        self.items = None;
-        self.message = "No authors were found".to_string();
+    pub fn get_name(&self) -> String {
+        self.search_bar.value().trim().to_lowercase()
     }
 
-    fn toggle_author(&mut self) {
+    fn set_users_not_found(&mut self) {
+        self.items = None;
+        self.message = "There were no results".to_string();
+    }
+
+    fn toggle(&mut self) {
         if let Some(items) = self.items.as_mut() {
             if let Some(index) = self.state.selected() {
-                if let Some(author_selected) = items.get_mut(index) {
-                    author_selected.is_selected = !author_selected.is_selected;
+                if let Some(user_selected) = items.get_mut(index) {
+                    user_selected.is_selected = !user_selected.is_selected;
                 }
+            }
+        }
+    }
+
+    fn load_users(&mut self, maybe_user: Option<AuthorsResponse>) {
+        match maybe_user {
+            Some(user) => {
+                if user.data.is_empty() {
+                    self.set_users_not_found();
+                } else {
+                    self.set_users_found(user);
+                }
+            }
+            None => {
+                self.set_users_not_found();
             }
         }
     }
@@ -284,7 +315,8 @@ pub struct FilterState {
     pub sort_by_state: SortByState,
     pub tags: TagsState,
     pub magazine_demographic: MagazineDemographicState,
-    pub author_state: AuthorState,
+    pub author_state: UserState<AuthorState>,
+    pub artist_state: UserState<ArtistState>,
     pub is_typing: bool,
     tx: UnboundedSender<FilterEvents>,
     rx: UnboundedReceiver<FilterEvents>,
@@ -302,7 +334,8 @@ impl FilterState {
             sort_by_state: SortByState::default(),
             tags: TagsState::default(),
             magazine_demographic: MagazineDemographicState::default(),
-            author_state: AuthorState::default(),
+            author_state: UserState::<AuthorState>::default(),
+            artist_state: UserState::<ArtistState>::default(),
             is_typing: false,
             tx,
             rx,
@@ -318,7 +351,8 @@ impl FilterState {
             match event {
                 FilterEvents::SearchTags => self.search_tags(),
                 FilterEvents::LoadTags(res) => self.load_tags(res),
-                FilterEvents::LoadAuthors(res) => self.load_authors(res),
+                FilterEvents::LoadAuthors(res) => self.author_state.load_users(res),
+                FilterEvents::LoadArtists(res) => self.artist_state.load_users(res),
             }
         }
     }
@@ -339,37 +373,11 @@ impl FilterState {
 
     fn search(&mut self) {
         if let Some(filter) = FILTERS.get(self.id_filter) {
+            let tx = self.tx.clone();
             if *filter == MangaFilters::Authors {
-                let tx = self.tx.clone();
-                let author_name = self
-                    .author_state
-                    .search_bar
-                    .value()
-                    .to_string()
-                    .trim()
-                    .to_lowercase();
-                tokio::spawn(async move {
-                    let res = MangadexClient::global().get_authors(&author_name).await;
-                    tx.send(FilterEvents::LoadAuthors(res.ok())).ok();
-                });
-            }
-            if *filter == MangaFilters::Artists {
-                todo!()
-            }
-        }
-    }
-
-    fn load_authors(&mut self, maybe_authors: Option<AuthorsResponse>) {
-        match maybe_authors {
-            Some(authors) => {
-                if authors.data.is_empty() {
-                    self.author_state.set_authors_not_found();
-                } else {
-                    self.author_state.set_authors_found(authors);
-                }
-            }
-            None => {
-                self.author_state.set_authors_not_found();
+                self.author_state.search_authors(tx);
+            } else if *filter == MangaFilters::Artists {
+                self.artist_state.search_artists(tx);
             }
         }
     }
@@ -385,7 +393,7 @@ impl FilterState {
     pub fn handle_key_events(&mut self, key_event: KeyEvent) {
         if self.is_typing {
             match key_event.code {
-                KeyCode::Esc => self.toggle_focus_input(),
+                KeyCode::Esc | KeyCode::Left => self.toggle_focus_input(),
                 KeyCode::Enter => self.search(),
                 _ => self.handle_key_events_for_input(key_event),
             }
@@ -414,6 +422,11 @@ impl FilterState {
                 }
                 MangaFilters::Authors => {
                     self.author_state
+                        .search_bar
+                        .handle_event(&crossterm::event::Event::Key(key_event));
+                }
+                MangaFilters::Artists => {
+                    self.artist_state
                         .search_bar
                         .handle_event(&crossterm::event::Event::Key(key_event));
                 }
@@ -464,7 +477,11 @@ impl FilterState {
                         self.author_state.state.select_next();
                     }
                 }
-                MangaFilters::Artists => todo!(),
+                MangaFilters::Artists => {
+                    if self.artist_state.items.is_some() {
+                        self.artist_state.state.select_next();
+                    }
+                }
             }
         }
     }
@@ -491,7 +508,11 @@ impl FilterState {
                         self.author_state.state.select_previous();
                     }
                 }
-                MangaFilters::Artists => todo!(),
+                MangaFilters::Artists => {
+                    if self.artist_state.items.is_some() {
+                        self.artist_state.state.select_previous();
+                    }
+                }
             }
         }
     }
@@ -517,10 +538,13 @@ impl FilterState {
                     self.set_magazine_demographic();
                 }
                 MangaFilters::Authors => {
-                    self.author_state.toggle_author();
+                    self.author_state.toggle();
                     self.set_authors();
                 }
-                MangaFilters::Artists => todo!(),
+                MangaFilters::Artists => {
+                    self.artist_state.toggle();
+                    self.set_artists();
+                }
             }
         }
     }
@@ -613,13 +637,37 @@ impl FilterState {
         }
     }
 
+    fn set_artists(&mut self) {
+        if let Some(artists) = self.artist_state.items.as_ref() {
+            self.filters.set_artists(
+                artists
+                    .iter()
+                    .filter_map(|item| {
+                        if item.is_selected {
+                            return Some(Artist::new(item.id.to_string()));
+                        }
+                        None
+                    })
+                    .collect(),
+            )
+        }
+    }
+
     pub fn set_author(&mut self, author: crate::common::Author) {
         self.author_state.items = Some(vec![ListItemId {
             id: author.id.clone(),
             is_selected: true,
             name: author.name,
         }]);
-
         self.filters.authors.set_one_user(Author::new(author.id))
+    }
+
+    pub fn set_artist(&mut self, artist: crate::common::Artist) {
+        self.artist_state.items = Some(vec![ListItemId {
+            id: artist.id.clone(),
+            is_selected: true,
+            name: artist.name,
+        }]);
+        self.filters.artists.set_one_user(Artist::new(artist.id))
     }
 }

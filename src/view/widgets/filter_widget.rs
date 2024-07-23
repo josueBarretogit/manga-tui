@@ -10,6 +10,34 @@ pub struct FilterWidget<'a> {
     pub style: Style,
 }
 
+impl From<MangaFilters> for Line<'_> {
+    fn from(value: MangaFilters) -> Self {
+        Line::from(value.to_string())
+    }
+}
+
+impl From<FilterListItem> for ListItem<'_> {
+    fn from(value: FilterListItem) -> Self {
+        let line = if value.is_selected {
+            Line::from(format!("🟡 {} ", value.name)).fg(Color::Yellow)
+        } else {
+            Line::from(value.name)
+        };
+        ListItem::new(line)
+    }
+}
+
+impl From<ListItemId> for ListItem<'_> {
+    fn from(value: ListItemId) -> Self {
+        let line = if value.is_selected {
+            Line::from(format!("🟡 {} ", value.name)).fg(Color::Yellow)
+        } else {
+            Line::from(value.name)
+        };
+        ListItem::new(line)
+    }
+}
+
 impl<'a> StatefulWidgetFrame for FilterWidget<'a> {
     type State = FilterState;
 
@@ -160,7 +188,49 @@ impl<'a> StatefulWidgetFrame for FilterWidget<'a> {
                         input_area,
                     );
                 }
-                MangaFilters::Artists => todo!(),
+                MangaFilters::Artists => {
+                    let [list_area, input_area] =
+                        Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)])
+                            .areas(current_filter_area);
+
+                    match state.artist_state.items.as_mut() {
+                        Some(authors) => {
+                            render_filter_list(
+                                authors.clone(),
+                                list_area,
+                                buf,
+                                &mut state.artist_state.state,
+                            );
+                        }
+                        None => {
+                            state.artist_state.message.clone().render(list_area, buf);
+                        }
+                    }
+
+                    let input_help = if state.is_typing {
+                        Line::from(vec![
+                            "Press ".into(),
+                            " <Enter> ".bold().yellow(),
+                            "to search ".into(),
+                            " <Esc> ".bold().yellow(),
+                            "to stop typing".into(),
+                        ])
+                    } else {
+                        Line::from(vec![
+                            "Press".into(),
+                            " <l> ".bold().yellow(),
+                            "to search artists".into(),
+                        ])
+                    };
+
+                    render_search_bar(
+                        state.is_typing,
+                        input_help,
+                        &state.artist_state.search_bar,
+                        frame,
+                        input_area,
+                    );
+                }
             }
         }
     }
