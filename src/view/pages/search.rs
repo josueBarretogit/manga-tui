@@ -303,11 +303,11 @@ impl SearchPage {
                 if let Some(manga_selected) = self.get_current_manga_selected_mut() {
                     StatefulWidget::render(
                         MangaPreview::new(
-                            &manga_selected.title,
-                            &manga_selected.description,
-                            &manga_selected.tags,
-                            &manga_selected.content_rating,
-                            &manga_selected.status,
+                            &manga_selected.manga.title,
+                            &manga_selected.manga.description,
+                            &manga_selected.manga.tags,
+                            &manga_selected.manga.content_rating,
+                            &manga_selected.manga.status,
                         ),
                         preview_area,
                         buf,
@@ -360,11 +360,11 @@ impl SearchPage {
     }
 
     fn plan_to_read(&mut self) {
-        if let Some(manga) = self.get_current_manga_selected() {
+        if let Some(item) = self.get_current_manga_selected() {
             let plan_to_read_op = save_plan_to_read(MangaPlanToReadSave {
-                id: &manga.id,
-                title: &manga.title,
-                img_url: manga.img_url.as_deref(),
+                id: &item.manga.id,
+                title: &item.manga.title,
+                img_url: item.manga.img_url.as_deref(),
             });
 
             if let Err(e) = plan_to_read_op {
@@ -480,7 +480,7 @@ impl SearchPage {
         self.search_mangas(1);
     }
 
-    pub fn search_mangas_of_artist(&mut self, artist : Artist) {
+    pub fn search_mangas_of_artist(&mut self, artist: Artist) {
         self.filter_state.set_artist(artist);
         self.search_bar.reset();
         self.search_mangas(1);
@@ -511,11 +511,11 @@ impl SearchPage {
             match event {
                 SearchPageEvents::LoadMangasFound(response) => self.load_mangas_found(response),
                 SearchPageEvents::SearchCovers => {
-                    for manga in self.mangas_found_list.widget.mangas.iter() {
-                        let manga_id = manga.id.clone();
+                    for item in self.mangas_found_list.widget.mangas.iter() {
+                        let manga_id = item.manga.id.clone();
                         let tx = self.local_event_tx.clone();
 
-                        match manga.img_url.as_ref() {
+                        match item.manga.img_url.as_ref() {
                             Some(file_name) => {
                                 let file_name = file_name.clone();
                                 search_manga_cover(file_name, manga_id, &mut self.tasks, tx);
@@ -537,7 +537,7 @@ impl SearchPage {
                             .widget
                             .mangas
                             .iter_mut()
-                            .find(|manga| manga.id == manga_id)
+                            .find(|manga_item| manga_item.manga.id == manga_id)
                         {
                             manga.image_state = Some(image);
                         }

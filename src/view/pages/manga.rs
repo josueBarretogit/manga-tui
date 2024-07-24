@@ -8,7 +8,7 @@ use crate::backend::fetch::MangadexClient;
 use crate::backend::filter::Languages;
 use crate::backend::tui::Events;
 use crate::backend::{ChapterResponse, MangaStatisticsResponse, Statistics};
-use crate::common::{Artist, Author};
+use crate::common::{Artist, Author, Manga};
 use crate::utils::{set_status_style, set_tags_style};
 use crate::view::widgets::manga::{ChapterItem, ChaptersListWidget};
 use crate::view::widgets::Component;
@@ -72,16 +72,8 @@ impl ChapterOrder {
 }
 
 pub struct MangaPage {
-    id: String,
-    pub title: String,
-    description: String,
-    tags: Vec<String>,
-    img_url: Option<String>,
+    pub manga: Manga,
     image_state: Option<Box<dyn StatefulProtocol>>,
-    status: String,
-    content_rating: String,
-    author: Author,
-    artist: Artist,
     global_event_tx: UnboundedSender<Events>,
     local_action_tx: UnboundedSender<MangaPageActions>,
     pub local_action_rx: UnboundedReceiver<MangaPageActions>,
@@ -89,7 +81,6 @@ pub struct MangaPage {
     local_event_rx: UnboundedReceiver<MangaPageEvents>,
     chapters: Option<ChaptersData>,
     chapter_order: ChapterOrder,
-    chapter_language: Vec<Languages>,
     state: PageState,
     statistics: Option<MangaStatistics>,
     tasks: JoinSet<()>,
@@ -116,17 +107,8 @@ struct ChaptersData {
 #[allow(clippy::too_many_arguments)]
 impl MangaPage {
     pub fn new(
-        id: String,
-        title: String,
-        description: String,
-        tags: Vec<String>,
-        img_url: Option<String>,
+        manga: Manga,
         image_state: Option<Box<dyn StatefulProtocol>>,
-        status: String,
-        content_rating: String,
-        author: Author,
-        artist: Artist,
-        languages: Vec<Languages>,
         global_event_tx: UnboundedSender<Events>,
     ) -> Self {
         let (local_action_tx, local_action_rx) = mpsc::unbounded_channel::<MangaPageActions>();
@@ -136,23 +118,14 @@ impl MangaPage {
         local_event_tx.send(MangaPageEvents::FethStatistics).ok();
 
         Self {
-            id,
-            title,
-            description,
-            tags,
-            img_url,
+            manga,
             image_state,
-            status,
-            content_rating,
-            author,
-            artist,
             global_event_tx,
             local_action_tx,
             local_action_rx,
             local_event_tx,
             local_event_rx,
             chapters: None,
-            chapter_language: languages,
             chapter_order: ChapterOrder::default(),
             state: PageState::SearchingChapters,
             statistics: None,
@@ -191,7 +164,7 @@ impl MangaPage {
 
         let author_and_artist = Span::raw(format!(
             "Author : {} | Artist : {}",
-            self.author.name, self.artist.name
+            self.manga.author.name, self.manga.artist.name
         ));
 
         let instructions = vec![
@@ -200,7 +173,7 @@ impl MangaPage {
         ];
 
         Block::bordered()
-            .title_top(Line::from(vec![self.title.clone().into()]))
+            .title_top(Line::from(vec![self.manga.title.clone().into()]))
             .title_bottom(Line::from(vec![statistics, "".into(), author_and_artist]))
             .title_bottom(Line::from(instructions).right_aligned())
             .render(manga_information_area, buf);
@@ -215,17 +188,22 @@ impl MangaPage {
             Layout::vertical([Constraint::Percentage(20), Constraint::Percentage(80)]).margin(1);
         let [tags_area, description_area] = layout.areas(area);
 
-        let mut tags: Vec<Span<'_>> = self.tags.iter().map(|tag| set_tags_style(tag)).collect();
+        let mut tags: Vec<Span<'_>> = self
+            .manga
+            .tags
+            .iter()
+            .map(|tag| set_tags_style(tag))
+            .collect();
 
-        tags.push(set_tags_style(&self.content_rating));
+        tags.push(set_tags_style(&self.manga.content_rating));
 
-        tags.push(set_status_style(&self.status));
+        tags.push(set_status_style(&self.manga.status));
 
         Paragraph::new(Line::from(tags))
             .wrap(Wrap { trim: true })
             .render(tags_area, buf);
 
-        Paragraph::new(self.description.clone())
+        Paragraph::new(self.manga.description.clone())
             .wrap(Wrap { trim: true })
             .render(description_area, buf);
     }
@@ -240,7 +218,7 @@ impl MangaPage {
             sorting_buttons_area,
             frame.buffer_mut(),
             self.chapter_order,
-            self.chapter_language.clone(),
+            self.manga.available_languages.clone(),
         );
 
         match self.chapters.as_mut() {
@@ -418,9 +396,9 @@ impl MangaPage {
                 let tx = self.global_event_tx.clone();
                 if DBCONN.lock().unwrap().is_some() && !chapter_selected.is_read {
                     let save_response = save_history(MangaReadingHistorySave {
-                        id: &self.id,
-                        title: &self.title,
-                        img_url: self.img_url.as_deref(),
+                        id: &self.manga.id,
+                        title: &self.manga.title,
+                        img_url: self.manga.img_url.as_deref(),
                         chapter_id: &chapter_selected.id,
                         chapter_title: &chapter_selected.title,
                     });
@@ -462,9 +440,15 @@ impl MangaPage {
 
     fn search_chapters(&mut self) {
         self.state = PageState::SearchingChapters;
-        let manga_id = self.id.clone();
+        let manga_id = self.manga.id.clone();
         let tx = self.local_event_tx.clone();
-        let language = self.chapter_language.first().as_ref().cloned().unwrap();
+        let language = self
+            .manga
+            .available_languages
+            .first()
+            .as_ref()
+            .cloned()
+            .unwrap();
         let language = language.clone();
         let chapter_order = self.chapter_order;
         self.tasks.spawn(async move {
@@ -485,7 +469,7 @@ impl MangaPage {
     }
 
     fn fetch_statistics(&mut self) {
-        let manga_id = self.id.clone();
+        let manga_id = self.manga.id.clone();
         let tx = self.local_event_tx.clone();
         self.tasks.spawn(async move {
             let response = MangadexClient::global()
@@ -505,7 +489,7 @@ impl MangaPage {
     }
 
     fn check_chapters_read(&mut self) {
-        let history = get_chapters_history_status(&self.id);
+        let history = get_chapters_history_status(&self.manga.id);
         match history {
             Ok(his) => {
                 for chapter in self.chapters.as_mut().unwrap().widget.chapters.iter_mut() {
@@ -523,11 +507,12 @@ impl MangaPage {
     }
 
     fn download_chapter_selected(&mut self) {
-        let manga_id = self.id.clone();
-        let manga_title = self.title.clone();
+        let manga_id = self.manga.id.clone();
+        let manga_title = self.manga.title.clone();
         let tx = self.local_event_tx.clone();
         let lang = self
-            .chapter_language
+            .manga
+            .available_languages
             .clone()
             .first()
             .cloned()
@@ -597,9 +582,9 @@ impl MangaPage {
         let save_download_operation = set_chapter_downloaded(SetChapterDownloaded {
             id: &id_chapter,
             title: &title,
-            manga_id: &self.id,
-            manga_title: &self.title,
-            img_url: self.img_url.as_deref(),
+            manga_id: &self.manga.id,
+            manga_title: &self.manga.title,
+            img_url: self.manga.img_url.as_deref(),
         });
 
         if let Err(e) = save_download_operation {
@@ -609,13 +594,13 @@ impl MangaPage {
 
     fn go_mangas_author(&mut self) {
         self.global_event_tx
-            .send(Events::GoSearchMangasAuthor(self.author.clone()))
+            .send(Events::GoSearchMangasAuthor(self.manga.author.clone()))
             .ok();
     }
 
     fn go_mangas_artist(&mut self) {
         self.global_event_tx
-            .send(Events::GoSearchMangasArtist(self.artist.clone()))
+            .send(Events::GoSearchMangasArtist(self.manga.artist.clone()))
             .ok();
     }
 
@@ -671,7 +656,7 @@ impl MangaPage {
                 }
                 MangaPageEvents::LoadStatistics(maybe_statistics) => {
                     if let Some(response) = maybe_statistics {
-                        let statistics: &Statistics = &response.statistics[&self.id];
+                        let statistics: &Statistics = &response.statistics[&self.manga.id];
                         self.statistics = Some(MangaStatistics::new(
                             statistics.rating.average.unwrap_or_default(),
                             statistics.follows.unwrap_or_default(),
@@ -727,7 +712,7 @@ impl Component for MangaPage {
     }
     fn clean_up(&mut self) {
         self.abort_tasks();
-        self.tags = vec![];
-        self.description = String::new();
+        self.manga.tags = vec![];
+        self.manga.description = String::new();
     }
 }

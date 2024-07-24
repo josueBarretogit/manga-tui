@@ -103,20 +103,11 @@ impl Component for Home {
                 self.carrousel_recently_added.select_previous()
             }
             HomeActions::GoToRecentlyAddedMangaPage => {
-                if let Some(manga) = self.carrousel_recently_added.get_current_selected_manga() {
+                if let Some(item) = self.carrousel_recently_added.get_current_selected_manga() {
                     self.global_event_tx
                         .send(Events::GoToMangaPage(MangaItem::new(
-                            manga.id.clone(),
-                            manga.title.clone(),
-                            manga.description.clone(),
-                            manga.tags.clone(),
-                            manga.content_rating.clone(),
-                            manga.status.clone(),
-                            manga.img_url.clone(),
-                            manga.author.clone(),
-                            manga.artist.clone(),
-                            manga.available_languages.clone(),
-                            manga.cover_state.clone(),
+                            item.manga.clone(),
+                            item.cover_state.clone(),
                         )))
                         .ok();
                 }
@@ -188,20 +179,11 @@ impl Home {
     }
 
     pub fn go_to_manga_page(&self) {
-        if let Some(manga) = self.get_current_popular_manga() {
+        if let Some(item) = self.get_current_popular_manga() {
             self.global_event_tx
                 .send(Events::GoToMangaPage(MangaItem::new(
-                    manga.id.clone(),
-                    manga.title.clone(),
-                    manga.description.clone(),
-                    manga.tags.clone(),
-                    manga.content_rating.clone(),
-                    manga.status.clone(),
-                    manga.img_url.clone(),
-                    manga.author.clone(),
-                    manga.artist.clone(),
-                    manga.available_languages.clone(),
-                    manga.cover_state.clone(),
+                    item.manga.clone(),
+                    item.cover_state.clone(),
                 )))
                 .ok();
         }
@@ -313,7 +295,7 @@ impl Home {
                     .carrousel_popular_mangas
                     .items
                     .iter_mut()
-                    .find(|manga| manga.id == id)
+                    .find(|manga_item| manga_item.manga.id == id)
                 {
                     let image = PICKER.unwrap().new_resize_protocol(cover);
                     popular_manga.cover_state = Some(image);
@@ -342,16 +324,16 @@ impl Home {
     }
 
     fn search_popular_mangas_cover(&mut self) {
-        for manga in self.carrousel_popular_mangas.items.iter() {
-            let manga_id = manga.id.clone();
+        for item in self.carrousel_popular_mangas.items.iter() {
+            let manga_id = item.manga.id.clone();
             let tx = self.local_event_tx.clone();
-            match manga.img_url.as_ref() {
+            match item.manga.img_url.as_ref() {
                 Some(file_name) => {
                     let file_name = file_name.clone();
                     search_manga_cover(file_name, manga_id, &mut self.tasks, tx);
                 }
                 None => {
-                    tx.send(HomeEvents::LoadCover(None, manga.id.clone())).ok();
+                    tx.send(HomeEvents::LoadCover(None, manga_id)).ok();
                 }
             };
         }
@@ -391,10 +373,10 @@ impl Home {
     }
 
     fn search_recently_added_mangas_cover(&mut self) {
-        for manga in self.carrousel_recently_added.items.iter() {
-            let manga_id = manga.id.clone();
+        for item in self.carrousel_recently_added.items.iter() {
+            let manga_id = item.manga.id.clone();
             let tx = self.local_event_tx.clone();
-            match manga.img_url.as_ref() {
+            match item.manga.img_url.as_ref() {
                 Some(file_name) => {
                     let file_name = file_name.clone();
                     self.tasks.spawn(async move {
@@ -409,21 +391,11 @@ impl Home {
                                     .unwrap();
 
                                 let maybe_decoded = dyn_img.decode();
-                                match maybe_decoded {
-                                    Ok(image) => {
-                                        tx.send(HomeEvents::LoadRecentlyAddedMangasCover(
-                                            Some(image),
-                                            manga_id,
-                                        ))
-                                        .unwrap();
-                                    }
-                                    Err(_) => {
-                                        tx.send(HomeEvents::LoadRecentlyAddedMangasCover(
-                                            None, manga_id,
-                                        ))
-                                        .unwrap();
-                                    }
-                                };
+                                tx.send(HomeEvents::LoadRecentlyAddedMangasCover(
+                                    maybe_decoded.ok(),
+                                    manga_id,
+                                ))
+                                .ok();
                             }
                             Err(_) => tx
                                 .send(HomeEvents::LoadRecentlyAddedMangasCover(None, manga_id))
@@ -432,11 +404,8 @@ impl Home {
                     });
                 }
                 None => {
-                    tx.send(HomeEvents::LoadRecentlyAddedMangasCover(
-                        None,
-                        manga.id.clone(),
-                    ))
-                    .ok();
+                    tx.send(HomeEvents::LoadRecentlyAddedMangasCover(None, manga_id))
+                        .ok();
                 }
             };
         }
@@ -449,7 +418,7 @@ impl Home {
                     .carrousel_recently_added
                     .items
                     .iter_mut()
-                    .find(|manga| manga.id == id)
+                    .find(|manga_item| manga_item.manga.id == id)
                 {
                     let image = PICKER.unwrap().new_resize_protocol(cover);
                     recently_added_manga.cover_state = Some(image);

@@ -2,7 +2,7 @@ use crate::backend::error_log::write_to_error_log;
 use crate::backend::fetch::MangadexClient;
 use crate::backend::filter::Languages;
 use crate::backend::Data;
-use crate::common::{Artist, Author};
+use crate::common::{Artist, Author, Manga};
 use crate::view::widgets::ImageHandler;
 use image::io::Reader;
 use ratatui::{prelude::*, widgets::*};
@@ -71,22 +71,10 @@ pub fn search_manga_cover<IM: ImageHandler>(
     });
 }
 
-pub struct Manga {
-    pub id: String,
-    pub title: String,
-    pub description: String,
-    pub content_rating: String,
-    pub tags: Vec<String>,
-    pub status: String,
-    pub img_url: Option<String>,
-    pub author: Author,
-    pub artist: Artist,
-    pub available_languages: Vec<Languages>,
-}
-
 pub fn from_manga_response(value: Data) -> Manga {
     let id = value.id.clone();
     // Todo! maybe there is a better way to do this
+    // and use preferred language
     let title = value.attributes.title.en.unwrap_or(
         value.attributes.title.ja_ro.unwrap_or(
             value.attributes.title.ja.unwrap_or(
@@ -148,6 +136,7 @@ pub fn from_manga_response(value: Data) -> Manga {
         .into_iter()
         .flatten()
         .map(|lang| lang.as_str().into())
+        .filter(|lang| *lang != Languages::Unkown)
         .collect();
 
     let status = value.attributes.status;

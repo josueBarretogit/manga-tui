@@ -103,17 +103,8 @@ impl Component for App {
 
                 self.current_tab = SelectedTabs::MangaTab;
                 self.manga_page = Some(MangaPage::new(
-                    manga.id,
-                    manga.title,
-                    manga.description,
-                    manga.tags,
-                    manga.img_url,
+                    manga.manga,
                     manga.image_state,
-                    manga.status,
-                    manga.content_rating,
-                    manga.author,
-                    manga.artist,
-                    manga.available_languages,
                     self.global_event_tx.clone(),
                 ));
             }

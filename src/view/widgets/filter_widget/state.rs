@@ -24,6 +24,7 @@ pub enum FilterEvents {
 pub enum MangaFilters {
     #[strum(to_string = "Content rating")]
     ContentRating,
+    Languages,
     #[strum(to_string = "Sort by")]
     SortBy,
     #[strum(to_string = "Magazine demographic")]
@@ -31,17 +32,16 @@ pub enum MangaFilters {
     Tags,
     Authors,
     Artists,
-    Languages,
 }
 
 pub const FILTERS: [MangaFilters; 7] = [
     MangaFilters::ContentRating,
+    MangaFilters::Languages,
     MangaFilters::SortBy,
     MangaFilters::Tags,
     MangaFilters::MagazineDemographic,
     MangaFilters::Authors,
     MangaFilters::Artists,
-    MangaFilters::Languages,
 ];
 
 #[derive(Clone)]

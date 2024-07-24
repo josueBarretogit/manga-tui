@@ -1,6 +1,5 @@
-use crate::backend::filter::Languages;
 use crate::backend::{Data, SearchMangaResponse};
-use crate::common::{Artist, Author};
+use crate::common::Manga;
 use crate::utils::{from_manga_response, set_status_style, set_tags_style};
 use ratatui::{prelude::*, widgets::*};
 use ratatui_image::protocol::StatefulProtocol;
@@ -16,47 +15,14 @@ pub enum CarrouselState {
 
 #[derive(Clone)]
 pub struct CarrouselItem {
-    pub id: String,
-    pub title: String,
-    pub description: String,
-    pub tags: Vec<String>,
-    pub content_rating: String,
-    pub status: String,
-    pub img_url: Option<String>,
-    pub author: Author,
-    pub artist: Artist,
-    pub available_languages: Vec<Languages>,
+    pub manga: Manga,
     pub cover_state: Option<Box<dyn StatefulProtocol>>,
 }
 
 #[allow(clippy::too_many_arguments)]
 impl CarrouselItem {
-    fn new(
-        id: String,
-        title: String,
-        description: String,
-        tags: Vec<String>,
-        content_rating: String,
-        status: String,
-        img_url: Option<String>,
-        author: Author,
-        artist: Artist,
-        available_languages: Vec<Languages>,
-        cover_state: Option<Box<dyn StatefulProtocol>>,
-    ) -> Self {
-        Self {
-            id,
-            title,
-            description,
-            tags,
-            content_rating,
-            status,
-            img_url,
-            author,
-            artist,
-            available_languages,
-            cover_state,
-        }
+    fn new(manga: Manga, cover_state: Option<Box<dyn StatefulProtocol>>) -> Self {
+        Self { manga, cover_state }
     }
 
     fn render_cover(&mut self, area: Rect, buf: &mut Buffer) {
@@ -79,39 +45,32 @@ impl CarrouselItem {
         let [tags_area, description_area] = layout.areas(area);
 
         Block::bordered()
-            .title(self.title.clone())
-            .title_bottom(self.author.name.clone())
+            .title(self.manga.title.clone())
+            .title_bottom(self.manga.author.name.clone())
             .render(area, buf);
 
-        let mut tags: Vec<Span<'_>> = self.tags.iter().map(|tag| set_tags_style(tag)).collect();
+        let mut tags: Vec<Span<'_>> = self
+            .manga
+            .tags
+            .iter()
+            .map(|tag| set_tags_style(tag))
+            .collect();
 
-        tags.push(set_status_style(&self.status));
-        tags.push(set_tags_style(&self.content_rating));
+        tags.push(set_status_style(&self.manga.status));
+        tags.push(set_tags_style(&self.manga.content_rating));
 
         Paragraph::new(Line::from(tags))
             .wrap(Wrap { trim: true })
             .render(tags_area, buf);
 
-        Paragraph::new(self.description.clone())
+        Paragraph::new(self.manga.description.clone())
             .wrap(Wrap { trim: true })
             .render(description_area, buf);
     }
 
     pub fn from_response(value: Data) -> Self {
         let manga = from_manga_response(value);
-        Self::new(
-            manga.id,
-            manga.title,
-            manga.description,
-            manga.tags,
-            manga.content_rating,
-            manga.status,
-            manga.img_url,
-            manga.author,
-            manga.artist,
-            manga.available_languages,
-            None,
-        )
+        Self::new(manga, None)
     }
 
     pub fn render_recently_added(&mut self, area: Rect, buf: &mut Buffer) {
@@ -121,7 +80,7 @@ impl CarrouselItem {
 
         self.render_cover(cover_area, buf);
 
-        Paragraph::new(self.title.clone())
+        Paragraph::new(self.manga.title.clone())
             .wrap(Wrap { trim: true })
             .render(title_area, buf);
     }

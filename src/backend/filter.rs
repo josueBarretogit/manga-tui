@@ -308,7 +308,7 @@ impl Languages {
             Languages::German => "German",
             Languages::Arabic => "Arabic",
             Languages::Danish => "Danish",
-            Languages::Spanish => "Spanish (traditional)",
+            Languages::Spanish => "Spanish (Spain)",
             Languages::Russian => "Russian",
             Languages::Japanese => "Japanese",
             Languages::Albanian => "Albanian",
@@ -316,8 +316,8 @@ impl Languages {
             Languages::SpanishLa => "Spanish (mx)",
             Languages::Bulgarian => "Bulgarian",
             Languages::Ukrainian => "Ukrainian",
-            Languages::BrazilianPortuguese => "Portuguese",
-            Languages::Portuguese => "Portuguese (traditional)",
+            Languages::BrazilianPortuguese => "Portuguese (brazil)",
+            Languages::Portuguese => "Portuguese",
             Languages::Unkown => "",
         }
     }
@@ -361,6 +361,7 @@ impl IntoParam for Vec<Languages> {
             );
         }
         self.into_iter()
+            .filter(|lang| *lang != Languages::Unkown)
             .fold(String::new(), |mut languages, language| {
                 let _ = write!(
                     languages,

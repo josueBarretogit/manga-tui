@@ -1,6 +1,6 @@
 use crate::backend::filter::Languages;
 use crate::backend::Data;
-use crate::common::{Artist, Author};
+use crate::common::{Artist, Author, Manga};
 use crate::utils::{from_manga_response, set_status_style, set_tags_style};
 use ratatui::{prelude::*, widgets::*};
 use ratatui_image::protocol::StatefulProtocol;
@@ -108,16 +108,7 @@ impl<'a> StatefulWidget for MangaPreview<'a> {
 
 #[derive(Default, Clone)]
 pub struct MangaItem {
-    pub id: String,
-    pub title: String,
-    pub description: String,
-    pub tags: Vec<String>,
-    pub content_rating: String,
-    pub status: String,
-    pub img_url: Option<String>,
-    pub available_languages: Vec<Languages>,
-    pub author: Author,
-    pub artist: Artist,
+    pub manga: Manga,
     pub style: Style,
     pub image_state: Option<Box<dyn StatefulProtocol>>,
 }
@@ -127,7 +118,7 @@ impl Widget for MangaItem {
     where
         Self: Sized,
     {
-        Paragraph::new(self.title)
+        Paragraph::new(self.manga.title)
             .wrap(Wrap { trim: true })
             .block(Block::bordered().style(self.style))
             .style(self.style)
@@ -147,50 +138,16 @@ impl PreRender for MangaItem {
 impl From<Data> for MangaItem {
     fn from(value: Data) -> Self {
         let manga = from_manga_response(value);
-
-        Self::new(
-            manga.id,
-            manga.title,
-            manga.description,
-            manga.tags,
-            manga.content_rating,
-            manga.status,
-            manga.img_url,
-            manga.author,
-            manga.artist,
-            manga.available_languages,
-            None,
-        )
+        Self::new(manga, None)
     }
 }
 
 impl MangaItem {
-    pub fn new(
-        id: String,
-        title: String,
-        description: String,
-        tags: Vec<String>,
-        content_rating: String,
-        status: String,
-        img_url: Option<String>,
-        author: Author,
-        artist: Artist,
-        available_languages: Vec<Languages>,
-        image_state: Option<Box<dyn StatefulProtocol>>,
-    ) -> Self {
+    pub fn new(manga: Manga, image_state: Option<Box<dyn StatefulProtocol>>) -> Self {
         Self {
-            id,
-            title,
-            description,
-            tags,
-            img_url,
-            content_rating,
+            manga,
             image_state,
-            status,
             style: Style::default(),
-            author,
-            artist,
-            available_languages,
         }
     }
 }
