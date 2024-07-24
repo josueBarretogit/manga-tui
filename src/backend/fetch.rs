@@ -52,7 +52,7 @@ impl MangadexClient {
         };
 
         let url = format!(
-            "{}/manga?{}&includes[]=cover_art&includes[]=author&includes[]=artist&limit=10&offset={}{}&includedTagsMode=AND&excludedTagsMode=OR&hasAvailableChapters=true&availableTranslatedLanguage[]=en",
+            "{}/manga?{}&includes[]=cover_art&includes[]=author&includes[]=artist&limit=10&offset={}{}&includedTagsMode=AND&excludedTagsMode=OR&hasAvailableChapters=true",
             API_URL_BASE,
             search_by_title,
             offset,

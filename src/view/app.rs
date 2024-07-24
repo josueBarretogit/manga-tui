@@ -113,6 +113,7 @@ impl Component for App {
                     manga.content_rating,
                     manga.author,
                     manga.artist,
+                    manga.available_languages,
                     self.global_event_tx.clone(),
                 ));
             }

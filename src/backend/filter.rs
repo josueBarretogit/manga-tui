@@ -215,7 +215,7 @@ where
     }
 }
 
-#[derive(Display, EnumIter, Default, Clone, Copy)]
+#[derive(Debug, Display, EnumIter, Default, Clone, Copy, PartialEq, Eq)]
 pub enum Languages {
     #[strum(to_string = "🇫🇷")]
     French,
@@ -228,12 +228,12 @@ pub enum Languages {
     SpanishLa,
     #[strum(to_string = "🇯🇵")]
     Japanese,
-    #[strum(to_string = "🇪🇸")]
+    #[strum(to_string = "🇰🇷")]
     Korean,
     #[strum(to_string = "🇧🇷")]
     BrazilianPortuguese,
-    #[strum(to_string = "🇧🇷")]
-    Brazilian,
+    #[strum(to_string = "🇵🇹")]
+    Portuguese,
     #[strum(to_string = "🇨🇳")]
     TraditionalChinese,
     #[strum(to_string = "🇷🇺")]
@@ -256,23 +256,43 @@ pub enum Languages {
     Dutch,
     #[strum(to_string = "🇺🇦")]
     Ukrainian,
+    // needs to be implemented
+    Unkown,
 }
 
 impl From<&str> for Languages {
     fn from(value: &str) -> Self {
         match value {
-            "fr" => Self::French,
-            "en" => Self::English,
-            "es" => Self::Spanish,
-            "es-la" => Self::SpanishLa,
-            "ko" => Self::Korean,
-            "de" => Self::German,
-            "pt-br" => Self::BrazilianPortuguese,
-            "ru" => Self::Russian,
-            "zh-hk" => Self::TraditionalChinese,
-            "ja" | "ja-ro" => Self::Japanese,
-            _ => Self::default(),
+            "es" => Languages::Spanish,
+            "fr" => Languages::French,
+            "en" => Languages::English,
+            "ja" => Languages::Japanese,
+            "nl" => Languages::Dutch,
+            "ko" => Languages::Korean,
+            "de" => Languages::German,
+            "ar" => Languages::Arabic,
+            "pt-br" => Languages::BrazilianPortuguese,
+            "br" => Languages::Portuguese,
+            "da" => Languages::Danish,
+            "ru" => Languages::Russian,
+            "sq" => Languages::Albanian,
+            "hr" => Languages::Croatian,
+            "es-la" => Languages::SpanishLa,
+            "bg" => Languages::Bulgarian,
+            "uk" => Languages::Ukrainian,
+            "vi" => Languages::Vietnamese,
+            "zh-hk" => Languages::TraditionalChinese,
+            _ => Languages::Unkown,
         }
+    }
+}
+
+// Todo! there has to be a better way of doing this conversion
+impl From<String> for Languages {
+    fn from(value: String) -> Self {
+        Self::iter()
+            .find(|lang| value == format!("{} {}", lang.as_emoji(), lang.as_human_readable()))
+            .unwrap_or_default()
     }
 }
 
@@ -290,14 +310,15 @@ impl Languages {
             Languages::Danish => "Danish",
             Languages::Spanish => "Spanish (traditional)",
             Languages::Russian => "Russian",
-            Languages::Japanese => "Japanses",
+            Languages::Japanese => "Japanese",
             Languages::Albanian => "Albanian",
             Languages::Croatian => "Croatian",
             Languages::SpanishLa => "Spanish (mx)",
             Languages::Bulgarian => "Bulgarian",
             Languages::Ukrainian => "Ukrainian",
-            Languages::BrazilianPortuguese => "Brazilian (traditional)",
-            Languages::Brazilian => "Brazilian",
+            Languages::BrazilianPortuguese => "Portuguese",
+            Languages::Portuguese => "Portuguese (traditional)",
+            Languages::Unkown => "",
         }
     }
 
@@ -316,7 +337,7 @@ impl Languages {
             Languages::German => "de",
             Languages::Arabic => "ar",
             Languages::BrazilianPortuguese => "pt-br",
-            Languages::Brazilian => "br",
+            Languages::Portuguese => "br",
             Languages::Danish => "da",
             Languages::Russian => "ru",
             Languages::Albanian => "sq",
@@ -326,6 +347,7 @@ impl Languages {
             Languages::Ukrainian => "uk",
             Languages::Vietnamese => "vi",
             Languages::TraditionalChinese => "zh-hk",
+            Languages::Unkown => unreachable!(),
         }
     }
 }
@@ -402,6 +424,10 @@ impl Filters {
         self.tags.0 = tags;
     }
 
+    pub fn set_languages(&mut self, languages: Vec<Languages>) {
+        self.languages = languages;
+    }
+
     pub fn set_magazine_demographic(&mut self, magazine_demographics: Vec<MagazineDemographic>) {
         self.magazine_demographic = magazine_demographics;
     }
@@ -420,5 +446,23 @@ impl Filters {
 
     pub fn reset_artist(&mut self) {
         self.artists.0 = vec![];
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn language_conversion_works() {
+        let language_formatted = format!(
+            "{} {}",
+            Languages::Spanish.as_emoji(),
+            Languages::Spanish.as_human_readable()
+        );
+
+        let conversion: Languages = language_formatted.into();
+
+        assert_eq!(conversion, Languages::Spanish);
     }
 }

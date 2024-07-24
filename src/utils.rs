@@ -1,5 +1,6 @@
 use crate::backend::error_log::write_to_error_log;
 use crate::backend::fetch::MangadexClient;
+use crate::backend::filter::Languages;
 use crate::backend::Data;
 use crate::common::{Artist, Author};
 use crate::view::widgets::ImageHandler;
@@ -80,6 +81,7 @@ pub struct Manga {
     pub img_url: Option<String>,
     pub author: Author,
     pub artist: Artist,
+    pub available_languages: Vec<Languages>,
 }
 
 pub fn from_manga_response(value: Data) -> Manga {
@@ -140,6 +142,14 @@ pub fn from_manga_response(value: Data) -> Manga {
         }
     }
 
+    let languages: Vec<Languages> = value
+        .attributes
+        .available_translated_languages
+        .into_iter()
+        .flatten()
+        .map(|lang| lang.as_str().into())
+        .collect();
+
     let status = value.attributes.status;
 
     Manga {
@@ -152,6 +162,7 @@ pub fn from_manga_response(value: Data) -> Manga {
         img_url,
         author,
         artist,
+        available_languages: languages,
     }
 }
 

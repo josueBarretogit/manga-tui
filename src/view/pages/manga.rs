@@ -89,7 +89,7 @@ pub struct MangaPage {
     local_event_rx: UnboundedReceiver<MangaPageEvents>,
     chapters: Option<ChaptersData>,
     chapter_order: ChapterOrder,
-    chapter_language: Languages,
+    chapter_language: Vec<Languages>,
     state: PageState,
     statistics: Option<MangaStatistics>,
     tasks: JoinSet<()>,
@@ -126,6 +126,7 @@ impl MangaPage {
         content_rating: String,
         author: Author,
         artist: Artist,
+        languages: Vec<Languages>,
         global_event_tx: UnboundedSender<Events>,
     ) -> Self {
         let (local_action_tx, local_action_rx) = mpsc::unbounded_channel::<MangaPageActions>();
@@ -151,7 +152,7 @@ impl MangaPage {
             local_event_tx,
             local_event_rx,
             chapters: None,
-            chapter_language: Languages::default(),
+            chapter_language: languages,
             chapter_order: ChapterOrder::default(),
             state: PageState::SearchingChapters,
             statistics: None,
@@ -239,7 +240,7 @@ impl MangaPage {
             sorting_buttons_area,
             frame.buffer_mut(),
             self.chapter_order,
-            self.chapter_language,
+            self.chapter_language.clone(),
         );
 
         match self.chapters.as_mut() {
@@ -278,7 +279,7 @@ impl MangaPage {
         area: Rect,
         buf: &mut Buffer,
         order: ChapterOrder,
-        language: Languages,
+        language: Vec<Languages>,
     ) {
         let layout = Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]);
         let [sorting_area, language_area] = layout.areas(area);
@@ -296,6 +297,7 @@ impl MangaPage {
             " Change order : <o>".into(),
         ]))
         .render(sorting_area, buf);
+        let language = language.first().cloned().unwrap_or_default();
 
         let language = format!(
             "Language: {} {}",
@@ -462,7 +464,8 @@ impl MangaPage {
         self.state = PageState::SearchingChapters;
         let manga_id = self.id.clone();
         let tx = self.local_event_tx.clone();
-        let language = self.chapter_language;
+        let language = self.chapter_language.first().as_ref().cloned().unwrap();
+        let language = language.clone();
         let chapter_order = self.chapter_order;
         self.tasks.spawn(async move {
             let response = MangadexClient::global()
@@ -523,8 +526,12 @@ impl MangaPage {
         let manga_id = self.id.clone();
         let manga_title = self.title.clone();
         let tx = self.local_event_tx.clone();
-        let lang = self.chapter_language.as_param();
-        let lang = lang.to_string();
+        let lang = self
+            .chapter_language
+            .clone()
+            .first()
+            .cloned()
+            .unwrap_or_default();
         self.state = PageState::DownloadingChapters;
         if let Some(chapter) = self.get_current_selected_chapter_mut() {
             let title = chapter.title.clone();
@@ -552,7 +559,7 @@ impl MangaPage {
                                 title: &title,
                                 number: &number,
                                 scanlator: &scanlator,
-                                lang: &lang,
+                                lang: lang.as_human_readable(),
                             },
                             res,
                             tx.clone(),

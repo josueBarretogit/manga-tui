@@ -115,6 +115,7 @@ impl Component for Home {
                             manga.img_url.clone(),
                             manga.author.clone(),
                             manga.artist.clone(),
+                            manga.available_languages.clone(),
                             manga.cover_state.clone(),
                         )))
                         .ok();
@@ -199,6 +200,7 @@ impl Home {
                     manga.img_url.clone(),
                     manga.author.clone(),
                     manga.artist.clone(),
+                    manga.available_languages.clone(),
                     manga.cover_state.clone(),
                 )))
                 .ok();

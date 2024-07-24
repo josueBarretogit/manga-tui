@@ -231,6 +231,14 @@ impl<'a> StatefulWidgetFrame for FilterWidget<'a> {
                         input_area,
                     );
                 }
+                MangaFilters::Languages => {
+                    render_filter_list(
+                        state.lang_state.items.clone(),
+                        current_filter_area,
+                        buf,
+                        &mut state.lang_state.state,
+                    );
+                }
             }
         }
     }

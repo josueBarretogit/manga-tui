@@ -337,6 +337,7 @@ impl Feed {
                                             None,
                                             manga_found.author,
                                             manga_found.artist,
+                                            manga_found.available_languages,
                                             Some(image),
                                         )))
                                         .ok();
@@ -352,6 +353,7 @@ impl Feed {
                                             None,
                                             manga_found.author,
                                             manga_found.artist,
+                                            manga_found.available_languages,
                                             None,
                                         )))
                                         .ok();
@@ -368,6 +370,7 @@ impl Feed {
                                     None,
                                     manga_found.author,
                                     manga_found.artist,
+                                    manga_found.available_languages,
                                     None,
                                 )))
                                 .ok();

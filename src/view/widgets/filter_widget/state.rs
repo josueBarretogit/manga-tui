@@ -31,15 +31,17 @@ pub enum MangaFilters {
     Tags,
     Authors,
     Artists,
+    Languages,
 }
 
-pub const FILTERS: [MangaFilters; 6] = [
+pub const FILTERS: [MangaFilters; 7] = [
     MangaFilters::ContentRating,
     MangaFilters::SortBy,
     MangaFilters::Tags,
     MangaFilters::MagazineDemographic,
     MangaFilters::Authors,
     MangaFilters::Artists,
+    MangaFilters::Languages,
 ];
 
 #[derive(Clone)]
@@ -167,10 +169,12 @@ impl FilterList<SortByState> {
 
 impl Default for FilterList<LanguageState> {
     fn default() -> Self {
-        let items = Languages::iter().map(|lang| FilterListItem {
-            name: format!(" {} {}", lang.as_emoji(), lang.as_human_readable()),
-            is_selected: false,
-        });
+        let items = Languages::iter()
+            .filter(|lang| *lang != Languages::Unkown)
+            .map(|lang| FilterListItem {
+                name: format!("{} {}", lang.as_emoji(), lang.as_human_readable()),
+                is_selected: false,
+            });
 
         Self {
             items: items.collect(),
@@ -509,6 +513,9 @@ impl FilterState {
                         self.artist_state.state.select_next();
                     }
                 }
+                MangaFilters::Languages => {
+                    self.lang_state.scroll_down();
+                }
             }
         }
     }
@@ -539,6 +546,10 @@ impl FilterState {
                     if self.artist_state.items.is_some() {
                         self.artist_state.state.select_previous();
                     }
+                }
+
+                MangaFilters::Languages => {
+                    self.lang_state.scroll_up();
                 }
             }
         }
@@ -571,6 +582,11 @@ impl FilterState {
                 MangaFilters::Artists => {
                     self.artist_state.toggle();
                     self.set_artists();
+                }
+
+                MangaFilters::Languages => {
+                    self.lang_state.toggle();
+                    self.set_languages();
                 }
             }
         }
@@ -678,6 +694,21 @@ impl FilterState {
                     .collect(),
             )
         }
+    }
+
+    fn set_languages(&mut self) {
+        self.filters.set_languages(
+            self.lang_state
+                .items
+                .iter()
+                .filter_map(|item| {
+                    if item.is_selected {
+                        return Some(item.name.clone().into());
+                    }
+                    None
+                })
+                .collect(),
+        )
     }
 
     /// This function is called from manga page

@@ -1,3 +1,4 @@
+use crate::backend::filter::Languages;
 use crate::backend::{Data, SearchMangaResponse};
 use crate::common::{Artist, Author};
 use crate::utils::{from_manga_response, set_status_style, set_tags_style};
@@ -24,6 +25,7 @@ pub struct CarrouselItem {
     pub img_url: Option<String>,
     pub author: Author,
     pub artist: Artist,
+    pub available_languages: Vec<Languages>,
     pub cover_state: Option<Box<dyn StatefulProtocol>>,
 }
 
@@ -39,6 +41,7 @@ impl CarrouselItem {
         img_url: Option<String>,
         author: Author,
         artist: Artist,
+        available_languages: Vec<Languages>,
         cover_state: Option<Box<dyn StatefulProtocol>>,
     ) -> Self {
         Self {
@@ -51,6 +54,7 @@ impl CarrouselItem {
             img_url,
             author,
             artist,
+            available_languages,
             cover_state,
         }
     }
@@ -105,6 +109,7 @@ impl CarrouselItem {
             manga.img_url,
             manga.author,
             manga.artist,
+            manga.available_languages,
             None,
         )
     }

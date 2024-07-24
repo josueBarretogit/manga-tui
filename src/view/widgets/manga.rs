@@ -48,12 +48,9 @@ impl Widget for ChapterItem {
             " ".into(),
             is_downloaded_icon.into(),
             " ".into(),
-            translated_language.to_string().into(),
+            translated_language.as_emoji().into(),
             format!(" Ch. {} ", self.chapter_number).into(),
             self.title.into(),
-            // after this goes the user group,
-            // when it was uploaded
-            // and if the chapters has been downloaded by user
         ]))
         .wrap(Wrap { trim: true })
         .style(self.style)

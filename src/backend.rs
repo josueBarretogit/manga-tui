@@ -101,7 +101,7 @@ pub struct Attributes {
     pub content_rating: String,
     pub state: String,
     pub publication_demographic: Option<String>,
-    pub available_translated_languages : Vec<String>,
+    pub available_translated_languages : Vec<Option<String>>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]

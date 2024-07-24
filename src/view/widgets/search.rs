@@ -1,3 +1,4 @@
+use crate::backend::filter::Languages;
 use crate::backend::Data;
 use crate::common::{Artist, Author};
 use crate::utils::{from_manga_response, set_status_style, set_tags_style};
@@ -114,6 +115,7 @@ pub struct MangaItem {
     pub content_rating: String,
     pub status: String,
     pub img_url: Option<String>,
+    pub available_languages: Vec<Languages>,
     pub author: Author,
     pub artist: Artist,
     pub style: Style,
@@ -156,6 +158,7 @@ impl From<Data> for MangaItem {
             manga.img_url,
             manga.author,
             manga.artist,
+            manga.available_languages,
             None,
         )
     }
@@ -172,6 +175,7 @@ impl MangaItem {
         img_url: Option<String>,
         author: Author,
         artist: Artist,
+        available_languages: Vec<Languages>,
         image_state: Option<Box<dyn StatefulProtocol>>,
     ) -> Self {
         Self {
@@ -186,6 +190,7 @@ impl MangaItem {
             style: Style::default(),
             author,
             artist,
+            available_languages,
         }
     }
 }
