@@ -1,6 +1,8 @@
 use crate::backend::authors::AuthorsResponse;
 use crate::backend::fetch::MangadexClient;
-use crate::backend::filter::{Artist, Author, ContentRating, Filters, MagazineDemographic, SortBy};
+use crate::backend::filter::{
+    Artist, Author, ContentRating, Filters, Languages, MagazineDemographic, SortBy,
+};
 use crate::backend::tags::TagsResponse;
 use crate::backend::tui::Events;
 use crossterm::event::{KeyCode, KeyEvent};
@@ -52,12 +54,18 @@ impl FilterListItem {
     }
 }
 
-pub struct ContentRatingState {
+pub struct ContentRatingState;
+pub struct SortByState;
+pub struct MagazineDemographicState;
+pub struct LanguageState;
+
+pub struct FilterList<T> {
     pub items: Vec<FilterListItem>,
     pub state: ListState,
+    _state: PhantomData<T>,
 }
 
-impl ContentRatingState {
+impl<T> FilterList<T> {
     pub fn toggle(&mut self) {
         if let Some(index) = self.state.selected() {
             if let Some(content_rating) = self.items.get_mut(index) {
@@ -65,9 +73,29 @@ impl ContentRatingState {
             }
         }
     }
+
+    pub fn scroll_down(&mut self) {
+        if self
+            .state
+            .selected()
+            .is_some_and(|index| index == self.items.len() - 1)
+        {
+            self.state.select_first();
+        } else {
+            self.state.select_next()
+        }
+    }
+
+    pub fn scroll_up(&mut self) {
+        if self.state.selected().is_some_and(|index| index == 0) {
+            self.state.select_last();
+        } else {
+            self.state.select_previous()
+        }
+    }
 }
 
-impl Default for ContentRatingState {
+impl Default for FilterList<ContentRatingState> {
     fn default() -> Self {
         Self {
             items: vec![
@@ -89,17 +117,42 @@ impl Default for ContentRatingState {
                 },
             ],
             state: ListState::default(),
+            _state: PhantomData::<ContentRatingState>,
         }
     }
 }
 
-pub struct SortByState {
-    pub items: Vec<FilterListItem>,
-    pub state: ListState,
+impl Default for FilterList<SortByState> {
+    fn default() -> Self {
+        let sort_by_items = SortBy::iter().map(|sort_by_elem| FilterListItem {
+            is_selected: sort_by_elem == SortBy::default(),
+            name: sort_by_elem.to_string(),
+        });
+
+        Self {
+            items: sort_by_items.collect(),
+            state: ListState::default(),
+            _state: PhantomData::<SortByState>,
+        }
+    }
 }
 
-impl SortByState {
-    pub fn toggle(&mut self) {
+impl Default for FilterList<MagazineDemographicState> {
+    fn default() -> Self {
+        let items = MagazineDemographic::iter().map(|mag| FilterListItem {
+            name: mag.to_string(),
+            is_selected: false,
+        });
+        Self {
+            items: items.collect(),
+            state: ListState::default(),
+            _state: PhantomData,
+        }
+    }
+}
+
+impl FilterList<SortByState> {
+    pub fn toggle_sort_by(&mut self) {
         for item in self.items.iter_mut() {
             item.is_selected = false;
         }
@@ -112,45 +165,17 @@ impl SortByState {
     }
 }
 
-impl Default for SortByState {
+impl Default for FilterList<LanguageState> {
     fn default() -> Self {
-        let sort_by_items = SortBy::iter().map(|sort_by_elem| FilterListItem {
-            is_selected: sort_by_elem == SortBy::default(),
-            name: sort_by_elem.to_string(),
-        });
-
-        Self {
-            items: sort_by_items.collect(),
-            state: ListState::default(),
-        }
-    }
-}
-
-pub struct MagazineDemographicState {
-    pub items: Vec<FilterListItem>,
-    pub state: ListState,
-}
-
-impl Default for MagazineDemographicState {
-    fn default() -> Self {
-        let items = MagazineDemographic::iter().map(|mag| FilterListItem {
-            name: mag.to_string(),
+        let items = Languages::iter().map(|lang| FilterListItem {
+            name: format!(" {} {}", lang.as_emoji(), lang.as_human_readable()),
             is_selected: false,
         });
 
         Self {
             items: items.collect(),
             state: ListState::default(),
-        }
-    }
-}
-
-impl MagazineDemographicState {
-    fn toggle(&mut self) {
-        if let Some(index) = self.state.selected() {
-            if let Some(magazine) = self.items.get_mut(index) {
-                magazine.toggle();
-            }
+            _state: PhantomData,
         }
     }
 }
@@ -311,12 +336,13 @@ pub struct FilterState {
     pub is_open: bool,
     pub id_filter: usize,
     pub filters: Filters,
-    pub content_rating_list_state: ContentRatingState,
-    pub sort_by_state: SortByState,
+    pub content_rating_list_state: FilterList<ContentRatingState>,
+    pub sort_by_state: FilterList<SortByState>,
+    pub magazine_demographic: FilterList<MagazineDemographicState>,
     pub tags: TagsState,
-    pub magazine_demographic: MagazineDemographicState,
     pub author_state: UserState<AuthorState>,
     pub artist_state: UserState<ArtistState>,
+    pub lang_state: FilterList<LanguageState>,
     pub is_typing: bool,
     tx: UnboundedSender<FilterEvents>,
     rx: UnboundedReceiver<FilterEvents>,
@@ -330,12 +356,13 @@ impl FilterState {
             is_open: false,
             id_filter: 0,
             filters: Filters::default(),
-            content_rating_list_state: ContentRatingState::default(),
-            sort_by_state: SortByState::default(),
+            content_rating_list_state: FilterList::<ContentRatingState>::default(),
+            sort_by_state: FilterList::<SortByState>::default(),
             tags: TagsState::default(),
-            magazine_demographic: MagazineDemographicState::default(),
+            magazine_demographic: FilterList::<MagazineDemographicState>::default(),
             author_state: UserState::<AuthorState>::default(),
             artist_state: UserState::<ArtistState>::default(),
+            lang_state: FilterList::<LanguageState>::default(),
             is_typing: false,
             tx,
             rx,
@@ -459,10 +486,10 @@ impl FilterState {
         if let Some(filter) = FILTERS.get(self.id_filter) {
             match filter {
                 MangaFilters::ContentRating => {
-                    self.content_rating_list_state.state.select_next();
+                    self.content_rating_list_state.scroll_down();
                 }
                 MangaFilters::SortBy => {
-                    self.sort_by_state.state.select_next();
+                    self.sort_by_state.scroll_down();
                 }
                 MangaFilters::Tags => {
                     if self.tags.items.is_some() {
@@ -470,7 +497,7 @@ impl FilterState {
                     }
                 }
                 MangaFilters::MagazineDemographic => {
-                    self.magazine_demographic.state.select_next();
+                    self.magazine_demographic.scroll_down();
                 }
                 MangaFilters::Authors => {
                     if self.author_state.items.is_some() {
@@ -490,10 +517,10 @@ impl FilterState {
         if let Some(filter) = FILTERS.get(self.id_filter) {
             match filter {
                 MangaFilters::ContentRating => {
-                    self.content_rating_list_state.state.select_previous();
+                    self.content_rating_list_state.scroll_up();
                 }
                 MangaFilters::SortBy => {
-                    self.sort_by_state.state.select_previous();
+                    self.sort_by_state.scroll_up();
                 }
                 MangaFilters::Tags => {
                     if self.tags.items.is_some() {
@@ -501,7 +528,7 @@ impl FilterState {
                     }
                 }
                 MangaFilters::MagazineDemographic => {
-                    self.magazine_demographic.state.select_previous();
+                    self.magazine_demographic.scroll_up();
                 }
                 MangaFilters::Authors => {
                     if self.author_state.items.is_some() {
@@ -525,7 +552,7 @@ impl FilterState {
                     self.set_content_rating();
                 }
                 MangaFilters::SortBy => {
-                    self.sort_by_state.toggle();
+                    self.sort_by_state.toggle_sort_by();
                     self.set_sort_by();
                 }
                 MangaFilters::Tags => {

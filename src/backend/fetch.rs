@@ -11,7 +11,7 @@ use super::authors::AuthorsResponse;
 use super::filter::Languages;
 use super::tags::TagsResponse;
 use super::{
-    ChapterPagesResponse, ChapterResponse,  MangaStatisticsResponse, SearchMangaResponse,
+    ChapterPagesResponse, ChapterResponse, MangaStatisticsResponse, SearchMangaResponse,
     APP_DATA_DIR,
 };
 
@@ -112,7 +112,7 @@ impl MangadexClient {
         language: Languages,
         order: ChapterOrder,
     ) -> Result<ChapterResponse, reqwest::Error> {
-        let language: &str = language.into();
+        let language = language.as_param();
         // let page = (page - 1) * 50;
 
         let order = format!("order[volume]={order}&order[chapter]={order}");

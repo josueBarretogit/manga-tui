@@ -297,8 +297,11 @@ impl MangaPage {
         ]))
         .render(sorting_area, buf);
 
-        // Todo! bring in selectable widget
-        let language = format!("Language: {}", language);
+        let language = format!(
+            "Language: {} {}",
+            language.as_emoji(),
+            language.as_human_readable()
+        );
 
         Paragraph::new(language).render(language_area, buf);
     }
@@ -520,7 +523,7 @@ impl MangaPage {
         let manga_id = self.id.clone();
         let manga_title = self.title.clone();
         let tx = self.local_event_tx.clone();
-        let lang: &str = self.chapter_language.into();
+        let lang = self.chapter_language.as_param();
         let lang = lang.to_string();
         self.state = PageState::DownloadingChapters;
         if let Some(chapter) = self.get_current_selected_chapter_mut() {

@@ -232,6 +232,8 @@ pub enum Languages {
     Korean,
     #[strum(to_string = "🇧🇷")]
     BrazilianPortuguese,
+    #[strum(to_string = "🇧🇷")]
+    Brazilian,
     #[strum(to_string = "🇨🇳")]
     TraditionalChinese,
     #[strum(to_string = "🇷🇺")]
@@ -269,13 +271,42 @@ impl From<&str> for Languages {
             "ru" => Self::Russian,
             "zh-hk" => Self::TraditionalChinese,
             "ja" | "ja-ro" => Self::Japanese,
+            _ => Self::default(),
         }
     }
 }
 
-impl From<Languages> for &str {
-    fn from(value: Languages) -> Self {
-        match value {
+impl Languages {
+    pub fn as_human_readable(self) -> &'static str {
+        match self {
+            Languages::TraditionalChinese => "Chinese (traditional)",
+            Languages::Vietnamese => "Vietnamese",
+            Languages::English => "English",
+            Languages::Dutch => "Dutch",
+            Languages::French => "French",
+            Languages::Korean => "Korean",
+            Languages::German => "German",
+            Languages::Arabic => "Arabic",
+            Languages::Danish => "Danish",
+            Languages::Spanish => "Spanish (traditional)",
+            Languages::Russian => "Russian",
+            Languages::Japanese => "Japanses",
+            Languages::Albanian => "Albanian",
+            Languages::Croatian => "Croatian",
+            Languages::SpanishLa => "Spanish (mx)",
+            Languages::Bulgarian => "Bulgarian",
+            Languages::Ukrainian => "Ukrainian",
+            Languages::BrazilianPortuguese => "Brazilian (traditional)",
+            Languages::Brazilian => "Brazilian",
+        }
+    }
+
+    pub fn as_emoji(self) -> String {
+        self.to_string()
+    }
+
+    pub fn as_param(self) -> &'static str {
+        match self {
             Languages::Spanish => "es",
             Languages::French => "fr",
             Languages::English => "en",
@@ -285,6 +316,7 @@ impl From<Languages> for &str {
             Languages::German => "de",
             Languages::Arabic => "ar",
             Languages::BrazilianPortuguese => "pt-br",
+            Languages::Brazilian => "br",
             Languages::Danish => "da",
             Languages::Russian => "ru",
             Languages::Albanian => "sq",
@@ -294,7 +326,6 @@ impl From<Languages> for &str {
             Languages::Ukrainian => "uk",
             Languages::Vietnamese => "vi",
             Languages::TraditionalChinese => "zh-hk",
-
         }
     }
 }
@@ -302,12 +333,18 @@ impl From<Languages> for &str {
 impl IntoParam for Vec<Languages> {
     fn into_param(self) -> String {
         if self.is_empty() {
-            return String::new();
+            return format!(
+                "&availableTranslatedLanguage[]={}",
+                Languages::default().as_param()
+            );
         }
         self.into_iter()
             .fold(String::new(), |mut languages, language| {
-                let lang: &str = language.into();
-                let _ = write!(languages, "&availableTranslatedLanguage[]={}", lang);
+                let _ = write!(
+                    languages,
+                    "&availableTranslatedLanguage[]={}",
+                    language.as_param()
+                );
                 languages
             })
     }
@@ -327,9 +364,10 @@ pub struct Filters {
 impl IntoParam for Filters {
     fn into_param(self) -> String {
         format!(
-            "{}{}{}{}{}{}",
+            "{}{}{}{}{}{}{}",
             self.authors.into_param(),
             self.artists.into_param(),
+            self.languages.into_param(),
             self.tags.into_param(),
             self.magazine_demographic.into_param(),
             self.content_rating.into_param(),
