@@ -1,4 +1,5 @@
-use crate::backend::{ChapterResponse, Languages};
+use crate::backend::filter::Languages;
+use crate::backend::ChapterResponse;
 use crate::utils::display_dates_since_publication;
 use ratatui::{prelude::*, widgets::*};
 use throbber_widgets_tui::{Throbber, ThrobberState};

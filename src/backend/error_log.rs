@@ -17,6 +17,7 @@ pub enum ErrorType<'a> {
 }
 
 pub fn write_to_error_log(e: ErrorType<'_>) {
+
     let error_file_name = APP_DATA_DIR
         .as_ref()
         .unwrap()

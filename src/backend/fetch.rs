@@ -1,3 +1,6 @@
+use std::fs::OpenOptions;
+use std::io::Write;
+
 use crate::backend::filter::{Filters, IntoParam};
 use crate::view::pages::manga::ChapterOrder;
 use bytes::Bytes;
@@ -5,9 +8,11 @@ use chrono::Months;
 use once_cell::sync::OnceCell;
 
 use super::authors::AuthorsResponse;
+use super::filter::Languages;
 use super::tags::TagsResponse;
 use super::{
-    ChapterPagesResponse, ChapterResponse, Languages, MangaStatisticsResponse, SearchMangaResponse,
+    ChapterPagesResponse, ChapterResponse,  MangaStatisticsResponse, SearchMangaResponse,
+    APP_DATA_DIR,
 };
 
 #[derive(Clone, Debug)]
@@ -47,12 +52,28 @@ impl MangadexClient {
         };
 
         let url = format!(
-            "{}/manga?{}&includes[]=cover_art&includes[]=author&includes[]=artist&limit=10&offset={}&{}&includedTagsMode=AND&excludedTagsMode=OR&hasAvailableChapters=true&availableTranslatedLanguage[]=en",
+            "{}/manga?{}&includes[]=cover_art&includes[]=author&includes[]=artist&limit=10&offset={}{}&includedTagsMode=AND&excludedTagsMode=OR&hasAvailableChapters=true&availableTranslatedLanguage[]=en",
             API_URL_BASE,
             search_by_title,
             offset,
             filters.into_param(),
         );
+
+        // for quick debugging purposes
+        let error_file_name = APP_DATA_DIR
+            .as_ref()
+            .unwrap()
+            .join(super::AppDirectories::ErrorLogs.to_string())
+            .join("manga-tui-error-logs.txt");
+
+        let mut error_logs = OpenOptions::new()
+            .append(true)
+            .open(error_file_name)
+            .unwrap();
+
+        error_logs
+            .write_all(format!("{} \n", url).as_bytes())
+            .unwrap();
 
         self.client.get(url).send().await?.json().await
     }

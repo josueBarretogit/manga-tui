@@ -101,6 +101,7 @@ pub struct Attributes {
     pub content_rating: String,
     pub state: String,
     pub publication_demographic: Option<String>,
+    pub available_translated_languages : Vec<String>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -215,60 +216,6 @@ pub struct ChapterRelationshipAttribute {
 
 // Translations
 
-#[derive(strum_macros::Display, Default, Clone, Copy)]
-pub enum Languages {
-    #[strum(to_string = "🇫🇷")]
-    French,
-    #[default]
-    #[strum(to_string = "🇬🇧")]
-    English,
-    #[strum(to_string = "🇪🇸")]
-    Spanish,
-    #[strum(to_string = "🇲🇽")]
-    SpanishLa,
-    #[strum(to_string = "🇯🇵")]
-    Japanese,
-    #[strum(to_string = "🇪🇸")]
-    Korean,
-    #[strum(to_string = "🇧🇷")]
-    BrazilianPortuguese,
-    #[strum(to_string = "🇨🇳")]
-    TraditionalChinese,
-    #[strum(to_string = "🇷🇺")]
-    Russian,
-    #[strum(to_string = "🇩🇪")]
-    German,
-}
-
-impl From<&str> for Languages {
-    fn from(value: &str) -> Self {
-        match value {
-            "fr" => Self::French,
-            "en" => Self::English,
-            "es" => Self::Spanish,
-            "es-la" => Self::SpanishLa,
-            "ko" => Self::Korean,
-            "de" => Self::German,
-            "pt-br" => Self::BrazilianPortuguese,
-            "ru" => Self::Russian,
-            "zh-hk" => Self::TraditionalChinese,
-            "ja" | "ja-ro" => Self::Japanese,
-            _ => Self::default(),
-        }
-    }
-}
-
-impl From<Languages> for &str {
-    fn from(value: Languages) -> Self {
-        match value {
-            Languages::Spanish => "es",
-            Languages::French => "fr",
-            Languages::English => "en",
-            Languages::Japanese => "ja",
-            _ => "",
-        }
-    }
-}
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

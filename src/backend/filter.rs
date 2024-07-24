@@ -60,11 +60,6 @@ pub enum SortBy {
     YearAscending,
 }
 
-#[derive(Display, Clone, EnumIter, PartialEq, Eq)]
-pub enum Language {
-    English,
-}
-
 #[derive(Clone, PartialEq, Eq)]
 pub struct Tags(Vec<String>);
 
@@ -189,6 +184,9 @@ pub struct User<T: Clone + Default + Sized>(pub Vec<T>);
 
 impl IntoParam for User<Author> {
     fn into_param(self) -> String {
+        if self.0.is_empty() {
+            return String::new();
+        }
         self.0.into_iter().fold(String::new(), |mut ids, author| {
             let _ = write!(ids, "&authors[]={}", author.0);
             ids
@@ -198,6 +196,9 @@ impl IntoParam for User<Author> {
 
 impl IntoParam for User<Artist> {
     fn into_param(self) -> String {
+        if self.0.is_empty() {
+            return String::new();
+        }
         self.0.into_iter().fold(String::new(), |mut ids, artist| {
             let _ = write!(ids, "&artists[]={}", artist.0);
             ids
@@ -214,6 +215,104 @@ where
     }
 }
 
+#[derive(Display, EnumIter, Default, Clone, Copy)]
+pub enum Languages {
+    #[strum(to_string = "🇫🇷")]
+    French,
+    #[default]
+    #[strum(to_string = "🇬🇧")]
+    English,
+    #[strum(to_string = "🇪🇸")]
+    Spanish,
+    #[strum(to_string = "🇲🇽")]
+    SpanishLa,
+    #[strum(to_string = "🇯🇵")]
+    Japanese,
+    #[strum(to_string = "🇪🇸")]
+    Korean,
+    #[strum(to_string = "🇧🇷")]
+    BrazilianPortuguese,
+    #[strum(to_string = "🇨🇳")]
+    TraditionalChinese,
+    #[strum(to_string = "🇷🇺")]
+    Russian,
+    #[strum(to_string = "🇩🇪")]
+    German,
+    #[strum(to_string = "🇦🇱")]
+    Albanian,
+    #[strum(to_string = "🇸🇦")]
+    Arabic,
+    #[strum(to_string = "🇧🇬")]
+    Bulgarian,
+    #[strum(to_string = "🇻🇳")]
+    Vietnamese,
+    #[strum(to_string = "🇭🇷")]
+    Croatian,
+    #[strum(to_string = "🇩🇰")]
+    Danish,
+    #[strum(to_string = "🇳🇱")]
+    Dutch,
+    #[strum(to_string = "🇺🇦")]
+    Ukrainian,
+}
+
+impl From<&str> for Languages {
+    fn from(value: &str) -> Self {
+        match value {
+            "fr" => Self::French,
+            "en" => Self::English,
+            "es" => Self::Spanish,
+            "es-la" => Self::SpanishLa,
+            "ko" => Self::Korean,
+            "de" => Self::German,
+            "pt-br" => Self::BrazilianPortuguese,
+            "ru" => Self::Russian,
+            "zh-hk" => Self::TraditionalChinese,
+            "ja" | "ja-ro" => Self::Japanese,
+        }
+    }
+}
+
+impl From<Languages> for &str {
+    fn from(value: Languages) -> Self {
+        match value {
+            Languages::Spanish => "es",
+            Languages::French => "fr",
+            Languages::English => "en",
+            Languages::Japanese => "ja",
+            Languages::Dutch => "nl",
+            Languages::Korean => "ko",
+            Languages::German => "de",
+            Languages::Arabic => "ar",
+            Languages::BrazilianPortuguese => "pt-br",
+            Languages::Danish => "da",
+            Languages::Russian => "ru",
+            Languages::Albanian => "sq",
+            Languages::Croatian => "hr",
+            Languages::SpanishLa => "es-la",
+            Languages::Bulgarian => "bg",
+            Languages::Ukrainian => "uk",
+            Languages::Vietnamese => "vi",
+            Languages::TraditionalChinese => "zh-hk",
+
+        }
+    }
+}
+
+impl IntoParam for Vec<Languages> {
+    fn into_param(self) -> String {
+        if self.is_empty() {
+            return String::new();
+        }
+        self.into_iter()
+            .fold(String::new(), |mut languages, language| {
+                let lang: &str = language.into();
+                let _ = write!(languages, "&availableTranslatedLanguage[]={}", lang);
+                languages
+            })
+    }
+}
+
 #[derive(Clone)]
 pub struct Filters {
     pub content_rating: Vec<ContentRating>,
@@ -222,6 +321,7 @@ pub struct Filters {
     pub magazine_demographic: Vec<MagazineDemographic>,
     pub authors: User<Author>,
     pub artists: User<Artist>,
+    pub languages: Vec<Languages>,
 }
 
 impl IntoParam for Filters {
@@ -247,6 +347,7 @@ impl Default for Filters {
             magazine_demographic: vec![],
             authors: User::<Author>::default(),
             artists: User::<Artist>::default(),
+            languages: vec![Languages::English],
         }
     }
 }
@@ -273,5 +374,13 @@ impl Filters {
 
     pub fn set_artists(&mut self, artist_ids: Vec<Artist>) {
         self.artists.0 = artist_ids;
+    }
+
+    pub fn reset_author(&mut self) {
+        self.authors.0 = vec![];
+    }
+
+    pub fn reset_artist(&mut self) {
+        self.artists.0 = vec![];
     }
 }
