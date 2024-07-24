@@ -226,6 +226,8 @@ pub enum Languages {
     Spanish,
     #[strum(to_string = "🇲🇽")]
     SpanishLa,
+    #[strum(to_string = "🇮🇹")]
+    Italian,
     #[strum(to_string = "🇯🇵")]
     Japanese,
     #[strum(to_string = "🇰🇷")]
@@ -256,7 +258,7 @@ pub enum Languages {
     Dutch,
     #[strum(to_string = "🇺🇦")]
     Ukrainian,
-    // needs to be implemented
+    // Some language that is missing
     Unkown,
 }
 
@@ -282,6 +284,7 @@ impl From<&str> for Languages {
             "uk" => Languages::Ukrainian,
             "vi" => Languages::Vietnamese,
             "zh-hk" => Languages::TraditionalChinese,
+            "it" => Languages::Italian,
             _ => Languages::Unkown,
         }
     }
@@ -300,6 +303,7 @@ impl Languages {
     pub fn as_human_readable(self) -> &'static str {
         match self {
             Languages::TraditionalChinese => "Chinese (traditional)",
+            Languages::Italian => "Italian",
             Languages::Vietnamese => "Vietnamese",
             Languages::English => "English",
             Languages::Dutch => "Dutch",
@@ -347,6 +351,7 @@ impl Languages {
             Languages::Ukrainian => "uk",
             Languages::Vietnamese => "vi",
             Languages::TraditionalChinese => "zh-hk",
+            Languages::Italian => "it",
             Languages::Unkown => unreachable!(),
         }
     }

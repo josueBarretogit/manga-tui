@@ -15,7 +15,7 @@ pub struct ChapterItem {
     pub is_read: bool,
     pub is_downloaded: bool,
     pub download_loading_state: Option<ThrobberState>,
-    pub translated_language: String,
+    pub translated_language: Languages,
     style: Style,
 }
 
@@ -37,8 +37,6 @@ impl Widget for ChapterItem {
             vertical: 1,
         }));
 
-        let translated_language: Languages = self.translated_language.as_str().into();
-
         let is_read_icon = if self.is_read { "👀" } else { "" };
 
         let is_downloaded_icon = if self.is_downloaded { "📥" } else { "" };
@@ -48,7 +46,7 @@ impl Widget for ChapterItem {
             " ".into(),
             is_downloaded_icon.into(),
             " ".into(),
-            translated_language.as_emoji().into(),
+            self.translated_language.as_emoji().into(),
             format!(" Ch. {} ", self.chapter_number).into(),
             self.title.into(),
         ]))
@@ -95,7 +93,7 @@ impl ChapterItem {
         chapter_number: String,
         readable_at: String,
         scanlator: String,
-        translated_language: String,
+        translated_language: Languages,
     ) -> Self {
         Self {
             id,
@@ -136,7 +134,8 @@ impl ChaptersListWidget {
                 .clone()
                 .unwrap_or("0".to_string());
 
-            let translated_language = chapter.attributes.translated_language.clone();
+            let translated_language: Languages =
+                chapter.attributes.translated_language.as_str().into();
 
             let parse_date = chrono::DateTime::parse_from_rfc3339(&chapter.attributes.readable_at)
                 .unwrap_or_default();

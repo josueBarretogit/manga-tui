@@ -1,5 +1,4 @@
 use manga_tui::exists;
-use ratatui::widgets::ListState;
 use std::fs::{create_dir, File};
 use std::io::Write;
 use std::path::Path;

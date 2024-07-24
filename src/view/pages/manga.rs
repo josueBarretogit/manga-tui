@@ -8,7 +8,7 @@ use crate::backend::fetch::MangadexClient;
 use crate::backend::filter::Languages;
 use crate::backend::tui::Events;
 use crate::backend::{ChapterResponse, MangaStatisticsResponse, Statistics};
-use crate::common::{Artist, Author, Manga};
+use crate::common::Manga;
 use crate::utils::{set_status_style, set_tags_style};
 use crate::view::widgets::manga::{ChapterItem, ChaptersListWidget};
 use crate::view::widgets::Component;
@@ -38,6 +38,7 @@ pub enum MangaPageActions {
     ScrollChapterUp,
     ToggleOrder,
     ReadChapter,
+    OpenAvailableLanguagesList,
     GoMangasAuthor,
     GoMangasArtist,
 }
@@ -84,6 +85,8 @@ pub struct MangaPage {
     state: PageState,
     statistics: Option<MangaStatistics>,
     tasks: JoinSet<()>,
+    available_languages_state: ListState,
+    is_list_languages_open: bool,
 }
 
 struct MangaStatistics {
@@ -130,6 +133,8 @@ impl MangaPage {
             state: PageState::SearchingChapters,
             statistics: None,
             tasks: JoinSet::new(),
+            available_languages_state: ListState::default(),
+            is_list_languages_open: false,
         }
     }
     fn render_cover(&mut self, area: Rect, buf: &mut Buffer) {
@@ -209,17 +214,11 @@ impl MangaPage {
     }
 
     fn render_chapters_area(&mut self, area: Rect, frame: &mut Frame<'_>) {
+        let buf = frame.buffer_mut();
         let layout =
             Layout::vertical([Constraint::Percentage(10), Constraint::Percentage(90)]).margin(2);
 
         let [sorting_buttons_area, chapters_area] = layout.areas(area);
-
-        MangaPage::render_sorting_buttons(
-            sorting_buttons_area,
-            frame.buffer_mut(),
-            self.chapter_order,
-            self.manga.available_languages.clone(),
-        );
 
         match self.chapters.as_mut() {
             Some(chapters) => {
@@ -237,15 +236,18 @@ impl MangaPage {
                     .title_top(Line::from(chapter_instructions))
                     .title_bottom(Line::from(page).left_aligned())
                     .title_bottom(Line::from(total).right_aligned())
-                    .render(area, frame.buffer_mut());
+                    .render(area, buf);
 
                 StatefulWidget::render(
                     chapters.widget.clone(),
                     chapters_area,
-                    frame.buffer_mut(),
+                    buf,
                     &mut chapters.state,
                 );
+
+                self.render_sorting_buttons(sorting_buttons_area, buf);
             }
+
             None => {
                 Block::bordered().render(area, frame.buffer_mut());
                 // Todo! show chapters are loading
@@ -253,18 +255,13 @@ impl MangaPage {
         }
     }
 
-    fn render_sorting_buttons(
-        area: Rect,
-        buf: &mut Buffer,
-        order: ChapterOrder,
-        language: Vec<Languages>,
-    ) {
+    fn render_sorting_buttons(&mut self, area: Rect, buf: &mut Buffer) {
         let layout = Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]);
         let [sorting_area, language_area] = layout.areas(area);
 
         let order_title = format!(
             "Order: {} ",
-            match order {
+            match self.chapter_order {
                 ChapterOrder::Descending => "Descending",
                 ChapterOrder::Ascending => "Ascending",
             }
@@ -275,15 +272,28 @@ impl MangaPage {
             " Change order : <o>".into(),
         ]))
         .render(sorting_area, buf);
-        let language = language.first().cloned().unwrap_or_default();
 
-        let language = format!(
-            "Language: {} {}",
-            language.as_emoji(),
-            language.as_human_readable()
+        let languages_area = Rect::new(
+            language_area.x,
+            language_area.y,
+            language_area.width,
+            language_area.height + 10,
         );
 
-        Paragraph::new(language).render(language_area, buf);
+        if self.is_list_languages_open {
+            Clear.render(languages_area, buf);
+            Widget::render(
+                List::new(
+                    self.manga
+                        .available_languages
+                        .iter()
+                        .map(|lang| format!("{} {}", lang.as_emoji(), lang.as_human_readable())),
+                )
+                .block(Block::bordered().title("Available languages")),
+                languages_area,
+                buf,
+            );
+        }
     }
 
     fn handle_key_events(&mut self, key_event: KeyEvent) {
@@ -331,6 +341,11 @@ impl MangaPage {
                     .send(MangaPageActions::GoMangasArtist)
                     .ok();
             }
+            KeyCode::Char('l') => {
+                self.local_action_tx
+                    .send(MangaPageActions::OpenAvailableLanguagesList)
+                    .ok();
+            }
             _ => {}
         }
     }
@@ -359,6 +374,10 @@ impl MangaPage {
     // Todo! filter by language
     fn change_language(&mut self) {
         self.search_chapters();
+    }
+
+    fn open_available_languages_list(&mut self) {
+        self.is_list_languages_open = !self.is_list_languages_open;
     }
 
     fn get_current_selected_chapter_mut(&mut self) -> Option<&mut ChapterItem> {
@@ -510,19 +529,14 @@ impl MangaPage {
         let manga_id = self.manga.id.clone();
         let manga_title = self.manga.title.clone();
         let tx = self.local_event_tx.clone();
-        let lang = self
-            .manga
-            .available_languages
-            .clone()
-            .first()
-            .cloned()
-            .unwrap_or_default();
+
         self.state = PageState::DownloadingChapters;
         if let Some(chapter) = self.get_current_selected_chapter_mut() {
             let title = chapter.title.clone();
             let number = chapter.chapter_number.clone();
             let scanlator = chapter.scanlator.clone();
             let chapter_id = chapter.id.clone();
+            let lang = chapter.translated_language.as_human_readable().to_string();
 
             if chapter.download_loading_state.is_some() {
                 return;
@@ -544,7 +558,7 @@ impl MangaPage {
                                 title: &title,
                                 number: &number,
                                 scanlator: &scanlator,
-                                lang: lang.as_human_readable(),
+                                lang: &lang,
                             },
                             res,
                             tx.clone(),
@@ -685,6 +699,7 @@ impl Component for MangaPage {
     }
     fn update(&mut self, action: Self::Actions) {
         match action {
+            MangaPageActions::OpenAvailableLanguagesList => self.open_available_languages_list(),
             MangaPageActions::GoMangasArtist => self.go_mangas_artist(),
             MangaPageActions::GoMangasAuthor => self.go_mangas_author(),
             MangaPageActions::ScrollChapterUp => self.scroll_chapter_up(),
