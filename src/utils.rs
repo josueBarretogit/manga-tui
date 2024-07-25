@@ -91,6 +91,7 @@ pub fn from_manga_response(value: Data) -> Manga {
         ),
     );
 
+
     let description = match value.attributes.description {
         Some(description) => description.en.unwrap_or("No description".to_string()),
         None => String::from("No description"),
@@ -141,6 +142,8 @@ pub fn from_manga_response(value: Data) -> Manga {
 
     let status = value.attributes.status;
 
+    let publication_demographic = value.attributes.publication_demographic.unwrap_or_default();
+
     Manga {
         id,
         title,
@@ -151,6 +154,7 @@ pub fn from_manga_response(value: Data) -> Manga {
         img_url,
         author,
         artist,
+        publication_demographic,
         available_languages: languages,
     }
 }

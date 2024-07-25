@@ -416,11 +416,6 @@ impl MangaPage {
         self.search_chapters();
     }
 
-    // Todo! filter by language
-    fn change_language(&mut self) {
-        self.search_chapters();
-    }
-
     fn scroll_language_down(&mut self) {
         self.available_languages_state.select_next();
     }
@@ -514,6 +509,8 @@ impl MangaPage {
         // Todo! handles this unwraps
         match self.available_languages_state.selected() {
             Some(index) => *self.manga.available_languages.get(index).unwrap(),
+            // The Vec<Languages> will never be empty since the endpoint calls manga with available
+            // translated chapters
             None => *self.manga.available_languages.first().unwrap(),
         }
     }

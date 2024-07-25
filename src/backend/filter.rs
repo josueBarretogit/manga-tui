@@ -1,6 +1,8 @@
 use std::fmt::Write;
 use strum::{Display, EnumIter, IntoEnumIterator};
 
+use crate::global::PREFERRED_LANGUAGE;
+
 pub trait IntoParam {
     fn into_param(self) -> String;
 }
@@ -300,6 +302,9 @@ impl From<String> for Languages {
 }
 
 impl Languages {
+    pub fn get_preferred_lang() -> &'static Languages {
+        PREFERRED_LANGUAGE.get().expect("aa")
+    }
     pub fn as_human_readable(self) -> &'static str {
         match self {
             Languages::TraditionalChinese => "Chinese (traditional)",

@@ -18,6 +18,7 @@ pub struct Manga {
     pub title: String,
     pub description: String,
     pub content_rating: String,
+    pub publication_demographic : String,
     pub tags: Vec<String>,
     pub status: String,
     pub img_url: Option<String>,
