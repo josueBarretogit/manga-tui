@@ -39,6 +39,8 @@ pub enum MangaPageActions {
     ToggleOrder,
     ReadChapter,
     OpenAvailableLanguagesList,
+    ScrollDownAvailbleLanguages,
+    ScrollUpAvailbleLanguages,
     GoMangasAuthor,
     GoMangasArtist,
 }
@@ -256,7 +258,7 @@ impl MangaPage {
     }
 
     fn render_sorting_buttons(&mut self, area: Rect, buf: &mut Buffer) {
-        let layout = Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]);
+        let layout = Layout::horizontal([Constraint::Percentage(40), Constraint::Percentage(60)]);
         let [sorting_area, language_area] = layout.areas(area);
 
         let order_title = format!(
@@ -273,7 +275,7 @@ impl MangaPage {
         ]))
         .render(sorting_area, buf);
 
-        let languages_area = Rect::new(
+        let languages_list_area = Rect::new(
             language_area.x,
             language_area.y,
             language_area.width,
@@ -281,72 +283,115 @@ impl MangaPage {
         );
 
         if self.is_list_languages_open {
-            Clear.render(languages_area, buf);
-            Widget::render(
-                List::new(
-                    self.manga
-                        .available_languages
-                        .iter()
-                        .map(|lang| format!("{} {}", lang.as_emoji(), lang.as_human_readable())),
-                )
-                .block(Block::bordered().title("Available languages")),
-                languages_area,
+            Clear.render(languages_list_area, buf);
+            let instructions = Line::from(vec![
+                "Close".into(),
+                " <Esc> ".bold().yellow(),
+                "Up/Down".into(),
+                " <k><j> ".bold().yellow(),
+                "Search".into(),
+                "<Enter>".bold().yellow(),
+            ]);
+
+            let available_language_list = List::new(
+                self.manga
+                    .available_languages
+                    .iter()
+                    .map(|lang| format!("{} {}", lang.as_emoji(), lang.as_human_readable())),
+            )
+            .block(Block::bordered().title(instructions))
+            .highlight_style(Style::default().on_blue());
+
+            StatefulWidget::render(
+                available_language_list,
+                languages_list_area,
                 buf,
+                &mut self.available_languages_state,
             );
+        } else {
+            Paragraph::new(Line::from(vec![
+                "Available languages : ".into(),
+                "<l>".bold().yellow(),
+            ]))
+            .render(language_area, buf);
         }
     }
 
     fn handle_key_events(&mut self, key_event: KeyEvent) {
-        match key_event.code {
-            KeyCode::Char('j') => {
-                if self.state != PageState::SearchingChapterData {
+        if self.is_list_languages_open {
+            match key_event.code {
+                KeyCode::Char('j') => {
                     self.local_action_tx
-                        .send(MangaPageActions::ScrollChapterDown)
-                        .unwrap();
-                }
-            }
-            KeyCode::Char('k') => {
-                if self.state != PageState::SearchingChapterData {
-                    self.local_action_tx
-                        .send(MangaPageActions::ScrollChapterUp)
-                        .unwrap();
-                }
-            }
-            KeyCode::Char('o') => {
-                if self.state != PageState::SearchingChapters {
-                    self.local_action_tx
-                        .send(MangaPageActions::ToggleOrder)
-                        .unwrap();
-                }
-            }
-            KeyCode::Char('r') => {
-                if PICKER.is_some() {
-                    self.local_action_tx
-                        .send(MangaPageActions::ReadChapter)
+                        .send(MangaPageActions::ScrollDownAvailbleLanguages)
                         .ok();
                 }
+                KeyCode::Char('k') => {
+                    self.local_action_tx
+                        .send(MangaPageActions::ScrollUpAvailbleLanguages)
+                        .unwrap();
+                }
+                KeyCode::Enter => {
+                    self.search_chapters();
+                }
+                KeyCode::Char('l') | KeyCode::Esc => {
+                    self.local_action_tx
+                        .send(MangaPageActions::OpenAvailableLanguagesList)
+                        .ok();
+                }
+                _ => {}
             }
-            KeyCode::Char('d') => {
-                self.local_action_tx
-                    .send(MangaPageActions::DownloadChapter)
-                    .ok();
+        } else {
+            match key_event.code {
+                KeyCode::Char('j') => {
+                    if self.state != PageState::SearchingChapterData {
+                        self.local_action_tx
+                            .send(MangaPageActions::ScrollChapterDown)
+                            .unwrap();
+                    }
+                }
+                KeyCode::Char('k') => {
+                    if self.state != PageState::SearchingChapterData {
+                        self.local_action_tx
+                            .send(MangaPageActions::ScrollChapterUp)
+                            .ok();
+                    }
+                }
+                KeyCode::Char('o') => {
+                    if self.state != PageState::SearchingChapters {
+                        self.local_action_tx
+                            .send(MangaPageActions::ToggleOrder)
+                            .unwrap();
+                    }
+                }
+                KeyCode::Char('r') => {
+                    if PICKER.is_some() {
+                        self.local_action_tx
+                            .send(MangaPageActions::ReadChapter)
+                            .ok();
+                    }
+                }
+                KeyCode::Char('d') => {
+                    self.local_action_tx
+                        .send(MangaPageActions::DownloadChapter)
+                        .ok();
+                }
+                KeyCode::Char('u') => {
+                    self.local_action_tx
+                        .send(MangaPageActions::GoMangasAuthor)
+                        .ok();
+                }
+                KeyCode::Char('a') => {
+                    self.local_action_tx
+                        .send(MangaPageActions::GoMangasArtist)
+                        .ok();
+                }
+                KeyCode::Char('l') | KeyCode::Esc => {
+                    self.local_action_tx
+                        .send(MangaPageActions::OpenAvailableLanguagesList)
+                        .ok();
+                }
+                _ => {}
             }
-            KeyCode::Char('u') => {
-                self.local_action_tx
-                    .send(MangaPageActions::GoMangasAuthor)
-                    .ok();
-            }
-            KeyCode::Char('a') => {
-                self.local_action_tx
-                    .send(MangaPageActions::GoMangasArtist)
-                    .ok();
-            }
-            KeyCode::Char('l') => {
-                self.local_action_tx
-                    .send(MangaPageActions::OpenAvailableLanguagesList)
-                    .ok();
-            }
-            _ => {}
         }
     }
 
@@ -374,6 +419,14 @@ impl MangaPage {
     // Todo! filter by language
     fn change_language(&mut self) {
         self.search_chapters();
+    }
+
+    fn scroll_language_down(&mut self) {
+        self.available_languages_state.select_next();
+    }
+
+    fn scroll_language_up(&mut self) {
+        self.available_languages_state.select_previous();
     }
 
     fn open_available_languages_list(&mut self) {
@@ -457,18 +510,19 @@ impl MangaPage {
         }
     }
 
+    fn get_current_selected_language(&mut self) -> Languages {
+        // Todo! handles this unwraps
+        match self.available_languages_state.selected() {
+            Some(index) => *self.manga.available_languages.get(index).unwrap(),
+            None => *self.manga.available_languages.first().unwrap(),
+        }
+    }
+
     fn search_chapters(&mut self) {
         self.state = PageState::SearchingChapters;
         let manga_id = self.manga.id.clone();
         let tx = self.local_event_tx.clone();
-        let language = self
-            .manga
-            .available_languages
-            .first()
-            .as_ref()
-            .cloned()
-            .unwrap();
-        let language = language.clone();
+        let language = self.get_current_selected_language();
         let chapter_order = self.chapter_order;
         self.tasks.spawn(async move {
             let response = MangadexClient::global()
@@ -481,7 +535,7 @@ impl MangaPage {
                     .unwrap(),
                 Err(e) => {
                     write_to_error_log(error_log::ErrorType::FromError(Box::new(e)));
-                    tx.send(MangaPageEvents::LoadChapters(None)).unwrap()
+                    tx.send(MangaPageEvents::LoadChapters(None)).ok();
                 }
             }
         });
@@ -699,6 +753,8 @@ impl Component for MangaPage {
     }
     fn update(&mut self, action: Self::Actions) {
         match action {
+            MangaPageActions::ScrollDownAvailbleLanguages => self.scroll_language_down(),
+            MangaPageActions::ScrollUpAvailbleLanguages => self.scroll_language_up(),
             MangaPageActions::OpenAvailableLanguagesList => self.open_available_languages_list(),
             MangaPageActions::GoMangasArtist => self.go_mangas_artist(),
             MangaPageActions::GoMangasAuthor => self.go_mangas_author(),

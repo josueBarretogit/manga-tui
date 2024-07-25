@@ -22,8 +22,8 @@ pub struct MangadexClient {
 
 pub static MANGADEX_CLIENT_INSTANCE: OnceCell<MangadexClient> = once_cell::sync::OnceCell::new();
 
-static API_URL_BASE: &str = "https://api.mangadex.dev";
-static COVER_IMG_URL_BASE: &str = "https://uploads.mangadex.dev/covers";
+static API_URL_BASE: &str = "https://api.mangadex.org";
+static COVER_IMG_URL_BASE: &str = "https://uploads.mangadex.org/covers";
 
 impl MangadexClient {
     pub fn global() -> &'static MangadexClient {
@@ -208,11 +208,10 @@ impl MangadexClient {
         &self,
         manga_id: &str,
     ) -> Result<ChapterResponse, reqwest::Error> {
-        let order = "order[volume]=desc&order[chapter]=desc";
 
         let endpoint = format!(
-            "{}/manga/{}/feed?limit=3&{}&translatedLanguage[]=en&includes[]=scanlation_group&offset=0&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&contentRating[]=pornographic",
-            API_URL_BASE, manga_id, order
+            "{}/manga/{}/feed?limit=3&translatedLanguage[]=en&includes[]=scanlation_group&offset=0&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&contentRating[]=pornographic&order[readableAt]=desc",
+            API_URL_BASE, manga_id, 
         );
 
         let response = self.client.get(endpoint).send().await?.text().await?;

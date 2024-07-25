@@ -317,7 +317,7 @@ impl Languages {
             Languages::Japanese => "Japanese",
             Languages::Albanian => "Albanian",
             Languages::Croatian => "Croatian",
-            Languages::SpanishLa => "Spanish (mx)",
+            Languages::SpanishLa => "Spanish (latam)",
             Languages::Bulgarian => "Bulgarian",
             Languages::Ukrainian => "Ukrainian",
             Languages::BrazilianPortuguese => "Portuguese (brazil)",
