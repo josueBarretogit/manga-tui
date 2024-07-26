@@ -6,6 +6,7 @@ use crate::backend::filter::{
 use crate::backend::tags::TagsResponse;
 use crate::backend::tui::Events;
 use crossterm::event::{KeyCode, KeyEvent};
+use futures::select;
 use ratatui::widgets::*;
 use std::marker::PhantomData;
 use strum::{Display, IntoEnumIterator};
@@ -373,6 +374,26 @@ impl FilterState {
         }
     }
 
+    pub fn reset(&mut self) {
+        if self.tags.items.is_some() {
+            self.tags
+                .items
+                .as_mut()
+                .unwrap()
+                .iter_mut()
+                .for_each(|tag| tag.is_selected = false);
+            self.tags.search_bar.reset();
+        }
+
+        self.filters = Filters::default();
+        self.content_rating_list_state = FilterList::<ContentRatingState>::default();
+        self.magazine_demographic = FilterList::<MagazineDemographicState>::default();
+        self.sort_by_state = FilterList::<SortByState>::default();
+        self.lang_state = FilterList::<LanguageState>::default();
+        self.author_state = UserState::<AuthorState>::default();
+        self.artist_state = UserState::<ArtistState>::default();
+    }
+
     pub fn toggle(&mut self) {
         self.is_open = !self.is_open;
     }
@@ -426,6 +447,7 @@ impl FilterState {
             match key_event.code {
                 KeyCode::Esc | KeyCode::Left => self.toggle_focus_input(),
                 KeyCode::Enter => self.search(),
+
                 _ => self.handle_key_events_for_input(key_event),
             }
         } else {
@@ -437,6 +459,7 @@ impl FilterState {
                 KeyCode::Tab => self.next_filter(),
                 KeyCode::BackTab => self.previous_filter(),
                 KeyCode::Char('s') => self.toggle_filter_list(),
+                KeyCode::Char('r') => self.reset(),
                 KeyCode::Char('l') | KeyCode::Right => self.toggle_focus_input(),
                 _ => {}
             }

@@ -9,6 +9,7 @@ use crate::backend::filter::Languages;
 use crate::backend::tui::Events;
 use crate::backend::{ChapterResponse, MangaStatisticsResponse, Statistics};
 use crate::common::Manga;
+use crate::global::INSTRUCTIONS_STYLE;
 use crate::utils::{set_status_style, set_tags_style};
 use crate::view::widgets::manga::{ChapterItem, ChaptersListWidget};
 use crate::view::widgets::Component;
@@ -175,7 +176,7 @@ impl MangaPage {
 
         let instructions = vec![
             "More about author/artist ".into(),
-            "<u>/<a>".bold().fg(Color::Yellow),
+            Span::raw("<u>/<a>").style(*INSTRUCTIONS_STYLE),
         ];
 
         Block::bordered()
@@ -228,9 +229,9 @@ impl MangaPage {
 
                 let chapter_instructions = vec![
                     "Scroll Down/Up ".into(),
-                    " <j>/<k> ".bold().fg(Color::Yellow),
+                    Span::raw(" <j>/<k> ").style(*INSTRUCTIONS_STYLE),
                     " Download chapter ".into(),
-                    " <d> ".bold().fg(Color::Yellow),
+                    Span::raw(" <d> ").style(*INSTRUCTIONS_STYLE),
                 ];
 
                 Block::bordered()
@@ -270,7 +271,8 @@ impl MangaPage {
 
         Paragraph::new(Line::from(vec![
             order_title.into(),
-            " Change order : <o>".into(),
+            " Change order : ".into(),
+            Span::raw("<o>").style(*INSTRUCTIONS_STYLE),
         ]))
         .render(sorting_area, buf);
 
@@ -285,11 +287,11 @@ impl MangaPage {
             Clear.render(languages_list_area, buf);
             let instructions = Line::from(vec![
                 "Close".into(),
-                " <Esc> ".bold().yellow(),
+                Span::raw(" <Esc> ").style(*INSTRUCTIONS_STYLE),
                 "Up/Down".into(),
-                " <k><j> ".bold().yellow(),
+                Span::raw(" <k><j> ").style(*INSTRUCTIONS_STYLE),
                 "Search".into(),
-                "<Enter>".bold().yellow(),
+                Span::raw("<s>").style(*INSTRUCTIONS_STYLE),
             ]);
 
             let available_language_list = List::new(
@@ -329,7 +331,7 @@ impl MangaPage {
                         .send(MangaPageActions::ScrollUpAvailbleLanguages)
                         .unwrap();
                 }
-                KeyCode::Enter | KeyCode::Char('a') => {
+                KeyCode::Enter | KeyCode::Char('s') => {
                     self.search_chapters();
                 }
                 KeyCode::Char('l') | KeyCode::Esc => {
@@ -592,7 +594,7 @@ impl MangaPage {
                 return;
             }
 
-            chapter.download_loading_state = Some(0.01);
+            chapter.download_loading_state = Some(0.001);
 
             self.tasks.spawn(async move {
                 let manga_response = MangadexClient::global()

@@ -7,6 +7,7 @@ use crate::backend::tui::Events;
 use crate::backend::SearchMangaResponse;
 use crate::common::Artist;
 use crate::common::Author;
+use crate::global::INSTRUCTIONS_STYLE;
 use crate::utils::search_manga_cover;
 use crate::view::widgets::filter_widget::state::FilterState;
 use crate::view::widgets::filter_widget::FilterWidget;
@@ -19,7 +20,6 @@ use crossterm::event::KeyEvent;
 use crossterm::event::{self, KeyCode};
 use image::DynamicImage;
 use ratatui::{prelude::*, widgets::*};
-use ratatui_image::protocol::StatefulProtocol;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 use tui_input::backend::crossterm::EventHandler;
@@ -160,6 +160,7 @@ impl Component for SearchPage {
     }
     fn handle_events(&mut self, events: Events) {
         if self.filter_state.is_open {
+            
             self.filter_state.handle_events(events);
         } else {
             match events {
@@ -324,10 +325,15 @@ impl SearchPage {
     }
 
     fn render_filters(&mut self, area: Rect, frame: &mut Frame<'_>) {
+        let filter_instructions = Line::from(vec![
+            "Close ".into(),
+            Span::raw("<f>").style(*INSTRUCTIONS_STYLE),
+            " Reset filters ".into(),
+            Span::raw("<r>").style(*INSTRUCTIONS_STYLE),
+        ]);
+
         FilterWidget::new()
-            .block(
-                Block::bordered().title(Line::from(vec!["Close ".into(), "<f>".bold().yellow()])),
-            )
+            .block(Block::bordered().title(filter_instructions))
             .render(area, frame, &mut self.filter_state);
     }
 

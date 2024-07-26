@@ -1,10 +1,10 @@
-use core::panic;
 use crossterm::event::{KeyCode, KeyEvent};
 use image::io::Reader;
 use image::DynamicImage;
 use ratatui::{prelude::*, widgets::*};
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::{Resize, StatefulImage};
+use rusqlite::InterruptHandle;
 use std::env;
 use std::io::Cursor;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
@@ -465,13 +465,18 @@ impl Home {
             vertical: 1,
         });
 
+        let instructions = Line::from(vec![
+            "Recently added mangas | ".into(),
+            "Move right ".into(),
+            Span::raw("<l>").style(*INSTRUCTIONS_STYLE),
+            "Move left ".into(),
+            Span::raw("<h>").style(*INSTRUCTIONS_STYLE),
+            "Read ".into(),
+            Span::raw("<Enter>").style(*INSTRUCTIONS_STYLE),
+        ]);
+
         Block::bordered()
-            .title(vec![
-                "Recently added mangas | ".bold(),
-                "Move right <l> ".into(),
-                "Move left <h> ".into(),
-                "Read <Enter> ".into(),
-            ])
+            .title(instructions)
             .render(recently_added_mangas_area, buf);
 
         StatefulWidget::render(
