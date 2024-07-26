@@ -35,6 +35,7 @@ pub static PICKER: Lazy<Option<Picker>> = Lazy::new(|| {
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 7)]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+
     let cli_args = CliArgs::parse();
 
     match cli_args.command {

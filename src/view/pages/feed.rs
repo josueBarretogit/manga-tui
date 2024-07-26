@@ -16,6 +16,8 @@ use throbber_widgets_tui::{Throbber, ThrobberState};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
+//todo! make search bar
+
 #[derive(Eq, PartialEq)]
 pub enum FeedState {
     SearchingMangaData,

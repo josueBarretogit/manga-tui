@@ -18,7 +18,6 @@ use ratatui::{prelude::*, widgets::*};
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::{Resize, StatefulImage};
 use strum::Display;
-use throbber_widgets_tui::ThrobberState;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
@@ -50,6 +49,7 @@ pub enum MangaPageEvents {
     FethStatistics,
     CheckChapterStatus,
     ChapterFinishedDownloading(String),
+    SetDownloadProgress(f64, String),
     SaveChapterDownloadStatus(String, String),
     StoppedSearchingChapterData,
     LoadChapters(Option<ChapterResponse>),
@@ -109,7 +109,6 @@ struct ChaptersData {
     total_result: u32,
 }
 
-#[allow(clippy::too_many_arguments)]
 impl MangaPage {
     pub fn new(
         manga: Manga,
@@ -593,7 +592,7 @@ impl MangaPage {
                 return;
             }
 
-            chapter.download_loading_state = Some(ThrobberState::default());
+            chapter.download_loading_state = Some(0.01);
 
             self.tasks.spawn(async move {
                 let manga_response = MangadexClient::global()
@@ -669,21 +668,25 @@ impl MangaPage {
             .ok();
     }
 
-    fn tick(&mut self) {
-        if self.state == PageState::DownloadingChapters {
-            let chapters = self.chapters.as_mut().unwrap();
-            for chapt in chapters
+    fn set_download_progress_for_chapter(&mut self, progress: f64, id_chapter: String) {
+        if let Some(chapters) = self.chapters.as_mut() {
+            if let Some(chap) = chapters
                 .widget
                 .chapters
                 .iter_mut()
-                .filter(|chap| chap.download_loading_state.is_some())
+                .find(|chap| chap.id == id_chapter)
             {
-                chapt.download_loading_state.as_mut().unwrap().calc_next();
+                chap.download_loading_state = Some(progress);
             }
         }
+    }
 
+    fn tick(&mut self) {
         if let Ok(background_event) = self.local_event_rx.try_recv() {
             match background_event {
+                MangaPageEvents::SetDownloadProgress(progress, id_chapter) => {
+                    self.set_download_progress_for_chapter(progress, id_chapter)
+                }
                 MangaPageEvents::SaveChapterDownloadStatus(id_chapter, title) => {
                     self.save_download_status(id_chapter, title)
                 }

@@ -2,7 +2,6 @@ use crate::backend::filter::Languages;
 use crate::backend::ChapterResponse;
 use crate::utils::display_dates_since_publication;
 use ratatui::{prelude::*, widgets::*};
-use throbber_widgets_tui::{Throbber, ThrobberState};
 use tui_widget_list::PreRender;
 
 #[derive(Clone)]
@@ -14,13 +13,13 @@ pub struct ChapterItem {
     pub chapter_number: String,
     pub is_read: bool,
     pub is_downloaded: bool,
-    pub download_loading_state: Option<ThrobberState>,
+    pub download_loading_state: Option<f64>,
     pub translated_language: Languages,
     style: Style,
 }
 
 impl Widget for ChapterItem {
-    fn render(mut self, area: Rect, buf: &mut Buffer)
+    fn render(self, area: Rect, buf: &mut Buffer)
     where
         Self: Sized,
     {
@@ -37,9 +36,9 @@ impl Widget for ChapterItem {
             vertical: 1,
         }));
 
-        let is_read_icon = if self.is_read { "👀" } else { "" };
+        let is_read_icon = if self.is_read { "👀" } else { " " };
 
-        let is_downloaded_icon = if self.is_downloaded { "📥" } else { "" };
+        let is_downloaded_icon = if self.is_downloaded { "📥" } else { " " };
 
         Paragraph::new(Line::from(vec![
             is_read_icon.into(),
@@ -54,15 +53,19 @@ impl Widget for ChapterItem {
         .style(self.style)
         .render(title_area, buf);
 
-        match self.download_loading_state.as_mut() {
-            Some(state) => {
-                let loader = Throbber::default()
-                    .label("Downloading, please wait a moment")
-                    .style(Style::default().fg(Color::Yellow))
-                    .throbber_set(throbber_widgets_tui::BRAILLE_SIX)
-                    .use_type(throbber_widgets_tui::WhichUse::Spin);
-
-                StatefulWidget::render(loader, scanlator_area, buf, state);
+        match self.download_loading_state.as_ref() {
+            Some(progress) => {
+                LineGauge::default()
+                    .block(Block::bordered().title("Downloading please wait a moment"))
+                    .filled_style(
+                        Style::default()
+                            .fg(Color::Blue)
+                            .bg(Color::Black)
+                            .add_modifier(Modifier::BOLD),
+                    )
+                    .line_set(symbols::line::THICK)
+                    .ratio(*progress)
+                    .render(scanlator_area, buf);
             }
             None => {
                 Paragraph::new(self.scanlator)
@@ -82,7 +85,12 @@ impl PreRender for ChapterItem {
         if context.is_selected {
             self.style = Style::new().fg(Color::Yellow);
         }
-        3
+
+        if self.download_loading_state.is_some() {
+            5
+        } else {
+            3
+        }
     }
 }
 

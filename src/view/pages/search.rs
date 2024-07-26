@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::backend::database::save_plan_to_read;
 use crate::backend::database::MangaPlanToReadSave;
 use crate::backend::error_log::write_to_error_log;
@@ -94,7 +92,6 @@ pub struct SearchPage {
     mangas_found_list: MangasFoundList,
     filter_state: FilterState,
     /// To store the state of the covers without cloning
-    cover_state: HashMap<String, Option<Box<dyn StatefulProtocol>>>,
     tasks: JoinSet<()>,
 }
 
@@ -202,7 +199,6 @@ impl SearchPage {
             mangas_found_list: MangasFoundList::default(),
             tasks: JoinSet::new(),
             filter_state: FilterState::new(),
-            cover_state: HashMap::new(),
         }
     }
 

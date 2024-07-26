@@ -63,6 +63,7 @@ pub fn download_chapter(
     }
 
     // create images and store them in the directory
+    let total_chapters = chapter_data.chapter.data.len();
 
     tokio::spawn(async move {
         for (index, file_name) in chapter_data.chapter.data.iter().enumerate() {
@@ -86,6 +87,11 @@ pub fn download_chapter(
                     )))
                     .unwrap();
                     image_created.write_all(&bytes).unwrap();
+                    tx.send(MangaPageEvents::SetDownloadProgress(
+                        (index as f64) / (total_chapters as f64),
+                        chapter_id.clone(),
+                    ))
+                    .ok();
                 }
                 Err(e) => write_to_error_log(ErrorType::FromError(Box::new(e))),
             }

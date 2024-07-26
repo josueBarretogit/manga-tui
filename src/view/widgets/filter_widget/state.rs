@@ -713,6 +713,7 @@ impl FilterState {
 
     /// This function is called from manga page
     pub fn set_author(&mut self, author: crate::common::Author) {
+        self.filters.reset_author();
         self.filters.reset_artist();
         self.artist_state.items = None;
         self.author_state.items = Some(vec![ListItemId {
@@ -726,6 +727,8 @@ impl FilterState {
     /// This function is called from manga page
     pub fn set_artist(&mut self, artist: crate::common::Artist) {
         self.filters.reset_author();
+        self.filters.reset_artist();
+
         self.author_state.items = None;
         self.artist_state.items = Some(vec![ListItemId {
             id: artist.id.clone(),

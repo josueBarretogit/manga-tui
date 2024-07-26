@@ -14,6 +14,7 @@ use crate::backend::error_log::{write_to_error_log, ErrorType};
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
 use crate::backend::SearchMangaResponse;
+use crate::global::INSTRUCTIONS_STYLE;
 use crate::utils::search_manga_cover;
 use crate::view::widgets::home::{
     CarrouselItem, CarrouselState, PopularMangaCarrousel, RecentlyAddedCarrousel,
@@ -158,12 +159,27 @@ impl Home {
             vertical: 1,
         });
 
-        let instructions = Span::from(format!(
-            "Next  <w> | previous  <b> | read <r>  No.{}  Total : {}",
-            self.carrousel_popular_mangas.current_item_visible_index,
-            self.carrousel_popular_mangas.items.len()
-        ))
-        .into_left_aligned_line();
+        let instructions = Line::from(vec![
+            "Next ".into(),
+            Span::raw("<w>").style(*INSTRUCTIONS_STYLE),
+            " previous ".into(),
+            Span::raw("<b>").style(*INSTRUCTIONS_STYLE),
+            " read ".into(),
+            Span::raw("<r>").style(*INSTRUCTIONS_STYLE),
+            format!(
+                " No.{} Total : {}",
+                self.carrousel_popular_mangas.current_item_visible_index,
+                self.carrousel_popular_mangas.items.len()
+            )
+            .into(),
+        ]);
+
+        // let instructions = Span::from(format!(
+        //     "Next  <w> | previous  <b> | read <r>  No.{}  Total : {}",
+        //     self.carrousel_popular_mangas.current_item_visible_index,
+        //     self.carrousel_popular_mangas.items.len()
+        // ))
+        // .into_left_aligned_line();
 
         Block::bordered()
             .title(Line::from(vec!["Popular new titles".bold()]))
