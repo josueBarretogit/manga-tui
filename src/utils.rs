@@ -91,7 +91,6 @@ pub fn from_manga_response(value: Data) -> Manga {
         ),
     );
 
-
     let description = match value.attributes.description {
         Some(description) => description.en.unwrap_or("No description".to_string()),
         None => String::from("No description"),
@@ -136,7 +135,7 @@ pub fn from_manga_response(value: Data) -> Manga {
         .available_translated_languages
         .into_iter()
         .flatten()
-        .map(|lang| lang.as_str().into())
+        .flat_map(|lang| lang.as_str().try_into())
         .filter(|lang| *lang != Languages::Unkown)
         .collect();
 

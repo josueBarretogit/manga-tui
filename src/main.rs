@@ -37,8 +37,8 @@ pub static PICKER: Lazy<Option<Picker>> = Lazy::new(|| {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli_args = CliArgs::parse();
 
-    if let Some(command) = cli_args.command {
-        match command {
+    match cli_args.command {
+        Some(command) => match command {
             cli::Commands::Lang { print, set } => {
                 if print {
                     println!("The available languages are:");
@@ -46,10 +46,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .filter(|lang| *lang != Languages::Unkown)
                         .for_each(|lang| {
                             println!(
-                                "{} {} argument form : {}",
+                                "{} {} | argument form : {}",
                                 lang.as_emoji(),
                                 lang.as_human_readable(),
-                                lang.as_param()
+                                lang.as_iso_code()
                             )
                         });
                     return Ok(());
@@ -57,17 +57,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 match set {
                     Some(lang) => {
-                        PREFERRED_LANGUAGE
-                            .set(Languages::from(lang.as_str()))
-                            .unwrap();
+                        let try_lang: Result<Languages, &'static str> = lang.as_str().try_into();
+
+                        if let Err(message) = try_lang {
+                            println!("{message}");
+
+                            return Ok(());
+                        }
+
+                        PREFERRED_LANGUAGE.set(try_lang.unwrap()).unwrap()
                     }
                     None => PREFERRED_LANGUAGE.set(Languages::default()).unwrap(),
                 }
             }
-        }
+        },
+        None => PREFERRED_LANGUAGE.set(Languages::default()).unwrap(),
     }
-
-    println!("{}", Languages::get_preferred_lang().as_human_readable());
 
     match build_data_dir() {
         Ok(_) => {}

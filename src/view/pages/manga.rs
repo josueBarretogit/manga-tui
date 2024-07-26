@@ -330,7 +330,7 @@ impl MangaPage {
                         .send(MangaPageActions::ScrollUpAvailbleLanguages)
                         .unwrap();
                 }
-                KeyCode::Enter => {
+                KeyCode::Enter | KeyCode::Char('a') => {
                     self.search_chapters();
                 }
                 KeyCode::Char('l') | KeyCode::Esc => {

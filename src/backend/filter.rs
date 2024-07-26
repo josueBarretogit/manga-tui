@@ -264,9 +264,11 @@ pub enum Languages {
     Unkown,
 }
 
-impl From<&str> for Languages {
-    fn from(value: &str) -> Self {
-        match value {
+impl TryFrom<&str> for Languages {
+    type Error = &'static str;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        let lang = match value {
             "es" => Languages::Spanish,
             "fr" => Languages::French,
             "en" => Languages::English,
@@ -275,8 +277,8 @@ impl From<&str> for Languages {
             "ko" => Languages::Korean,
             "de" => Languages::German,
             "ar" => Languages::Arabic,
-            "pt-br" => Languages::BrazilianPortuguese,
-            "br" => Languages::Portuguese,
+            "br" => Languages::BrazilianPortuguese,
+            "pt-br" => Languages::Portuguese,
             "da" => Languages::Danish,
             "ru" => Languages::Russian,
             "sq" => Languages::Albanian,
@@ -288,7 +290,13 @@ impl From<&str> for Languages {
             "zh-hk" => Languages::TraditionalChinese,
             "it" => Languages::Italian,
             _ => Languages::Unkown,
+        };
+
+        if lang == Languages::Unkown {
+            return Err("That language code is not available, please run `manga-tui lang --print` to list available languages");
         }
+
+        Ok(lang)
     }
 }
 
@@ -335,7 +343,7 @@ impl Languages {
         self.to_string()
     }
 
-    pub fn as_param(self) -> &'static str {
+    pub fn as_iso_code(self) -> &'static str {
         match self {
             Languages::Spanish => "es",
             Languages::French => "fr",
@@ -345,8 +353,8 @@ impl Languages {
             Languages::Korean => "ko",
             Languages::German => "de",
             Languages::Arabic => "ar",
-            Languages::BrazilianPortuguese => "pt-br",
-            Languages::Portuguese => "br",
+            Languages::BrazilianPortuguese => "br",
+            Languages::Portuguese => "pt-br",
             Languages::Danish => "da",
             Languages::Russian => "ru",
             Languages::Albanian => "sq",
@@ -367,7 +375,7 @@ impl IntoParam for Vec<Languages> {
         if self.is_empty() {
             return format!(
                 "&availableTranslatedLanguage[]={}",
-                Languages::default().as_param()
+                Languages::get_preferred_lang().as_iso_code()
             );
         }
         self.into_iter()
@@ -376,7 +384,7 @@ impl IntoParam for Vec<Languages> {
                 let _ = write!(
                     languages,
                     "&availableTranslatedLanguage[]={}",
-                    language.as_param()
+                    language.as_iso_code()
                 );
                 languages
             })
@@ -418,7 +426,7 @@ impl Default for Filters {
             magazine_demographic: vec![],
             authors: User::<Author>::default(),
             artists: User::<Artist>::default(),
-            languages: vec![Languages::English],
+            languages: vec![*Languages::get_preferred_lang()],
         }
     }
 }

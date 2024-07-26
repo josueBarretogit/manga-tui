@@ -112,7 +112,7 @@ impl MangadexClient {
         language: Languages,
         order: ChapterOrder,
     ) -> Result<ChapterResponse, reqwest::Error> {
-        let language = language.as_param();
+        let language = language.as_iso_code();
         // let page = (page - 1) * 50;
 
         let order = format!("order[volume]={order}&order[chapter]={order}");
@@ -157,7 +157,7 @@ impl MangadexClient {
             .checked_sub_months(Months::new(1))
             .unwrap();
 
-        let endpoint = format!("{}/manga?includes[]=cover_art&includes[]=artist&includes[]=author&order[followedCount]=desc&contentRating[]=safe&contentRating[]=suggestive&hasAvailableChapters=true&createdAtSince={}T00:00:00", API_URL_BASE, current_date);
+        let endpoint = format!("{}/manga?includes[]=cover_art&includes[]=artist&includes[]=author&order[followedCount]=desc&contentRating[]=safe&contentRating[]=suggestive&hasAvailableChapters=true&availableTranslatedLanguage[]={}&createdAtSince={}T00:00:00", API_URL_BASE, Languages::get_preferred_lang().as_iso_code(), current_date);
 
         let response = self.client.get(endpoint).send().await?;
 
@@ -169,7 +169,7 @@ impl MangadexClient {
     }
 
     pub async fn get_recently_added(&self) -> Result<SearchMangaResponse, reqwest::Error> {
-        let endpoint = format!("{}/manga?limit=5&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&order[createdAt]=desc&includes[]=cover_art&includes[]=artist&includes[]=author&hasAvailableChapters=true", API_URL_BASE);
+        let endpoint = format!("{}/manga?limit=5&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&order[createdAt]=desc&includes[]=cover_art&includes[]=artist&includes[]=author&hasAvailableChapters=true&availableTranslatedLanguage[]={}", API_URL_BASE, Languages::get_preferred_lang().as_iso_code());
 
         let response = self.client.get(endpoint).send().await?;
 
@@ -208,10 +208,9 @@ impl MangadexClient {
         &self,
         manga_id: &str,
     ) -> Result<ChapterResponse, reqwest::Error> {
-
         let endpoint = format!(
-            "{}/manga/{}/feed?limit=3&translatedLanguage[]=en&includes[]=scanlation_group&offset=0&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&contentRating[]=pornographic&order[readableAt]=desc",
-            API_URL_BASE, manga_id, 
+            "{}/manga/{}/feed?limit=5&includes[]=scanlation_group&offset=0&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&contentRating[]=pornographic&order[readableAt]=desc",
+            API_URL_BASE, manga_id
         );
 
         let response = self.client.get(endpoint).send().await?.text().await?;
