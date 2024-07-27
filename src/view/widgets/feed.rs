@@ -1,3 +1,4 @@
+use crate::backend::filter::Languages;
 use crate::backend::ChapterResponse;
 use crate::utils::{display_dates_since_publication, render_search_bar};
 use ratatui::{prelude::*, widgets::*};
@@ -12,6 +13,7 @@ pub enum FeedTabs {
 pub struct RecentChapters {
     pub title: String,
     pub number: String,
+    pub translated_language: Languages,
     pub readeable_at: String,
 }
 
@@ -123,10 +125,18 @@ impl HistoryWidget {
 
                 let num_days = difference.num_days();
 
+                let translated_language: Languages = chapter
+                    .attributes
+                    .translated_language
+                    .as_str()
+                    .try_into()
+                    .unwrap_or(*Languages::get_preferred_lang());
+
                 let recent_chapter = RecentChapters {
                     title: chapter.attributes.title.unwrap_or("No title ".to_string()),
                     number: chapter.attributes.chapter.unwrap_or_default(),
                     readeable_at: display_dates_since_publication(num_days),
+                    translated_language,
                 };
                 manga.recent_chapters.push(recent_chapter);
             }
@@ -145,7 +155,6 @@ impl HistoryWidget {
             " <b> ".bold().fg(Color::Yellow),
         ]))
         .render(area, buf);
-
     }
 }
 

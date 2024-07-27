@@ -346,7 +346,7 @@ pub fn get_history(
     let mut get_statement_with_search_term = conn.prepare(
         "SELECT  mangas.id, mangas.title from mangas 
                      INNER JOIN manga_history_union ON mangas.id = manga_history_union.manga_id 
-                     WHERE manga_history_union.type_id = ?1 AND mangas.title MATCH ?2
+                     WHERE manga_history_union.type_id = ?1 AND LOWER(mangas.title) LIKE '%' || ?2 || '%'
                      ORDER BY mangas.last_read DESC
                      LIMIT 5 OFFSET ?3",
     )?;
@@ -368,6 +368,14 @@ pub fn get_history(
 
         Ok((manga_history, total_mangas))
     } else {
+        let total_mangas_with_search: u32 = conn.query_row(
+            "
+                SELECT COUNT(*) from mangas
+                INNER JOIN manga_history_union ON mangas.id = manga_history_union.manga_id 
+                WHERE manga_history_union.type_id = ?1 AND LOWER(mangas.title) LIKE '%' || ?2 || '%'",
+            params![history_type_id, search.trim().to_lowercase()],
+            |row| row.get(0),
+        )?;
         let iter_mangas = get_statement_with_search_term.query_map(
             params![history_type_id, search.trim().to_lowercase(), offset],
             |row| {
@@ -383,7 +391,7 @@ pub fn get_history(
             manga_history.push(manga?);
         }
 
-        Ok((manga_history, total_mangas))
+        Ok((manga_history, total_mangas_with_search))
     }
 }
 

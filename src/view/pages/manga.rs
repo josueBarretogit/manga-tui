@@ -290,7 +290,7 @@ impl MangaPage {
                 Span::raw(" <Esc> ").style(*INSTRUCTIONS_STYLE),
                 "Up/Down".into(),
                 Span::raw(" <k><j> ").style(*INSTRUCTIONS_STYLE),
-                "Search".into(),
+                "Search ".into(),
                 Span::raw("<s>").style(*INSTRUCTIONS_STYLE),
             ]);
 
@@ -507,12 +507,24 @@ impl MangaPage {
     }
 
     fn get_current_selected_language(&mut self) -> Languages {
-        // Todo! Select preffered language if no language is selected
+        let preferred_language = Languages::get_preferred_lang();
         match self.available_languages_state.selected() {
-            Some(index) => *self.manga.available_languages.get(index).unwrap(),
-            // The Vec<Languages> will never be empty since the endpoint calls manga with available
-            // translated chapters
-            None => *self.manga.available_languages.first().unwrap(),
+            Some(index) => *self
+                .manga
+                .available_languages
+                .get(index)
+                .unwrap_or(preferred_language),
+            None => {
+                let maybe_preferred_language = self
+                    .manga
+                    .available_languages
+                    .iter()
+                    .find(|lang| *lang == preferred_language);
+
+                maybe_preferred_language
+                    .cloned()
+                    .unwrap_or(*preferred_language)
+            }
         }
     }
 

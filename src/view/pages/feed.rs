@@ -23,8 +23,9 @@ use tui_input::Input;
 
 #[derive(Eq, PartialEq)]
 pub enum FeedState {
-    SearchingMangaData,
-    MangaDataNotFound,
+    SearchingHistory,
+    SearchingMangaPage,
+    MangaPageNotFound,
     Normal,
 }
 
@@ -112,31 +113,8 @@ impl Feed {
             .block(Block::bordered().title(tabs_instructions))
             .highlight_style(Style::default().fg(Color::Yellow))
             .render(tabs_area, buf);
-
-        match self.loading_state.as_mut() {
-            Some(state) => {
-                let loader = Throbber::default()
-                    .label("Searching manga data, please wait ")
-                    .style(Style::default().fg(Color::Yellow))
-                    .throbber_set(throbber_widgets_tui::BRAILLE_SIX)
-                    .use_type(throbber_widgets_tui::WhichUse::Spin);
-
-                StatefulWidget::render(
-                    loader,
-                    loading_state_area.inner(Margin {
-                        horizontal: 1,
-                        vertical: 1,
-                    }),
-                    buf,
-                    state,
-                );
-            }
-            None => {
-                if self.state == FeedState::MangaDataNotFound {
-                    Paragraph::new("Error, could not get manga data, please try another time")
-                        .render(loading_state_area, buf);
-                }
-
+        match self.state {
+            FeedState::Normal | FeedState::SearchingHistory => {
                 let input_help = if self.is_typing {
                     "Press <Enter> to serch"
                 } else {
@@ -151,6 +129,29 @@ impl Feed {
                     loading_state_area,
                 );
             }
+            FeedState::SearchingMangaPage => {
+                if let Some(state) = self.loading_state.as_mut() {
+                    let loader = Throbber::default()
+                        .label("Searching manga data, please wait ")
+                        .style(Style::default().fg(Color::Yellow))
+                        .throbber_set(throbber_widgets_tui::BRAILLE_SIX)
+                        .use_type(throbber_widgets_tui::WhichUse::Spin);
+
+                    StatefulWidget::render(
+                        loader,
+                        loading_state_area.inner(Margin {
+                            horizontal: 1,
+                            vertical: 1,
+                        }),
+                        buf,
+                        state,
+                    );
+                }
+            }
+            FeedState::MangaPageNotFound => {
+                Paragraph::new("Error, could not get manga data, please try another time")
+                    .render(loading_state_area, buf);
+            }
         }
     }
     pub fn init_search(&mut self) {
@@ -158,7 +159,7 @@ impl Feed {
     }
 
     fn handle_key_events(&mut self, key_event: KeyEvent) {
-        if self.is_typing {
+        if self.is_typing && self.state != FeedState::SearchingMangaPage {
             match key_event.code {
                 KeyCode::Enter => {
                     self.local_event_tx.send(FeedEvents::SearchHistory).ok();
@@ -259,13 +260,14 @@ impl Feed {
     // Todo! display that manga data could not be found
     fn display_error_searching_manga(&mut self) {
         self.loading_state = None;
-        self.state = FeedState::MangaDataNotFound;
+        self.state = FeedState::MangaPageNotFound;
     }
 
     fn search_history(&mut self) {
+        self.state = FeedState::SearchingHistory;
         let tx = self.local_event_tx.clone();
         self.tasks.abort_all();
-        let search_term = self.search_bar.value().trim().to_lowercase();
+        let search_term = self.search_bar.value().to_string();
 
         let page = match &self.history {
             Some(history) => history.page,
@@ -304,6 +306,7 @@ impl Feed {
     }
 
     fn load_history(&mut self, page: u32, maybe_history: Option<(Vec<MangaHistory>, u32)>) {
+        self.state = FeedState::Normal;
         if let Some(history) = maybe_history {
             self.history = Some(HistoryWidget {
                 page,
@@ -348,7 +351,7 @@ impl Feed {
     fn go_to_manga_page(&mut self) {
         if let Some(history) = self.history.as_mut() {
             if let Some(currently_selected_manga) = history.get_current_manga_selected() {
-                self.state = FeedState::SearchingMangaData;
+                self.state = FeedState::SearchingMangaPage;
                 let tx = self.global_event_tx.clone();
                 let loca_tx = self.local_event_tx.clone();
                 let manga_id = currently_selected_manga.id.clone();
@@ -426,7 +429,7 @@ impl Component for Feed {
     }
 
     fn update(&mut self, action: Self::Actions) {
-        if self.state != FeedState::SearchingMangaData {
+        if self.state != FeedState::SearchingMangaPage {
             match action {
                 FeedActions::ToggleSearchBar => self.toggle_focus_search_bar(),
                 FeedActions::NextPage => self.search_next_page(),

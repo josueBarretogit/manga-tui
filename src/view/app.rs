@@ -178,7 +178,7 @@ impl App {
         let (global_action_tx, global_action_rx) = unbounded_channel::<Action>();
         let (global_event_tx, global_event_rx) = unbounded_channel::<Events>();
 
-        global_event_tx.send(Events::GoSearchPage).ok();
+        global_event_tx.send(Events::GoFeedPage).ok();
 
         App {
             current_tab: SelectedTabs::default(),
