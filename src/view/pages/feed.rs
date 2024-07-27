@@ -3,7 +3,8 @@ use crate::backend::error_log::{write_to_error_log, ErrorType};
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
 use crate::backend::ChapterResponse;
-use crate::utils::from_manga_response;
+use crate::global::INSTRUCTIONS_STYLE;
+use crate::utils::{from_manga_response, render_search_bar};
 use crate::view::widgets::feed::{FeedTabs, HistoryWidget, MangasRead};
 use crate::view::widgets::search::MangaItem;
 use crate::view::widgets::Component;
@@ -15,6 +16,8 @@ use std::io::Cursor;
 use throbber_widgets_tui::{Throbber, ThrobberState};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
+use tui_input::backend::crossterm::EventHandler;
+use tui_input::Input;
 
 //todo! make search bar
 
@@ -28,6 +31,7 @@ pub enum FeedState {
 pub enum FeedActions {
     ScrollHistoryUp,
     ScrollHistoryDown,
+    ToggleSearchBar,
     NextPage,
     PreviousPage,
     ChangeTab,
@@ -54,6 +58,8 @@ pub struct Feed {
     pub local_action_rx: UnboundedReceiver<FeedActions>,
     pub local_event_tx: UnboundedSender<FeedEvents>,
     pub local_event_rx: UnboundedReceiver<FeedEvents>,
+    search_bar: Input,
+    is_typing: bool,
     tasks: JoinSet<()>,
 }
 
@@ -72,6 +78,8 @@ impl Feed {
             local_event_tx,
             local_event_rx,
             tasks: JoinSet::new(),
+            search_bar: Input::default(),
+            is_typing: false,
         }
     }
 
@@ -84,41 +92,65 @@ impl Feed {
         }
     }
 
-    fn render_tabs_area(&mut self, area: Rect, buf: &mut Buffer) {
+    fn render_tabs_area(&mut self, area: Rect, frame: &mut Frame) {
+        let buf = frame.buffer_mut();
         let [tabs_area, loading_state_area] =
             Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)]).areas(area);
+
         let selected_tab = match self.tabs {
             FeedTabs::History => 0,
             FeedTabs::PlantToRead => 1,
         };
 
+        let tabs_instructions = Line::from(vec![
+            "Switch tab: ".into(),
+            Span::raw("<tab>").style(*INSTRUCTIONS_STYLE),
+        ]);
+
         Tabs::new(vec!["Reading history", "Plan to Read"])
             .select(selected_tab)
-            .block(Block::bordered().title("Switch tab: <tab>"))
+            .block(Block::bordered().title(tabs_instructions))
             .highlight_style(Style::default().fg(Color::Yellow))
             .render(tabs_area, buf);
 
-        if let Some(state) = self.loading_state.as_mut() {
-            let loader = Throbber::default()
-                .label("Searching manga data, please wait ")
-                .style(Style::default().fg(Color::Yellow))
-                .throbber_set(throbber_widgets_tui::BRAILLE_SIX)
-                .use_type(throbber_widgets_tui::WhichUse::Spin);
+        match self.loading_state.as_mut() {
+            Some(state) => {
+                let loader = Throbber::default()
+                    .label("Searching manga data, please wait ")
+                    .style(Style::default().fg(Color::Yellow))
+                    .throbber_set(throbber_widgets_tui::BRAILLE_SIX)
+                    .use_type(throbber_widgets_tui::WhichUse::Spin);
 
-            StatefulWidget::render(
-                loader,
-                loading_state_area.inner(Margin {
-                    horizontal: 1,
-                    vertical: 1,
-                }),
-                buf,
-                state,
-            );
-        }
+                StatefulWidget::render(
+                    loader,
+                    loading_state_area.inner(Margin {
+                        horizontal: 1,
+                        vertical: 1,
+                    }),
+                    buf,
+                    state,
+                );
+            }
+            None => {
+                if self.state == FeedState::MangaDataNotFound {
+                    Paragraph::new("Error, could not get manga data, please try another time")
+                        .render(loading_state_area, buf);
+                }
 
-        if self.state == FeedState::MangaDataNotFound {
-            Paragraph::new("Error, could not get manga data, please try another time")
-                .render(loading_state_area, buf);
+                let input_help = if self.is_typing {
+                    "Press <Enter> to serch"
+                } else {
+                    "Press <s> to search"
+                };
+
+                render_search_bar(
+                    self.is_typing,
+                    input_help.into(),
+                    &self.search_bar,
+                    frame,
+                    loading_state_area,
+                );
+            }
         }
     }
     pub fn init_search(&mut self) {
@@ -126,29 +158,47 @@ impl Feed {
     }
 
     fn handle_key_events(&mut self, key_event: KeyEvent) {
-        match key_event.code {
-            KeyCode::Tab => {
-                self.local_action_tx.send(FeedActions::ChangeTab).ok();
-            }
-            KeyCode::Char('j') | KeyCode::Down => {
-                self.local_action_tx
-                    .send(FeedActions::ScrollHistoryDown)
-                    .ok();
-            }
-            KeyCode::Char('k') | KeyCode::Up => {
-                self.local_action_tx.send(FeedActions::ScrollHistoryUp).ok();
-            }
-            KeyCode::Char('w') => {
-                self.local_action_tx.send(FeedActions::NextPage).ok();
-            }
+        if self.is_typing {
+            match key_event.code {
+                KeyCode::Enter => {
+                    self.local_event_tx.send(FeedEvents::SearchHistory).ok();
+                }
+                KeyCode::Esc => {
+                    self.local_action_tx.send(FeedActions::ToggleSearchBar).ok();
+                }
+                _ => {
+                    self.search_bar
+                        .handle_event(&crossterm::event::Event::Key(key_event));
+                }
+            };
+        } else {
+            match key_event.code {
+                KeyCode::Tab => {
+                    self.local_action_tx.send(FeedActions::ChangeTab).ok();
+                }
+                KeyCode::Char('j') | KeyCode::Down => {
+                    self.local_action_tx
+                        .send(FeedActions::ScrollHistoryDown)
+                        .ok();
+                }
+                KeyCode::Char('k') | KeyCode::Up => {
+                    self.local_action_tx.send(FeedActions::ScrollHistoryUp).ok();
+                }
+                KeyCode::Char('w') => {
+                    self.local_action_tx.send(FeedActions::NextPage).ok();
+                }
 
-            KeyCode::Char('b') => {
-                self.local_action_tx.send(FeedActions::PreviousPage).ok();
+                KeyCode::Char('b') => {
+                    self.local_action_tx.send(FeedActions::PreviousPage).ok();
+                }
+                KeyCode::Char('r') => {
+                    self.local_action_tx.send(FeedActions::GoToMangaPage).ok();
+                }
+                KeyCode::Char('s') => {
+                    self.local_action_tx.send(FeedActions::ToggleSearchBar).ok();
+                }
+                _ => {}
             }
-            KeyCode::Char('r') => {
-                self.local_action_tx.send(FeedActions::GoToMangaPage).ok();
-            }
-            _ => {}
         }
     }
 
@@ -215,6 +265,7 @@ impl Feed {
     fn search_history(&mut self) {
         let tx = self.local_event_tx.clone();
         self.tasks.abort_all();
+        let search_term = self.search_bar.value().trim().to_lowercase();
 
         let page = match &self.history {
             Some(history) => history.page,
@@ -227,7 +278,7 @@ impl Feed {
         };
 
         self.tasks.spawn(async move {
-            let maybe_reading_history = get_history(history_type, page);
+            let maybe_reading_history = get_history(history_type, page, &search_term);
             tx.send(FeedEvents::LoadHistory(
                 page,
                 Some(maybe_reading_history.unwrap()),
@@ -356,24 +407,28 @@ impl Feed {
             }
         }
     }
+
+    fn toggle_focus_search_bar(&mut self) {
+        self.is_typing = !self.is_typing;
+    }
 }
 
 impl Component for Feed {
     type Actions = FeedActions;
     fn render(&mut self, area: ratatui::prelude::Rect, frame: &mut Frame<'_>) {
-        let buf = frame.buffer_mut();
         let layout = Layout::vertical([Constraint::Percentage(10), Constraint::Percentage(90)]);
 
         let [tabs_area, history_area] = layout.areas(area);
 
-        self.render_tabs_area(tabs_area, buf);
+        self.render_tabs_area(tabs_area, frame);
 
-        self.render_history(history_area, buf);
+        self.render_history(history_area, frame.buffer_mut());
     }
 
     fn update(&mut self, action: Self::Actions) {
         if self.state != FeedState::SearchingMangaData {
             match action {
+                FeedActions::ToggleSearchBar => self.toggle_focus_search_bar(),
                 FeedActions::NextPage => self.search_next_page(),
                 FeedActions::PreviousPage => self.search_previous_page(),
                 FeedActions::GoToMangaPage => self.go_to_manga_page(),

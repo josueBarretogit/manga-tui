@@ -314,6 +314,7 @@ pub struct MangaHistory {
 pub fn get_history(
     hist_type: MangaHistoryType,
     offset: u32,
+    search: &str,
 ) -> rusqlite::Result<(Vec<MangaHistory>, u32)> {
     let offset = (offset - 1) * 5;
     let binding = DBCONN.lock().unwrap();
@@ -334,33 +335,56 @@ pub fn get_history(
         |row| row.get(0),
     )?;
 
-    let mut statement = conn.prepare(
-        format!(
-            "SELECT  mangas.id, mangas.title from mangas 
+    let mut get_statement = conn.prepare(
+        "SELECT  mangas.id, mangas.title from mangas 
                      INNER JOIN manga_history_union ON mangas.id = manga_history_union.manga_id 
                      WHERE manga_history_union.type_id = ?1
                      ORDER BY mangas.last_read DESC
-                     LIMIT 5 OFFSET {}",
-            offset
-        )
-        .as_str(),
+                     LIMIT 5 OFFSET ?2",
+    )?;
+
+    let mut get_statement_with_search_term = conn.prepare(
+        "SELECT  mangas.id, mangas.title from mangas 
+                     INNER JOIN manga_history_union ON mangas.id = manga_history_union.manga_id 
+                     WHERE manga_history_union.type_id = ?1 AND mangas.title MATCH ?2
+                     ORDER BY mangas.last_read DESC
+                     LIMIT 5 OFFSET ?3",
     )?;
 
     let mut manga_history: Vec<MangaHistory> = vec![];
 
-    let iter_mangas = statement.query_map(params![history_type_id], |row| {
-        Ok(MangaHistory {
-            id: row.get(0)?,
-            title: row.get(1)?,
-            // img_url: row.get(2)?,
-        })
-    })?;
+    if search.trim().is_empty() {
+        let iter_mangas = get_statement.query_map(params![history_type_id, offset], |row| {
+            Ok(MangaHistory {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                // img_url: row.get(2)?,
+            })
+        })?;
 
-    for manga in iter_mangas {
-        manga_history.push(manga?);
+        for manga in iter_mangas {
+            manga_history.push(manga?);
+        }
+
+        Ok((manga_history, total_mangas))
+    } else {
+        let iter_mangas = get_statement_with_search_term.query_map(
+            params![history_type_id, search.trim().to_lowercase(), offset],
+            |row| {
+                Ok(MangaHistory {
+                    id: row.get(0)?,
+                    title: row.get(1)?,
+                    // img_url: row.get(2)?,
+                })
+            },
+        )?;
+
+        for manga in iter_mangas {
+            manga_history.push(manga?);
+        }
+
+        Ok((manga_history, total_mangas))
     }
-
-    Ok((manga_history, total_mangas))
 }
 
 pub struct MangaPlanToReadSave<'a> {
@@ -472,7 +496,6 @@ pub fn set_chapter_downloaded(chapter: SetChapterDownloaded<'_>) -> rusqlite::Re
             (chapter.manga_id, history_type),
         )
         .unwrap();
-
 
         Ok(())
     } else {

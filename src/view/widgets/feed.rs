@@ -1,5 +1,5 @@
 use crate::backend::ChapterResponse;
-use crate::utils::display_dates_since_publication;
+use crate::utils::{display_dates_since_publication, render_search_bar};
 use ratatui::{prelude::*, widgets::*};
 use tui_widget_list::PreRender;
 
@@ -145,6 +145,7 @@ impl HistoryWidget {
             " <b> ".bold().fg(Color::Yellow),
         ]))
         .render(area, buf);
+
     }
 }
 

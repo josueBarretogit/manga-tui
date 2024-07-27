@@ -470,7 +470,7 @@ impl Home {
             "Move right ".into(),
             Span::raw("<l>").style(*INSTRUCTIONS_STYLE),
             "Move left ".into(),
-            Span::raw("<h>").style(*INSTRUCTIONS_STYLE),
+            Span::raw(" <h> ").style(*INSTRUCTIONS_STYLE),
             "Read ".into(),
             Span::raw("<Enter>").style(*INSTRUCTIONS_STYLE),
         ]);

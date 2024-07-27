@@ -2,7 +2,7 @@
 use clap::Parser;
 use once_cell::sync::Lazy;
 use ratatui::backend::CrosstermBackend;
-use ratatui_image::picker::Picker;
+use ratatui_image::picker::{Picker, ProtocolType};
 use reqwest::Client;
 use strum::IntoEnumIterator;
 
@@ -26,6 +26,7 @@ mod cli;
 
 mod global;
 
+#[cfg(unix)]
 pub static PICKER: Lazy<Option<Picker>> = Lazy::new(|| {
     Picker::from_termios().ok().map(|mut picker| {
         picker.guess_protocol();
@@ -33,9 +34,20 @@ pub static PICKER: Lazy<Option<Picker>> = Lazy::new(|| {
     })
 });
 
+#[cfg(target_os = "windows")]
+pub static PICKER: Lazy<Option<Picker>> = Lazy::new(|| {
+    let mut picker = Picker::new((7, 14));
+
+    let protocol = picker.guess_protocol();
+
+    if protocol == ProtocolType::Halfblocks {
+        return None;
+    }
+    Some(picker)
+});
+
 #[tokio::main(flavor = "multi_thread", worker_threads = 7)]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-
     let cli_args = CliArgs::parse();
 
     match cli_args.command {

@@ -206,10 +206,7 @@ pub fn render_search_bar(
     let input_bar = Paragraph::new(input.value())
         .block(Block::bordered().title(input_help).border_style(style));
 
-    input_bar.render(
-        Rect::new(area.x, area.y, area.width, area.height - 8),
-        frame.buffer_mut(),
-    );
+    input_bar.render(area, frame.buffer_mut());
 
     let width = area.width.max(3) - 3;
 

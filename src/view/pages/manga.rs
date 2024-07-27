@@ -507,7 +507,7 @@ impl MangaPage {
     }
 
     fn get_current_selected_language(&mut self) -> Languages {
-        // Todo! handles this unwraps
+        // Todo! Select preffered language if no language is selected
         match self.available_languages_state.selected() {
             Some(index) => *self.manga.available_languages.get(index).unwrap(),
             // The Vec<Languages> will never be empty since the endpoint calls manga with available
