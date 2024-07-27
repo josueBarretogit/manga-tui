@@ -238,7 +238,6 @@ impl Feed {
 
     fn load_recent_chapters(&mut self, manga_id: String, maybe_history: Option<ChapterResponse>) {
         if let Some(chapters_response) = maybe_history {
-            // todo! handle this unwrap
             if let Some(history) = self.history.as_mut() {
                 history.set_chapter(manga_id, chapters_response);
             }
@@ -246,27 +245,27 @@ impl Feed {
     }
 
     fn search_latest_chapters(&mut self) {
-        let history = self.history.as_ref().unwrap();
+        if let Some(history) = self.history.as_mut() {
+            for manga in history.mangas.clone() {
+                let manga_id = manga.id;
+                let tx = self.local_event_tx.clone();
+                self.tasks.spawn(async move {
+                    let latest_chapter_response = MangadexClient::global()
+                        .get_latest_chapters(&manga_id)
+                        .await;
+                    match latest_chapter_response {
+                        Ok(chapters) => {
+                            tx.send(FeedEvents::LoadRecentChapters(manga_id, Some(chapters)))
+                                .ok();
+                        }
+                        Err(e) => {
+                            write_to_error_log(ErrorType::FromError(Box::new(e)));
 
-        for manga in history.mangas.clone() {
-            let manga_id = manga.id;
-            let tx = self.local_event_tx.clone();
-            self.tasks.spawn(async move {
-                let latest_chapter_response = MangadexClient::global()
-                    .get_latest_chapters(&manga_id)
-                    .await;
-                match latest_chapter_response {
-                    Ok(chapters) => {
-                        tx.send(FeedEvents::LoadRecentChapters(manga_id, Some(chapters)))
-                            .ok();
+                            tx.send(FeedEvents::LoadRecentChapters(manga_id, None)).ok();
+                        }
                     }
-                    Err(e) => {
-                        write_to_error_log(ErrorType::FromError(Box::new(e)));
-
-                        tx.send(FeedEvents::LoadRecentChapters(manga_id, None)).ok();
-                    }
-                }
-            });
+                });
+            }
         }
     }
 

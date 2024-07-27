@@ -1,6 +1,5 @@
-use crate::backend::filter::Languages;
 use crate::backend::Data;
-use crate::common::{Artist, Author, Manga};
+use crate::common::Manga;
 use crate::utils::{from_manga_response, set_status_style, set_tags_style};
 use ratatui::{prelude::*, widgets::*};
 use ratatui_image::protocol::StatefulProtocol;
@@ -72,22 +71,20 @@ impl<'a> MangaPreview<'a> {
     }
 
     pub fn render_details(&mut self, area: Rect, buf: &mut Buffer) {
-        let layout = Layout::horizontal([Constraint::Fill(1), Constraint::Fill(2)]);
-        let [tags_area, details_area] = layout.areas(area);
+        let layout = Layout::vertical([Constraint::Percentage(20), Constraint::Percentage(80)]);
+        let [details_area, tags_area] = layout.areas(area);
 
-        let tags_list: Vec<ListItem<'_>> = self
-            .tags
-            .iter()
-            .map(|tag| ListItem::new(set_tags_style(tag)))
-            .collect();
-
-        Widget::render(List::new(tags_list), tags_area, buf);
+        let tags_list: Vec<Span<'_>> = self.tags.iter().map(|tag| set_tags_style(tag)).collect();
 
         let content_rating = set_tags_style(self.content_rating);
 
         let status = set_status_style(self.status);
 
         Paragraph::new(Line::from(vec![content_rating, status])).render(details_area, buf);
+
+        Paragraph::new(Line::from(tags_list))
+            .wrap(Wrap { trim: true })
+            .render(tags_area, buf);
     }
 }
 

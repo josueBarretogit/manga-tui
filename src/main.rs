@@ -28,14 +28,18 @@ mod global;
 
 #[cfg(unix)]
 pub static PICKER: Lazy<Option<Picker>> = Lazy::new(|| {
-    Picker::from_termios().ok().map(|mut picker| {
-        picker.guess_protocol();
-        picker
-    })
+    Picker::from_termios()
+        .ok()
+        .map(|mut picker| {
+            picker.guess_protocol();
+            picker
+        })
+        .filter(|picker| picker.protocol_type != ProtocolType::Halfblocks)
 });
 
 #[cfg(target_os = "windows")]
 pub static PICKER: Lazy<Option<Picker>> = Lazy::new(|| {
+    // Todo! figure out how to get the size of the terminal on windows
     let mut picker = Picker::new((7, 14));
 
     let protocol = picker.guess_protocol();
@@ -70,8 +74,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 match set {
                     Some(lang) => {
-                        let try_lang: Result<Languages, &'static str> =
-                            Languages::try_from_iso_code(lang.as_str());
+                        let try_lang = Languages::try_from_iso_code(lang.as_str());
 
                         if let Err(message) = try_lang {
                             println!("{message}");

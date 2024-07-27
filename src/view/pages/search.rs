@@ -125,28 +125,12 @@ impl Component for SearchPage {
             SearchPageActions::StopTyping => self.input_mode = InputMode::Idle,
             SearchPageActions::Search => {
                 self.mangas_found_list.page = 1;
-                self.search_mangas(1);
+                self.search_mangas();
             }
             SearchPageActions::ScrollUp => self.scroll_up(),
             SearchPageActions::ScrollDown => self.scroll_down(),
-            SearchPageActions::NextPage => {
-                if self.state == PageState::DisplayingMangasFound
-                    && self.state != PageState::SearchingMangas
-                    && self.mangas_found_list.page * 10 < self.mangas_found_list.total_result
-                {
-                    self.mangas_found_list.page += 1;
-                    self.search_mangas(self.mangas_found_list.page);
-                }
-            }
-            SearchPageActions::PreviousPage => {
-                if self.state == PageState::DisplayingMangasFound
-                    && self.state != PageState::SearchingMangas
-                    && self.mangas_found_list.page != 1
-                {
-                    self.mangas_found_list.page -= 1;
-                    self.search_mangas(self.mangas_found_list.page);
-                }
-            }
+            SearchPageActions::NextPage => self.search_next_page(),
+            SearchPageActions::PreviousPage => self.search_previous_page(),
             SearchPageActions::GoToMangaPage => {
                 let manga_selected = self.get_current_manga_selected();
                 if let Some(manga) = manga_selected {
@@ -160,7 +144,6 @@ impl Component for SearchPage {
     }
     fn handle_events(&mut self, events: Events) {
         if self.filter_state.is_open {
-            
             self.filter_state.handle_events(events);
         } else {
             match events {
@@ -450,10 +433,12 @@ impl SearchPage {
         self.filter_state.is_typing
     }
 
-    fn search_mangas(&mut self, page: i32) {
+    fn search_mangas(&mut self) {
         self.clean_up();
 
         self.state = PageState::SearchingMangas;
+
+        let page = self.mangas_found_list.page;
 
         let tx = self.local_event_tx.clone();
 
@@ -482,16 +467,38 @@ impl SearchPage {
         });
     }
 
+    fn search_next_page(&mut self) {
+        if self.state == PageState::DisplayingMangasFound
+            && self.state != PageState::SearchingMangas
+            && self.mangas_found_list.page * 10 < self.mangas_found_list.total_result
+        {
+            self.mangas_found_list.page += 1;
+            self.search_mangas();
+        }
+    }
+
+    fn search_previous_page(&mut self) {
+        if self.state == PageState::DisplayingMangasFound
+            && self.state != PageState::SearchingMangas
+            && self.mangas_found_list.page != 1
+        {
+            self.mangas_found_list.page -= 1;
+            self.search_mangas();
+        }
+    }
+
     pub fn search_mangas_of_author(&mut self, author: Author) {
         self.filter_state.set_author(author);
         self.search_bar.reset();
-        self.search_mangas(1);
+        self.mangas_found_list.page = 1;
+        self.search_mangas();
     }
 
     pub fn search_mangas_of_artist(&mut self, artist: Artist) {
         self.filter_state.set_artist(artist);
         self.search_bar.reset();
-        self.search_mangas(1);
+        self.mangas_found_list.page = 1;
+        self.search_mangas();
     }
 
     fn load_mangas_found(&mut self, response: Option<SearchMangaResponse>) {

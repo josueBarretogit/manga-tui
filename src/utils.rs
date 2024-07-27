@@ -18,7 +18,7 @@ pub fn set_tags_style(tag: &str) -> Span<'_> {
             format!("  {tag}  ").black().bg(Color::Red)
         }
         "doujinshi" => format!("  {tag}  ").bg(Color::Blue),
-        _ => format!("  {tag}  ").into(),
+        _ => format!("{tag}  ").into(),
     }
 }
 
@@ -142,6 +142,8 @@ pub fn from_manga_response(value: Data) -> Manga {
 
     let publication_demographic = value.attributes.publication_demographic.unwrap_or_default();
 
+    let created_at = value.attributes.created_at;
+
     Manga {
         id,
         title,
@@ -154,6 +156,7 @@ pub fn from_manga_response(value: Data) -> Manga {
         artist,
         publication_demographic,
         available_languages: languages,
+        created_at,
     }
 }
 

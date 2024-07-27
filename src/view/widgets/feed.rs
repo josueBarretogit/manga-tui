@@ -1,6 +1,6 @@
 use crate::backend::filter::Languages;
 use crate::backend::ChapterResponse;
-use crate::utils::{display_dates_since_publication, render_search_bar};
+use crate::utils::display_dates_since_publication;
 use ratatui::{prelude::*, widgets::*};
 use tui_widget_list::PreRender;
 
@@ -22,6 +22,10 @@ impl From<RecentChapters> for ListItem<'_> {
         let line = Line::from(vec![
             format!("Ch. {} ", value.number).into(),
             value.title.bold(),
+            " | ".into(),
+            value.translated_language.as_emoji().into(),
+            " ".into(),
+            value.translated_language.as_human_readable().into(),
             " | ".into(),
             value.readeable_at.into(),
         ]);

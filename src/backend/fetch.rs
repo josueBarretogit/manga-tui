@@ -108,17 +108,17 @@ impl MangadexClient {
     pub async fn get_manga_chapters(
         &self,
         id: String,
-        page: i32,
+        page: u32,
         language: Languages,
         order: ChapterOrder,
     ) -> Result<ChapterResponse, reqwest::Error> {
         let language = language.as_iso_code();
-        // let page = (page - 1) * 50;
+        let page = (page - 1) * 50;
 
         let order = format!("order[volume]={order}&order[chapter]={order}");
         let endpoint = format!(
-            "{}/manga/{}/feed?limit=50&{}&translatedLanguage[]={}&includes[]=scanlation_group&offset=0&includeExternalUrl=0&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&contentRating[]=pornographic",
-            API_URL_BASE, id, order, language
+            "{}/manga/{}/feed?limit=50&offset={}&{}&translatedLanguage[]={}&includes[]=scanlation_group&offset=0&includeExternalUrl=0&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&contentRating[]=pornographic",
+            API_URL_BASE, id, page, order, language
         );
 
         let reponse = self.client.get(endpoint).send().await?.text().await?;

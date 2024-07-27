@@ -25,4 +25,5 @@ pub struct Manga {
     pub author: Author,
     pub artist: Artist,
     pub available_languages: Vec<Languages>,
+    pub created_at: String,
 }

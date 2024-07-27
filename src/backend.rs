@@ -10,8 +10,8 @@ pub mod database;
 pub mod download;
 pub mod error_log;
 pub mod fetch;
-pub mod tui;
 pub mod filter;
+pub mod tui;
 
 #[derive(Display)]
 pub enum AppDirectories {
@@ -100,8 +100,9 @@ pub struct Attributes {
     pub tags: Vec<Tag>,
     pub content_rating: String,
     pub state: String,
+    pub created_at: String,
     pub publication_demographic: Option<String>,
-    pub available_translated_languages : Vec<Option<String>>,
+    pub available_translated_languages: Vec<Option<String>>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -215,7 +216,6 @@ pub struct ChapterRelationshipAttribute {
 }
 
 // Translations
-
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

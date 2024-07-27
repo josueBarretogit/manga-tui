@@ -22,8 +22,6 @@ use strum::Display;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
-// Todo! add publication year of the manga
-
 #[derive(PartialEq, Eq)]
 pub enum PageState {
     DownloadingChapters,
@@ -43,10 +41,12 @@ pub enum MangaPageActions {
     ScrollUpAvailbleLanguages,
     GoMangasAuthor,
     GoMangasArtist,
+    SearchNextChapterPage,
+    GoPreviousChapterPage,
 }
 
 pub enum MangaPageEvents {
-    FetchChapters,
+    SearchChapters,
     FethStatistics,
     CheckChapterStatus,
     ChapterFinishedDownloading(String),
@@ -119,7 +119,7 @@ impl MangaPage {
         let (local_action_tx, local_action_rx) = mpsc::unbounded_channel::<MangaPageActions>();
         let (local_event_tx, local_event_rx) = mpsc::unbounded_channel::<MangaPageEvents>();
 
-        local_event_tx.send(MangaPageEvents::FetchChapters).ok();
+        local_event_tx.send(MangaPageEvents::SearchChapters).ok();
         local_event_tx.send(MangaPageEvents::FethStatistics).ok();
 
         Self {
@@ -142,6 +142,10 @@ impl MangaPage {
     fn render_cover(&mut self, area: Rect, buf: &mut Buffer) {
         let [cover_area, more_details_area] =
             Layout::vertical([Constraint::Percentage(80), Constraint::Percentage(20)]).areas(area);
+
+        Paragraph::new(format!(" \n Publication date : {}", self.manga.created_at))
+            .render(more_details_area, buf);
+
         match self.image_state.as_mut() {
             Some(state) => {
                 let image = StatefulImage::new(None).resize(Resize::Fit(None));
@@ -201,6 +205,8 @@ impl MangaPage {
             .iter()
             .map(|tag| set_tags_style(tag))
             .collect();
+
+        tags.push(set_status_style(&self.manga.publication_demographic));
 
         tags.push(set_tags_style(&self.manga.content_rating));
 
@@ -391,6 +397,11 @@ impl MangaPage {
                         .send(MangaPageActions::OpenAvailableLanguagesList)
                         .ok();
                 }
+                KeyCode::Char('w') => {
+                    self.local_action_tx
+                        .send(MangaPageActions::SearchNextChapterPage)
+                        .ok();
+                }
                 _ => {}
             }
         }
@@ -528,15 +539,28 @@ impl MangaPage {
         }
     }
 
+    fn search_next_chapters(&mut self) {
+        if let Some(chapters) = self.chapters.as_mut() {
+            chapters.page += 1
+        }
+        self.search_chapters();
+    }
+
     fn search_chapters(&mut self) {
         self.state = PageState::SearchingChapters;
         let manga_id = self.manga.id.clone();
         let tx = self.local_event_tx.clone();
         let language = self.get_current_selected_language();
         let chapter_order = self.chapter_order;
+        let page = if let Some(chapters) = self.chapters.as_ref() {
+            chapters.page
+        } else {
+            1
+        };
+
         self.tasks.spawn(async move {
             let response = MangadexClient::global()
-                .get_manga_chapters(manga_id, 1, language, chapter_order)
+                .get_manga_chapters(manga_id, page, language, chapter_order)
                 .await;
 
             match response {
@@ -708,7 +732,7 @@ impl MangaPage {
                     self.stop_loader_for_chapter(id_chapter)
                 }
                 MangaPageEvents::FethStatistics => self.fetch_statistics(),
-                MangaPageEvents::FetchChapters => self.search_chapters(),
+                MangaPageEvents::SearchChapters => self.search_chapters(),
                 MangaPageEvents::LoadChapters(response) => {
                     self.state = PageState::SearchingStopped;
                     match response {
@@ -767,6 +791,8 @@ impl Component for MangaPage {
     }
     fn update(&mut self, action: Self::Actions) {
         match action {
+            MangaPageActions::GoPreviousChapterPage => todo!(),
+            MangaPageActions::SearchNextChapterPage => self.search_next_chapters(),
             MangaPageActions::ScrollDownAvailbleLanguages => self.scroll_language_down(),
             MangaPageActions::ScrollUpAvailbleLanguages => self.scroll_language_up(),
             MangaPageActions::OpenAvailableLanguagesList => self.open_available_languages_list(),
