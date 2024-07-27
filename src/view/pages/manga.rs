@@ -4,7 +4,7 @@ use crate::backend::database::{
 use crate::backend::database::{set_chapter_downloaded, MangaReadingHistorySave};
 use crate::backend::download::{download_chapter, DownloadChapter};
 use crate::backend::error_log::{self, write_to_error_log};
-use crate::backend::fetch::MangadexClient;
+use crate::backend::fetch::{MangadexClient, ITEMS_PER_PAGE_CHAPTERS};
 use crate::backend::filter::Languages;
 use crate::backend::tui::Events;
 use crate::backend::{ChapterResponse, MangaStatisticsResponse, Statistics};
@@ -27,7 +27,8 @@ pub enum PageState {
     DownloadingChapters,
     SearchingChapters,
     SearchingChapterData,
-    SearchingStopped,
+    DisplayingChapters,
+    SearchNotFound,
 }
 
 pub enum MangaPageActions {
@@ -42,7 +43,7 @@ pub enum MangaPageActions {
     GoMangasAuthor,
     GoMangasArtist,
     SearchNextChapterPage,
-    GoPreviousChapterPage,
+    SearchPreviousChapterPage,
 }
 
 pub enum MangaPageEvents {
@@ -230,7 +231,8 @@ impl MangaPage {
 
         match self.chapters.as_mut() {
             Some(chapters) => {
-                let page = format!("Page {}", chapters.page);
+                let tota_pages = chapters.total_result as f64 / 16_f64;
+                let page = format!("Page {} of : {}", chapters.page, tota_pages.ceil());
                 let total = format!("Total chapters {}", chapters.total_result);
 
                 let chapter_instructions = vec![
@@ -240,10 +242,19 @@ impl MangaPage {
                     Span::raw(" <d> ").style(*INSTRUCTIONS_STYLE),
                 ];
 
+                let pagination_instructions: Vec<Span<'_>> = vec![
+                    page.into(),
+                    " | ".into(),
+                    total.into(),
+                    " Next ".into(),
+                    Span::raw("<w>").style(*INSTRUCTIONS_STYLE),
+                    " Previous ".into(),
+                    Span::raw("<b>").style(*INSTRUCTIONS_STYLE),
+                ];
+
                 Block::bordered()
                     .title_top(Line::from(chapter_instructions))
-                    .title_bottom(Line::from(page).left_aligned())
-                    .title_bottom(Line::from(total).right_aligned())
+                    .title_bottom(Line::from(pagination_instructions))
                     .render(area, buf);
 
                 StatefulWidget::render(
@@ -257,8 +268,15 @@ impl MangaPage {
             }
 
             None => {
-                Block::bordered().render(area, frame.buffer_mut());
-                // Todo! show chapters are loading
+                let title = if self.state == PageState::SearchNotFound {
+                    "Could not get chapters, please try again"
+                } else {
+                    "Searching chapters"
+                };
+
+                Block::bordered()
+                    .title(title)
+                    .render(area, frame.buffer_mut());
             }
         }
     }
@@ -338,6 +356,7 @@ impl MangaPage {
                         .unwrap();
                 }
                 KeyCode::Enter | KeyCode::Char('s') => {
+                    self.chapters = None;
                     self.search_chapters();
                 }
                 KeyCode::Char('l') | KeyCode::Esc => {
@@ -400,6 +419,11 @@ impl MangaPage {
                 KeyCode::Char('w') => {
                     self.local_action_tx
                         .send(MangaPageActions::SearchNextChapterPage)
+                        .ok();
+                }
+                KeyCode::Char('b') => {
+                    self.local_action_tx
+                        .send(MangaPageActions::SearchPreviousChapterPage)
                         .ok();
                 }
                 _ => {}
@@ -513,7 +537,7 @@ impl MangaPage {
                     }
                 });
             }
-            None => self.state = PageState::SearchingStopped,
+            None => self.state = PageState::DisplayingChapters,
         }
     }
 
@@ -541,9 +565,20 @@ impl MangaPage {
 
     fn search_next_chapters(&mut self) {
         if let Some(chapters) = self.chapters.as_mut() {
-            chapters.page += 1
+            if chapters.page * ITEMS_PER_PAGE_CHAPTERS < chapters.total_result {
+                chapters.page += 1;
+                self.search_chapters();
+            }
         }
-        self.search_chapters();
+    }
+
+    fn search_previous_chapters(&mut self) {
+        if let Some(chapters) = self.chapters.as_mut() {
+            if chapters.page != 1 {
+                chapters.page -= 1;
+                self.search_chapters();
+            }
+        }
     }
 
     fn search_chapters(&mut self) {
@@ -552,6 +587,7 @@ impl MangaPage {
         let tx = self.local_event_tx.clone();
         let language = self.get_current_selected_language();
         let chapter_order = self.chapter_order;
+
         let page = if let Some(chapters) = self.chapters.as_ref() {
             chapters.page
         } else {
@@ -734,7 +770,7 @@ impl MangaPage {
                 MangaPageEvents::FethStatistics => self.fetch_statistics(),
                 MangaPageEvents::SearchChapters => self.search_chapters(),
                 MangaPageEvents::LoadChapters(response) => {
-                    self.state = PageState::SearchingStopped;
+                    self.state = PageState::DisplayingChapters;
                     match response {
                         Some(response) => {
                             let mut list_state = tui_widget_list::ListState::default();
@@ -743,10 +779,16 @@ impl MangaPage {
 
                             let chapter_widget = ChaptersListWidget::from_response(&response);
 
+                            let page = if let Some(previous) = self.chapters.as_ref() {
+                                previous.page
+                            } else {
+                                1
+                            };
+
                             self.chapters = Some(ChaptersData {
                                 state: list_state,
                                 widget: chapter_widget,
-                                page: 1,
+                                page,
                                 total_result: response.total as u32,
                             });
 
@@ -754,7 +796,10 @@ impl MangaPage {
                                 .send(MangaPageEvents::CheckChapterStatus)
                                 .ok();
                         }
-                        None => self.chapters = None,
+                        None => {
+                            self.state = PageState::SearchNotFound;
+                            self.chapters = None;
+                        }
                     }
                 }
                 MangaPageEvents::CheckChapterStatus => {
@@ -770,7 +815,7 @@ impl MangaPage {
                     }
                 }
                 MangaPageEvents::StoppedSearchingChapterData => {
-                    self.state = PageState::SearchingStopped
+                    self.state = PageState::DisplayingChapters
                 }
             }
         }
@@ -791,7 +836,7 @@ impl Component for MangaPage {
     }
     fn update(&mut self, action: Self::Actions) {
         match action {
-            MangaPageActions::GoPreviousChapterPage => todo!(),
+            MangaPageActions::SearchPreviousChapterPage => self.search_previous_chapters(),
             MangaPageActions::SearchNextChapterPage => self.search_next_chapters(),
             MangaPageActions::ScrollDownAvailbleLanguages => self.scroll_language_down(),
             MangaPageActions::ScrollUpAvailbleLanguages => self.scroll_language_up(),

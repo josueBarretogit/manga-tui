@@ -25,6 +25,12 @@ pub static MANGADEX_CLIENT_INSTANCE: OnceCell<MangadexClient> = once_cell::sync:
 static API_URL_BASE: &str = "https://api.mangadex.org";
 static COVER_IMG_URL_BASE: &str = "https://uploads.mangadex.org/covers";
 
+pub static ITEMS_PER_PAGE_CHAPTERS: u32 = 16;
+
+pub static ITEMS_PER_PAGE_LATEST_CHAPTERS: u32 = 5;
+
+pub static ITEMS_PER_PAGE_SEARCH: u32 = 10;
+
 impl MangadexClient {
     pub fn global() -> &'static MangadexClient {
         MANGADEX_CLIENT_INSTANCE
@@ -113,13 +119,28 @@ impl MangadexClient {
         order: ChapterOrder,
     ) -> Result<ChapterResponse, reqwest::Error> {
         let language = language.as_iso_code();
-        let page = (page - 1) * 50;
+        let page = (page - 1) * ITEMS_PER_PAGE_CHAPTERS;
 
         let order = format!("order[volume]={order}&order[chapter]={order}");
         let endpoint = format!(
-            "{}/manga/{}/feed?limit=50&offset={}&{}&translatedLanguage[]={}&includes[]=scanlation_group&offset=0&includeExternalUrl=0&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&contentRating[]=pornographic",
+            "{}/manga/{}/feed?limit={ITEMS_PER_PAGE_CHAPTERS}&offset={}&{}&translatedLanguage[]={}&includes[]=scanlation_group&includeExternalUrl=0&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&contentRating[]=pornographic",
             API_URL_BASE, id, page, order, language
         );
+        // for quick debugging purposes
+        let error_file_name = APP_DATA_DIR
+            .as_ref()
+            .unwrap()
+            .join(super::AppDirectories::ErrorLogs.to_string())
+            .join("manga-tui-error-logs.txt");
+
+        let mut error_logs = OpenOptions::new()
+            .append(true)
+            .open(error_file_name)
+            .unwrap();
+
+        error_logs
+            .write_all(format!("{} \n", endpoint).as_bytes())
+            .unwrap();
 
         let reponse = self.client.get(endpoint).send().await?.text().await?;
         Ok(serde_json::from_str(&reponse).unwrap_or_else(|e| panic!("{e}")))
