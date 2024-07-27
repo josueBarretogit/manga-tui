@@ -142,12 +142,9 @@ impl ChaptersListWidget {
                 .clone()
                 .unwrap_or("0".to_string());
 
-            let translated_language: Languages = chapter
-                .attributes
-                .translated_language
-                .as_str()
-                .try_into()
-                .unwrap();
+            let translated_language: Languages =
+                Languages::try_from_iso_code(&chapter.attributes.translated_language)
+                    .unwrap_or(*Languages::get_preferred_lang());
 
             let parse_date = chrono::DateTime::parse_from_rfc3339(&chapter.attributes.readable_at)
                 .unwrap_or_default();

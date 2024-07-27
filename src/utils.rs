@@ -135,8 +135,7 @@ pub fn from_manga_response(value: Data) -> Manga {
         .available_translated_languages
         .into_iter()
         .flatten()
-        .flat_map(|lang| lang.as_str().try_into())
-        .filter(|lang| *lang != Languages::Unkown)
+        .flat_map(|lang| Languages::try_from_iso_code(&lang))
         .collect();
 
     let status = value.attributes.status;

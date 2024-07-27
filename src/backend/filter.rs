@@ -264,42 +264,6 @@ pub enum Languages {
     Unkown,
 }
 
-impl TryFrom<&str> for Languages {
-    type Error = &'static str;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        let lang = match value {
-            "es" => Languages::Spanish,
-            "fr" => Languages::French,
-            "en" => Languages::English,
-            "ja" => Languages::Japanese,
-            "nl" => Languages::Dutch,
-            "ko" => Languages::Korean,
-            "de" => Languages::German,
-            "ar" => Languages::Arabic,
-            "br" => Languages::BrazilianPortuguese,
-            "pt-br" => Languages::Portuguese,
-            "da" => Languages::Danish,
-            "ru" => Languages::Russian,
-            "sq" => Languages::Albanian,
-            "hr" => Languages::Croatian,
-            "es-la" => Languages::SpanishLa,
-            "bg" => Languages::Bulgarian,
-            "uk" => Languages::Ukrainian,
-            "vi" => Languages::Vietnamese,
-            "zh-hk" => Languages::TraditionalChinese,
-            "it" => Languages::Italian,
-            _ => Languages::Unkown,
-        };
-
-        if lang == Languages::Unkown {
-            return Err("That language code is not available, please run `manga-tui lang --print` to list available languages");
-        }
-
-        Ok(lang)
-    }
-}
-
 // Todo! there has to be a better way of doing this conversion
 impl From<String> for Languages {
     fn from(value: String) -> Self {
@@ -367,6 +331,38 @@ impl Languages {
             Languages::Italian => "it",
             Languages::Unkown => unreachable!(),
         }
+    }
+
+    pub fn try_from_iso_code(code: &str) -> Result<Self, &'static str> {
+        let lang = match code {
+            "es" => Languages::Spanish,
+            "fr" => Languages::French,
+            "en" => Languages::English,
+            "ja" => Languages::Japanese,
+            "nl" => Languages::Dutch,
+            "ko" => Languages::Korean,
+            "de" => Languages::German,
+            "ar" => Languages::Arabic,
+            "br" => Languages::BrazilianPortuguese,
+            "pt-br" => Languages::Portuguese,
+            "da" => Languages::Danish,
+            "ru" => Languages::Russian,
+            "sq" => Languages::Albanian,
+            "hr" => Languages::Croatian,
+            "es-la" => Languages::SpanishLa,
+            "bg" => Languages::Bulgarian,
+            "uk" => Languages::Ukrainian,
+            "vi" => Languages::Vietnamese,
+            "zh-hk" => Languages::TraditionalChinese,
+            "it" => Languages::Italian,
+            _ => Languages::Unkown,
+        };
+
+        if lang == Languages::Unkown {
+            return Err("That language code is not available, please run `manga-tui lang --print` to list available languages");
+        }
+
+        Ok(lang)
     }
 }
 

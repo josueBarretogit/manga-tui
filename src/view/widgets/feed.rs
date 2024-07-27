@@ -125,12 +125,9 @@ impl HistoryWidget {
 
                 let num_days = difference.num_days();
 
-                let translated_language: Languages = chapter
-                    .attributes
-                    .translated_language
-                    .as_str()
-                    .try_into()
-                    .unwrap_or(*Languages::get_preferred_lang());
+                let translated_language =
+                    Languages::try_from_iso_code(&chapter.attributes.translated_language)
+                        .unwrap_or(*Languages::get_preferred_lang());
 
                 let recent_chapter = RecentChapters {
                     title: chapter.attributes.title.unwrap_or("No title ".to_string()),

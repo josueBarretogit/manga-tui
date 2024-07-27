@@ -19,8 +19,6 @@ use tokio::task::JoinSet;
 use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
 
-//todo! make search bar
-
 #[derive(Eq, PartialEq)]
 pub enum FeedState {
     SearchingHistory,
@@ -93,9 +91,8 @@ impl Feed {
         }
     }
 
-    fn render_tabs_area(&mut self, area: Rect, frame: &mut Frame) {
-        let buf = frame.buffer_mut();
-        let [tabs_area, loading_state_area] =
+    fn render_tabs_and_search_bar(&mut self, area: Rect, frame: &mut Frame) {
+        let [tabs_area, search_bar_area] =
             Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)]).areas(area);
 
         let selected_tab = match self.tabs {
@@ -112,48 +109,64 @@ impl Feed {
             .select(selected_tab)
             .block(Block::bordered().title(tabs_instructions))
             .highlight_style(Style::default().fg(Color::Yellow))
-            .render(tabs_area, buf);
-        match self.state {
-            FeedState::Normal | FeedState::SearchingHistory => {
-                let input_help = if self.is_typing {
-                    "Press <Enter> to serch"
-                } else {
-                    "Press <s> to search"
-                };
+            .render(tabs_area, frame.buffer_mut());
 
-                render_search_bar(
-                    self.is_typing,
-                    input_help.into(),
-                    &self.search_bar,
-                    frame,
-                    loading_state_area,
-                );
-            }
-            FeedState::SearchingMangaPage => {
-                if let Some(state) = self.loading_state.as_mut() {
-                    let loader = Throbber::default()
-                        .label("Searching manga data, please wait ")
-                        .style(Style::default().fg(Color::Yellow))
-                        .throbber_set(throbber_widgets_tui::BRAILLE_SIX)
-                        .use_type(throbber_widgets_tui::WhichUse::Spin);
+        let input_help: Vec<Span<'_>> = if self.is_typing {
+            vec![
+                "Press ".into(),
+                Span::raw("<Enter>").style(*INSTRUCTIONS_STYLE),
+                " to search".into(),
+            ]
+        } else {
+            vec![
+                "Press ".into(),
+                Span::raw("<s>").style(*INSTRUCTIONS_STYLE),
+                " to filter mangas".into(),
+            ]
+        };
 
-                    StatefulWidget::render(
-                        loader,
-                        loading_state_area.inner(Margin {
-                            horizontal: 1,
-                            vertical: 1,
-                        }),
-                        buf,
-                        state,
-                    );
-                }
-            }
-            FeedState::MangaPageNotFound => {
-                Paragraph::new("Error, could not get manga data, please try another time")
-                    .render(loading_state_area, buf);
-            }
+        render_search_bar(
+            self.is_typing,
+            input_help.into(),
+            &self.search_bar,
+            frame,
+            search_bar_area,
+        );
+    }
+
+    fn render_searching_status(&mut self, area: Rect, buf: &mut Buffer) {
+        if let Some(state) = self.loading_state.as_mut() {
+            let loader = Throbber::default()
+                .label("Searching manga data, please wait ")
+                .style(Style::default().fg(Color::Yellow))
+                .throbber_set(throbber_widgets_tui::BRAILLE_SIX)
+                .use_type(throbber_widgets_tui::WhichUse::Spin);
+
+            StatefulWidget::render(
+                loader,
+                area.inner(Margin {
+                    horizontal: 1,
+                    vertical: 1,
+                }),
+                buf,
+                state,
+            );
+        }
+        if self.state == FeedState::MangaPageNotFound {
+            Paragraph::new("Error, could not get manga data, please try again another time")
+                .render(area, buf);
         }
     }
+
+    fn render_top_area(&mut self, area: Rect, frame: &mut Frame) {
+        let [tabs_and_search_bar_area, searching_area] =
+            Layout::vertical([Constraint::Fill(1), Constraint::Fill(1)]).areas(area);
+
+        self.render_tabs_and_search_bar(tabs_and_search_bar_area, frame);
+
+        self.render_searching_status(searching_area, frame.buffer_mut());
+    }
+
     pub fn init_search(&mut self) {
         self.local_event_tx.send(FeedEvents::SearchHistory).ok();
     }
@@ -419,11 +432,11 @@ impl Feed {
 impl Component for Feed {
     type Actions = FeedActions;
     fn render(&mut self, area: ratatui::prelude::Rect, frame: &mut Frame<'_>) {
-        let layout = Layout::vertical([Constraint::Percentage(10), Constraint::Percentage(90)]);
+        let layout = Layout::vertical([Constraint::Percentage(20), Constraint::Percentage(80)]);
 
         let [tabs_area, history_area] = layout.areas(area);
 
-        self.render_tabs_area(tabs_area, frame);
+        self.render_top_area(tabs_area, frame);
 
         self.render_history(history_area, frame.buffer_mut());
     }

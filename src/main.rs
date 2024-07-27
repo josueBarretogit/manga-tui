@@ -70,7 +70,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 match set {
                     Some(lang) => {
-                        let try_lang: Result<Languages, &'static str> = lang.as_str().try_into();
+                        let try_lang: Result<Languages, &'static str> =
+                            Languages::try_from_iso_code(lang.as_str());
 
                         if let Err(message) = try_lang {
                             println!("{message}");
