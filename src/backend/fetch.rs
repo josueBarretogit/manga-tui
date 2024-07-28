@@ -98,6 +98,20 @@ impl MangadexClient {
             .await
     }
 
+    pub async fn get_cover_for_manga_lower_quality(
+        &self,
+        id_manga: &str,
+        file_name: &str,
+    ) -> Result<bytes::Bytes, reqwest::Error> {
+        let file_name = format!("{}.256.jpg", file_name);
+        self.client
+            .get(format!("{}/{}/{}", COVER_IMG_URL_BASE, id_manga, file_name))
+            .send()
+            .await?
+            .bytes()
+            .await
+    }
+
     pub async fn get_chapter_page(
         &self,
         endpoint: &str,

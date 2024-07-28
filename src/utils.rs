@@ -41,7 +41,7 @@ pub fn search_manga_cover<IM: ImageHandler>(
 ) {
     join_set.spawn(async move {
         let response = MangadexClient::global()
-            .get_cover_for_manga(&manga_id, &file_name)
+            .get_cover_for_manga_lower_quality(&manga_id, &file_name)
             .await;
 
         match response {

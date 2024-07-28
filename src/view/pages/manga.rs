@@ -144,8 +144,11 @@ impl MangaPage {
         let [cover_area, more_details_area] =
             Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)]).areas(area);
 
-        Paragraph::new(format!(" \n Publication date : \n {}", self.manga.created_at))
-            .render(more_details_area, buf);
+        Paragraph::new(format!(
+            " \n Publication date : \n {}",
+            self.manga.created_at
+        ))
+        .render(more_details_area, buf);
 
         match self.image_state.as_mut() {
             Some(state) => {
@@ -235,12 +238,17 @@ impl MangaPage {
                 let page = format!("Page {} of : {}", chapters.page, tota_pages.ceil());
                 let total = format!("Total chapters {}", chapters.total_result);
 
-                let chapter_instructions = vec![
+                let mut chapter_instructions = vec![
                     "Scroll Down/Up ".into(),
                     Span::raw(" <j>/<k> ").style(*INSTRUCTIONS_STYLE),
                     " Download chapter ".into(),
                     Span::raw(" <d> ").style(*INSTRUCTIONS_STYLE),
                 ];
+
+                if PICKER.is_some() {
+                    chapter_instructions.push(" Read chapter ".into());
+                    chapter_instructions.push(Span::raw(" <r> ").style(*INSTRUCTIONS_STYLE));
+                }
 
                 let pagination_instructions: Vec<Span<'_>> = vec![
                     page.into(),

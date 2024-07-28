@@ -8,6 +8,7 @@ use crate::backend::SearchMangaResponse;
 use crate::common::Artist;
 use crate::common::Author;
 use crate::global::INSTRUCTIONS_STYLE;
+use crate::utils::render_search_bar;
 use crate::utils::search_manga_cover;
 use crate::view::widgets::filter_widget::state::FilterState;
 use crate::view::widgets::filter_widget::FilterWidget;
@@ -20,11 +21,15 @@ use crossterm::event::KeyEvent;
 use crossterm::event::{self, KeyCode};
 use ratatui::{prelude::*, widgets::*};
 use ratatui_image::protocol::StatefulProtocol;
+use throbber_widgets_tui::Throbber;
+use throbber_widgets_tui::ThrobberState;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
 use tui_widget_list::ListState;
+
+use self::text::ToSpan;
 
 // Todo! display cover area loading
 // Todo! display loading search
@@ -89,9 +94,10 @@ pub struct SearchPage {
     pub input_mode: InputMode,
     search_bar: Input,
     state: PageState,
+    loader_state: ThrobberState,
     mangas_found_list: MangasFoundList,
     filter_state: FilterState,
-    /// To store the state of the covers without cloning
+    manga_added_to_plan_to_read: Option<String>,
     tasks: JoinSet<()>,
 }
 
@@ -157,6 +163,7 @@ impl Component for SearchPage {
     }
     fn clean_up(&mut self) {
         self.state = PageState::default();
+        self.manga_added_to_plan_to_read = None;
         self.input_mode = InputMode::Idle;
         self.abort_tasks();
         self.mangas_found_list.state = ListState::default();
@@ -183,41 +190,42 @@ impl SearchPage {
             mangas_found_list: MangasFoundList::default(),
             tasks: JoinSet::new(),
             filter_state: FilterState::new(),
+            loader_state: ThrobberState::default(),
+            manga_added_to_plan_to_read: None,
         }
     }
 
     fn render_input_area(&self, area: Rect, frame: &mut Frame<'_>) {
-        let layout = Layout::vertical([Constraint::Max(1), Constraint::Max(5)]).split(area);
+        let [input_area, information_area] =
+            Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)]).areas(area);
 
-        let (input_help, input_style) = match self.input_mode {
-            InputMode::Idle => (
-                "Press <s> to type, open advanced filters: <f> ",
-                Style::default(),
-            ),
-            InputMode::Typing => (
-                "Press <enter> to search, <esc> to stop typing",
-                Style::default().fg(Color::Yellow),
-            ),
+        let input_help = match self.input_mode {
+            InputMode::Idle => "Press <s> to type, open advanced filters: <f> ",
+            InputMode::Typing => "Press <enter> to search, <esc> to stop typing",
         };
 
-        let input_bar = Paragraph::new(self.search_bar.value()).block(
-            Block::bordered()
-                .title(input_help)
-                .border_style(input_style),
+        render_search_bar(
+            self.input_mode == InputMode::Typing,
+            input_help.into(),
+            &self.search_bar,
+            frame,
+            input_area,
         );
 
-        input_bar.render(layout[1], frame.buffer_mut());
-
-        let width = layout[0].width.max(3) - 3;
-
-        let scroll = self.search_bar.visual_scroll(width as usize);
-
-        match self.input_mode {
-            InputMode::Idle => {}
-            InputMode::Typing => frame.set_cursor(
-                layout[1].x + ((self.search_bar.visual_cursor()).max(scroll) - scroll) as u16 + 1,
-                layout[1].y + 1,
-            ),
+        if let Some(name) = self.manga_added_to_plan_to_read.as_ref() {
+            Paragraph::new(
+                format!("Added: {} to plan to read 📖", name)
+                    .to_span()
+                    .underlined(),
+            )
+            .wrap(Wrap { trim: true })
+            .render(
+                information_area.inner(Margin {
+                    horizontal: 1,
+                    vertical: 1,
+                }),
+                frame.buffer_mut(),
+            );
         }
     }
 
@@ -234,7 +242,13 @@ impl SearchPage {
                 Block::bordered().render(area, buf);
             }
             PageState::SearchingMangas => {
-                Block::bordered().render(area, buf);
+                let loader = Throbber::default()
+                    .label("Searching mangas")
+                    .style(Style::default().fg(Color::Yellow))
+                    .throbber_set(throbber_widgets_tui::BRAILLE_SIX)
+                    .use_type(throbber_widgets_tui::WhichUse::Spin);
+
+                StatefulWidget::render(loader, area, buf, &mut self.loader_state);
             }
             PageState::NotFound => {
                 Block::bordered()
@@ -246,13 +260,13 @@ impl SearchPage {
 
                 let list_instructions = Line::from(vec![
                     "Go down ".into(),
-                    "<j> ".bold().blue(),
-                    "Go up ".into(),
-                    "<k> ".bold().blue(),
-                    "Plan to read ".into(),
-                    "<p> ".bold().fg(Color::Yellow),
-                    "Read ".into(),
-                    "<r> ".bold().fg(Color::Yellow),
+                    Span::raw("<j>").style(*INSTRUCTIONS_STYLE),
+                    " Go up ".into(),
+                    Span::raw("<k>").style(*INSTRUCTIONS_STYLE),
+                    " Plan to read ".into(),
+                    Span::raw("<p>").style(*INSTRUCTIONS_STYLE),
+                    " Read ".into(),
+                    Span::raw("<r>").style(*INSTRUCTIONS_STYLE),
                 ]);
 
                 let pagination_instructions = Line::from(vec![
@@ -264,9 +278,9 @@ impl SearchPage {
                     )
                     .into(),
                     "Next ".into(),
-                    "<w> ".bold().fg(Color::Yellow),
-                    "Previous ".into(),
-                    "<b> ".bold().fg(Color::Yellow),
+                    Span::raw("<w>").style(*INSTRUCTIONS_STYLE),
+                    " Previous ".into(),
+                    Span::raw("<b>").style(*INSTRUCTIONS_STYLE),
                 ]);
 
                 Block::bordered()
@@ -286,6 +300,7 @@ impl SearchPage {
                         buf,
                         &mut self.mangas_found_list.state,
                     );
+                    let loader_state = self.loader_state.clone();
                     if let Some(manga_selected) = self.get_current_manga_selected_mut() {
                         StatefulWidget::render(
                             MangaPreview::new(
@@ -294,6 +309,7 @@ impl SearchPage {
                                 &manga_selected.manga.tags,
                                 &manga_selected.manga.content_rating,
                                 &manga_selected.manga.status,
+                                loader_state,
                             ),
                             preview_area,
                             buf,
@@ -359,8 +375,11 @@ impl SearchPage {
                 img_url: item.manga.img_url.as_deref(),
             });
 
-            if let Err(e) = plan_to_read_op {
-                write_to_error_log(ErrorType::FromError(Box::new(e)));
+            match plan_to_read_op {
+                Ok(()) => {
+                    self.manga_added_to_plan_to_read = Some(item.manga.title.clone());
+                }
+                Err(e) => write_to_error_log(ErrorType::FromError(Box::new(e))),
             }
         }
     }
@@ -523,6 +542,7 @@ impl SearchPage {
     }
 
     pub fn tick(&mut self) {
+        self.loader_state.calc_next();
         if let Ok(event) = self.local_event_rx.try_recv() {
             match event {
                 SearchPageEvents::LoadMangasFound(response) => self.load_mangas_found(response),

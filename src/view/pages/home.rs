@@ -37,15 +37,15 @@ pub enum HomeEvents {
     LoadPopularMangas(Option<SearchMangaResponse>),
     LoadRecentlyAddedMangas(Option<SearchMangaResponse>),
     LoadCover(Option<Box<dyn StatefulProtocol>>, String),
-    LoadRecentlyAddedMangasCover(Option<DynamicImage>, String),
+    LoadRecentlyAddedMangasCover(Option<Box<dyn StatefulProtocol>>, String),
 }
 
 impl ImageHandler for HomeEvents {
     fn load(image: Box<dyn StatefulProtocol>, id: String) -> Self {
-        Self::LoadCover(Some(image), id)
+        Self::LoadRecentlyAddedMangasCover(Some(image), id)
     }
     fn not_found(id: String) -> Self {
-        Self::LoadCover(None, id)
+        Self::LoadRecentlyAddedMangasCover(None, id)
     }
 }
 
@@ -352,7 +352,25 @@ impl Home {
             match item.manga.img_url.as_ref() {
                 Some(file_name) => {
                     let file_name = file_name.clone();
-                    search_manga_cover(file_name, manga_id, &mut self.tasks, tx);
+                    self.tasks.spawn(async move {
+                        let response = MangadexClient::global()
+                            .get_cover_for_manga(&manga_id, &file_name)
+                            .await;
+
+                        if let Ok(bytes) = response {
+                            let dyn_img = Reader::new(Cursor::new(bytes))
+                                .with_guessed_format()
+                                .unwrap();
+
+                            let maybe_decoded = dyn_img.decode();
+
+                            if let Ok(decoded) = maybe_decoded {
+                                let protocol = PICKER.unwrap().new_resize_protocol(decoded);
+                                tx.send(HomeEvents::LoadCover(Some(protocol), manga_id))
+                                    .ok();
+                            }
+                        }
+                    });
                 }
                 None => {
                     tx.send(HomeEvents::LoadCover(None, manga_id)).ok();
@@ -401,29 +419,8 @@ impl Home {
             match item.manga.img_url.as_ref() {
                 Some(file_name) => {
                     let file_name = file_name.clone();
-                    self.tasks.spawn(async move {
-                        let response = MangadexClient::global()
-                            .get_cover_for_manga(&manga_id, &file_name)
-                            .await;
 
-                        match response {
-                            Ok(bytes) => {
-                                let dyn_img = Reader::new(Cursor::new(bytes))
-                                    .with_guessed_format()
-                                    .unwrap();
-
-                                let maybe_decoded = dyn_img.decode();
-                                tx.send(HomeEvents::LoadRecentlyAddedMangasCover(
-                                    maybe_decoded.ok(),
-                                    manga_id,
-                                ))
-                                .ok();
-                            }
-                            Err(_) => tx
-                                .send(HomeEvents::LoadRecentlyAddedMangasCover(None, manga_id))
-                                .unwrap(),
-                        }
-                    });
+                    search_manga_cover(file_name, manga_id, &mut self.tasks, tx);
                 }
                 None => {
                     tx.send(HomeEvents::LoadRecentlyAddedMangasCover(None, manga_id))
@@ -433,7 +430,11 @@ impl Home {
         }
     }
 
-    fn load_recently_added_mangas_cover(&mut self, maybe_cover: Option<DynamicImage>, id: String) {
+    fn load_recently_added_mangas_cover(
+        &mut self,
+        maybe_cover: Option<Box<dyn StatefulProtocol>>,
+        id: String,
+    ) {
         match maybe_cover {
             Some(cover) => {
                 if let Some(recently_added_manga) = self
@@ -442,8 +443,7 @@ impl Home {
                     .iter_mut()
                     .find(|manga_item| manga_item.manga.id == id)
                 {
-                    let image = PICKER.unwrap().new_resize_protocol(cover);
-                    recently_added_manga.cover_state = Some(image);
+                    recently_added_manga.cover_state = Some(cover);
                 }
             }
             None => {

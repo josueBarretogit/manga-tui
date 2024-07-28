@@ -4,6 +4,7 @@ use crate::utils::{from_manga_response, set_status_style, set_tags_style};
 use ratatui::{prelude::*, widgets::*};
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::{Resize, StatefulImage};
+use throbber_widgets_tui::{Throbber, ThrobberState};
 use tui_widget_list::PreRender;
 
 pub struct MangaPreview<'a> {
@@ -12,6 +13,7 @@ pub struct MangaPreview<'a> {
     tags: &'a Vec<String>,
     content_rating: &'a str,
     status: &'a str,
+    loader_state: ThrobberState,
 }
 
 impl<'a> MangaPreview<'a> {
@@ -21,6 +23,7 @@ impl<'a> MangaPreview<'a> {
         tags: &'a Vec<String>,
         content_rating: &'a str,
         status: &'a str,
+        loader_state: ThrobberState,
     ) -> Self {
         Self {
             title,
@@ -28,6 +31,7 @@ impl<'a> MangaPreview<'a> {
             tags,
             content_rating,
             status,
+            loader_state,
         }
     }
 
@@ -48,10 +52,21 @@ impl<'a> MangaPreview<'a> {
                 StatefulWidget::render(cover, cover_area, buf, image_state)
             }
             None => {
-                //Loading cover
-                Block::bordered()
-                    .title("Loading cover")
-                    .render(cover_area, buf);
+                Block::bordered().render(cover_area, buf);
+                let loader = Throbber::default()
+                    .label("Loading cover")
+                    .throbber_set(throbber_widgets_tui::BRAILLE_SIX)
+                    .use_type(throbber_widgets_tui::WhichUse::Spin);
+
+                StatefulWidget::render(
+                    loader,
+                    cover_area.inner(Margin {
+                        horizontal: 2,
+                        vertical: 2,
+                    }),
+                    buf,
+                    &mut self.loader_state,
+                );
             }
         };
     }

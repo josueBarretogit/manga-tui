@@ -1,6 +1,7 @@
 use crate::backend::error_log::{write_to_error_log, ErrorType};
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
+use crate::global::INSTRUCTIONS_STYLE;
 use crate::view::widgets::reader::{PageItemState, PagesItem, PagesList};
 use crate::view::widgets::Component;
 use crate::PICKER;
@@ -86,7 +87,11 @@ impl Component for MangaReader {
         Block::bordered().render(left, buf);
         self.render_page_list(left, buf);
 
-        Block::bordered().render(right, buf);
+        Paragraph::new(Line::from(vec![
+            "Go back: ".into(),
+            Span::raw("<Backspace>").style(*INSTRUCTIONS_STYLE),
+        ]))
+        .render(right, buf);
 
         match self
             .pages
