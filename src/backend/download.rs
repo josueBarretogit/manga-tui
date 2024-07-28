@@ -41,7 +41,6 @@ pub fn download_chapter(
     }
 
     // need directory to store the language the chapter is in
-    // todo!
     let chapter_language_dir = dir_manga.join(chapter.lang);
 
     if !exists!(&chapter_language_dir) {

@@ -68,12 +68,20 @@ impl<'a> StatefulWidgetFrame for FilterWidget<'a> {
 
         if let Some(filter) = FILTERS.get(state.id_filter) {
             match filter {
-                MangaFilters::ContentRating => {
+                MangaFilters::PublicationStatus => {
                     render_filter_list(
-                        state.content_rating_list_state.items.clone(),
+                        state.publication_status.items.clone(),
                         current_filter_area,
                         buf,
-                        &mut state.content_rating_list_state.state,
+                        &mut state.publication_status.state,
+                    );
+                }
+                MangaFilters::ContentRating => {
+                    render_filter_list(
+                        state.content_rating.items.clone(),
+                        current_filter_area,
+                        buf,
+                        &mut state.content_rating.state,
                     );
                 }
                 MangaFilters::SortBy => {

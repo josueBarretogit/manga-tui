@@ -133,7 +133,8 @@ impl Component for SearchPage {
             SearchPageActions::PreviousPage => self.search_previous_page(),
             SearchPageActions::GoToMangaPage => {
                 let manga_selected = self.get_current_manga_selected();
-                if let Some(manga) = manga_selected { self.global_event_tx
+                if let Some(manga) = manga_selected {
+                    self.global_event_tx
                         .send(Events::GoToMangaPage(manga.clone()))
                         .ok();
                 }
@@ -278,32 +279,28 @@ impl SearchPage {
                     vertical: 1,
                 });
 
-                StatefulWidgetRef::render_ref(
-                    &self.mangas_found_list.widget,
-                    inner_list_area,
-                    buf,
-                    &mut self.mangas_found_list.state,
-                );
-
                 if !self.filter_state.is_open {
-if let Some(manga_selected) = self.get_current_manga_selected_mut() {
-                    StatefulWidget::render(
-                        MangaPreview::new(
-                            &manga_selected.manga.title,
-                            &manga_selected.manga.description,
-                            &manga_selected.manga.tags,
-                            &manga_selected.manga.content_rating,
-                            &manga_selected.manga.status,
-                        ),
-                        preview_area,
+                    StatefulWidgetRef::render_ref(
+                        &self.mangas_found_list.widget,
+                        inner_list_area,
                         buf,
-                        &mut manga_selected.image_state,
-                    )
+                        &mut self.mangas_found_list.state,
+                    );
+                    if let Some(manga_selected) = self.get_current_manga_selected_mut() {
+                        StatefulWidget::render(
+                            MangaPreview::new(
+                                &manga_selected.manga.title,
+                                &manga_selected.manga.description,
+                                &manga_selected.manga.tags,
+                                &manga_selected.manga.content_rating,
+                                &manga_selected.manga.status,
+                            ),
+                            preview_area,
+                            buf,
+                            &mut manga_selected.image_state,
+                        )
+                    }
                 }
-
-                }
-
-                
             }
         }
         if self.filter_state.is_open {

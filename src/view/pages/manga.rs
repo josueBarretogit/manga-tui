@@ -656,15 +656,14 @@ impl MangaPage {
 
         self.state = PageState::DownloadingChapters;
         if let Some(chapter) = self.get_current_selected_chapter_mut() {
+            if chapter.download_loading_state.is_some() {
+                return;
+            }
             let title = chapter.title.clone();
             let number = chapter.chapter_number.clone();
             let scanlator = chapter.scanlator.clone();
             let chapter_id = chapter.id.clone();
             let lang = chapter.translated_language.as_human_readable().to_string();
-
-            if chapter.download_loading_state.is_some() {
-                return;
-            }
 
             chapter.download_loading_state = Some(0.001);
 
@@ -827,7 +826,7 @@ impl Component for MangaPage {
     fn render(&mut self, area: ratatui::prelude::Rect, frame: &mut ratatui::Frame<'_>) {
         let layout = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(30), Constraint::Percentage(70)]);
+            .constraints([Constraint::Percentage(25), Constraint::Percentage(75)]);
 
         let [cover_area, information_area] = layout.areas(area);
 

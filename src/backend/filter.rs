@@ -387,9 +387,44 @@ impl IntoParam for Vec<Languages> {
     }
 }
 
+#[derive(Clone, Display, EnumIter)]
+pub enum PublicationStatus {
+    #[strum(to_string = "ongoing")]
+    Ongoing,
+    #[strum(to_string = "completed")]
+    Completed,
+    #[strum(to_string = "hiatus")]
+    Hiatus,
+    #[strum(to_string = "cancelled")]
+    Cancelled,
+}
+
+impl From<&str> for PublicationStatus {
+    fn from(value: &str) -> Self {
+        PublicationStatus::iter()
+            .find(|status| status.to_string() == value)
+            .unwrap()
+    }
+}
+
+impl IntoParam for Vec<PublicationStatus> {
+    fn into_param(self) -> String {
+        let param = String::new();
+        if self.is_empty() {
+            return param;
+        }
+        self.into_iter()
+            .fold(String::new(), |mut name, current_status| {
+                let _ = write!(name, "&status[]={}", current_status);
+                name
+            })
+    }
+}
+
 #[derive(Clone)]
 pub struct Filters {
     pub content_rating: Vec<ContentRating>,
+    pub publication_status: Vec<PublicationStatus>,
     pub sort_by: SortBy,
     pub tags: Tags,
     pub magazine_demographic: Vec<MagazineDemographic>,
@@ -401,9 +436,10 @@ pub struct Filters {
 impl IntoParam for Filters {
     fn into_param(self) -> String {
         format!(
-            "{}{}{}{}{}{}{}",
+            "{}{}{}{}{}{}{}{}",
             self.authors.into_param(),
             self.artists.into_param(),
+            self.publication_status.into_param(),
             self.languages.into_param(),
             self.tags.into_param(),
             self.magazine_demographic.into_param(),
@@ -417,6 +453,7 @@ impl Default for Filters {
     fn default() -> Self {
         Self {
             content_rating: vec![ContentRating::Safe, ContentRating::Suggestive],
+            publication_status: vec![],
             sort_by: SortBy::default(),
             tags: Tags(vec![]),
             magazine_demographic: vec![],
@@ -430,6 +467,10 @@ impl Default for Filters {
 impl Filters {
     pub fn set_content_rating(&mut self, ratings: Vec<ContentRating>) {
         self.content_rating = ratings;
+    }
+
+    pub fn set_publication_status(&mut self, status: Vec<PublicationStatus>) {
+        self.publication_status = status;
     }
 
     pub fn set_sort_by(&mut self, sort_by: SortBy) {

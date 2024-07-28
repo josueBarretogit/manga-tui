@@ -1,12 +1,12 @@
 use crate::backend::authors::AuthorsResponse;
 use crate::backend::fetch::MangadexClient;
 use crate::backend::filter::{
-    Artist, Author, ContentRating, Filters, Languages, MagazineDemographic, SortBy,
+    Artist, Author, ContentRating, Filters, Languages, MagazineDemographic, PublicationStatus,
+    SortBy,
 };
 use crate::backend::tags::TagsResponse;
 use crate::backend::tui::Events;
 use crossterm::event::{KeyCode, KeyEvent};
-use futures::select;
 use ratatui::widgets::*;
 use std::marker::PhantomData;
 use strum::{Display, IntoEnumIterator};
@@ -28,6 +28,8 @@ pub enum MangaFilters {
     Languages,
     #[strum(to_string = "Sort by")]
     SortBy,
+    #[strum(to_string = "Publication status")]
+    PublicationStatus,
     #[strum(to_string = "Magazine demographic")]
     MagazineDemographic,
     Tags,
@@ -35,10 +37,11 @@ pub enum MangaFilters {
     Artists,
 }
 
-pub const FILTERS: [MangaFilters; 7] = [
+pub const FILTERS: [MangaFilters; 8] = [
     MangaFilters::ContentRating,
     MangaFilters::Languages,
     MangaFilters::SortBy,
+    MangaFilters::PublicationStatus,
     MangaFilters::Tags,
     MangaFilters::MagazineDemographic,
     MangaFilters::Authors,
@@ -58,6 +61,7 @@ impl FilterListItem {
 }
 
 pub struct ContentRatingState;
+pub struct PublicationStatusState;
 pub struct SortByState;
 pub struct MagazineDemographicState;
 pub struct LanguageState;
@@ -145,6 +149,20 @@ impl Default for FilterList<MagazineDemographicState> {
         let items = MagazineDemographic::iter().map(|mag| FilterListItem {
             name: mag.to_string(),
             is_selected: false,
+        });
+        Self {
+            items: items.collect(),
+            state: ListState::default(),
+            _state: PhantomData,
+        }
+    }
+}
+
+impl Default for FilterList<PublicationStatusState> {
+    fn default() -> Self {
+        let items = PublicationStatus::iter().map(|status| FilterListItem {
+            is_selected: false,
+            name: status.to_string(),
         });
         Self {
             items: items.collect(),
@@ -341,7 +359,8 @@ pub struct FilterState {
     pub is_open: bool,
     pub id_filter: usize,
     pub filters: Filters,
-    pub content_rating_list_state: FilterList<ContentRatingState>,
+    pub content_rating: FilterList<ContentRatingState>,
+    pub publication_status: FilterList<PublicationStatusState>,
     pub sort_by_state: FilterList<SortByState>,
     pub magazine_demographic: FilterList<MagazineDemographicState>,
     pub tags: TagsState,
@@ -361,7 +380,8 @@ impl FilterState {
             is_open: false,
             id_filter: 0,
             filters: Filters::default(),
-            content_rating_list_state: FilterList::<ContentRatingState>::default(),
+            content_rating: FilterList::<ContentRatingState>::default(),
+            publication_status: FilterList::<PublicationStatusState>::default(),
             sort_by_state: FilterList::<SortByState>::default(),
             tags: TagsState::default(),
             magazine_demographic: FilterList::<MagazineDemographicState>::default(),
@@ -386,7 +406,8 @@ impl FilterState {
         }
 
         self.filters = Filters::default();
-        self.content_rating_list_state = FilterList::<ContentRatingState>::default();
+        self.content_rating = FilterList::<ContentRatingState>::default();
+        self.publication_status = FilterList::<PublicationStatusState>::default();
         self.magazine_demographic = FilterList::<MagazineDemographicState>::default();
         self.sort_by_state = FilterList::<SortByState>::default();
         self.lang_state = FilterList::<LanguageState>::default();
@@ -513,7 +534,7 @@ impl FilterState {
         if let Some(filter) = FILTERS.get(self.id_filter) {
             match filter {
                 MangaFilters::ContentRating => {
-                    self.content_rating_list_state.scroll_down();
+                    self.content_rating.scroll_down();
                 }
                 MangaFilters::SortBy => {
                     self.sort_by_state.scroll_down();
@@ -539,6 +560,9 @@ impl FilterState {
                 MangaFilters::Languages => {
                     self.lang_state.scroll_down();
                 }
+                MangaFilters::PublicationStatus => {
+                    self.publication_status.scroll_down();
+                }
             }
         }
     }
@@ -547,7 +571,7 @@ impl FilterState {
         if let Some(filter) = FILTERS.get(self.id_filter) {
             match filter {
                 MangaFilters::ContentRating => {
-                    self.content_rating_list_state.scroll_up();
+                    self.content_rating.scroll_up();
                 }
                 MangaFilters::SortBy => {
                     self.sort_by_state.scroll_up();
@@ -574,6 +598,9 @@ impl FilterState {
                 MangaFilters::Languages => {
                     self.lang_state.scroll_up();
                 }
+                MangaFilters::PublicationStatus => {
+                    self.publication_status.scroll_up();
+                }
             }
         }
     }
@@ -582,7 +609,7 @@ impl FilterState {
         if let Some(filter) = FILTERS.get(self.id_filter) {
             match filter {
                 MangaFilters::ContentRating => {
-                    self.content_rating_list_state.toggle();
+                    self.content_rating.toggle();
                     self.set_content_rating();
                 }
                 MangaFilters::SortBy => {
@@ -611,8 +638,27 @@ impl FilterState {
                     self.lang_state.toggle();
                     self.set_languages();
                 }
+                MangaFilters::PublicationStatus => {
+                    self.publication_status.toggle();
+                    self.set_publication_status();
+                }
             }
         }
+    }
+
+    fn set_publication_status(&mut self) {
+        self.filters.set_publication_status(
+            self.publication_status
+                .items
+                .iter()
+                .filter_map(|item| {
+                    if item.is_selected {
+                        return Some(item.name.as_str().into());
+                    }
+                    None
+                })
+                .collect(),
+        )
     }
 
     pub fn set_tags_from_response(&mut self, tags_response: TagsResponse) {
@@ -659,7 +705,7 @@ impl FilterState {
 
     fn set_content_rating(&mut self) {
         self.filters.set_content_rating(
-            self.content_rating_list_state
+            self.content_rating
                 .items
                 .iter()
                 .filter_map(|item| {
