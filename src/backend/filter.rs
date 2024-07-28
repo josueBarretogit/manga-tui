@@ -239,13 +239,14 @@ pub enum Languages {
     SimplifiedChinese,
     Russian,
     German,
-    Albanian,
+    Burmese,
     Arabic,
     Bulgarian,
     Vietnamese,
     Croatian,
     Hungarian,
     Dutch,
+    Mongolian,
     Turkish,
     Ukrainian,
     Thai,
@@ -256,6 +257,7 @@ pub enum Languages {
     Romanian,
     Hebrew,
     Polish,
+    Persian,
     // Some language that is missing
     Unkown,
 }
@@ -272,7 +274,9 @@ impl From<String> for Languages {
 impl Languages {
     pub fn as_emoji(self) -> &'static str {
         match self {
+            Self::Mongolian => "🇲🇳",
             Self::Polish => "🇵🇱",
+            Self::Persian => "🇮🇷",
             Self::Romanian => "🇷🇴",
             Self::Hungarian => "🇭🇺",
             Self::Hebrew => "🇮🇱",
@@ -295,7 +299,7 @@ impl Languages {
             Self::Spanish => "🇪🇸",
             Self::Russian => "🇷🇺",
             Self::Japanese => "🇯🇵",
-            Self::Albanian => "🇦🇱",
+            Self::Burmese => "🇲🇲",
             Self::Croatian => "🇭🇷",
             Self::SpanishLa => "🇲🇽",
             Self::Bulgarian => "🇧🇬",
@@ -316,6 +320,8 @@ impl Languages {
 
     pub fn as_iso_code(self) -> &'static str {
         match self {
+            Self::Mongolian => "mn",
+            Self::Persian => "fa",
             Self::Polish => "pl",
             Self::Romanian => "ro",
             Self::Hungarian => "hu",
@@ -336,7 +342,7 @@ impl Languages {
             Self::BrazilianPortuguese => "pt-br",
             Self::Portuguese => "pt",
             Self::Russian => "ru",
-            Self::Albanian => "sq",
+            Self::Burmese => "my",
             Self::Croatian => "hr",
             Self::SpanishLa => "es-la",
             Self::Bulgarian => "bg",

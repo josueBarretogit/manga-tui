@@ -89,6 +89,7 @@ impl MangadexClient {
         id_manga: &str,
         file_name: &str,
     ) -> Result<bytes::Bytes, reqwest::Error> {
+        let file_name = format!("{}.512.jpg", file_name);
         self.client
             .get(format!("{}/{}/{}", COVER_IMG_URL_BASE, id_manga, file_name))
             .send()

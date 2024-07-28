@@ -1,6 +1,6 @@
 use crate::backend::tui::Events;
-use image::DynamicImage;
 use ratatui::Frame;
+use ratatui_image::protocol::StatefulProtocol;
 
 pub mod feed;
 pub mod filter_widget;
@@ -8,7 +8,6 @@ pub mod home;
 pub mod manga;
 pub mod reader;
 pub mod search;
-
 
 pub trait Component {
     type Actions;
@@ -32,6 +31,6 @@ pub trait StatefulWidgetFrame {
 }
 
 pub trait ImageHandler: Send + 'static {
-    fn load(image: DynamicImage, id: String) -> Self;
+    fn load(image: Box<dyn StatefulProtocol>, id: String) -> Self;
     fn not_found(id: String) -> Self;
 }

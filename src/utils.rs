@@ -4,6 +4,7 @@ use crate::backend::filter::Languages;
 use crate::backend::Data;
 use crate::common::{Artist, Author, Manga};
 use crate::view::widgets::ImageHandler;
+use crate::PICKER;
 use image::io::Reader;
 use ratatui::{prelude::*, widgets::*};
 use std::io::Cursor;
@@ -51,18 +52,10 @@ pub fn search_manga_cover<IM: ImageHandler>(
 
                 let maybe_decoded = dyn_img.decode();
 
-                match maybe_decoded {
-                    Ok(image) => {
-                        tx.send(IM::load(image, manga_id)).unwrap();
-                    }
-                    Err(e) => {
-                        write_to_error_log(crate::backend::error_log::ErrorType::FromError(
-                            Box::new(e),
-                        ));
-                        tx.send(IM::not_found(manga_id)).unwrap();
-                    }
-                };
-
+                if let Ok(decoded) = maybe_decoded {
+                    let protocol = PICKER.unwrap().new_resize_protocol(decoded);
+                    tx.send(IM::load(protocol, manga_id)).unwrap();
+                }
             }
             Err(e) => {
                 write_to_error_log(crate::backend::error_log::ErrorType::FromError(Box::new(e)));

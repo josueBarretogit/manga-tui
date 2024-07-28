@@ -37,7 +37,7 @@ impl<'a> MangaPreview<'a> {
         buf: &mut Buffer,
         state: &mut Option<Box<dyn StatefulProtocol>>,
     ) {
-        let layout = Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]);
+        let layout = Layout::horizontal([Constraint::Percentage(30), Constraint::Percentage(80)]);
         let [cover_area, details_area] = layout.areas(area);
 
         self.render_details(details_area, buf);
@@ -57,7 +57,6 @@ impl<'a> MangaPreview<'a> {
     }
 
     pub fn render_description_area(self, area: Rect, buf: &mut Buffer) {
-        // Manga details
         Block::bordered().title(self.title).render(area, buf);
 
         let inner = area.inner(layout::Margin {

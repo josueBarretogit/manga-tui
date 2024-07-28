@@ -28,7 +28,7 @@ pub enum PageState {
     SearchingChapters,
     SearchingChapterData,
     DisplayingChapters,
-    SearchNotFound,
+    ChaptersNotFound,
 }
 
 pub enum MangaPageActions {
@@ -142,9 +142,9 @@ impl MangaPage {
     }
     fn render_cover(&mut self, area: Rect, buf: &mut Buffer) {
         let [cover_area, more_details_area] =
-            Layout::vertical([Constraint::Percentage(80), Constraint::Percentage(20)]).areas(area);
+            Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)]).areas(area);
 
-        Paragraph::new(format!(" \n Publication date : {}", self.manga.created_at))
+        Paragraph::new(format!(" \n Publication date : \n {}", self.manga.created_at))
             .render(more_details_area, buf);
 
         match self.image_state.as_mut() {
@@ -268,7 +268,7 @@ impl MangaPage {
             }
 
             None => {
-                let title = if self.state == PageState::SearchNotFound {
+                let title = if self.state == PageState::ChaptersNotFound {
                     "Could not get chapters, please try again"
                 } else {
                     "Searching chapters"
@@ -556,9 +556,13 @@ impl MangaPage {
                     .iter()
                     .find(|lang| *lang == preferred_language);
 
-                maybe_preferred_language
-                    .cloned()
-                    .unwrap_or(*preferred_language)
+                maybe_preferred_language.cloned().unwrap_or(
+                    self.manga
+                        .available_languages
+                        .first()
+                        .cloned()
+                        .unwrap_or(*preferred_language),
+                )
             }
         }
     }
@@ -796,7 +800,7 @@ impl MangaPage {
                                 .ok();
                         }
                         None => {
-                            self.state = PageState::SearchNotFound;
+                            self.state = PageState::ChaptersNotFound;
                             self.chapters = None;
                         }
                     }
@@ -826,7 +830,7 @@ impl Component for MangaPage {
     fn render(&mut self, area: ratatui::prelude::Rect, frame: &mut ratatui::Frame<'_>) {
         let layout = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(25), Constraint::Percentage(75)]);
+            .constraints([Constraint::Percentage(15), Constraint::Percentage(85)]);
 
         let [cover_area, information_area] = layout.areas(area);
 

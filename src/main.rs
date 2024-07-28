@@ -69,9 +69,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .filter(|lang| *lang != Languages::Unkown)
                         .for_each(|lang| {
                             println!(
-                                "{} {} | argument form : {}",
+                                "{} {} | iso code : {}",
                                 lang.as_emoji(),
-                                lang.as_human_readable(),
+                                lang.as_human_readable().to_lowercase(),
                                 lang.as_iso_code()
                             )
                         });

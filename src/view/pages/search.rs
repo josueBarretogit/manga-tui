@@ -18,8 +18,8 @@ use crate::view::widgets::StatefulWidgetFrame;
 use crate::PICKER;
 use crossterm::event::KeyEvent;
 use crossterm::event::{self, KeyCode};
-use image::DynamicImage;
 use ratatui::{prelude::*, widgets::*};
+use ratatui_image::protocol::StatefulProtocol;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 use tui_input::backend::crossterm::EventHandler;
@@ -44,12 +44,12 @@ enum PageState {
 /// These happens in the background
 pub enum SearchPageEvents {
     SearchCovers,
-    LoadCover(Option<DynamicImage>, String),
+    LoadCover(Option<Box<dyn StatefulProtocol>>, String),
     LoadMangasFound(Option<SearchMangaResponse>),
 }
 
 impl ImageHandler for SearchPageEvents {
-    fn load(image: DynamicImage, id: String) -> Self {
+    fn load(image: Box<dyn StatefulProtocol>, id: String) -> Self {
         Self::LoadCover(Some(image), id)
     }
     fn not_found(id: String) -> Self {
@@ -546,8 +546,6 @@ impl SearchPage {
 
                 SearchPageEvents::LoadCover(maybe_image, manga_id) => match maybe_image {
                     Some(image) => {
-                        let image = PICKER.unwrap().new_resize_protocol(image);
-
                         if let Some(manga) = self
                             .mangas_found_list
                             .widget

@@ -36,12 +36,12 @@ pub enum HomeEvents {
     LoadSupportImage(Option<DynamicImage>),
     LoadPopularMangas(Option<SearchMangaResponse>),
     LoadRecentlyAddedMangas(Option<SearchMangaResponse>),
-    LoadCover(Option<DynamicImage>, String),
+    LoadCover(Option<Box<dyn StatefulProtocol>>, String),
     LoadRecentlyAddedMangasCover(Option<DynamicImage>, String),
 }
 
 impl ImageHandler for HomeEvents {
-    fn load(image: DynamicImage, id: String) -> Self {
+    fn load(image: Box<dyn StatefulProtocol>, id: String) -> Self {
         Self::LoadCover(Some(image), id)
     }
     fn not_found(id: String) -> Self {
@@ -303,7 +303,11 @@ impl Home {
         }
     }
 
-    fn load_popular_manga_cover(&mut self, maybe_cover: Option<DynamicImage>, id: String) {
+    fn load_popular_manga_cover(
+        &mut self,
+        maybe_cover: Option<Box<dyn StatefulProtocol>>,
+        id: String,
+    ) {
         match maybe_cover {
             Some(cover) => {
                 if let Some(popular_manga) = self
@@ -312,8 +316,7 @@ impl Home {
                     .iter_mut()
                     .find(|manga_item| manga_item.manga.id == id)
                 {
-                    let image = PICKER.unwrap().new_resize_protocol(cover);
-                    popular_manga.cover_state = Some(image);
+                    popular_manga.cover_state = Some(cover);
                 }
             }
             None => {
