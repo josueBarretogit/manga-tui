@@ -118,12 +118,12 @@ impl StatefulWidget for PopularMangaCarrousel {
             CarrouselState::Displaying => {
                 match self.items.get(*state) {
                     Some(item) => item.clone().render(area, buf),
-                    None => Block::bordered().title("loading").render(area, buf),
+                    None => Block::bordered().title("Loading").render(area, buf),
                 };
             }
             CarrouselState::NotFound => {
                 Block::bordered()
-                    .title("Could not get mangas")
+                    .title("Mangas not found")
                     .render(area, buf);
             }
         }

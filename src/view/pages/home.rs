@@ -4,7 +4,6 @@ use image::DynamicImage;
 use ratatui::{prelude::*, widgets::*};
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::{Resize, StatefulImage};
-use rusqlite::InterruptHandle;
 use std::env;
 use std::io::Cursor;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
@@ -329,7 +328,11 @@ impl Home {
             let response = MangadexClient::global().get_popular_mangas().await;
             match response {
                 Ok(mangas) => {
-                    tx.send(HomeEvents::LoadPopularMangas(Some(mangas))).ok();
+                    if mangas.data.is_empty() {
+                        tx.send(HomeEvents::LoadPopularMangas(None)).ok();
+                    } else {
+                        tx.send(HomeEvents::LoadPopularMangas(Some(mangas))).ok();
+                    }
                 }
                 Err(e) => {
                     write_to_error_log(ErrorType::FromError(Box::new(e)));

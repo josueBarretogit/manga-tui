@@ -65,17 +65,17 @@ impl Component for App {
                                 self.global_action_tx.send(Action::Quit).unwrap()
                             }
                         }
-                        KeyCode::Char('1') => {
+                        KeyCode::Char('u') | KeyCode::F(1) => {
                             if self.current_tab != SelectedTabs::ReaderTab {
                                 self.global_event_tx.send(Events::GoToHome).ok();
                             }
                         }
-                        KeyCode::Char('2') => {
+                        KeyCode::Char('i') | KeyCode::F(2) => {
                             if self.current_tab != SelectedTabs::ReaderTab {
                                 self.global_event_tx.send(Events::GoSearchPage).ok();
                             }
                         }
-                        KeyCode::Char('3') => {
+                        KeyCode::Char('o') | KeyCode::F(3) => {
                             if self.current_tab != SelectedTabs::ReaderTab {
                                 self.global_event_tx.send(Events::GoFeedPage).ok();
                             }
@@ -178,7 +178,7 @@ impl App {
         let (global_action_tx, global_action_rx) = unbounded_channel::<Action>();
         let (global_event_tx, global_event_rx) = unbounded_channel::<Events>();
 
-        global_event_tx.send(Events::GoSearchPage).ok();
+        global_event_tx.send(Events::GoToHome).ok();
 
         App {
             current_tab: SelectedTabs::default(),
@@ -196,14 +196,25 @@ impl App {
     }
 
     pub fn render_top_tabs(&self, area: Rect, buf: &mut Buffer) {
-        let titles: Vec<&str> = vec!["Home", "Search", "Feed"];
+        let mut titles: Vec<&str> = vec!["Home <F1>/<u>", "Search <F2>/<i>", "Feed <F3>/<o>"];
 
         let tabs_block = Block::default().borders(Borders::BOTTOM);
+
+        let index_current_tab = match self.current_tab {
+            SelectedTabs::Home => 0,
+            SelectedTabs::Search => 1,
+            SelectedTabs::Feed => 2,
+            SelectedTabs::MangaTab => {
+                titles.push(" 📖 Manga page");
+                3
+            }
+            _ => 0,
+        };
 
         Tabs::new(titles)
             .block(tabs_block)
             .highlight_style(Color::Yellow)
-            .select(0)
+            .select(index_current_tab)
             .padding("", "")
             .divider(" | ")
             .render(area, buf);
