@@ -6,11 +6,11 @@ use ratatui_image::picker::{Picker, ProtocolType};
 use reqwest::Client;
 use strum::IntoEnumIterator;
 
-use self::backend::build_data_dir;
 use self::backend::error_log::init_error_hooks;
 use self::backend::fetch::{MangadexClient, MANGADEX_CLIENT_INSTANCE};
 use self::backend::filter::Languages;
 use self::backend::tui::{init, restore, run_app};
+use self::backend::{build_data_dir, APP_DATA_DIR};
 use self::cli::CliArgs;
 use self::global::PREFERRED_LANGUAGE;
 
@@ -54,6 +54,12 @@ pub static PICKER: Lazy<Option<Picker>> = Lazy::new(|| {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli_args = CliArgs::parse();
 
+    if cli_args.dir {
+        let app_dir = APP_DATA_DIR.as_ref().unwrap();
+        println!("{}", app_dir.to_str().unwrap());
+        return Ok(());
+    }
+
     match cli_args.command {
         Some(command) => match command {
             cli::Commands::Lang { print, set } => {
@@ -76,8 +82,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     Some(lang) => {
                         let try_lang = Languages::try_from_iso_code(lang.as_str());
 
-                        if let Err(message) = try_lang {
-                            println!("{message}");
+                        if try_lang.is_none() {
+                            println!("The code : `{}` is not a valid Iso code, run `manga-tui lang --print` to list available languages and their Iso codes", lang);
 
                             return Ok(());
                         }

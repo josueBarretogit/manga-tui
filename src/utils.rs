@@ -62,6 +62,7 @@ pub fn search_manga_cover<IM: ImageHandler>(
                         tx.send(IM::not_found(manga_id)).unwrap();
                     }
                 };
+
             }
             Err(e) => {
                 write_to_error_log(crate::backend::error_log::ErrorType::FromError(Box::new(e)));

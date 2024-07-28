@@ -217,49 +217,45 @@ where
     }
 }
 
+// Todo! add at least all the languages that appear in the advanced search
 #[derive(Debug, Display, EnumIter, Default, Clone, Copy, PartialEq, Eq)]
 pub enum Languages {
-    #[strum(to_string = "🇫🇷")]
     French,
     #[default]
-    #[strum(to_string = "🇬🇧")]
     English,
-    #[strum(to_string = "🇪🇸")]
     Spanish,
-    #[strum(to_string = "🇲🇽")]
+    #[strum(to_string = "Spanish (latam)")]
     SpanishLa,
-    #[strum(to_string = "🇮🇹")]
     Italian,
-    #[strum(to_string = "🇯🇵")]
     Japanese,
-    #[strum(to_string = "🇰🇷")]
     Korean,
-    #[strum(to_string = "🇧🇷")]
+    #[strum(to_string = "Portuguese (brazil)")]
     BrazilianPortuguese,
-    #[strum(to_string = "🇵🇹")]
+    #[strum(to_string = "Portuguese")]
     Portuguese,
-    #[strum(to_string = "🇨🇳")]
+    #[strum(to_string = "Chinese (traditional)")]
     TraditionalChinese,
-    #[strum(to_string = "🇷🇺")]
+    #[strum(to_string = "Chinese (simplified)")]
+    SimplifiedChinese,
     Russian,
-    #[strum(to_string = "🇩🇪")]
     German,
-    #[strum(to_string = "🇦🇱")]
     Albanian,
-    #[strum(to_string = "🇸🇦")]
     Arabic,
-    #[strum(to_string = "🇧🇬")]
     Bulgarian,
-    #[strum(to_string = "🇻🇳")]
     Vietnamese,
-    #[strum(to_string = "🇭🇷")]
     Croatian,
-    #[strum(to_string = "🇩🇰")]
-    Danish,
-    #[strum(to_string = "🇳🇱")]
+    Hungarian,
     Dutch,
-    #[strum(to_string = "🇺🇦")]
+    Turkish,
     Ukrainian,
+    Thai,
+    Catalan,
+    Indonesian,
+    Filipino,
+    Hindi,
+    Romanian,
+    Hebrew,
+    Polish,
     // Some language that is missing
     Unkown,
 }
@@ -274,95 +270,88 @@ impl From<String> for Languages {
 }
 
 impl Languages {
-    pub fn get_preferred_lang() -> &'static Languages {
-        PREFERRED_LANGUAGE.get().expect("aa")
-    }
-    pub fn as_human_readable(self) -> &'static str {
+    pub fn as_emoji(self) -> &'static str {
         match self {
-            Languages::TraditionalChinese => "Chinese (traditional)",
-            Languages::Italian => "Italian",
-            Languages::Vietnamese => "Vietnamese",
-            Languages::English => "English",
-            Languages::Dutch => "Dutch",
-            Languages::French => "French",
-            Languages::Korean => "Korean",
-            Languages::German => "German",
-            Languages::Arabic => "Arabic",
-            Languages::Danish => "Danish",
-            Languages::Spanish => "Spanish (Spain)",
-            Languages::Russian => "Russian",
-            Languages::Japanese => "Japanese",
-            Languages::Albanian => "Albanian",
-            Languages::Croatian => "Croatian",
-            Languages::SpanishLa => "Spanish (latam)",
-            Languages::Bulgarian => "Bulgarian",
-            Languages::Ukrainian => "Ukrainian",
-            Languages::BrazilianPortuguese => "Portuguese (brazil)",
-            Languages::Portuguese => "Portuguese",
-            Languages::Unkown => "",
+            Self::Polish => "🇵🇱",
+            Self::Romanian => "🇷🇴",
+            Self::Hungarian => "🇭🇺",
+            Self::Hebrew => "🇮🇱",
+            Self::Filipino => "🇵🇭",
+            Self::Catalan => "",
+            Self::Hindi => "🇮🇳",
+            Self::Indonesian => "🇮🇩",
+            Self::Thai => "🇹🇭",
+            Self::Turkish => "🇹🇷",
+            Self::SimplifiedChinese => "🇨🇳",
+            Self::TraditionalChinese => "🇨🇳",
+            Self::Italian => "🇮🇹",
+            Self::Vietnamese => "🇻🇳",
+            Self::English => "🇺🇸",
+            Self::Dutch => "🇳🇱",
+            Self::French => "🇫🇷",
+            Self::Korean => "🇰🇷",
+            Self::German => "🇩🇪",
+            Self::Arabic => "🇸🇦",
+            Self::Spanish => "🇪🇸",
+            Self::Russian => "🇷🇺",
+            Self::Japanese => "🇯🇵",
+            Self::Albanian => "🇦🇱",
+            Self::Croatian => "🇭🇷",
+            Self::SpanishLa => "🇲🇽",
+            Self::Bulgarian => "🇧🇬",
+            Self::Ukrainian => "🇺🇦",
+            Self::BrazilianPortuguese => "🇧🇷",
+            Self::Portuguese => "🇵🇹",
+            Self::Unkown => unreachable!(),
         }
     }
-
-    pub fn as_emoji(self) -> String {
+    pub fn get_preferred_lang() -> &'static Languages {
+        PREFERRED_LANGUAGE
+            .get()
+            .expect("an error ocurred when setting preferred language")
+    }
+    pub fn as_human_readable(self) -> String {
         self.to_string()
     }
 
     pub fn as_iso_code(self) -> &'static str {
         match self {
-            Languages::Spanish => "es",
-            Languages::French => "fr",
-            Languages::English => "en",
-            Languages::Japanese => "ja",
-            Languages::Dutch => "nl",
-            Languages::Korean => "ko",
-            Languages::German => "de",
-            Languages::Arabic => "ar",
-            Languages::BrazilianPortuguese => "br",
-            Languages::Portuguese => "pt-br",
-            Languages::Danish => "da",
-            Languages::Russian => "ru",
-            Languages::Albanian => "sq",
-            Languages::Croatian => "hr",
-            Languages::SpanishLa => "es-la",
-            Languages::Bulgarian => "bg",
-            Languages::Ukrainian => "uk",
-            Languages::Vietnamese => "vi",
-            Languages::TraditionalChinese => "zh-hk",
-            Languages::Italian => "it",
-            Languages::Unkown => unreachable!(),
+            Self::Polish => "pl",
+            Self::Romanian => "ro",
+            Self::Hungarian => "hu",
+            Self::Hebrew => "he",
+            Self::Filipino => "fi",
+            Self::Catalan => "ca",
+            Self::Hindi => "hi",
+            Self::Indonesian => "id",
+            Self::Turkish => "tr",
+            Self::Spanish => "es",
+            Self::French => "fr",
+            Self::English => "en",
+            Self::Japanese => "ja",
+            Self::Dutch => "nl",
+            Self::Korean => "ko",
+            Self::German => "de",
+            Self::Arabic => "ar",
+            Self::BrazilianPortuguese => "pt-br",
+            Self::Portuguese => "pt",
+            Self::Russian => "ru",
+            Self::Albanian => "sq",
+            Self::Croatian => "hr",
+            Self::SpanishLa => "es-la",
+            Self::Bulgarian => "bg",
+            Self::Ukrainian => "uk",
+            Self::Vietnamese => "vi",
+            Self::TraditionalChinese => "zh-hk",
+            Self::Italian => "it",
+            Self::SimplifiedChinese => "zh",
+            Self::Thai => "th",
+            Languages::Unkown => "",
         }
     }
 
-    pub fn try_from_iso_code(code: &str) -> Result<Self, &'static str> {
-        let lang = match code {
-            "es" => Languages::Spanish,
-            "fr" => Languages::French,
-            "en" => Languages::English,
-            "ja" => Languages::Japanese,
-            "nl" => Languages::Dutch,
-            "ko" => Languages::Korean,
-            "de" => Languages::German,
-            "ar" => Languages::Arabic,
-            "br" => Languages::BrazilianPortuguese,
-            "pt-br" => Languages::Portuguese,
-            "da" => Languages::Danish,
-            "ru" => Languages::Russian,
-            "sq" => Languages::Albanian,
-            "hr" => Languages::Croatian,
-            "es-la" => Languages::SpanishLa,
-            "bg" => Languages::Bulgarian,
-            "uk" => Languages::Ukrainian,
-            "vi" => Languages::Vietnamese,
-            "zh-hk" => Languages::TraditionalChinese,
-            "it" => Languages::Italian,
-            _ => Languages::Unkown,
-        };
-
-        if lang == Languages::Unkown {
-            return Err("That language code is not available, please run `manga-tui lang --print` to list available languages");
-        }
-
-        Ok(lang)
+    pub fn try_from_iso_code(code: &str) -> Option<Self> {
+        Languages::iter().find(|lang| lang.as_iso_code() == code)
     }
 }
 

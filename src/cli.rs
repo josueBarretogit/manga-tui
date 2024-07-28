@@ -14,4 +14,6 @@ pub enum Commands {
 pub struct CliArgs {
     #[command(subcommand)]
     pub command: Option<Commands>,
+    #[arg(short, long)]
+    pub dir: bool,
 }

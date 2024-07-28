@@ -296,7 +296,7 @@ impl MangaPage {
         Paragraph::new(Line::from(vec![
             order_title.into(),
             " Change order : ".into(),
-            Span::raw("<o>").style(*INSTRUCTIONS_STYLE),
+            Span::raw("<t>").style(*INSTRUCTIONS_STYLE),
         ]))
         .render(sorting_area, buf);
 
@@ -382,7 +382,7 @@ impl MangaPage {
                             .ok();
                     }
                 }
-                KeyCode::Char('o') => {
+                KeyCode::Char('t') => {
                     if self.state != PageState::SearchingChapters {
                         self.local_action_tx
                             .send(MangaPageActions::ToggleOrder)

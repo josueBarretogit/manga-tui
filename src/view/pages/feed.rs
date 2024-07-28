@@ -269,7 +269,6 @@ impl Feed {
         }
     }
 
-    // Todo! display that manga data could not be found
     fn display_error_searching_manga(&mut self) {
         self.loading_state = None;
         self.state = FeedState::MangaPageNotFound;
