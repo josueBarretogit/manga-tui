@@ -6,6 +6,7 @@ use crate::view::pages::manga::ChapterOrder;
 use bytes::Bytes;
 use chrono::Months;
 use once_cell::sync::OnceCell;
+use reqwest::StatusCode;
 
 use super::authors::AuthorsResponse;
 use super::filter::Languages;
@@ -277,5 +278,11 @@ impl MangadexClient {
         let data: AuthorsResponse = serde_json::from_str(&response).unwrap();
 
         Ok(data)
+    }
+
+    pub async fn check_status(&self) -> Result<StatusCode, reqwest::Error> {
+        let endpoint = format!("{}/ping", API_URL_BASE);
+
+        Ok(self.client.get(endpoint).send().await?.status())
     }
 }

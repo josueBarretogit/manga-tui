@@ -98,13 +98,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         None => PREFERRED_LANGUAGE.set(Languages::default()).unwrap(),
     }
 
-    match build_data_dir() {
-        Ok(_) => {}
-        Err(e) => {
-            panic!("Data dir could not be created, details : {e}")
-        }
-    }
-
     let user_agent = format!(
         "manga-tui/0.beta-testing1.0 ({}/{}/{})",
         std::env::consts::FAMILY,
@@ -115,7 +108,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mangadex_client =
         MangadexClient::new(Client::builder().user_agent(user_agent).build().unwrap());
 
+    println!("Checking mangadex status...");
+
+    let mangadex_status = mangadex_client.check_status().await;
+
+    if mangadex_status.is_err() {
+        println!("Mangadex is in maintenance at the moment, please come back later");
+        return Ok(());
+    }
+
     MANGADEX_CLIENT_INSTANCE.set(mangadex_client).unwrap();
+
+    match build_data_dir() {
+        Ok(_) => {}
+        Err(e) => {
+            panic!("Data dir could not be created, details : {e}")
+        }
+    }
 
     init_error_hooks()?;
     init()?;

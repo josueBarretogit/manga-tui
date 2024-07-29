@@ -228,11 +228,9 @@ impl SearchPage {
 
     fn render_manga_found_area(&mut self, area: Rect, frame: &mut Frame<'_>) {
         let buf = frame.buffer_mut();
-        let layout = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(40), Constraint::Percentage(60)]);
-
-        let [manga_list_area, preview_area] = layout.areas(area);
+        let [manga_list_area, preview_area] =
+            Layout::horizontal([Constraint::Percentage(40), Constraint::Percentage(60)])
+                .areas(area);
 
         match self.state {
             PageState::Normal => {

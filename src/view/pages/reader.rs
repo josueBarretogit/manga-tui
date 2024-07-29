@@ -7,7 +7,7 @@ use crate::view::widgets::Component;
 use crate::PICKER;
 use crossterm::event::KeyCode;
 use image::io::Reader;
-use image::DynamicImage;
+use image::GenericImageView;
 use ratatui::{prelude::*, widgets::*};
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::{Resize, StatefulImage};
@@ -27,10 +27,16 @@ pub enum State {
     StoppedSearching,
 }
 
+pub struct PageData {
+    pub protocol: Box<dyn StatefulProtocol>,
+    pub index: usize,
+    pub dimensions: (u32, u32),
+}
+
 pub enum MangaReaderEvents {
     // Todo! make a way to fetch pages for every 2 or 3 seconds
     FetchPages(usize),
-    LoadPage(Option<DynamicImage>, usize),
+    LoadPage(Option<PageData>),
 }
 
 #[derive(Display)]
@@ -45,12 +51,14 @@ pub struct Page {
     pub image_state: Option<Box<dyn StatefulProtocol>>,
     pub url: String,
     pub page_type: PageType,
+    pub dimensions: Option<(u32, u32)>,
 }
 
 impl Page {
     pub fn new(url: String, page_type: PageType) -> Self {
         Self {
             image_state: None,
+            dimensions: None,
             url,
             page_type,
         }
@@ -101,8 +109,14 @@ impl Component for MangaReader {
         {
             Some(page) => match page.image_state.as_mut() {
                 Some(img_state) => {
-                    let image = StatefulImage::new(None).resize(Resize::Fit(None));
-                    StatefulWidget::render(image, center, buf, img_state);
+                    let (width, height) = page.dimensions.unwrap();
+                    if width > height {
+                        let image = StatefulImage::new(None).resize(Resize::Fit(None));
+                        StatefulWidget::render(image, area, buf, img_state);
+                    } else {
+                        let image = StatefulImage::new(None).resize(Resize::Fit(None));
+                        StatefulWidget::render(image, center, buf, img_state);
+                    }
                 }
                 None => {
                     Block::bordered()
@@ -110,9 +124,13 @@ impl Component for MangaReader {
                         .render(center, frame.buffer_mut());
                 }
             },
-            None => Block::bordered()
+            None => {
+
+
+Block::bordered()
                 .title("Loading page")
-                .render(center, frame.buffer_mut()),
+                .render(center, frame.buffer_mut())
+            },
         };
     }
 
@@ -210,6 +228,26 @@ impl MangaReader {
         );
     }
 
+    fn load_page(&mut self, maybe_data: Option<PageData>) {
+        if let Some(data) = maybe_data {
+            match self.pages.get_mut(data.index) {
+                Some(page) => {
+                    page.image_state = Some(data.protocol);
+                    page.dimensions = Some(data.dimensions);
+                }
+                None => {
+                    // Todo! indicate that the page couldnot be loaded
+                }
+            };
+            match self.pages_list.pages.get_mut(data.index) {
+                Some(page_item) => page_item.state = PageItemState::FinishedLoad,
+                None => {
+                    // Todo! indicate with an x that some page didnt load
+                }
+            }
+        }
+    }
+
     fn tick(&mut self) {
         self.pages_list.on_tick();
         if let Ok(background_event) = self.local_event_rx.try_recv() {
@@ -239,19 +277,14 @@ impl MangaReader {
 
                                     let maybe_decoded = dyn_img.unwrap().decode();
 
-                                    match maybe_decoded {
-                                        Ok(image) => {
-                                            tx.send(MangaReaderEvents::LoadPage(
-                                                Some(image),
-                                                index,
-                                            ))
-                                            .ok();
-                                        }
-                                        Err(e) => {
-                                            write_to_error_log(ErrorType::FromError(Box::new(e)));
-                                            tx.send(MangaReaderEvents::LoadPage(None, index)).ok();
-                                        }
-                                    };
+                                    if let Ok(decoded) = maybe_decoded {
+                                        let page_data = PageData {
+                                            dimensions: decoded.dimensions(),
+                                            protocol: PICKER.unwrap().new_resize_protocol(decoded),
+                                            index,
+                                        };
+                                        tx.send(MangaReaderEvents::LoadPage(Some(page_data))).ok();
+                                    }
                                 }
                                 Err(e) => {
                                     write_to_error_log(ErrorType::FromError(Box::new(e)));
@@ -261,29 +294,7 @@ impl MangaReader {
                     }
                     self.pages_list = PagesList::new(pages_list);
                 }
-                MangaReaderEvents::LoadPage(maybe_image, index_page) => match maybe_image {
-                    Some(image) => {
-                        let image = PICKER.unwrap().new_resize_protocol(image);
-
-                        match self.pages.get_mut(index_page) {
-                            Some(page) => {
-                                page.image_state = Some(image);
-                            }
-                            None => {
-                                // Todo! indicate that the page couldnot be loaded
-                            }
-                        };
-                        match self.pages_list.pages.get_mut(index_page) {
-                            Some(page_item) => page_item.state = PageItemState::FinishedLoad,
-                            None => {
-                                // Todo! indicate with an x that some page didnt load
-                            }
-                        }
-                    }
-                    None => {
-                        // Todo! indicate with an x that some page didnt load
-                    }
-                },
+                MangaReaderEvents::LoadPage(maybe_data) => self.load_page(maybe_data),
             }
         }
     }

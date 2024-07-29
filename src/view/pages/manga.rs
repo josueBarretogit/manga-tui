@@ -20,7 +20,6 @@ use strum::Display;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
-//Todo! notify when a chapter could not be read_chapter
 
 #[derive(PartialEq, Eq)]
 pub enum PageState {

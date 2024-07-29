@@ -4,6 +4,7 @@ use self::manga::MangaPage;
 use self::reader::MangaReader;
 use self::search::{InputMode, SearchPage};
 use crate::backend::tui::{Action, Events};
+use crate::global::INSTRUCTIONS_STYLE;
 use crate::view::pages::*;
 use ::crossterm::event::KeyCode;
 use crossterm::event::KeyModifiers;
@@ -179,7 +180,7 @@ impl App {
         let (global_action_tx, global_action_rx) = unbounded_channel::<Action>();
         let (global_event_tx, global_event_rx) = unbounded_channel::<Events>();
 
-        global_event_tx.send(Events::GoSearchPage).ok();
+        global_event_tx.send(Events::GoToHome).ok();
 
         App {
             current_tab: SelectedTabs::default(),
@@ -214,7 +215,7 @@ impl App {
 
         Tabs::new(titles)
             .block(tabs_block)
-            .highlight_style(Color::Yellow)
+            .highlight_style(*INSTRUCTIONS_STYLE)
             .select(index_current_tab)
             .padding("", "")
             .divider(" | ")

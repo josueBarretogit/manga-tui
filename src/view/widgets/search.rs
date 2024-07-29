@@ -109,11 +109,8 @@ impl<'a> StatefulWidget for MangaPreview<'a> {
     type State = Option<Box<dyn StatefulProtocol>>;
 
     fn render(mut self, area: ratatui::prelude::Rect, buf: &mut Buffer, state: &mut Self::State) {
-        let layout = Layout::default()
-            .direction(layout::Direction::Vertical)
-            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)]);
-
-        let [cover_details_area, description_area] = layout.areas(area);
+        let [cover_details_area, description_area] =
+            Layout::vertical([Constraint::Percentage(40), Constraint::Percentage(60)]).areas(area);
 
         self.render_cover_and_details_area(cover_details_area, buf, state);
         self.render_description_area(description_area, buf);
