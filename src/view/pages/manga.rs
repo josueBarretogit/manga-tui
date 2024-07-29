@@ -22,6 +22,9 @@ use strum::Display;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
+//Todo! notify when a download could not be done
+//Todo! notify when a chapter could not be read_chapter
+
 #[derive(PartialEq, Eq)]
 pub enum PageState {
     DownloadingChapters,
@@ -184,7 +187,7 @@ impl MangaPage {
 
         let instructions = vec![
             "More about author/artist ".into(),
-            Span::raw("<u>/<a>").style(*INSTRUCTIONS_STYLE),
+            Span::raw("<f>/<g>").style(*INSTRUCTIONS_STYLE),
         ];
 
         Block::bordered()
@@ -409,12 +412,12 @@ impl MangaPage {
                         .send(MangaPageActions::DownloadChapter)
                         .ok();
                 }
-                KeyCode::Char('u') => {
+                KeyCode::Char('f') => {
                     self.local_action_tx
                         .send(MangaPageActions::GoMangasAuthor)
                         .ok();
                 }
-                KeyCode::Char('a') => {
+                KeyCode::Char('g') => {
                     self.local_action_tx
                         .send(MangaPageActions::GoMangasArtist)
                         .ok();

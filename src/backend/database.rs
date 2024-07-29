@@ -310,13 +310,18 @@ pub struct MangaHistory {
     // img_url: Option<String>,
 }
 
+pub struct MangaHistoryResponse {
+    pub mangas: Vec<MangaHistory>,
+    pub page: u32,
+    pub total_items: u32,
+}
 /// This is used in the `feed` page to retrieve the mangas the user is currently reading
 pub fn get_history(
     hist_type: MangaHistoryType,
-    offset: u32,
+    page: u32,
     search: &str,
-) -> rusqlite::Result<(Vec<MangaHistory>, u32)> {
-    let offset = (offset - 1) * 5;
+) -> rusqlite::Result<MangaHistoryResponse> {
+    let offset = (page - 1) * 5;
     let binding = DBCONN.lock().unwrap();
     let conn = binding.as_ref().unwrap();
 
@@ -366,7 +371,11 @@ pub fn get_history(
             manga_history.push(manga?);
         }
 
-        Ok((manga_history, total_mangas))
+        Ok(MangaHistoryResponse {
+            mangas: manga_history,
+            total_items: total_mangas,
+            page,
+        })
     } else {
         let total_mangas_with_search: u32 = conn.query_row(
             "
@@ -391,7 +400,11 @@ pub fn get_history(
             manga_history.push(manga?);
         }
 
-        Ok((manga_history, total_mangas_with_search))
+        Ok(MangaHistoryResponse {
+            mangas: manga_history,
+            total_items: total_mangas_with_search,
+            page,
+        })
     }
 }
 

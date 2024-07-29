@@ -1,6 +1,7 @@
 use crate::backend::{Data, SearchMangaResponse};
 use crate::common::Manga;
 use crate::utils::{from_manga_response, set_status_style, set_tags_style};
+use crate::PICKER;
 use ratatui::{prelude::*, widgets::*};
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::{Resize, StatefulImage};
@@ -19,7 +20,6 @@ pub struct CarrouselItem {
     pub cover_state: Option<Box<dyn StatefulProtocol>>,
 }
 
-#[allow(clippy::too_many_arguments)]
 impl CarrouselItem {
     fn new(manga: Manga, cover_state: Option<Box<dyn StatefulProtocol>>) -> Self {
         Self { manga, cover_state }
@@ -74,15 +74,26 @@ impl CarrouselItem {
     }
 
     pub fn render_recently_added(&mut self, area: Rect, buf: &mut Buffer) {
-        let layout = Layout::vertical([Constraint::Percentage(80), Constraint::Percentage(20)]);
+        if PICKER.is_some() {
+            let layout = Layout::vertical([Constraint::Percentage(80), Constraint::Percentage(20)]);
+            let [cover_area, title_area] = layout.areas(area);
+            self.render_cover(cover_area, buf);
 
-        let [cover_area, title_area] = layout.areas(area);
+            Paragraph::new(self.manga.title.clone())
+                .wrap(Wrap { trim: true })
+                .render(title_area, buf);
+        } else {
+            let [title_area, description_area] =
+                Layout::vertical([Constraint::Percentage(30), Constraint::Percentage(70)])
+                    .areas(area);
+            Paragraph::new(self.manga.title.clone())
+                .wrap(Wrap { trim: true })
+                .render(title_area, buf);
 
-        self.render_cover(cover_area, buf);
-
-        Paragraph::new(self.manga.title.clone())
-            .wrap(Wrap { trim: true })
-            .render(title_area, buf);
+            Paragraph::new(self.manga.description.clone())
+                .wrap(Wrap { trim: true })
+                .render(description_area, buf);
+        }
     }
 }
 
@@ -96,7 +107,9 @@ impl Widget for CarrouselItem {
 
         let [cover_area, details_area] = layout.areas(area);
 
-        self.render_cover(cover_area, buf);
+        if PICKER.is_some() {
+            self.render_cover(cover_area, buf);
+        }
         self.render_details(details_area, buf);
     }
 }

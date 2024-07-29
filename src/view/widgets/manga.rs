@@ -5,6 +5,15 @@ use ratatui::{prelude::*, widgets::*};
 use tui_widget_list::PreRender;
 
 #[derive(Clone)]
+pub enum ChapterItemState {
+    Normal,
+    /// When the user tried to download a chapter and there was an error
+    DownloadError,
+    /// When the user tried to read a chapter and there was an error
+    ReadError,
+}
+
+#[derive(Clone)]
 pub struct ChapterItem {
     pub id: String,
     pub title: String,
@@ -13,6 +22,7 @@ pub struct ChapterItem {
     pub chapter_number: String,
     pub is_read: bool,
     pub is_downloaded: bool,
+    pub state: ChapterItemState,
     pub download_loading_state: Option<f64>,
     pub translated_language: Languages,
     style: Style,
@@ -114,7 +124,12 @@ impl ChapterItem {
             download_loading_state: None,
             translated_language,
             style: Style::default(),
+            state: ChapterItemState::Normal,
         }
+    }
+
+    pub fn set_download_error(&mut self) {
+        self.state = ChapterItemState::DownloadError;
     }
 }
 

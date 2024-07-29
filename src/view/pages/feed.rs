@@ -1,4 +1,4 @@
-use crate::backend::database::{get_history, MangaHistory, MangaHistoryType};
+use crate::backend::database::{get_history, MangaHistory, MangaHistoryResponse, MangaHistoryType};
 use crate::backend::error_log::{write_to_error_log, ErrorType};
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
@@ -22,9 +22,10 @@ use tui_input::Input;
 #[derive(Eq, PartialEq)]
 pub enum FeedState {
     SearchingHistory,
+    ErrorSearchingHistory,
     SearchingMangaPage,
     MangaPageNotFound,
-    Normal,
+    DisplayingHistory,
 }
 
 pub enum FeedActions {
@@ -44,7 +45,7 @@ pub enum FeedEvents {
     LoadRecentChapters(String, Option<ChapterResponse>),
     ErrorSearchingMangaData,
     /// page , (history_data, total_results)
-    LoadHistory(u32, Option<(Vec<MangaHistory>, u32)>),
+    LoadHistory(Option<MangaHistoryResponse>),
 }
 
 pub struct Feed {
@@ -70,7 +71,7 @@ impl Feed {
             tabs: FeedTabs::History,
             loading_state: None,
             history: None,
-            state: FeedState::Normal,
+            state: FeedState::DisplayingHistory,
             global_event_tx,
             local_action_tx,
             local_action_rx,
@@ -82,11 +83,24 @@ impl Feed {
         }
     }
 
+    pub fn is_typing(&self) -> bool {
+        self.is_typing
+    }
+
     fn render_history(&mut self, area: Rect, buf: &mut Buffer) {
         match self.history.as_mut() {
-            Some(history) => StatefulWidget::render(history.clone(), area, buf, &mut history.state),
+            Some(history) => {
+                if history.mangas.is_empty() {
+                    Paragraph::new("It seems you have no mangas stored here, try reading some")
+                        .render(area, buf);
+                } else {
+                    StatefulWidget::render(history.clone(), area, buf, &mut history.state);
+                }
+            }
             None => {
-                Paragraph::new("You have not read any mangas yet").render(area, buf);
+                if self.state == FeedState::ErrorSearchingHistory {
+                    Paragraph::new("Cannot get your reading history due to some issues, please check error logs").render(area, buf);
+                }
             }
         }
     }
@@ -222,12 +236,10 @@ impl Feed {
         }
         if let Ok(local_event) = self.local_event_rx.try_recv() {
             match local_event {
-                FeedEvents::SearchingFinalized => self.state = FeedState::Normal,
+                FeedEvents::SearchingFinalized => self.state = FeedState::DisplayingHistory,
                 FeedEvents::ErrorSearchingMangaData => self.display_error_searching_manga(),
                 FeedEvents::SearchHistory => self.search_history(),
-                FeedEvents::LoadHistory(page, maybe_history) => {
-                    self.load_history(page, maybe_history)
-                }
+                FeedEvents::LoadHistory(maybe_history) => self.load_history(maybe_history),
                 FeedEvents::SearchRecentChapters => self.search_latest_chapters(),
                 FeedEvents::LoadRecentChapters(manga_id, maybe_chapters) => {
                     self.load_recent_chapters(manga_id, maybe_chapters);
@@ -260,7 +272,6 @@ impl Feed {
                         }
                         Err(e) => {
                             write_to_error_log(ErrorType::FromError(Box::new(e)));
-
                             tx.send(FeedEvents::LoadRecentChapters(manga_id, None)).ok();
                         }
                     }
@@ -292,17 +303,21 @@ impl Feed {
 
         self.tasks.spawn(async move {
             let maybe_reading_history = get_history(history_type, page, &search_term);
-            tx.send(FeedEvents::LoadHistory(
-                page,
-                Some(maybe_reading_history.unwrap()),
-            ))
-            .ok();
+
+            match maybe_reading_history {
+                Ok(history) => {
+                    tx.send(FeedEvents::LoadHistory(Some(history))).ok();
+                }
+                Err(e) => {
+                    write_to_error_log(ErrorType::FromError(Box::new(e)));
+                    tx.send(FeedEvents::LoadHistory(None)).ok();
+                }
+            }
         });
     }
 
     fn search_next_page(&mut self) {
         if let Some(history) = self.history.as_mut() {
-            self.tasks.abort_all();
             history.next_page();
             self.search_history();
         }
@@ -310,33 +325,38 @@ impl Feed {
 
     fn search_previous_page(&mut self) {
         if let Some(history) = self.history.as_mut() {
-            self.tasks.abort_all();
             history.previous_page();
             self.search_history();
         }
     }
 
-    fn load_history(&mut self, page: u32, maybe_history: Option<(Vec<MangaHistory>, u32)>) {
-        self.state = FeedState::Normal;
-        if let Some(history) = maybe_history {
-            self.history = Some(HistoryWidget {
-                page,
-                total_results: history.1,
-                mangas: history
-                    .0
-                    .iter()
-                    .map(|history| MangasRead {
-                        id: history.id.clone(),
-                        title: history.title.clone(),
-                        recent_chapters: vec![],
-                        style: Style::default(),
-                    })
-                    .collect(),
-                state: tui_widget_list::ListState::default(),
-            });
-            self.local_event_tx
-                .send(FeedEvents::SearchRecentChapters)
-                .ok();
+    fn load_history(&mut self, maybe_history: Option<MangaHistoryResponse>) {
+        match maybe_history {
+            Some(history) => {
+                self.history = Some(HistoryWidget {
+                    page: history.page,
+                    total_results: history.total_items,
+                    mangas: history
+                        .mangas
+                        .iter()
+                        .map(|history| MangasRead {
+                            id: history.id.clone(),
+                            title: history.title.clone(),
+                            recent_chapters: vec![],
+                            style: Style::default(),
+                        })
+                        .collect(),
+                    state: tui_widget_list::ListState::default(),
+                });
+                self.state = FeedState::DisplayingHistory;
+                self.local_event_tx
+                    .send(FeedEvents::SearchRecentChapters)
+                    .ok();
+            }
+            None => {
+                self.state = FeedState::ErrorSearchingHistory;
+                self.history = None;
+            }
         }
     }
 

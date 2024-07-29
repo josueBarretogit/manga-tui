@@ -27,12 +27,12 @@ pub fn write_to_error_log(e: ErrorType<'_>) {
 
     let error_format = match e {
         ErrorType::FromPanic(panic_info) => format!(
-            "{} | {} | {} \n",
+            "{} | {} | {} \n \n",
             now,
             panic_info,
             panic_info.location().unwrap()
         ),
-        ErrorType::FromError(boxed_err) => format!("{} | {} \n", now, boxed_err),
+        ErrorType::FromError(boxed_err) => format!("{} | {} \n \n", now, boxed_err),
     };
 
     let error_format_bytes = error_format.as_bytes();

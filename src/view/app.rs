@@ -58,6 +58,7 @@ impl Component for App {
             Events::Key(key_event) => {
                 if self.search_page.input_mode != InputMode::Typing
                     && !self.search_page.is_typing_filter()
+                    && !self.feed_page.is_typing()
                 {
                     match key_event.code {
                         KeyCode::Char('c') => {

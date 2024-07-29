@@ -22,6 +22,8 @@ use crate::view::widgets::search::MangaItem;
 use crate::view::widgets::{Component, ImageHandler};
 use crate::PICKER;
 
+use self::text::ToSpan;
+
 #[derive(PartialEq, Eq)]
 pub enum HomeState {
     Unused,
@@ -475,9 +477,9 @@ impl Home {
             "Recently added mangas | ".into(),
             "Move right ".into(),
             Span::raw("<l>").style(*INSTRUCTIONS_STYLE),
-            "Move left ".into(),
+            " Move left ".into(),
             Span::raw(" <h> ").style(*INSTRUCTIONS_STYLE),
-            "Read ".into(),
+            " Read ".into(),
             Span::raw("<Enter>").style(*INSTRUCTIONS_STYLE),
         ]);
 
@@ -509,8 +511,14 @@ impl Home {
 
         Widget::render(
             List::new([
-                Text::raw("Support mangadex <m>"),
-                Text::raw("Support this project <g>"),
+                Line::from(vec![
+                    "Support mangadex: ".into(),
+                    "<m>".to_span().style(*INSTRUCTIONS_STYLE),
+                ]),
+                Line::from(vec![
+                    "Support this project".into(),
+                    "<g>".to_span().style(*INSTRUCTIONS_STYLE),
+                ]),
             ]),
             layout[1],
             buf,

@@ -31,10 +31,6 @@ use tui_widget_list::ListState;
 
 use self::text::ToSpan;
 
-// Todo! display cover area loading
-// Todo! display loading search
-// Todo! indicate a manga has been added to plan to read
-
 /// Determine wheter or not mangas are being searched
 /// if so then this should not make a request until the most recent one finishes
 #[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
@@ -42,6 +38,7 @@ enum PageState {
     SearchingMangas,
     DisplayingMangasFound,
     NotFound,
+    ErrorOcurred,
     #[default]
     Normal,
 }
@@ -253,6 +250,11 @@ impl SearchPage {
             PageState::NotFound => {
                 Block::bordered()
                     .title("No mangas were found")
+                    .render(area, buf);
+            }
+            PageState::ErrorOcurred => {
+                Block::bordered()
+                    .title("An error ocurred when searching mangas, please try again")
                     .render(area, buf);
             }
             PageState::DisplayingMangasFound => {
@@ -472,12 +474,8 @@ impl SearchPage {
 
             match search_response {
                 Ok(mangas_found) => {
-                    if mangas_found.data.is_empty() {
-                        tx.send(SearchPageEvents::LoadMangasFound(None)).unwrap();
-                    } else {
-                        tx.send(SearchPageEvents::LoadMangasFound(Some(mangas_found)))
-                            .unwrap();
-                    }
+                    tx.send(SearchPageEvents::LoadMangasFound(Some(mangas_found)))
+                        .ok();
                 }
                 Err(e) => {
                     write_to_error_log(ErrorType::FromError(Box::new(e)));
@@ -524,6 +522,11 @@ impl SearchPage {
     fn load_mangas_found(&mut self, response: Option<SearchMangaResponse>) {
         match response {
             Some(response) => {
+                if response.data.is_empty() {
+                    self.state = PageState::NotFound;
+                    self.mangas_found_list.total_result = 0;
+                    return;
+                }
                 self.mangas_found_list.widget = ListMangasFoundWidget::from_response(response.data);
                 self.mangas_found_list.total_result = response.total;
                 self.state = PageState::DisplayingMangasFound;
@@ -533,10 +536,41 @@ impl SearchPage {
                         .ok();
                 }
             }
-            // Todo indicate that mangas where not found
             None => {
-                self.state = PageState::NotFound;
+                self.state = PageState::ErrorOcurred;
                 self.mangas_found_list.total_result = 0;
+            }
+        }
+    }
+
+    fn search_covers(&mut self) {
+        for item in self.mangas_found_list.widget.mangas.iter() {
+            let manga_id = item.manga.id.clone();
+            let tx = self.local_event_tx.clone();
+
+            match item.manga.img_url.as_ref() {
+                Some(file_name) => {
+                    let file_name = file_name.clone();
+                    search_manga_cover(file_name, manga_id, &mut self.tasks, tx);
+                }
+                None => {
+                    tx.send(SearchPageEvents::LoadCover(None, manga_id))
+                        .unwrap();
+                }
+            };
+        }
+    }
+
+    fn load_cover(&mut self, maybe_cover: Option<Box<dyn StatefulProtocol>>, manga_id: String) {
+        if let Some(image) = maybe_cover {
+            if let Some(manga) = self
+                .mangas_found_list
+                .widget
+                .mangas
+                .iter_mut()
+                .find(|manga_item| manga_item.manga.id == manga_id)
+            {
+                manga.image_state = Some(image);
             }
         }
     }
@@ -547,39 +581,11 @@ impl SearchPage {
             match event {
                 SearchPageEvents::LoadMangasFound(response) => self.load_mangas_found(response),
                 SearchPageEvents::SearchCovers => {
-                    for item in self.mangas_found_list.widget.mangas.iter() {
-                        let manga_id = item.manga.id.clone();
-                        let tx = self.local_event_tx.clone();
-
-                        match item.manga.img_url.as_ref() {
-                            Some(file_name) => {
-                                let file_name = file_name.clone();
-                                search_manga_cover(file_name, manga_id, &mut self.tasks, tx);
-                            }
-                            None => {
-                                tx.send(SearchPageEvents::LoadCover(None, manga_id))
-                                    .unwrap();
-                            }
-                        };
-                    }
+                    self.search_covers();
                 }
-
-                SearchPageEvents::LoadCover(maybe_image, manga_id) => match maybe_image {
-                    Some(image) => {
-                        if let Some(manga) = self
-                            .mangas_found_list
-                            .widget
-                            .mangas
-                            .iter_mut()
-                            .find(|manga_item| manga_item.manga.id == manga_id)
-                        {
-                            manga.image_state = Some(image);
-                        }
-                    }
-                    None => {
-                        // todo! indicate that for the manga the cover could not be loaded
-                    }
-                },
+                SearchPageEvents::LoadCover(maybe_image, manga_id) => {
+                    self.load_cover(maybe_image, manga_id)
+                }
             }
         }
     }
