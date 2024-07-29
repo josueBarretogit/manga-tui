@@ -77,15 +77,43 @@ impl Widget for ChapterItem {
                     .ratio(*progress)
                     .render(scanlator_area, buf);
             }
-            None => {
-                Paragraph::new(self.scanlator)
-                    .wrap(Wrap { trim: true })
-                    .render(scanlator_area, buf);
+            None => match self.state {
+                ChapterItemState::Normal => {
+                    Paragraph::new(self.scanlator)
+                        .wrap(Wrap { trim: true })
+                        .render(scanlator_area, buf);
 
-                Paragraph::new(self.readable_at)
-                    .wrap(Wrap { trim: true })
-                    .render(readable_at_area, buf);
-            }
+                    Paragraph::new(self.readable_at)
+                        .wrap(Wrap { trim: true })
+                        .render(readable_at_area, buf);
+                }
+                ChapterItemState::DownloadError => {
+                    Paragraph::new(
+                        "Cannot download this chapter due to an error, please try again",
+                    )
+                    .render(
+                        Rect::new(
+                            scanlator_area.x,
+                            scanlator_area.y,
+                            scanlator_area.width + readable_at_area.width,
+                            scanlator_area.height,
+                        ),
+                        buf,
+                    );
+                }
+                ChapterItemState::ReadError => {
+                    Paragraph::new("Cannot read this chapter due to an error, please try again")
+                        .render(
+                            Rect::new(
+                                scanlator_area.x,
+                                scanlator_area.y,
+                                scanlator_area.width + readable_at_area.width,
+                                scanlator_area.height,
+                            ),
+                            buf,
+                        );
+                }
+            },
         }
     }
 }
@@ -129,7 +157,12 @@ impl ChapterItem {
     }
 
     pub fn set_download_error(&mut self) {
+        self.download_loading_state = None;
         self.state = ChapterItemState::DownloadError;
+    }
+
+    pub fn set_read_error(&mut self) {
+        self.state = ChapterItemState::ReadError;
     }
 }
 

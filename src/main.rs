@@ -14,6 +14,7 @@ use self::backend::{build_data_dir, APP_DATA_DIR};
 use self::cli::CliArgs;
 use self::global::PREFERRED_LANGUAGE;
 
+//Todo! check if mangadex is in maintenance
 mod utils;
 
 mod backend;

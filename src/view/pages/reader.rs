@@ -15,6 +15,8 @@ use strum::Display;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
+// Todo! resize layout depending on page ratio,
+
 pub enum MangaReaderActions {
     NextPage,
     PreviousPage,
