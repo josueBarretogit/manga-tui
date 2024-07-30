@@ -2,6 +2,7 @@ use std::fmt::Write;
 use strum::{Display, EnumIter, IntoEnumIterator};
 
 use crate::global::PREFERRED_LANGUAGE;
+use crate::view::widgets::filter_widget::state::FilterListItem;
 
 pub trait IntoParam {
     fn into_param(self) -> String;
@@ -217,7 +218,6 @@ where
     }
 }
 
-// Todo! add at least all the languages that appear in the advanced search
 #[derive(Debug, Display, EnumIter, Default, Clone, Copy, PartialEq, Eq)]
 pub enum Languages {
     French,
@@ -262,11 +262,10 @@ pub enum Languages {
     Unkown,
 }
 
-// Todo! there has to be a better way of doing this conversion
-impl From<String> for Languages {
-    fn from(value: String) -> Self {
+impl From<FilterListItem> for Languages {
+    fn from(value: FilterListItem) -> Self {
         Self::iter()
-            .find(|lang| value == format!("{} {}", lang.as_emoji(), lang.as_human_readable()))
+            .find(|lang| value.name == format!("{} {}", lang.as_emoji(), lang.as_human_readable()))
             .unwrap_or_default()
     }
 }
@@ -506,11 +505,14 @@ mod test {
 
     #[test]
     fn language_conversion_works() {
-        let language_formatted = format!(
-            "{} {}",
-            Languages::Spanish.as_emoji(),
-            Languages::Spanish.as_human_readable()
-        );
+        let language_formatted = FilterListItem {
+            name: format!(
+                "{} {}",
+                Languages::Spanish.as_emoji(),
+                Languages::Spanish.as_human_readable()
+            ),
+            is_selected: false,
+        };
 
         let conversion: Languages = language_formatted.into();
 

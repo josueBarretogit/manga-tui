@@ -3,13 +3,13 @@ use crate::backend::error_log::{write_to_error_log, ErrorType};
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
 use crate::backend::ChapterResponse;
-use crate::global::INSTRUCTIONS_STYLE;
+use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
 use crate::utils::{from_manga_response, render_search_bar};
 use crate::view::widgets::feed::{FeedTabs, HistoryWidget, MangasRead};
 use crate::view::widgets::search::MangaItem;
 use crate::view::widgets::Component;
 use crate::PICKER;
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::{KeyCode, KeyEvent, MouseEvent, MouseEventKind};
 use image::io::Reader;
 use ratatui::{prelude::*, widgets::*};
 use std::io::Cursor;
@@ -18,6 +18,8 @@ use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
+
+use self::text::ToSpan;
 
 #[derive(Eq, PartialEq)]
 pub enum FeedState {
@@ -99,7 +101,7 @@ impl Feed {
             }
             None => {
                 if self.state == FeedState::ErrorSearchingHistory {
-                    Paragraph::new("Cannot get your reading history due to some issues, please check error logs").render(area, buf);
+                    Paragraph::new("Cannot get your reading history due to some issues, please check error logs".to_span().style(*ERROR_STYLE)).render(area, buf);
                 }
             }
         }
@@ -167,8 +169,12 @@ impl Feed {
             );
         }
         if self.state == FeedState::MangaPageNotFound {
-            Paragraph::new("Error, could not get manga data, please try again another time")
-                .render(area, buf);
+            Paragraph::new(
+                "Error, could not get manga data, please try again another time"
+                    .to_span()
+                    .style(*ERROR_STYLE),
+            )
+            .render(area, buf);
         }
     }
 
@@ -445,6 +451,20 @@ impl Feed {
     fn toggle_focus_search_bar(&mut self) {
         self.is_typing = !self.is_typing;
     }
+
+    fn handle_mouse_event(&mut self, mouse_event: MouseEvent) {
+        match mouse_event.kind {
+            MouseEventKind::ScrollUp => {
+                self.local_action_tx.send(FeedActions::ScrollHistoryUp).ok();
+            }
+            MouseEventKind::ScrollDown => {
+                self.local_action_tx
+                    .send(FeedActions::ScrollHistoryDown)
+                    .ok();
+            }
+            _ => {}
+        }
+    }
 }
 
 impl Component for Feed {
@@ -480,6 +500,7 @@ impl Component for Feed {
     }
 
     fn clean_up(&mut self) {
+        self.search_bar.reset();
         self.history = None;
         self.loading_state = None;
     }
@@ -489,6 +510,7 @@ impl Component for Feed {
             Events::Key(key_event) => {
                 self.handle_key_events(key_event);
             }
+            Events::Mouse(mouse_event) => self.handle_mouse_event(mouse_event),
             Events::Tick => self.tick(),
             _ => {}
         }

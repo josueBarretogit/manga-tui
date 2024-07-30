@@ -68,7 +68,6 @@ pub fn search_manga_cover<IM: ImageHandler>(
 pub fn from_manga_response(value: Data) -> Manga {
     let id = value.id.clone();
     // Todo! maybe there is a better way to do this
-    // and use preferred language
     let title = value.attributes.title.en.unwrap_or(
         value.attributes.title.ja_ro.unwrap_or(
             value.attributes.title.ja.unwrap_or(

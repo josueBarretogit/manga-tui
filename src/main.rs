@@ -14,18 +14,12 @@ use self::backend::{build_data_dir, APP_DATA_DIR};
 use self::cli::CliArgs;
 use self::global::PREFERRED_LANGUAGE;
 
-//Todo! check if mangadex is in maintenance
-mod utils;
-
 mod backend;
-/// These would be like the frontend
-mod view;
-
-mod common;
-
 mod cli;
-
+mod common;
 mod global;
+mod utils;
+mod view;
 
 #[cfg(unix)]
 pub static PICKER: Lazy<Option<Picker>> = Lazy::new(|| {
@@ -40,15 +34,16 @@ pub static PICKER: Lazy<Option<Picker>> = Lazy::new(|| {
 
 #[cfg(target_os = "windows")]
 pub static PICKER: Lazy<Option<Picker>> = Lazy::new(|| {
-    // Todo! figure out how to get the size of the terminal on windows
-    let mut picker = Picker::new((7, 14));
-
-    let protocol = picker.guess_protocol();
-
-    if protocol == ProtocolType::Halfblocks {
-        return None;
-    }
-    Some(picker)
+    // // Todo! figure out how to get the size of the terminal on windows
+    // let mut picker = Picker::new((7, 14));
+    //
+    // let protocol = picker.guess_protocol();
+    //
+    // if protocol == ProtocolType::Halfblocks {
+    //     return None;
+    // }
+    // Some(picker)
+    None
 });
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 7)]
@@ -84,7 +79,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let try_lang = Languages::try_from_iso_code(lang.as_str());
 
                         if try_lang.is_none() {
-                            println!("The code : `{}` is not a valid Iso code, run `manga-tui lang --print` to list available languages and their Iso codes", lang);
+                            println!("`{}` is not a valid ISO language code, run `{} lang --print` to list available languages and their ISO codes", lang, env!("CARGO_BIN_NAME"));
 
                             return Ok(());
                         }

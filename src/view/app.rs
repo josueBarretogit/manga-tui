@@ -10,7 +10,6 @@ use ::crossterm::event::KeyCode;
 use crossterm::event::KeyModifiers;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Rect};
-use ratatui::style::Color;
 use ratatui::widgets::{Block, Borders, Tabs, Widget};
 use ratatui::Frame;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
@@ -62,10 +61,8 @@ impl Component for App {
                     && !self.feed_page.is_typing()
                 {
                     match key_event.code {
-                        KeyCode::Char('c') => {
-                            if let KeyModifiers::CONTROL = key_event.modifiers {
-                                self.global_action_tx.send(Action::Quit).unwrap()
-                            }
+                        KeyCode::Char('c') if key_event.modifiers == KeyModifiers::CONTROL => {
+                            self.global_action_tx.send(Action::Quit).ok();
                         }
                         KeyCode::Char('u') | KeyCode::F(1) => {
                             if self.current_tab != SelectedTabs::ReaderTab {

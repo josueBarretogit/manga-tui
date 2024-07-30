@@ -1,8 +1,11 @@
 use crate::backend::filter::Languages;
 use crate::backend::ChapterResponse;
+use crate::global::ERROR_STYLE;
 use crate::utils::display_dates_since_publication;
 use ratatui::{prelude::*, widgets::*};
 use tui_widget_list::PreRender;
+
+use self::text::ToSpan;
 
 #[derive(Clone)]
 pub enum ChapterItemState {
@@ -89,7 +92,9 @@ impl Widget for ChapterItem {
                 }
                 ChapterItemState::DownloadError => {
                     Paragraph::new(
-                        "Cannot download this chapter due to an error, please try again",
+                        "Cannot download this chapter due to an error, please try again"
+                            .to_span()
+                            .style(*ERROR_STYLE),
                     )
                     .render(
                         Rect::new(
@@ -102,16 +107,20 @@ impl Widget for ChapterItem {
                     );
                 }
                 ChapterItemState::ReadError => {
-                    Paragraph::new("Cannot read this chapter due to an error, please try again")
-                        .render(
-                            Rect::new(
-                                scanlator_area.x,
-                                scanlator_area.y,
-                                scanlator_area.width + readable_at_area.width,
-                                scanlator_area.height,
-                            ),
-                            buf,
-                        );
+                    Paragraph::new(
+                        "Cannot read this chapter due to an error, please try again"
+                            .to_span()
+                            .style(*ERROR_STYLE),
+                    )
+                    .render(
+                        Rect::new(
+                            scanlator_area.x,
+                            scanlator_area.y,
+                            scanlator_area.width + readable_at_area.width,
+                            scanlator_area.height,
+                        ),
+                        buf,
+                    );
                 }
             },
         }
@@ -163,6 +172,10 @@ impl ChapterItem {
 
     pub fn set_read_error(&mut self) {
         self.state = ChapterItemState::ReadError;
+    }
+
+    pub fn set_normal_state(&mut self) {
+        self.state = ChapterItemState::Normal;
     }
 }
 

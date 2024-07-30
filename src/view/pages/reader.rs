@@ -15,8 +15,6 @@ use strum::Display;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
-// Todo! resize layout depending on page ratio,
-
 pub enum MangaReaderActions {
     NextPage,
     PreviousPage,
@@ -75,7 +73,7 @@ pub struct MangaReader {
     state: State,
     /// Handle fetching the images
     image_tasks: JoinSet<()>,
-    pub global_event_tx: UnboundedSender<Events>,
+    pub _global_event_tx: UnboundedSender<Events>,
     pub local_action_tx: UnboundedSender<MangaReaderActions>,
     pub local_action_rx: UnboundedReceiver<MangaReaderActions>,
     pub local_event_tx: UnboundedSender<MangaReaderEvents>,
@@ -154,6 +152,17 @@ impl Component for MangaReader {
 
                 _ => {}
             },
+            Events::Mouse(mouse_event) => match mouse_event.kind {
+                crossterm::event::MouseEventKind::ScrollUp => {
+                    self.local_action_tx
+                        .send(MangaReaderActions::PreviousPage)
+                        .ok();
+                }
+                crossterm::event::MouseEventKind::ScrollDown => {
+                    self.local_action_tx.send(MangaReaderActions::NextPage).ok();
+                }
+                _ => {}
+            },
             Events::Tick => self.tick(),
             _ => {}
         }
@@ -191,7 +200,7 @@ impl MangaReader {
         local_event_tx.send(MangaReaderEvents::FetchPages(5)).ok();
 
         Self {
-            global_event_tx,
+            _global_event_tx: global_event_tx,
             chapter_id,
             base_url,
             pages,

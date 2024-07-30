@@ -43,7 +43,6 @@ impl MangadexClient {
         Self { client }
     }
 
-    // Todo! implement more advanced filters
     pub async fn search_mangas(
         &self,
         search_term: &str,
@@ -126,7 +125,6 @@ impl MangadexClient {
             .await
     }
 
-    // Todo! implement filter by language and pagination
     pub async fn get_manga_chapters(
         &self,
         id: String,

@@ -7,6 +7,7 @@ use crate::backend::tui::Events;
 use crate::backend::SearchMangaResponse;
 use crate::common::Artist;
 use crate::common::Author;
+use crate::global::ERROR_STYLE;
 use crate::global::INSTRUCTIONS_STYLE;
 use crate::utils::render_search_bar;
 use crate::utils::search_manga_cover;
@@ -18,6 +19,9 @@ use crate::view::widgets::ImageHandler;
 use crate::view::widgets::StatefulWidgetFrame;
 use crate::PICKER;
 use crossterm::event::KeyEvent;
+use crossterm::event::MouseButton;
+use crossterm::event::MouseEvent;
+use crossterm::event::MouseEventKind;
 use crossterm::event::{self, KeyCode};
 use ratatui::{prelude::*, widgets::*};
 use ratatui_image::protocol::StatefulProtocol;
@@ -153,6 +157,7 @@ impl Component for SearchPage {
                 Events::Key(key_event) => {
                     self.handle_key_events(key_event);
                 }
+                Events::Mouse(mouse_event) => self.handle_mouse_events(mouse_event),
                 Events::Tick => self.tick(),
                 _ => {}
             }
@@ -252,7 +257,11 @@ impl SearchPage {
             }
             PageState::ErrorOcurred => {
                 Block::bordered()
-                    .title("An error ocurred when searching mangas, please try again")
+                    .title(
+                        "An error ocurred when searching mangas, please try again"
+                            .to_span()
+                            .style(*ERROR_STYLE),
+                    )
                     .render(area, buf);
             }
             PageState::DisplayingMangasFound => {
@@ -396,12 +405,12 @@ impl SearchPage {
                         .send(SearchPageActions::StartTyping)
                         .unwrap();
                 }
-                KeyCode::Char('j') => self
+                KeyCode::Char('j') | KeyCode::Down => self
                     .local_action_tx
                     .send(SearchPageActions::ScrollDown)
                     .unwrap(),
 
-                KeyCode::Char('k') => self
+                KeyCode::Char('k') | KeyCode::Up => self
                     .local_action_tx
                     .send(SearchPageActions::ScrollUp)
                     .unwrap(),
@@ -423,30 +432,50 @@ impl SearchPage {
                         .send(SearchPageActions::ToggleFilters)
                         .ok();
                 }
-                KeyCode::Char('r') => self
-                    .local_action_tx
-                    .send(SearchPageActions::GoToMangaPage)
-                    .unwrap(),
+                KeyCode::Char('r') | KeyCode::Enter => {
+                    self.local_action_tx
+                        .send(SearchPageActions::GoToMangaPage)
+                        .ok();
+                }
 
                 _ => {}
             },
             InputMode::Typing => match key_event.code {
                 KeyCode::Enter => {
                     if self.state != PageState::SearchingMangas {
-                        self.local_action_tx
-                            .send(SearchPageActions::Search)
-                            .unwrap();
+                        self.local_action_tx.send(SearchPageActions::Search).ok();
                     }
                 }
                 KeyCode::Esc => {
                     self.local_action_tx
                         .send(SearchPageActions::StopTyping)
-                        .unwrap();
+                        .ok();
                 }
                 _ => {
                     self.search_bar.handle_event(&event::Event::Key(key_event));
                 }
             },
+        }
+    }
+
+    fn handle_mouse_events(&mut self, mouse_event: MouseEvent) {
+        match mouse_event.kind {
+            MouseEventKind::ScrollDown => {
+                self.local_action_tx
+                    .send(SearchPageActions::ScrollDown)
+                    .ok();
+            }
+            MouseEventKind::ScrollUp => {
+                self.local_action_tx.send(SearchPageActions::ScrollUp).ok();
+            }
+            MouseEventKind::Down(button) => {
+                if button == MouseButton::Left {
+                    self.local_action_tx
+                        .send(SearchPageActions::GoToMangaPage)
+                        .ok();
+                }
+            }
+            _ => {}
         }
     }
     pub fn is_typing_filter(&mut self) -> bool {

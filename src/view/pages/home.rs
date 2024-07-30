@@ -97,7 +97,7 @@ impl Component for Home {
             HomeActions::SelectPreviousPopularManga => {
                 self.carrousel_popular_mangas.previous_item()
             }
-            HomeActions::GoToPopularMangaPage => self.go_to_manga_page(),
+            HomeActions::GoToPopularMangaPage => self.go_to_manga_page_popular(),
             HomeActions::SelectNextRecentlyAddedManga => {
                 self.carrousel_recently_added.select_next()
             }
@@ -175,13 +175,6 @@ impl Home {
             .into(),
         ]);
 
-        // let instructions = Span::from(format!(
-        //     "Next  <w> | previous  <b> | read <r>  No.{}  Total : {}",
-        //     self.carrousel_popular_mangas.current_item_visible_index,
-        //     self.carrousel_popular_mangas.items.len()
-        // ))
-        // .into_left_aligned_line();
-
         Block::bordered()
             .title(Line::from(vec!["Popular new titles".bold()]))
             .title_bottom(instructions)
@@ -195,7 +188,7 @@ impl Home {
         );
     }
 
-    pub fn go_to_manga_page(&self) {
+    pub fn go_to_manga_page_popular(&self) {
         if let Some(item) = self.get_current_popular_manga() {
             self.global_event_tx
                 .send(Events::GoToMangaPage(MangaItem::new(
@@ -212,6 +205,7 @@ impl Home {
 
     pub fn require_search(&mut self) -> bool {
         self.carrousel_popular_mangas.items.is_empty()
+            || self.carrousel_recently_added.items.is_empty()
     }
 
     pub fn init_search(&mut self) {
@@ -310,19 +304,14 @@ impl Home {
         maybe_cover: Option<Box<dyn StatefulProtocol>>,
         id: String,
     ) {
-        match maybe_cover {
-            Some(cover) => {
-                if let Some(popular_manga) = self
-                    .carrousel_popular_mangas
-                    .items
-                    .iter_mut()
-                    .find(|manga_item| manga_item.manga.id == id)
-                {
-                    popular_manga.cover_state = Some(cover);
-                }
-            }
-            None => {
-                // Todo! image could not be rendered
+        if let Some(cover) = maybe_cover {
+            if let Some(popular_manga) = self
+                .carrousel_popular_mangas
+                .items
+                .iter_mut()
+                .find(|manga_item| manga_item.manga.id == id)
+            {
+                popular_manga.cover_state = Some(cover);
             }
         }
     }
@@ -437,19 +426,14 @@ impl Home {
         maybe_cover: Option<Box<dyn StatefulProtocol>>,
         id: String,
     ) {
-        match maybe_cover {
-            Some(cover) => {
-                if let Some(recently_added_manga) = self
-                    .carrousel_recently_added
-                    .items
-                    .iter_mut()
-                    .find(|manga_item| manga_item.manga.id == id)
-                {
-                    recently_added_manga.cover_state = Some(cover);
-                }
-            }
-            None => {
-                // Todo! image could not be rendered
+        if let Some(cover) = maybe_cover {
+            if let Some(recently_added_manga) = self
+                .carrousel_recently_added
+                .items
+                .iter_mut()
+                .find(|manga_item| manga_item.manga.id == id)
+            {
+                recently_added_manga.cover_state = Some(cover);
             }
         }
     }

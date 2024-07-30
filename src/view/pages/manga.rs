@@ -7,12 +7,12 @@ use crate::backend::filter::Languages;
 use crate::backend::tui::Events;
 use crate::backend::{ChapterResponse, MangaStatisticsResponse, Statistics};
 use crate::common::Manga;
-use crate::global::INSTRUCTIONS_STYLE;
+use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
 use crate::utils::{set_status_style, set_tags_style};
 use crate::view::widgets::manga::{ChapterItem, ChaptersListWidget};
 use crate::view::widgets::Component;
 use crate::PICKER;
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::{KeyCode, KeyEvent, MouseEvent, MouseEventKind};
 use ratatui::{prelude::*, widgets::*};
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::{Resize, StatefulImage};
@@ -20,6 +20,9 @@ use strum::Display;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
+use self::text::ToSpan;
+
+// Todo! Define all keybindings
 
 #[derive(PartialEq, Eq)]
 pub enum PageState {
@@ -277,10 +280,12 @@ impl MangaPage {
             }
 
             None => {
-                let title = if self.state == PageState::ChaptersNotFound {
+                let title: Span<'_> = if self.state == PageState::ChaptersNotFound {
                     "Could not get chapters, please try again"
+                        .to_span()
+                        .style(*ERROR_STYLE)
                 } else {
-                    "Searching chapters"
+                    "Searching chapters".to_span()
                 };
 
                 Block::bordered()
@@ -354,12 +359,12 @@ impl MangaPage {
     fn handle_key_events(&mut self, key_event: KeyEvent) {
         if self.is_list_languages_open {
             match key_event.code {
-                KeyCode::Char('j') => {
+                KeyCode::Char('j') | KeyCode::Down => {
                     self.local_action_tx
                         .send(MangaPageActions::ScrollDownAvailbleLanguages)
                         .ok();
                 }
-                KeyCode::Char('k') => {
+                KeyCode::Char('k') | KeyCode::Up => {
                     self.local_action_tx
                         .send(MangaPageActions::ScrollUpAvailbleLanguages)
                         .unwrap();
@@ -377,12 +382,12 @@ impl MangaPage {
             }
         } else if self.state != PageState::SearchingChapterData {
             match key_event.code {
-                KeyCode::Char('j') => {
+                KeyCode::Char('j') | KeyCode::Down => {
                     self.local_action_tx
                         .send(MangaPageActions::ScrollChapterDown)
                         .ok();
                 }
-                KeyCode::Char('k') => {
+                KeyCode::Char('k') | KeyCode::Up => {
                     self.local_action_tx
                         .send(MangaPageActions::ScrollChapterUp)
                         .ok();
@@ -496,8 +501,9 @@ impl MangaPage {
 
     fn read_chapter(&mut self) {
         self.state = PageState::SearchingChapterData;
-        match self.get_current_selected_chapter() {
+        match self.get_current_selected_chapter_mut() {
             Some(chapter_selected) => {
+                chapter_selected.set_normal_state();
                 let id_chapter = chapter_selected.id.clone();
                 let chapter_title = chapter_selected.title.clone();
                 let is_read = chapter_selected.is_read;
@@ -666,6 +672,7 @@ impl MangaPage {
             if chapter.download_loading_state.is_some() {
                 return;
             }
+            chapter.set_normal_state();
             let title = chapter.title.clone();
             let number = chapter.chapter_number.clone();
             let scanlator = chapter.scanlator.clone();
@@ -828,6 +835,38 @@ impl MangaPage {
         }
     }
 
+    fn handle_mouse_events(&mut self, mouse_event: MouseEvent) {
+        if self.is_list_languages_open {
+            match mouse_event.kind {
+                MouseEventKind::ScrollUp => {
+                    self.local_action_tx
+                        .send(MangaPageActions::ScrollUpAvailbleLanguages)
+                        .ok();
+                }
+                MouseEventKind::ScrollDown => {
+                    self.local_action_tx
+                        .send(MangaPageActions::ScrollDownAvailbleLanguages)
+                        .ok();
+                }
+                _ => {}
+            }
+        } else {
+            match mouse_event.kind {
+                MouseEventKind::ScrollUp => {
+                    self.local_action_tx
+                        .send(MangaPageActions::ScrollChapterUp)
+                        .ok();
+                }
+                MouseEventKind::ScrollDown => {
+                    self.local_action_tx
+                        .send(MangaPageActions::ScrollChapterDown)
+                        .ok();
+                }
+                _ => {}
+            }
+        }
+    }
+
     fn tick(&mut self) {
         if let Ok(background_event) = self.local_event_rx.try_recv() {
             match background_event {
@@ -908,6 +947,7 @@ impl Component for MangaPage {
     fn handle_events(&mut self, events: Events) {
         match events {
             Events::Key(key_event) => self.handle_key_events(key_event),
+            Events::Mouse(mouse_event) => self.handle_mouse_events(mouse_event),
             _ => self.tick(),
         }
     }

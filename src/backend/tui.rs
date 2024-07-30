@@ -28,7 +28,6 @@ pub enum Action {
 pub enum Events {
     Tick,
     Key(KeyEvent),
-    // Todo! maybe implement something that uses the mouse?
     Mouse(MouseEvent),
     GoToMangaPage(MangaItem),
     GoToHome,

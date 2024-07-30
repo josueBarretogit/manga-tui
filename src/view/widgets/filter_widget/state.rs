@@ -475,8 +475,8 @@ impl FilterState {
             match key_event.code {
                 KeyCode::Char('f') => self.toggle(),
                 KeyCode::Esc => self.toggle(),
-                KeyCode::Char('j') => self.scroll_down_filter_list(),
-                KeyCode::Char('k') => self.scroll_up_filter_list(),
+                KeyCode::Char('j') | KeyCode::Down => self.scroll_down_filter_list(),
+                KeyCode::Char('k') | KeyCode::Up => self.scroll_up_filter_list(),
                 KeyCode::Tab => self.next_filter(),
                 KeyCode::BackTab => self.previous_filter(),
                 KeyCode::Char('s') => self.toggle_filter_list(),
@@ -772,7 +772,7 @@ impl FilterState {
                 .iter()
                 .filter_map(|item| {
                     if item.is_selected {
-                        return Some(item.name.clone().into());
+                        return Some(item.clone().into());
                     }
                     None
                 })
