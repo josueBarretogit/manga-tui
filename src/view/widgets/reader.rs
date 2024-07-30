@@ -22,12 +22,11 @@ impl Widget for PagesItem {
     where
         Self: Sized,
     {
-        let layout = Layout::horizontal([Constraint::Percentage(20), Constraint::Percentage(80)]);
+        let layout = Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]);
         let [chapter_number_area, loader_area] = layout.areas(area);
 
         Block::default().style(self.style).render(area, buf);
-
-        format!("Page {}", self.number).render(chapter_number_area, buf);
+        let page = Paragraph::new(format!("Page {}", self.number)).wrap(Wrap { trim: true });
 
         if self.state == PageItemState::Loading {
             let loader = Throbber::default()
@@ -36,7 +35,11 @@ impl Widget for PagesItem {
                 .throbber_set(throbber_widgets_tui::BRAILLE_SIX)
                 .use_type(throbber_widgets_tui::WhichUse::Spin);
 
+            page.render(chapter_number_area, buf);
+
             StatefulWidget::render(loader, loader_area, buf, &mut self.loading_state);
+        } else {
+            page.render(area, buf);
         }
     }
 }

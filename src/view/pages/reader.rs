@@ -70,6 +70,7 @@ pub struct MangaReader {
     base_url: String,
     pages: Vec<Page>,
     pages_list: PagesList,
+    current_page_size: u16,
     page_list_state: tui_widget_list::ListState,
     state: State,
     /// Handle fetching the images
@@ -88,7 +89,7 @@ impl Component for MangaReader {
 
         let layout = Layout::horizontal([
             Constraint::Fill(1),
-            Constraint::Fill(2),
+            Constraint::Fill(self.current_page_size),
             Constraint::Fill(1),
         ]);
 
@@ -111,12 +112,14 @@ impl Component for MangaReader {
                 Some(img_state) => {
                     let (width, height) = page.dimensions.unwrap();
                     if width > height {
-                        let image = StatefulImage::new(None).resize(Resize::Fit(None));
-                        StatefulWidget::render(image, area, buf, img_state);
+                        if width - height > 250 {
+                            self.current_page_size = 5;
+                        }
                     } else {
-                        let image = StatefulImage::new(None).resize(Resize::Fit(None));
-                        StatefulWidget::render(image, center, buf, img_state);
+                        self.current_page_size = 2;
                     }
+                    let image = StatefulImage::new(None).resize(Resize::Fit(None));
+                    StatefulWidget::render(image, center, buf, img_state);
                 }
                 None => {
                     Block::bordered()
@@ -124,13 +127,9 @@ impl Component for MangaReader {
                         .render(center, frame.buffer_mut());
                 }
             },
-            None => {
-
-
-Block::bordered()
+            None => Block::bordered()
                 .title("Loading page")
-                .render(center, frame.buffer_mut())
-            },
+                .render(center, frame.buffer_mut()),
         };
     }
 
@@ -203,6 +202,7 @@ impl MangaReader {
             local_event_tx,
             local_event_rx,
             state: State::SearchingPages,
+            current_page_size: 2,
             pages_list: PagesList::default(),
         }
     }
