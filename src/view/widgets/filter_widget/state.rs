@@ -14,8 +14,6 @@ use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
 
-// Todo! indicate what is being filtered
-
 pub enum FilterEvents {
     LoadAuthors(Option<AuthorsResponse>),
     LoadArtists(Option<AuthorsResponse>),
@@ -104,11 +102,7 @@ impl<T> FilterList<T> {
     }
 
     pub fn num_filters_active(&self) -> usize {
-        self.items
-            .iter()
-            .filter(|item| item.is_selected)
-            .collect::<Vec<&FilterListItem>>()
-            .len()
+        self.items.iter().filter(|item| item.is_selected).count()
     }
 }
 
@@ -220,27 +214,55 @@ pub struct ListItemId {
     pub is_selected: bool,
 }
 
-#[derive(Default)]
-pub struct TagsState {
+pub struct AuthorState;
+pub struct ArtistState;
+pub struct TagState;
+
+// It's called dynamic because the items must be fetched
+pub struct FilterListDynamic<T> {
     pub items: Option<Vec<ListItemId>>,
     pub state: ListState,
     pub search_bar: Input,
+    _state: PhantomData<T>,
 }
 
-impl TagsState {
-    pub fn is_search_bar_empty(&mut self) -> bool {
-        self.search_bar.value().trim().is_empty()
+impl Default for FilterListDynamic<AuthorState> {
+    fn default() -> Self {
+        Self {
+            items: None,
+            state: ListState::default(),
+            search_bar: Input::default(),
+            _state: PhantomData::<AuthorState>,
+        }
     }
+}
 
-    pub fn toggle(&mut self) {
+impl Default for FilterListDynamic<ArtistState> {
+    fn default() -> Self {
+        Self {
+            items: None,
+            state: ListState::default(),
+            search_bar: Input::default(),
+            _state: PhantomData::<ArtistState>,
+        }
+    }
+}
+
+impl Default for FilterListDynamic<TagState> {
+    fn default() -> Self {
+        Self {
+            items: None,
+            state: ListState::default(),
+            search_bar: Input::default(),
+            _state: PhantomData::<TagState>,
+        }
+    }
+}
+
+impl FilterListDynamic<TagState> {
+    pub fn toggle_tags(&mut self) {
         if self.is_search_bar_empty() {
-            if let Some(items) = self.items.as_mut() {
-                if let Some(index) = self.state.selected() {
-                    if let Some(tag) = items.get_mut(index) {
-                        tag.is_selected = !tag.is_selected;
-                    }
-                }
-            }
+            self.toggle()
         } else if let Some(index) = self.state.selected() {
             if let Some(items) = self.items.as_mut() {
                 if let Some(tag) = items
@@ -260,42 +282,7 @@ impl TagsState {
     }
 }
 
-pub struct AuthorState;
-pub struct ArtistState;
-
-pub struct UserState<T> {
-    pub items: Option<Vec<ListItemId>>,
-    pub state: ListState,
-    pub search_bar: Input,
-    pub message: String,
-    _state: PhantomData<T>,
-}
-
-impl Default for UserState<AuthorState> {
-    fn default() -> Self {
-        Self {
-            items: None,
-            state: ListState::default(),
-            search_bar: Input::default(),
-            message: "Search authors".to_string(),
-            _state: PhantomData::<AuthorState>,
-        }
-    }
-}
-
-impl Default for UserState<ArtistState> {
-    fn default() -> Self {
-        Self {
-            items: None,
-            state: ListState::default(),
-            search_bar: Input::default(),
-            message: "Search artists".to_string(),
-            _state: PhantomData::<ArtistState>,
-        }
-    }
-}
-
-impl UserState<AuthorState> {
+impl FilterListDynamic<AuthorState> {
     fn search_authors(&mut self, tx: UnboundedSender<FilterEvents>) {
         let name = self.get_name();
         tokio::spawn(async move {
@@ -305,7 +292,7 @@ impl UserState<AuthorState> {
     }
 }
 
-impl UserState<ArtistState> {
+impl FilterListDynamic<ArtistState> {
     fn search_artists(&mut self, tx: UnboundedSender<FilterEvents>) {
         let name = self.get_name();
         tokio::spawn(async move {
@@ -315,7 +302,7 @@ impl UserState<ArtistState> {
     }
 }
 
-impl<T> UserState<T> {
+impl<T> FilterListDynamic<T> {
     pub fn set_users_found(&mut self, response: AuthorsResponse) {
         self.items = Some(
             response
@@ -336,7 +323,10 @@ impl<T> UserState<T> {
 
     fn set_users_not_found(&mut self) {
         self.items = None;
-        self.message = "There were no results".to_string();
+    }
+
+    pub fn is_search_bar_empty(&mut self) -> bool {
+        self.search_bar.value().trim().is_empty()
     }
 
     fn toggle(&mut self) {
@@ -346,6 +336,13 @@ impl<T> UserState<T> {
                     user_selected.is_selected = !user_selected.is_selected;
                 }
             }
+        }
+    }
+
+    pub fn num_filters_active(&self) -> usize {
+        match &self.items {
+            Some(tags) => tags.iter().filter(|item| item.is_selected).count(),
+            None => 0,
         }
     }
 
@@ -373,9 +370,9 @@ pub struct FilterState {
     pub publication_status: FilterList<PublicationStatusState>,
     pub sort_by_state: FilterList<SortByState>,
     pub magazine_demographic: FilterList<MagazineDemographicState>,
-    pub tags: TagsState,
-    pub author_state: UserState<AuthorState>,
-    pub artist_state: UserState<ArtistState>,
+    pub tags: FilterListDynamic<TagState>,
+    pub author_state: FilterListDynamic<AuthorState>,
+    pub artist_state: FilterListDynamic<ArtistState>,
     pub lang_state: FilterList<LanguageState>,
     pub is_typing: bool,
     tx: UnboundedSender<FilterEvents>,
@@ -393,10 +390,10 @@ impl FilterState {
             content_rating: FilterList::<ContentRatingState>::default(),
             publication_status: FilterList::<PublicationStatusState>::default(),
             sort_by_state: FilterList::<SortByState>::default(),
-            tags: TagsState::default(),
+            tags: FilterListDynamic::<TagState>::default(),
             magazine_demographic: FilterList::<MagazineDemographicState>::default(),
-            author_state: UserState::<AuthorState>::default(),
-            artist_state: UserState::<ArtistState>::default(),
+            author_state: FilterListDynamic::<AuthorState>::default(),
+            artist_state: FilterListDynamic::<ArtistState>::default(),
             lang_state: FilterList::<LanguageState>::default(),
             is_typing: false,
             tx,
@@ -421,8 +418,8 @@ impl FilterState {
         self.magazine_demographic = FilterList::<MagazineDemographicState>::default();
         self.sort_by_state = FilterList::<SortByState>::default();
         self.lang_state = FilterList::<LanguageState>::default();
-        self.author_state = UserState::<AuthorState>::default();
-        self.artist_state = UserState::<ArtistState>::default();
+        self.author_state = FilterListDynamic::<AuthorState>::default();
+        self.artist_state = FilterListDynamic::<ArtistState>::default();
     }
 
     pub fn toggle(&mut self) {
@@ -627,7 +624,7 @@ impl FilterState {
                     self.set_sort_by();
                 }
                 MangaFilters::Tags => {
-                    self.tags.toggle();
+                    self.tags.toggle_tags();
                     self.set_tags();
                 }
 

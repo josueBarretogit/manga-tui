@@ -1,5 +1,3 @@
-use self::text::ToSpan;
-
 use super::StatefulWidgetFrame;
 use crate::utils::{centered_rect, render_search_bar};
 use ratatui::{prelude::*, widgets::*};
@@ -76,8 +74,9 @@ impl<'a> StatefulWidgetFrame for FilterWidget<'a> {
                     MangaFilters::MagazineDemographic => {
                         state.magazine_demographic.num_filters_active()
                     }
-
-                    _ => 1,
+                    MangaFilters::Tags => state.tags.num_filters_active(),
+                    MangaFilters::Authors => state.author_state.num_filters_active(),
+                    MangaFilters::Artists => state.artist_state.num_filters_active(),
                 };
 
                 Line::from(vec![
@@ -202,7 +201,7 @@ impl<'a> StatefulWidgetFrame for FilterWidget<'a> {
                             );
                         }
                         None => {
-                            state.author_state.message.clone().render(list_area, buf);
+                            Paragraph::new("Search authors").render(list_area, buf);
                         }
                     }
 
@@ -245,7 +244,7 @@ impl<'a> StatefulWidgetFrame for FilterWidget<'a> {
                             );
                         }
                         None => {
-                            state.artist_state.message.clone().render(list_area, buf);
+                            Paragraph::new("Search artist").render(list_area, buf);
                         }
                     }
 
