@@ -24,6 +24,8 @@ use crate::PICKER;
 
 use self::text::ToSpan;
 
+// Todo! introduce loader for covers
+
 #[derive(PartialEq, Eq)]
 pub enum HomeState {
     Unused,

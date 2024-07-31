@@ -34,23 +34,23 @@ pub static PICKER: Lazy<Option<Picker>> = Lazy::new(|| {
 
 #[cfg(target_os = "windows")]
 pub static PICKER: Lazy<Option<Picker>> = Lazy::new(|| {
-    // // Todo! figure out how to get the size of the terminal on windows
-    // let mut picker = Picker::new((7, 14));
-    //
-    // let protocol = picker.guess_protocol();
-    //
-    // if protocol == ProtocolType::Halfblocks {
-    //     return None;
-    // }
-    // Some(picker)
-    None
+    // Todo! figure out how to get the size of the terminal on windows
+    // I think with the winapi it is possible
+    let mut picker = Picker::new((10, 17));
+
+    let protocol = picker.guess_protocol();
+
+    if protocol == ProtocolType::Halfblocks {
+        return None;
+    }
+    Some(picker)
 });
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 7)]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli_args = CliArgs::parse();
 
-    if cli_args.dir {
+    if cli_args.data_dir {
         let app_dir = APP_DATA_DIR.as_ref().unwrap();
         println!("{}", app_dir.to_str().unwrap());
         return Ok(());

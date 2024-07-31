@@ -1,3 +1,5 @@
+use self::text::ToSpan;
+
 use super::StatefulWidgetFrame;
 use crate::utils::{centered_rect, render_search_bar};
 use ratatui::{prelude::*, widgets::*};
@@ -61,7 +63,39 @@ impl<'a> StatefulWidgetFrame for FilterWidget<'a> {
                 .margin(2)
                 .areas(popup_area);
 
-        Tabs::new(FILTERS)
+        let tabs: Vec<Line<'_>> = FILTERS
+            .iter()
+            .map(|filters| {
+                let num_filters = match filters {
+                    MangaFilters::ContentRating => state.content_rating.num_filters_active(),
+                    MangaFilters::SortBy => state.sort_by_state.num_filters_active(),
+                    MangaFilters::Languages => state.lang_state.num_filters_active(),
+                    MangaFilters::PublicationStatus => {
+                        state.publication_status.num_filters_active()
+                    }
+                    MangaFilters::MagazineDemographic => {
+                        state.magazine_demographic.num_filters_active()
+                    }
+
+                    _ => 1,
+                };
+
+                Line::from(vec![
+                    filters.to_string().into(),
+                    " ".into(),
+                    if num_filters != 0 {
+                        Span::raw(format!("{}+", num_filters))
+                            .bold()
+                            .underlined()
+                            .style(Color::Yellow)
+                    } else {
+                        "".into()
+                    },
+                ])
+            })
+            .collect();
+
+        Tabs::new(tabs)
             .select(state.id_filter)
             .highlight_style(Style::default().fg(Color::Yellow))
             .render(tabs_area, buf);

@@ -15,5 +15,5 @@ pub struct CliArgs {
     #[command(subcommand)]
     pub command: Option<Commands>,
     #[arg(short, long)]
-    pub dir: bool,
+    pub data_dir: bool,
 }

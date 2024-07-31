@@ -14,6 +14,8 @@ use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
 
+// Todo! indicate what is being filtered
+
 pub enum FilterEvents {
     LoadAuthors(Option<AuthorsResponse>),
     LoadArtists(Option<AuthorsResponse>),
@@ -99,6 +101,14 @@ impl<T> FilterList<T> {
         } else {
             self.state.select_previous()
         }
+    }
+
+    pub fn num_filters_active(&self) -> usize {
+        self.items
+            .iter()
+            .filter(|item| item.is_selected)
+            .collect::<Vec<&FilterListItem>>()
+            .len()
     }
 }
 
