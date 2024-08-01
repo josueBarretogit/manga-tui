@@ -32,7 +32,6 @@ pub struct PageData {
 }
 
 pub enum MangaReaderEvents {
-    // Todo! make a way to fetch pages for every 2 or 3 seconds
     FetchPages(usize),
     LoadPage(Option<PageData>),
 }

@@ -9,7 +9,7 @@ pub mod search;
 #[derive(
     Clone, Copy, Default, FromRepr, Display, EnumIter, EnumCount, PartialEq, Eq, PartialOrd, Ord,
 )]
-pub enum SelectedTabs {
+pub enum SelectedPage {
     ReaderTab,
     MangaTab,
     #[default]

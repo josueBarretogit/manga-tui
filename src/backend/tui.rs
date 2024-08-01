@@ -10,10 +10,9 @@ use std::error::Error;
 use std::time::Duration;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::task::JoinHandle;
-
 use crate::common::{Artist, Author};
 use crate::view::app::{App, AppState};
-use crate::view::pages::SelectedTabs;
+use crate::view::pages::SelectedPage;
 use crate::view::widgets::search::MangaItem;
 use crate::view::widgets::Component;
 
@@ -55,8 +54,6 @@ pub fn restore() -> std::io::Result<()> {
 pub async fn run_app(backend: impl Backend) -> Result<(), Box<dyn Error>> {
     let mut terminal = Terminal::new(backend)?;
 
-    terminal.show_cursor()?;
-
     let mut app = App::new();
 
     let tick_rate = std::time::Duration::from_millis(250);
@@ -71,19 +68,19 @@ pub async fn run_app(backend: impl Backend) -> Result<(), Box<dyn Error>> {
         if let Some(event) = app.global_event_rx.recv().await {
             app.handle_events(event.clone());
             match app.current_tab {
-                SelectedTabs::Search => {
+                SelectedPage::Search => {
                     app.search_page.handle_events(event);
                 }
-                SelectedTabs::MangaTab => {
+                SelectedPage::MangaTab => {
                     app.manga_page.as_mut().unwrap().handle_events(event);
                 }
-                SelectedTabs::ReaderTab => {
+                SelectedPage::ReaderTab => {
                     app.manga_reader_page.as_mut().unwrap().handle_events(event);
                 }
-                SelectedTabs::Home => {
+                SelectedPage::Home => {
                     app.home_page.handle_events(event);
                 }
-                SelectedTabs::Feed => {
+                SelectedPage::Feed => {
                     app.feed_page.handle_events(event);
                 }
             };
@@ -94,31 +91,31 @@ pub async fn run_app(backend: impl Backend) -> Result<(), Box<dyn Error>> {
         }
 
         match app.current_tab {
-            SelectedTabs::Search => {
+            SelectedPage::Search => {
                 if let Ok(search_page_action) = app.search_page.local_action_rx.try_recv() {
                     app.search_page.update(search_page_action);
                 }
             }
-            SelectedTabs::MangaTab => {
+            SelectedPage::MangaTab => {
                 if let Some(manga_page) = app.manga_page.as_mut() {
                     if let Ok(action) = manga_page.local_action_rx.try_recv() {
                         manga_page.update(action);
                     }
                 }
             }
-            SelectedTabs::ReaderTab => {
+            SelectedPage::ReaderTab => {
                 if let Some(reader_page) = app.manga_reader_page.as_mut() {
                     if let Ok(reader_action) = reader_page.local_action_rx.try_recv() {
                         reader_page.update(reader_action);
                     }
                 }
             }
-            SelectedTabs::Home => {
+            SelectedPage::Home => {
                 if let Ok(home_action) = app.home_page.local_action_rx.try_recv() {
                     app.home_page.update(home_action);
                 }
             }
-            SelectedTabs::Feed => {
+            SelectedPage::Feed => {
                 if let Ok(feed_event) = app.feed_page.local_action_rx.try_recv() {
                     app.feed_page.update(feed_event);
                 }

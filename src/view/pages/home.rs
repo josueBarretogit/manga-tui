@@ -24,8 +24,6 @@ use crate::PICKER;
 
 use self::text::ToSpan;
 
-// Todo! introduce loader for covers
-
 #[derive(PartialEq, Eq)]
 pub enum HomeState {
     Unused,
@@ -504,7 +502,7 @@ impl Home {
                     "<m>".to_span().style(*INSTRUCTIONS_STYLE),
                 ]),
                 Line::from(vec![
-                    "Support this project".into(),
+                    "Support this project ".into(),
                     "<g>".to_span().style(*INSTRUCTIONS_STYLE),
                 ]),
             ]),

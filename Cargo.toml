@@ -41,4 +41,4 @@ once_cell = "1.19.0"
 chrono = "0.4.38"
 open = "5"
 rusqlite = { version = "0.31.0", features = ["bundled"] }
-clap = { version = "4.4.5", features = ["derive", "cargo", "wrap_help", "unicode", "string", "unstable-styles"] }
+clap = { version = "4.4.5", features = ["derive", "cargo"] }

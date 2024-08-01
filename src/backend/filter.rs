@@ -258,7 +258,7 @@ pub enum Languages {
     Hebrew,
     Polish,
     Persian,
-    // Some language that is missing
+    // Some language that is missing from this `list`
     Unkown,
 }
 

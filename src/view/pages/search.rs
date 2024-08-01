@@ -107,8 +107,8 @@ pub struct SearchPage {
 struct MangasFoundList {
     widget: ListMangasFoundWidget,
     state: tui_widget_list::ListState,
-    total_result: i32,
-    page: i32,
+    total_result: u32,
+    page: u32,
 }
 
 impl Component for SearchPage {
@@ -164,13 +164,13 @@ impl Component for SearchPage {
         }
     }
     fn clean_up(&mut self) {
+        self.abort_tasks();
         self.state = PageState::default();
         self.manga_added_to_plan_to_read = None;
         self.input_mode = InputMode::Idle;
-        self.abort_tasks();
         self.mangas_found_list.state = ListState::default();
         if !self.mangas_found_list.widget.mangas.is_empty() {
-            self.mangas_found_list.widget.mangas.clear();
+            self.mangas_found_list.widget.mangas = vec![];
         }
     }
 }
@@ -202,13 +202,25 @@ impl SearchPage {
             Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)]).areas(area);
 
         let input_help = match self.input_mode {
-            InputMode::Idle => "Press <s> to type, open advanced filters: <f> ",
-            InputMode::Typing => "Press <enter> to search, <esc> to stop typing",
+            InputMode::Idle => Line::from(vec![
+                "Press ".into(),
+                "<s>".to_span().style(*INSTRUCTIONS_STYLE),
+                " to search mangas ".into(),
+                "<f>".to_span().style(*INSTRUCTIONS_STYLE),
+                " to open advanced filters".into(),
+            ]),
+            InputMode::Typing => Line::from(vec![
+                "Press ".into(),
+                "<Enter>".to_span().style(*INSTRUCTIONS_STYLE),
+                " to search ".into(),
+                "<Esc>".to_span().style(*INSTRUCTIONS_STYLE),
+                " to stop typing".into(),
+            ]),
         };
 
         render_search_bar(
             self.input_mode == InputMode::Typing,
-            input_help.into(),
+            input_help,
             &self.search_bar,
             frame,
             input_area,
@@ -378,13 +390,13 @@ impl SearchPage {
 
     fn plan_to_read(&mut self) {
         if let Some(item) = self.get_current_manga_selected() {
-            let plan_to_read_op = save_plan_to_read(MangaPlanToReadSave {
+            let plan_to_read_operation = save_plan_to_read(MangaPlanToReadSave {
                 id: &item.manga.id,
                 title: &item.manga.title,
                 img_url: item.manga.img_url.as_deref(),
             });
 
-            match plan_to_read_op {
+            match plan_to_read_operation {
                 Ok(()) => {
                     self.manga_added_to_plan_to_read = Some(item.manga.title.clone());
                 }
@@ -494,6 +506,7 @@ impl SearchPage {
         let manga_to_search = self.search_bar.value().to_string();
 
         let filters = self.filter_state.filters.clone();
+
         self.tasks.spawn(async move {
             let search_response = MangadexClient::global()
                 .search_mangas(&manga_to_search, page, filters)

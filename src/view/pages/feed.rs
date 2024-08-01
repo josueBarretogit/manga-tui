@@ -1,4 +1,4 @@
-use crate::backend::database::{get_history, MangaHistory, MangaHistoryResponse, MangaHistoryType};
+use crate::backend::database::{get_history, MangaHistoryResponse, MangaHistoryType};
 use crate::backend::error_log::{write_to_error_log, ErrorType};
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;

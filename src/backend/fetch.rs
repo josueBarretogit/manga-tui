@@ -46,10 +46,10 @@ impl MangadexClient {
     pub async fn search_mangas(
         &self,
         search_term: &str,
-        page: i32,
+        page: u32,
         filters: Filters,
     ) -> Result<SearchMangaResponse, reqwest::Error> {
-        let offset = (page - 1) * 10;
+        let offset = (page - 1) * ITEMS_PER_PAGE_SEARCH;
 
         let search_by_title = if search_term.trim().is_empty() {
             "".to_string()
@@ -244,8 +244,8 @@ impl MangadexClient {
         manga_id: &str,
     ) -> Result<ChapterResponse, reqwest::Error> {
         let endpoint = format!(
-            "{}/manga/{}/feed?limit=5&includes[]=scanlation_group&offset=0&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&contentRating[]=pornographic&order[readableAt]=desc",
-            API_URL_BASE, manga_id
+            "{}/manga/{}/feed?limit={}&includes[]=scanlation_group&offset=0&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&contentRating[]=pornographic&order[readableAt]=desc",
+            API_URL_BASE, manga_id, ITEMS_PER_PAGE_LATEST_CHAPTERS
         );
 
         let response = self.client.get(endpoint).send().await?.text().await?;

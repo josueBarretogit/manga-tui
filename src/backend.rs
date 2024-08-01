@@ -24,20 +24,16 @@ pub enum AppDirectories {
 }
 
 pub static APP_DATA_DIR: Lazy<Option<PathBuf>> = Lazy::new(|| {
-    directories::ProjectDirs::from(
-        env!("CARGO_PKG_NAME"),
-        env!("CARGO_CRATE_NAME"),
-        "manga-tui",
-    )
-    .map(|dirs| match std::env::var("MANGA_TUI_DATA_DIR") {
-        Ok(data_dir) => PathBuf::from(data_dir),
-        Err(_) => dirs.data_dir().to_path_buf(),
+    directories::ProjectDirs::from("", "", "manga-tui").map(|dirs| {
+        match std::env::var("MANGA_TUI_DATA_DIR").ok() {
+            Some(data_dir) => PathBuf::from(data_dir),
+            None => dirs.data_dir().to_path_buf(),
+        }
     })
 });
 
 pub fn build_data_dir() -> Result<(), std::io::Error> {
     let data_dir = APP_DATA_DIR.as_ref();
-
     match data_dir {
         Some(dir) => {
             if !exists!(dir) {
@@ -79,8 +75,8 @@ pub struct SearchMangaResponse {
     pub response: String,
     pub data: Vec<Data>,
     pub limit: i32,
-    pub offset: i32,
-    pub total: i32,
+    pub offset: u32,
+    pub total: u32,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]

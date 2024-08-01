@@ -186,15 +186,17 @@ impl MangaPage {
             self.manga.author.name, self.manga.artist.name
         ));
 
-        let instructions = vec![
-            "More about author/artist ".into(),
-            Span::raw("<c>/<v>").style(*INSTRUCTIONS_STYLE),
-        ];
+        let go_to_author_artist_instructions = Span::raw("<c>/<v>").style(*INSTRUCTIONS_STYLE);
 
         Block::bordered()
-            .title_top(Line::from(vec![self.manga.title.clone().into()]))
-            .title_bottom(Line::from(vec![statistics, "".into(), author_and_artist]))
-            .title_bottom(Line::from(instructions).right_aligned())
+            .title_top(self.manga.title.clone())
+            .title_bottom(Line::from(vec![
+                statistics,
+                " ".into(),
+                author_and_artist,
+                " More about author/artist ".into(),
+                go_to_author_artist_instructions,
+            ]))
             .render(manga_information_area, buf);
 
         self.render_details(manga_information_area, frame.buffer_mut());

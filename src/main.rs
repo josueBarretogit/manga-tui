@@ -3,7 +3,7 @@ use clap::Parser;
 use once_cell::sync::Lazy;
 use ratatui::backend::CrosstermBackend;
 use ratatui_image::picker::{Picker, ProtocolType};
-use reqwest::Client;
+use reqwest::{Client, StatusCode};
 use strum::IntoEnumIterator;
 
 use self::backend::error_log::init_error_hooks;
@@ -60,17 +60,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some(command) => match command {
             cli::Commands::Lang { print, set } => {
                 if print {
-                    println!("The available languages are:");
-                    Languages::iter()
-                        .filter(|lang| *lang != Languages::Unkown)
-                        .for_each(|lang| {
-                            println!(
-                                "{} {} | iso code : {}",
-                                lang.as_emoji(),
-                                lang.as_human_readable().to_lowercase(),
-                                lang.as_iso_code()
-                            )
-                        });
+                    CliArgs::print_available_languages();
                     return Ok(());
                 }
 
@@ -107,9 +97,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mangadex_status = mangadex_client.check_status().await;
 
-    if mangadex_status.is_err() {
-        println!("Mangadex is in maintenance at the moment, please come back later");
-        return Ok(());
+    match mangadex_status {
+        Ok(status) => {
+            if status != StatusCode::OK {
+                println!("Mangadex appears to be in maintenance, please come backe later");
+                return Ok(());
+            }
+        }
+        Err(_) => {
+            println!("Mangadex appears to be in maintenance, please come backe later");
+            return Ok(());
+        }
     }
 
     MANGADEX_CLIENT_INSTANCE.set(mangadex_client).unwrap();
@@ -117,7 +115,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     match build_data_dir() {
         Ok(_) => {}
         Err(e) => {
-            panic!("Data dir could not be created, details : {e}")
+            eprint!(
+            "Data directory could not be created, this is where your manga history and manga downloads is stored
+             \n this could be for many reasons such as the application not having enough permissions
+            \n Try setting the environment variable `MANGA_TUI_DATA_DIR` to some path pointing to a directory, example: /home/user/somedirectory 
+            \n Error details : {e}"
+            );
+            return Ok(());
         }
     }
 
