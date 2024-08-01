@@ -6,7 +6,7 @@ use tui_widget_list::PreRender;
 pub enum PageItemState {
     Loading,
     FinishedLoad,
-    NotFound,
+    _NotFound,
 }
 
 #[derive(Clone)]

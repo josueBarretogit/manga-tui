@@ -11,6 +11,8 @@ use manga_tui::exists;
 use super::tui::restore;
 use super::{AppDirectories, APP_DATA_DIR};
 
+pub static ERROR_LOGS_FILE: &str = "manga-tui-error-logs.txt";
+
 pub enum ErrorType<'a> {
     FromPanic(&'a PanicInfo<'a>),
     FromError(Box<dyn Error>),
@@ -21,7 +23,7 @@ pub fn write_to_error_log(e: ErrorType<'_>) {
         .as_ref()
         .unwrap()
         .join(AppDirectories::ErrorLogs.to_string())
-        .join("manga-tui-error-logs.txt");
+        .join(ERROR_LOGS_FILE);
 
     let now = offset::Local::now();
 

@@ -24,7 +24,7 @@ crossterm = { version = "0.27.0", features = ["event-stream"] }
 directories = "5.0.1"
 image = "0.25.1"
 ratatui = { version = "0.27.0", features = ["all-widgets", "palette", "unstable-widget-ref"] }
-ratatui-image = {version = "1.0.2", features = [  "rustix", "crossterm"]}
+ratatui-image = {version = "1.0.2", features = [  "rustix",]}
 reqwest = { version = "0.12.4", features = ["json"] }
 serde = { version = "1.0.203", features = ["derive"] }
 tokio = { version = "1.38.0", features = ["full"] }

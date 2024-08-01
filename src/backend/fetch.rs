@@ -1,20 +1,12 @@
-use std::fs::OpenOptions;
-use std::io::Write;
-
+use super::authors::AuthorsResponse;
+use super::filter::Languages;
+use super::{ChapterPagesResponse, ChapterResponse, MangaStatisticsResponse, SearchMangaResponse};
 use crate::backend::filter::{Filters, IntoParam};
 use crate::view::pages::manga::ChapterOrder;
 use bytes::Bytes;
 use chrono::Months;
 use once_cell::sync::OnceCell;
 use reqwest::StatusCode;
-
-use super::authors::AuthorsResponse;
-use super::filter::Languages;
-use super::tags::TagsResponse;
-use super::{
-    ChapterPagesResponse, ChapterResponse, MangaStatisticsResponse, SearchMangaResponse,
-    APP_DATA_DIR,
-};
 
 #[derive(Clone, Debug)]
 pub struct MangadexClient {
@@ -64,22 +56,6 @@ impl MangadexClient {
             offset,
             filters.into_param(),
         );
-
-        // for quick debugging purposes
-        let error_file_name = APP_DATA_DIR
-            .as_ref()
-            .unwrap()
-            .join(super::AppDirectories::ErrorLogs.to_string())
-            .join("manga-tui-error-logs.txt");
-
-        let mut error_logs = OpenOptions::new()
-            .append(true)
-            .open(error_file_name)
-            .unwrap();
-
-        error_logs
-            .write_all(format!("{} \n", url).as_bytes())
-            .unwrap();
 
         self.client.get(url).send().await?.json().await
     }
@@ -140,24 +116,8 @@ impl MangadexClient {
             "{}/manga/{}/feed?limit={ITEMS_PER_PAGE_CHAPTERS}&offset={}&{}&translatedLanguage[]={}&includes[]=scanlation_group&includeExternalUrl=0&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&contentRating[]=pornographic",
             API_URL_BASE, id, page, order, language
         );
-        // for quick debugging purposes
-        let error_file_name = APP_DATA_DIR
-            .as_ref()
-            .unwrap()
-            .join(super::AppDirectories::ErrorLogs.to_string())
-            .join("manga-tui-error-logs.txt");
 
-        let mut error_logs = OpenOptions::new()
-            .append(true)
-            .open(error_file_name)
-            .unwrap();
-
-        error_logs
-            .write_all(format!("{} \n", endpoint).as_bytes())
-            .unwrap();
-
-        let reponse = self.client.get(endpoint).send().await?.text().await?;
-        Ok(serde_json::from_str(&reponse).unwrap_or_else(|e| panic!("{e}")))
+        self.client.get(endpoint).send().await?.json().await
     }
 
     pub async fn get_chapter_pages(
@@ -166,11 +126,7 @@ impl MangadexClient {
     ) -> Result<ChapterPagesResponse, reqwest::Error> {
         let endpoint = format!("{}/at-home/server/{}", API_URL_BASE, id);
 
-        let text_response = self.client.get(endpoint).send().await?.text().await?;
-
-        let response: ChapterPagesResponse = serde_json::from_str(&text_response).unwrap();
-
-        Ok(response)
+        self.client.get(endpoint).send().await?.json().await
     }
 
     pub async fn get_manga_statistics(
@@ -179,11 +135,7 @@ impl MangadexClient {
     ) -> Result<MangaStatisticsResponse, reqwest::Error> {
         let endpoint = format!("{}/statistics/manga/{}", API_URL_BASE, id_manga);
 
-        let response = self.client.get(endpoint).send().await?.text().await;
-
-        let data: MangaStatisticsResponse = serde_json::from_str(&response.unwrap()).unwrap();
-
-        Ok(data)
+        self.client.get(endpoint).send().await?.json().await
     }
 
     pub async fn get_popular_mangas(&self) -> Result<SearchMangaResponse, reqwest::Error> {
@@ -194,23 +146,13 @@ impl MangadexClient {
 
         let endpoint = format!("{}/manga?includes[]=cover_art&includes[]=artist&includes[]=author&order[followedCount]=desc&contentRating[]=safe&contentRating[]=suggestive&hasAvailableChapters=true&availableTranslatedLanguage[]={}&createdAtSince={}T00:00:00", API_URL_BASE, Languages::get_preferred_lang().as_iso_code(), current_date);
 
-        let response = self.client.get(endpoint).send().await?;
-
-        let text = response.text().await?;
-
-        let data: SearchMangaResponse = serde_json::from_str(&text).unwrap();
-
-        Ok(data)
+        self.client.get(endpoint).send().await?.json().await
     }
 
     pub async fn get_recently_added(&self) -> Result<SearchMangaResponse, reqwest::Error> {
         let endpoint = format!("{}/manga?limit=5&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&order[createdAt]=desc&includes[]=cover_art&includes[]=artist&includes[]=author&hasAvailableChapters=true&availableTranslatedLanguage[]={}", API_URL_BASE, Languages::get_preferred_lang().as_iso_code());
 
-        let response = self.client.get(endpoint).send().await?;
-
-        let data: SearchMangaResponse = response.json().await?;
-
-        Ok(data)
+        self.client.get(endpoint).send().await?.json().await
     }
 
     // Todo! store image in this repo since it may change in the future
@@ -231,12 +173,7 @@ impl MangadexClient {
             "{}/manga/{}?includes[]=cover_art&includes[]=author&includes[]=artist",
             API_URL_BASE, manga_id
         );
-
-        let response = self.client.get(endpoint).send().await?.text().await?;
-
-        let data: super::feed::OneMangaResponse = serde_json::from_str(&response).unwrap();
-
-        Ok(data)
+        self.client.get(endpoint).send().await?.json().await
     }
 
     pub async fn get_latest_chapters(
@@ -247,22 +184,13 @@ impl MangadexClient {
             "{}/manga/{}/feed?limit={}&includes[]=scanlation_group&offset=0&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&contentRating[]=pornographic&order[readableAt]=desc",
             API_URL_BASE, manga_id, ITEMS_PER_PAGE_LATEST_CHAPTERS
         );
-
-        let response = self.client.get(endpoint).send().await?.text().await?;
-
-        let data: ChapterResponse = serde_json::from_str(&response).unwrap();
-
-        Ok(data)
+        self.client.get(endpoint).send().await?.json().await
     }
 
     pub async fn get_tags(&self) -> Result<super::tags::TagsResponse, reqwest::Error> {
         let endpoint = format!("{}/manga/tag", API_URL_BASE);
 
-        let response = self.client.get(endpoint).send().await?.text().await?;
-
-        let data: TagsResponse = serde_json::from_str(&response).unwrap();
-
-        Ok(data)
+        self.client.get(endpoint).send().await?.json().await
     }
 
     pub async fn get_authors(
@@ -271,11 +199,7 @@ impl MangadexClient {
     ) -> Result<super::authors::AuthorsResponse, reqwest::Error> {
         let endpoint = format!("{}/author?name={}", API_URL_BASE, name);
 
-        let response = self.client.get(endpoint).send().await?.text().await?;
-
-        let data: AuthorsResponse = serde_json::from_str(&response).unwrap();
-
-        Ok(data)
+        self.client.get(endpoint).send().await?.json().await
     }
 
     pub async fn check_status(&self) -> Result<StatusCode, reqwest::Error> {

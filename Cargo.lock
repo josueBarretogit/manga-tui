@@ -1913,7 +1913,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "495167cc53bf2676dcc8c26845bd5df1ae3205aa02fa7df6a57c92c6cf058c5d"
 dependencies = [
  "base64",
- "crossterm",
  "dyn-clone",
  "icy_sixel",
  "image",

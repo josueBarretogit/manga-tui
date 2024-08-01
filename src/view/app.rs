@@ -4,7 +4,7 @@ use self::manga::MangaPage;
 use self::reader::MangaReader;
 use self::search::{InputMode, SearchPage};
 use crate::backend::tui::{Action, Events};
-use crate::backend::{ChapterPagesResponse, ChapterResponse};
+use crate::backend::{ChapterPagesResponse};
 use crate::global::INSTRUCTIONS_STYLE;
 use crate::view::pages::*;
 use ::crossterm::event::KeyCode;

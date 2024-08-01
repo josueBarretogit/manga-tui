@@ -415,30 +415,33 @@ impl SearchPage {
                 KeyCode::Char('s') => {
                     self.local_action_tx
                         .send(SearchPageActions::StartTyping)
-                        .unwrap();
+                        .ok();
                 }
-                KeyCode::Char('j') | KeyCode::Down => self
-                    .local_action_tx
-                    .send(SearchPageActions::ScrollDown)
-                    .unwrap(),
+                KeyCode::Char('j') | KeyCode::Down => {
+                    self.local_action_tx
+                        .send(SearchPageActions::ScrollDown)
+                        .ok();
+                }
 
-                KeyCode::Char('k') | KeyCode::Up => self
-                    .local_action_tx
-                    .send(SearchPageActions::ScrollUp)
-                    .unwrap(),
-                KeyCode::Char('w') => self
+                KeyCode::Char('k') | KeyCode::Up => {
+                    self.local_action_tx.send(SearchPageActions::ScrollUp).ok();
+                }
+                KeyCode::Char('w') => {
+self
                     .local_action_tx
                     .send(SearchPageActions::NextPage)
-                    .unwrap(),
+                    .ok();
+                },
                 KeyCode::Char('p') => {
                     self.local_action_tx
                         .send(SearchPageActions::PlanToRead)
                         .ok();
                 }
-                KeyCode::Char('b') => self
-                    .local_action_tx
-                    .send(SearchPageActions::PreviousPage)
-                    .unwrap(),
+                KeyCode::Char('b') => {
+                    self.local_action_tx
+                        .send(SearchPageActions::PreviousPage)
+                        .ok();
+                }
                 KeyCode::Char('f') => {
                     self.local_action_tx
                         .send(SearchPageActions::ToggleFilters)
@@ -594,8 +597,7 @@ impl SearchPage {
                     search_manga_cover(file_name, manga_id, &mut self.tasks, tx);
                 }
                 None => {
-                    tx.send(SearchPageEvents::LoadCover(None, manga_id))
-                        .unwrap();
+                    tx.send(SearchPageEvents::LoadCover(None, manga_id)).ok();
                 }
             };
         }

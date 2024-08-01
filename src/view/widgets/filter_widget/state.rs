@@ -227,7 +227,7 @@ pub struct FilterListDynamic<T> {
     pub items: Option<Vec<ListItemId>>,
     pub state: ListState,
     pub search_bar: Input,
-    pub is_found: bool,
+    pub _is_found: bool,
     _state: PhantomData<T>,
 }
 

@@ -22,7 +22,6 @@ pub enum MangaReaderActions {
 
 pub enum State {
     SearchingPages,
-    StoppedSearching,
 }
 
 pub struct PageData {
@@ -32,7 +31,7 @@ pub struct PageData {
 }
 
 pub enum MangaReaderEvents {
-    FetchPages(usize),
+    FetchPages,
     LoadPage(Option<PageData>),
 }
 
@@ -69,7 +68,7 @@ pub struct MangaReader {
     pages_list: PagesList,
     current_page_size: u16,
     page_list_state: tui_widget_list::ListState,
-    state: State,
+    _state: State,
     /// Handle fetching the images
     image_tasks: JoinSet<()>,
     pub _global_event_tx: UnboundedSender<Events>,
@@ -196,7 +195,7 @@ impl MangaReader {
             pages.push(Page::new(url.to_string(), PageType::HighQuality));
         }
 
-        local_event_tx.send(MangaReaderEvents::FetchPages(5)).ok();
+        local_event_tx.send(MangaReaderEvents::FetchPages).ok();
 
         Self {
             _global_event_tx: global_event_tx,
@@ -209,7 +208,7 @@ impl MangaReader {
             local_action_rx,
             local_event_tx,
             local_event_rx,
-            state: State::SearchingPages,
+            _state: State::SearchingPages,
             current_page_size: 2,
             pages_list: PagesList::default(),
         }
@@ -260,7 +259,7 @@ impl MangaReader {
         self.pages_list.on_tick();
         if let Ok(background_event) = self.local_event_rx.try_recv() {
             match background_event {
-                MangaReaderEvents::FetchPages(amount) => {
+                MangaReaderEvents::FetchPages => {
                     let mut pages_list: Vec<PagesItem> = vec![];
                     for (index, page) in self.pages.iter().enumerate() {
                         let file_name = page.url.clone();

@@ -37,14 +37,14 @@ pub fn download_chapter(
     ));
 
     if !exists!(&dir_manga) {
-        create_dir(&dir_manga).unwrap();
+        create_dir(&dir_manga)?;
     }
 
     // need directory to store the language the chapter is in
     let chapter_language_dir = dir_manga.join(chapter.lang);
 
     if !exists!(&chapter_language_dir) {
-        create_dir(&chapter_language_dir).unwrap();
+        create_dir(&chapter_language_dir)?;
     }
 
     // need directory with chapter's title, number and scanlator
@@ -58,10 +58,9 @@ pub fn download_chapter(
     ));
 
     if !exists!(&chapter_dir) {
-        create_dir(&chapter_dir).unwrap();
+        create_dir(&chapter_dir)?;
     }
 
-    // create images and store them in the directory
     let total_chapters = chapter_data.chapter.data.len();
 
     tokio::spawn(async move {

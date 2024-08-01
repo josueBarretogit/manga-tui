@@ -194,7 +194,7 @@ impl MangaPage {
                 statistics,
                 " ".into(),
                 author_and_artist,
-                " More about author/artist ".into(),
+                " | More about author/artist ".into(),
                 go_to_author_artist_instructions,
             ]))
             .render(manga_information_area, buf);
@@ -369,7 +369,7 @@ impl MangaPage {
                 KeyCode::Char('k') | KeyCode::Up => {
                     self.local_action_tx
                         .send(MangaPageActions::ScrollUpAvailbleLanguages)
-                        .unwrap();
+                        .ok();
                 }
                 KeyCode::Enter | KeyCode::Char('s') => {
                     self.chapters = None;
@@ -489,7 +489,7 @@ impl MangaPage {
         }
     }
 
-    fn get_current_selected_chapter(&self) -> Option<&ChapterItem> {
+    fn _get_current_selected_chapter(&self) -> Option<&ChapterItem> {
         match self.chapters.as_ref() {
             Some(chapters_data) => match chapters_data.state.selected {
                 Some(selected_chapter_index) => {
@@ -615,9 +615,10 @@ impl MangaPage {
                 .await;
 
             match response {
-                Ok(chapters_response) => tx
-                    .send(MangaPageEvents::LoadChapters(Some(chapters_response)))
-                    .unwrap(),
+                Ok(chapters_response) => {
+                    tx.send(MangaPageEvents::LoadChapters(Some(chapters_response)))
+                        .ok();
+                }
                 Err(e) => {
                     write_to_error_log(error_log::ErrorType::FromError(Box::new(e)));
                     tx.send(MangaPageEvents::LoadChapters(None)).ok();
@@ -650,11 +651,13 @@ impl MangaPage {
         let history = get_chapters_history_status(&self.manga.id);
         match history {
             Ok(his) => {
-                for chapter in self.chapters.as_mut().unwrap().widget.chapters.iter_mut() {
-                    let chapter_found = his.iter().find(|chap| chap.id == chapter.id);
-                    if let Some(chapt) = chapter_found {
-                        chapter.is_read = chapt.is_read;
-                        chapter.is_downloaded = chapt.is_downloaded
+                if let Some(chapters) = self.chapters.as_mut() {
+                    for chapter in chapters.widget.chapters.iter_mut() {
+                        let chapter_found = his.iter().find(|chap| chap.id == chapter.id);
+                        if let Some(chapt) = chapter_found {
+                            chapter.is_read = chapt.is_read;
+                            chapter.is_downloaded = chapt.is_downloaded
+                        }
                     }
                 }
             }
@@ -724,17 +727,18 @@ impl MangaPage {
     }
 
     fn stop_loader_for_chapter(&mut self, chapter_id: String) {
-        let chapters = self.chapters.as_mut().unwrap();
-        if let Some(chap) = chapters
-            .widget
-            .chapters
-            .iter_mut()
-            .find(|chap| chap.id == chapter_id)
-        {
-            chap.download_loading_state = None;
-            self.local_event_tx
-                .send(MangaPageEvents::CheckChapterStatus)
-                .ok();
+        if let Some(chapters) = self.chapters.as_mut() {
+            if let Some(chap) = chapters
+                .widget
+                .chapters
+                .iter_mut()
+                .find(|chap| chap.id == chapter_id)
+            {
+                chap.download_loading_state = None;
+                self.local_event_tx
+                    .send(MangaPageEvents::CheckChapterStatus)
+                    .ok();
+            }
         }
     }
     fn save_download_status(&mut self, id_chapter: String, title: String) {

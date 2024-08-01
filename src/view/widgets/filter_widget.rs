@@ -7,7 +7,7 @@ pub mod state;
 
 pub struct FilterWidget<'a> {
     pub block: Option<Block<'a>>,
-    pub style: Style,
+    pub _style: Style,
 }
 
 impl From<MangaFilters> for Line<'_> {
@@ -289,7 +289,7 @@ impl<'a> FilterWidget<'a> {
     pub fn new() -> Self {
         Self {
             block: None,
-            style: Style::default(),
+            _style: Style::default(),
         }
     }
 

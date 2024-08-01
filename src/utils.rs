@@ -54,12 +54,12 @@ pub fn search_manga_cover<IM: ImageHandler>(
 
                 if let Ok(decoded) = maybe_decoded {
                     let protocol = PICKER.unwrap().new_resize_protocol(decoded);
-                    tx.send(IM::load(protocol, manga_id)).unwrap();
+                    tx.send(IM::load(protocol, manga_id)).ok();
                 }
             }
             Err(e) => {
                 write_to_error_log(crate::backend::error_log::ErrorType::FromError(Box::new(e)));
-                tx.send(IM::not_found(manga_id)).unwrap()
+                tx.send(IM::not_found(manga_id)).ok();
             }
         }
     });
