@@ -214,49 +214,21 @@ pub struct ListItemId {
     pub is_selected: bool,
 }
 
+#[derive(Default)]
 pub struct AuthorState;
+#[derive(Default)]
 pub struct ArtistState;
+#[derive(Default)]
 pub struct TagState;
 
 // It's called dynamic because the items must be fetched
+#[derive(Default)]
 pub struct FilterListDynamic<T> {
     pub items: Option<Vec<ListItemId>>,
     pub state: ListState,
     pub search_bar: Input,
+    pub is_found: bool,
     _state: PhantomData<T>,
-}
-
-impl Default for FilterListDynamic<AuthorState> {
-    fn default() -> Self {
-        Self {
-            items: None,
-            state: ListState::default(),
-            search_bar: Input::default(),
-            _state: PhantomData::<AuthorState>,
-        }
-    }
-}
-
-impl Default for FilterListDynamic<ArtistState> {
-    fn default() -> Self {
-        Self {
-            items: None,
-            state: ListState::default(),
-            search_bar: Input::default(),
-            _state: PhantomData::<ArtistState>,
-        }
-    }
-}
-
-impl Default for FilterListDynamic<TagState> {
-    fn default() -> Self {
-        Self {
-            items: None,
-            state: ListState::default(),
-            search_bar: Input::default(),
-            _state: PhantomData::<TagState>,
-        }
-    }
 }
 
 impl FilterListDynamic<TagState> {

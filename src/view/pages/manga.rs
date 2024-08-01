@@ -188,7 +188,7 @@ impl MangaPage {
 
         let instructions = vec![
             "More about author/artist ".into(),
-            Span::raw("<f>/<g>").style(*INSTRUCTIONS_STYLE),
+            Span::raw("<c>/<v>").style(*INSTRUCTIONS_STYLE),
         ];
 
         Block::bordered()
@@ -409,12 +409,12 @@ impl MangaPage {
                         .send(MangaPageActions::DownloadChapter)
                         .ok();
                 }
-                KeyCode::Char('f') => {
+                KeyCode::Char('c') => {
                     self.local_action_tx
                         .send(MangaPageActions::GoMangasAuthor)
                         .ok();
                 }
-                KeyCode::Char('g') => {
+                KeyCode::Char('v') => {
                     self.local_action_tx
                         .send(MangaPageActions::GoMangasArtist)
                         .ok();

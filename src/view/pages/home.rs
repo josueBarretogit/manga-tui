@@ -226,6 +226,8 @@ impl Home {
     }
 
     pub fn tick(&mut self) {
+        self.carrousel_popular_mangas.tick();
+        self.carrousel_recently_added.tick();
         if let Ok(local_event) = self.local_event_rx.try_recv() {
             match local_event {
                 HomeEvents::SearchPopularMangasCover => self.search_popular_mangas_cover(),

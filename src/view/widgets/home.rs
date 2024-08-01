@@ -5,6 +5,7 @@ use crate::PICKER;
 use ratatui::{prelude::*, widgets::*};
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::{Resize, StatefulImage};
+use throbber_widgets_tui::{Throbber, ThrobberState};
 
 #[derive(Clone, Default, PartialEq, Eq)]
 pub enum CarrouselState {
@@ -18,11 +19,20 @@ pub enum CarrouselState {
 pub struct CarrouselItem {
     pub manga: Manga,
     pub cover_state: Option<Box<dyn StatefulProtocol>>,
+    pub loader_state: ThrobberState,
 }
 
 impl CarrouselItem {
-    fn new(manga: Manga, cover_state: Option<Box<dyn StatefulProtocol>>) -> Self {
-        Self { manga, cover_state }
+    fn new(
+        manga: Manga,
+        cover_state: Option<Box<dyn StatefulProtocol>>,
+        loader_state: ThrobberState,
+    ) -> Self {
+        Self {
+            manga,
+            cover_state,
+            loader_state,
+        }
     }
 
     fn render_cover(&mut self, area: Rect, buf: &mut Buffer) {
@@ -33,8 +43,13 @@ impl CarrouselItem {
                 StatefulWidget::render(cover, area, buf, image_state)
             }
             None => {
-                //Loading cover
-                Block::bordered().title("Loading cover").render(area, buf);
+                let loader = Throbber::default()
+                    .label("Loading cover")
+                    .style(Style::default().fg(Color::Yellow))
+                    .throbber_set(throbber_widgets_tui::BRAILLE_SIX)
+                    .use_type(throbber_widgets_tui::WhichUse::Spin);
+
+                StatefulWidget::render(loader, area, buf, &mut self.loader_state);
             }
         };
     }
@@ -70,7 +85,13 @@ impl CarrouselItem {
 
     pub fn from_response(value: Data) -> Self {
         let manga = from_manga_response(value);
-        Self::new(manga, None)
+        Self::new(manga, None, ThrobberState::default())
+    }
+
+    pub fn tick(&mut self) {
+        if self.cover_state.is_none() {
+            self.loader_state.calc_next();
+        }
     }
 
     pub fn render_recently_added(&mut self, area: Rect, buf: &mut Buffer) {
@@ -184,6 +205,10 @@ impl PopularMangaCarrousel {
             None
         }
     }
+
+    pub fn tick(&mut self) {
+        self.items.iter_mut().for_each(|item| item.tick());
+    }
 }
 
 #[derive(Clone)]
@@ -270,6 +295,10 @@ impl RecentlyAddedCarrousel {
         } else {
             None
         }
+    }
+
+    pub fn tick(&mut self) {
+        self.items.iter_mut().for_each(|item| item.tick());
     }
 
     pub fn from_response(response: SearchMangaResponse) -> Self {
