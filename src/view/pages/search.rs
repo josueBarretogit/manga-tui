@@ -427,11 +427,8 @@ impl SearchPage {
                     self.local_action_tx.send(SearchPageActions::ScrollUp).ok();
                 }
                 KeyCode::Char('w') => {
-self
-                    .local_action_tx
-                    .send(SearchPageActions::NextPage)
-                    .ok();
-                },
+                    self.local_action_tx.send(SearchPageActions::NextPage).ok();
+                }
                 KeyCode::Char('p') => {
                     self.local_action_tx
                         .send(SearchPageActions::PlanToRead)
