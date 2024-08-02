@@ -8,8 +8,11 @@
 
 <p align="center">
 
-https://github.com/user-attachments/assets/7f7f61e7-058f-4d3e-a6d4-ac692cc51bc8
     
+
+https://github.com/user-attachments/assets/2b693bd3-ec30-4d6e-bcc4-6cf457a860b1
+
+
 </p>
 
 
@@ -24,14 +27,24 @@ https://github.com/user-attachments/assets/7f7f61e7-058f-4d3e-a6d4-ac692cc51bc8
 
 ## Features
 
-- Read manga in your terminal (Wezterm, iterm2, Kitty)
-[gif showing reader page]
+- Read manga in your terminal (If it supports graphical protocols like : Wezterm, iterm2, Kitty)
+  
+https://github.com/user-attachments/assets/70f321ff-13d1-4c4b-9c37-604271456ab2
+
+
 - Advanced search (with filters)
-[gif showing how filters work]
+
+https://github.com/user-attachments/assets/c1e21aa1-8a51-4c47-baea-9f56dcd0d6a4
+
+
 - Reading history is stored locally (with no login required)
-[gif showing feed page]
+- https://github.com/user-attachments/assets/47e88e89-f73c-4575-9645-2abb80ca7d63
+
 - Download manga
-[gif showing download]
+
+
+https://github.com/user-attachments/assets/64880a98-74c8-4656-8cf8-2c1daf5375d2
+
 
 ## Installation
 
