@@ -6,6 +6,8 @@ use std::fs::{create_dir, create_dir_all, File};
 use std::path::{Path, PathBuf};
 use strum::Display;
 
+use self::error_log::ERROR_LOGS_FILE;
+
 pub mod database;
 pub mod download;
 pub mod error_log;
@@ -54,11 +56,11 @@ pub fn build_data_dir() -> Result<(), std::io::Error> {
 
             if !exists!(&dir
                 .join(AppDirectories::ErrorLogs.to_string())
-                .join("manga-tui-error-logs.txt"))
+                .join(ERROR_LOGS_FILE))
             {
                 File::create(
                     dir.join(AppDirectories::ErrorLogs.to_string())
-                        .join("manga-tui-error-logs.txt"),
+                        .join(ERROR_LOGS_FILE),
                 )?;
             }
 

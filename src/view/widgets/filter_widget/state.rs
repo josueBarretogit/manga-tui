@@ -490,7 +490,12 @@ impl FilterState {
     }
 
     fn toggle_focus_input(&mut self) {
-        self.is_typing = !self.is_typing;
+        match FILTERS.get(self.id_filter).unwrap() {
+            MangaFilters::Tags | MangaFilters::Authors | MangaFilters::Artists => {
+                self.is_typing = !self.is_typing;
+            }
+            _ => {}
+        }
     }
 
     fn next_filter(&mut self) {

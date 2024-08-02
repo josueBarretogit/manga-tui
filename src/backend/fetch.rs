@@ -1,4 +1,3 @@
-use super::authors::AuthorsResponse;
 use super::filter::Languages;
 use super::{ChapterPagesResponse, ChapterResponse, MangaStatisticsResponse, SearchMangaResponse};
 use crate::backend::filter::{Filters, IntoParam};
