@@ -53,12 +53,14 @@ cargo install manga-tui
 ```
 ## Binary release
 
-Download a binary from the [binary release]()
+Download a binary from the [releases page](https://github.com/josueBarretogit/manga-tui/releases/latest)
 
 ## Image rendering
 
-Use a terminal that can render images such as Wezterm, iTerm2 or Kitty, in any other terminal no images
-will be rendered but all the functionality remains the same
+Use a terminal that can render images such as Wezterm (Personally I recommend using this one It's the one used in the videos), iTerm2 or Kitty, <br />
+
+in any other terminal no images
+will be rendered but all the functionality remains the same 
 
 ## Usage
 
@@ -88,7 +90,10 @@ On the `manga-tui` directory there will be 3 directories
 
 If you want to change the location you can set the environment variable `MANGA_TUI_DATA_DIR` to some path pointing to a directory, like: <br />
 
-`export MANGA_TUI_DATA_DIR="/home/user/Desktop/mangas"`
+```shell
+export MANGA_TUI_DATA_DIR="/home/user/Desktop/mangas"
+```
+
 
 ## Configuration
 
@@ -108,12 +113,12 @@ manga-tui lang --print
 ```
 
 ## Motivation
-I wanted to make a "How linux user does ..." but for manga, [here is the video](https://www.youtube.com/watch?v=K0FsGRqEc1c) 
+I wanted to make a "How linux user does ..." but for manga, [here is the video](https://www.youtube.com/watch?v=K0FsGRqEc1c) also this is a great excuse to start reading manga again 
 
 ## Credits
 
 Many thanks to Mangadex for providing the free API please consider supporting them ❤️  <br />
-Many thanks to the [Ratatui organization](https://github.com/ratatui-org) for making such a good library for making TUI's 🐭 <br />
+Many thanks to the [Ratatui organization](https://github.com/ratatui-org) for making such a good library for making TUI's in rust 🐭 <br />
 Many thanks to the developer of the [Ratatui-image crate](https://crates.io/crates/ratatui-image) for providing a widget that renders images in the terminal 🖼️ <br />
 
 Consider giving a star to this project ⭐

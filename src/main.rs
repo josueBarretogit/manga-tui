@@ -82,7 +82,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let user_agent = format!(
-        "manga-tui/0.beta-testing1.0 ({}/{}/{})",
+        "manga-tui/0.1.0 ({}/{}/{})",
         std::env::consts::FAMILY,
         std::env::consts::OS,
         std::env::consts::ARCH
