@@ -31,6 +31,7 @@ pub static DBCONN: Lazy<Mutex<Option<Connection>>> = Lazy::new(|| {
     )
     .unwrap();
 
+
     let already_has_data: i32 = conn
         .query_row("SELECT COUNT(*) from app_version", [], |row| row.get(0))
         .unwrap();

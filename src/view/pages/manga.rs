@@ -399,7 +399,7 @@ impl MangaPage {
                         .send(MangaPageActions::ToggleOrder)
                         .ok();
                 }
-                KeyCode::Char('r') => {
+                KeyCode::Char('r') | KeyCode::Enter => {
                     if PICKER.is_some() {
                         self.local_action_tx
                             .send(MangaPageActions::ReadChapter)
@@ -436,6 +436,7 @@ impl MangaPage {
                         .send(MangaPageActions::SearchPreviousChapterPage)
                         .ok();
                 }
+
                 _ => {}
             }
         }

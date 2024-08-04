@@ -31,7 +31,7 @@ https://github.com/user-attachments/assets/2b693bd3-ec30-4d6e-bcc4-6cf457a860b1
 
 https://github.com/user-attachments/assets/c1e21aa1-8a51-4c47-baea-9f56dcd0d6a4
 
-- Read manga in your terminal 
+- Read manga in your terminal (Wezterm, iTerm2, or Kitty, any terminal that has support for graphics protocol) 
   
 https://github.com/user-attachments/assets/70f321ff-13d1-4c4b-9c37-604271456ab2
 
@@ -51,6 +51,9 @@ https://github.com/user-attachments/assets/64880a98-74c8-4656-8cf8-2c1daf5375d2
 ```shell
 cargo install manga-tui
 ```
+## Binary release
+
+Download a binary from the [binary release]()
 
 ## Image rendering
 
@@ -85,7 +88,7 @@ On the `manga-tui` directory there will be 3 directories
 
 If you want to change the location you can set the environment variable `MANGA_TUI_DATA_DIR` to some path pointing to a directory, like: <br />
 
-export MANGA_TUI_DATA_DIR="/home/user/Desktop/mangas"
+`export MANGA_TUI_DATA_DIR="/home/user/Desktop/mangas"`
 
 ## Configuration
 
@@ -97,7 +100,7 @@ By default `manga-tui` will search mangas in english, you can change the languag
 manga-tui lang --set 'es'
 ```
 
-Check the available languages by running:
+Check the available languages and their Iso codes by running:
 
 
 ```shell
@@ -110,7 +113,7 @@ I wanted to make a "How linux user does ..." but for manga, [here is the video](
 ## Credits
 
 Many thanks to Mangadex for providing the free API please consider supporting them ❤️  <br />
-Many thanks to [Ratatui](https://github.com/ratatui-org) for making such a good library for making TUI's 🐭 <br />
+Many thanks to the [Ratatui organization](https://github.com/ratatui-org) for making such a good library for making TUI's 🐭 <br />
 Many thanks to the developer of the [Ratatui-image crate](https://crates.io/crates/ratatui-image) for providing a widget that renders images in the terminal 🖼️ <br />
 
-Consider giving a start to this project ⭐
+Consider giving a star to this project ⭐
