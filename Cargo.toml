@@ -8,7 +8,7 @@ homepage = "https://github.com/josueBarretogit/manga-tui"
 repository = "https://github.com/josueBarretogit/manga-tui"
 description = "Read manga in your terminal"
 keywords = ["cli", "command-line"]
-categories = ["entertainment", "terminal"]
+categories = ["command-line-interface"]
 license = "MIT"
 exclude = [
   "public/*"

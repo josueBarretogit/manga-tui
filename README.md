@@ -59,8 +59,9 @@ Download a binary from the [releases page](https://github.com/josueBarretogit/ma
 
 Use a terminal that can render images such as Wezterm (Personally I recommend using this one It's the one used in the videos), iTerm2 or Kitty, <br />
 
-in any other terminal no images
-will be rendered but all the functionality remains the same 
+For more information see : [image-support](https://github.com/benjajaja/ratatui-image?tab=readme-ov-file#compatibility-matrix)
+
+No images will be displayed if the terminal does not have image support (but `manga-tui` will still work as a manga downloader)
 
 ## Usage
 
