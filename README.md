@@ -6,6 +6,15 @@
     Terminal manga reader and downloader
 </h3>
 
+<div align="center">
+    <img alt="top language" src="https://img.shields.io/github/languages/top/josuebarretogit/manga-tui">
+    <a href="https://crates.io/crates/manga-tui">
+        <img alt="crates io downloads" src="https://img.shields.io/crates/d/manga-tui?logo=rust&label=crates.io downloads">
+    </a>
+    <a href="https://github.com/josueBarretogit/manga-tui/blob/main/LICENSE">
+        <img alt="License" src="https://img.shields.io/github/license/josueBarretogit/Manga-tui?style=flat-square&color=blue">
+    </a>
+</div >
 
 <p align="center">
 
