@@ -131,7 +131,6 @@ impl Widget for MangaItem {
     {
         Paragraph::new(self.manga.title)
             .wrap(Wrap { trim: true })
-            .block(Block::bordered().style(self.style))
             .style(self.style)
             .render(area, buf);
     }
@@ -142,7 +141,7 @@ impl PreRender for MangaItem {
         if context.is_selected {
             self.style = Style::default().fg(Color::Yellow);
         }
-        4
+        1
     }
 }
 

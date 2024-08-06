@@ -37,28 +37,35 @@ impl Widget for ChapterItem {
         Self: Sized,
     {
         let layout = Layout::horizontal([
-            Constraint::Percentage(50),
-            Constraint::Percentage(30),
-            Constraint::Percentage(20),
+            Constraint::Length(3),
+            Constraint::Length(3),
+            Constraint::Length(3),
+            Constraint::Fill(50),
+            Constraint::Fill(30),
+            Constraint::Fill(20),
         ]);
 
-        Block::bordered().border_style(self.style).render(area, buf);
-
-        let [title_area, scanlator_area, readable_at_area] = layout.areas(area.inner(Margin {
-            horizontal: 1,
-            vertical: 1,
-        }));
+        let [is_read_area, is_downloaded_area, lang_area, title_area, scanlator_area, readable_at_area] =
+            layout.areas(area.inner(Margin {
+                horizontal: 0,
+                vertical: 0,
+            }));
 
         let is_read_icon = if self.is_read { "👀" } else { " " };
 
         let is_downloaded_icon = if self.is_downloaded { "📥" } else { " " };
 
+        Line::from(is_read_icon)
+            .style(self.style)
+            .render(is_read_area, buf);
+        Line::from(is_downloaded_icon)
+            .style(self.style)
+            .render(is_downloaded_area, buf);
+        Line::from(self.translated_language.as_emoji())
+            .style(self.style)
+            .render(lang_area, buf);
+
         Paragraph::new(Line::from(vec![
-            is_read_icon.into(),
-            " ".into(),
-            is_downloaded_icon.into(),
-            " ".into(),
-            self.translated_language.as_emoji().into(),
             format!(" Ch. {} ", self.chapter_number).into(),
             self.title.into(),
         ]))
@@ -136,7 +143,7 @@ impl PreRender for ChapterItem {
         if self.download_loading_state.is_some() {
             5
         } else {
-            3
+            1
         }
     }
 }
