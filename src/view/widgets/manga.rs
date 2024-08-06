@@ -46,10 +46,7 @@ impl Widget for ChapterItem {
         ]);
 
         let [is_read_area, is_downloaded_area, lang_area, title_area, scanlator_area, readable_at_area] =
-            layout.areas(area.inner(Margin {
-                horizontal: 0,
-                vertical: 0,
-            }));
+            layout.areas(area);
 
         let is_read_icon = if self.is_read { "👀" } else { " " };
 
