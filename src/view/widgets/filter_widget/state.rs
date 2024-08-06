@@ -791,3 +791,14 @@ impl FilterState {
         self.filters.artists.set_one_user(Artist::new(artist.id))
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[test]
+    fn filter_state_works() {
+        let mut filter_state = FilterState::new();
+
+        assert_eq!(Filters::default(), filter_state.filters);
+    }
+}

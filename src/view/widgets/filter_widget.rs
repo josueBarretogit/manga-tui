@@ -318,3 +318,13 @@ where
 
     StatefulWidget::render(list, area, buf, state);
 }
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn filter_widget() {
+
+        let filter_widget = FilterWidget::new();
+    }
+}

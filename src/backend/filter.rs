@@ -8,7 +8,7 @@ pub trait IntoParam {
     fn into_param(self) -> String;
 }
 
-#[derive(Display, Clone)]
+#[derive(Display, Clone, PartialEq, Eq, Debug)]
 pub enum ContentRating {
     #[strum(to_string = "safe")]
     Safe,
@@ -32,7 +32,7 @@ impl From<&str> for ContentRating {
     }
 }
 
-#[derive(Display, Clone, EnumIter, PartialEq, Eq, Default)]
+#[derive(Display, Clone, EnumIter, PartialEq, Eq, Default, Debug)]
 pub enum SortBy {
     #[strum(to_string = "Best match")]
     BestMatch,
@@ -63,8 +63,14 @@ pub enum SortBy {
     YearAscending,
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Tags(Vec<String>);
+
+impl Tags {
+    pub fn new(tags: Vec<String>) -> Self {
+        Self(tags)
+    }
+}
 
 impl IntoParam for Tags {
     fn into_param(self) -> String {
@@ -126,7 +132,7 @@ impl IntoParam for SortBy {
     }
 }
 
-#[derive(Display, Clone, EnumIter, PartialEq, Eq)]
+#[derive(Display, Clone, EnumIter, PartialEq, Eq, Debug)]
 pub enum MagazineDemographic {
     Shounen,
     Shoujo,
@@ -164,7 +170,7 @@ impl IntoParam for Vec<MagazineDemographic> {
     }
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, PartialEq, Eq, Debug)]
 pub struct Author(String);
 
 impl Author {
@@ -173,7 +179,7 @@ impl Author {
     }
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, PartialEq, Eq, Debug)]
 pub struct Artist(String);
 
 impl Artist {
@@ -182,8 +188,8 @@ impl Artist {
     }
 }
 
-#[derive(Default, Clone)]
-pub struct User<T: Clone + Default + Sized>(pub Vec<T>);
+#[derive(Default, Clone, Eq, PartialEq, Debug)]
+pub struct User<T>(pub Vec<T>);
 
 impl IntoParam for User<Author> {
     fn into_param(self) -> String {
@@ -211,8 +217,11 @@ impl IntoParam for User<Artist> {
 
 impl<T> User<T>
 where
-    T: Clone + Default + Sized,
+    T: Clone + Default,
 {
+    pub fn new(ids: Vec<T>) -> Self {
+        Self(ids)
+    }
     pub fn set_one_user(&mut self, user: T) {
         self.0.push(user);
     }
@@ -381,7 +390,7 @@ impl IntoParam for Vec<Languages> {
     }
 }
 
-#[derive(Clone, Display, EnumIter)]
+#[derive(Clone, Display, EnumIter, PartialEq, Eq, Debug)]
 pub enum PublicationStatus {
     #[strum(to_string = "ongoing")]
     Ongoing,
@@ -415,7 +424,7 @@ impl IntoParam for Vec<PublicationStatus> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Filters {
     pub content_rating: Vec<ContentRating>,
     pub publication_status: Vec<PublicationStatus>,
@@ -504,7 +513,24 @@ mod test {
     use super::*;
 
     #[test]
-    fn language_conversion_works() {
+    fn content_rating_works() {
+        let content_rating = vec![ContentRating::Safe, ContentRating::Suggestive];
+
+        assert_eq!(
+            "&contentRating[]=safe&contentRating[]=suggestive",
+            content_rating.into_param()
+        );
+    }
+
+    #[test]
+    fn sort_by_works() {
+        let sort_by = SortBy::BestMatch;
+
+        assert_eq!("&order[relevance]=desc", sort_by.into_param());
+    }
+
+    #[test]
+    fn language_conversion_from_filter_item() {
         let language_formatted = FilterListItem {
             name: format!(
                 "{} {}",
@@ -517,5 +543,31 @@ mod test {
         let conversion: Languages = language_formatted.into();
 
         assert_eq!(conversion, Languages::Spanish);
+    }
+
+    #[test]
+    fn all_filters_work() {
+        PREFERRED_LANGUAGE.set(Languages::default()).unwrap();
+        let filters = Filters::default();
+        assert_eq!("&availableTranslatedLanguage[]=en&contentRating[]=safe&contentRating[]=suggestive&order[latestUploadedChapter]=desc", filters.into_param());
+
+        let content_rating = vec![ContentRating::Safe];
+        let publication_status = vec![PublicationStatus::Cancelled, PublicationStatus::Ongoing];
+        let authors = User::<Author>::new(vec![Author::new("mock_id".to_string())]);
+        let sort_by = SortBy::LatestUpload;
+        let tags = Tags::new(vec!["mock_id_1".to_string(), "mock_id_2".to_string()]);
+
+        let most_filters_combined = Filters {
+            content_rating,
+            publication_status,
+            magazine_demographic: vec![],
+            authors,
+            sort_by,
+            tags,
+            artists: User::<Artist>::default(),
+            languages: vec![Languages::English, Languages::Spanish],
+        };
+
+        assert_eq!("&authors[]=mock_id&status[]=cancelled&status[]=ongoing&availableTranslatedLanguage[]=en&availableTranslatedLanguage[]=es&includedTags[]=mock_id_1&includedTags[]=mock_id_2&contentRating[]=safe&order[latestUploadedChapter]=desc", most_filters_combined.into_param());
     }
 }
