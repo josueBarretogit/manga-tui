@@ -1,5 +1,6 @@
 use crate::backend::Data;
 use crate::common::Manga;
+use crate::global::CURRENT_LIST_ITEM_STYLE;
 use crate::utils::{from_manga_response, set_status_style, set_tags_style};
 use crate::PICKER;
 use ratatui::{prelude::*, widgets::*};
@@ -139,7 +140,7 @@ impl Widget for MangaItem {
 impl PreRender for MangaItem {
     fn pre_render(&mut self, context: &tui_widget_list::PreRenderContext) -> u16 {
         if context.is_selected {
-            self.style = Style::default().fg(Color::Yellow);
+            self.style = *CURRENT_LIST_ITEM_STYLE;
         }
         1
     }
