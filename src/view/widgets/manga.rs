@@ -87,10 +87,12 @@ impl Widget for ChapterItem {
             None => match self.state {
                 ChapterItemState::Normal => {
                     Paragraph::new(self.scanlator)
+                        .style(self.style)
                         .wrap(Wrap { trim: true })
                         .render(scanlator_area, buf);
 
                     Paragraph::new(self.readable_at)
+                        .style(self.style)
                         .wrap(Wrap { trim: true })
                         .render(readable_at_area, buf);
                 }
@@ -134,7 +136,7 @@ impl Widget for ChapterItem {
 impl PreRender for ChapterItem {
     fn pre_render(&mut self, context: &tui_widget_list::PreRenderContext) -> u16 {
         if context.is_selected {
-            self.style = Style::new().fg(Color::Yellow);
+            self.style = Style::new().fg(Color::Yellow).bg(Color::Blue);
         }
 
         if self.download_loading_state.is_some() {
