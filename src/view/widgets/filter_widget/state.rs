@@ -465,15 +465,15 @@ impl FilterState {
     }
 
     pub fn reset(&mut self) {
-        // if self.tags.tags.is_some() {
-        //     self.tags
-        //         .tags
-        //         .as_mut()
-        //         .unwrap()
-        //         .iter_mut()
-        //         .for_each(|tag| tag.is_selected = false);
-        //     self.tags.search_bar.reset();
-        // }
+        if self.tags_state.tags.is_some() {
+            self.tags_state
+                .tags
+                .as_mut()
+                .unwrap()
+                .iter_mut()
+                .for_each(|tag| tag.state = TagListItemState::NotSelected);
+            self.tags_state.filter_input.reset();
+        }
 
         self.filters = Filters::default();
         self.content_rating = FilterList::<ContentRatingState>::default();
@@ -550,7 +550,7 @@ impl FilterState {
                 KeyCode::Tab => self.next_filter(),
                 KeyCode::BackTab => self.previous_filter(),
                 KeyCode::Char('s') => self.toggle_filter_list(),
-                KeyCode::Char('e') => {
+                KeyCode::Char('d') => {
                     if *FILTERS.get(self.id_filter).unwrap() == MangaFilters::Tags {
                         self.exclude_tag_selected();
                     }

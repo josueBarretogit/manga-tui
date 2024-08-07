@@ -1,5 +1,5 @@
 use super::StatefulWidgetFrame;
-use crate::utils::{centered_rect, render_search_bar};
+use crate::utils::{centered_rect, render_search_bar, set_filter_tags_style};
 use ratatui::{prelude::*, widgets::*};
 use state::*;
 
@@ -41,8 +41,10 @@ impl From<ListItemId> for ListItem<'_> {
 impl From<TagListItem> for ListItem<'_> {
     fn from(value: TagListItem) -> Self {
         let line = match value.state {
-            TagListItemState::Included => Line::from(value.name).on_green(),
-            TagListItemState::Excluded => Line::from(value.name).on_red(),
+            TagListItemState::Included => {
+                Line::from(format!(" {} ", value.name).black().on_green())
+            }
+            TagListItemState::Excluded => Line::from(format!(" {} ", value.name).black().on_red()),
             TagListItemState::NotSelected => Line::from(value.name),
         };
 
@@ -137,57 +139,7 @@ impl<'a> StatefulWidgetFrame for FilterWidget<'a> {
                         &mut state.sort_by_state.state,
                     );
                 }
-                MangaFilters::Tags => {
-                    let [list_area, input_area] =
-                        Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)])
-                            .areas(current_filter_area);
-
-                    if let Some(tags) = state.tags_state.tags.as_ref().cloned() {
-                        if state.tags_state.is_filter_empty() {
-                            render_filter_list(tags, list_area, buf, &mut state.tags_state.state);
-                        } else {
-                            let filtered_tags: Vec<TagListItem> = tags
-                                .iter()
-                                .filter_map(|tag| {
-                                    if tag.name.to_lowercase().contains(
-                                        &state.tags_state.filter_input.value().to_lowercase(),
-                                    ) {
-                                        return Some(tag.clone());
-                                    }
-                                    None
-                                })
-                                .collect();
-
-                            render_filter_list(
-                                filtered_tags,
-                                list_area,
-                                buf,
-                                &mut state.tags_state.state,
-                            );
-                        }
-                        let input_help = if state.is_typing {
-                            Line::from(vec![
-                                "Press ".into(),
-                                " <esc> ".bold().yellow(),
-                                "to stop typing".into(),
-                            ])
-                        } else {
-                            Line::from(vec![
-                                "Press".into(),
-                                " <l> ".bold().yellow(),
-                                "to filter tags".into(),
-                            ])
-                        };
-
-                        render_search_bar(
-                            state.is_typing,
-                            input_help,
-                            &state.tags_state.filter_input,
-                            frame,
-                            input_area,
-                        );
-                    }
-                }
+                MangaFilters::Tags => self.render_tags_list(current_filter_area, frame, state),
                 MangaFilters::MagazineDemographic => {
                     render_filter_list(
                         state.magazine_demographic.items.clone(),
@@ -307,6 +259,69 @@ impl<'a> FilterWidget<'a> {
         self.block = Some(block);
         self
     }
+
+    fn render_tags_list(&mut self, area: Rect, frame: &mut Frame<'_>, state: &mut FilterState) {
+        let buf = frame.buffer_mut();
+        let [list_area, input_area] =
+            Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)]).areas(area);
+
+        let [input_area, current_tags_area] =
+            Layout::vertical([Constraint::Fill(1), Constraint::Fill(1)]).areas(input_area);
+
+        if let Some(tags) = state.tags_state.tags.as_ref().cloned() {
+            let tags_filtered: Vec<Span<'_>> = tags
+                .iter()
+                .filter(|tag| tag.state != TagListItemState::NotSelected)
+                .map(|tag| set_filter_tags_style(tag))
+                .collect();
+            Paragraph::new(Line::from(tags_filtered))
+                .block(Block::bordered())
+                .wrap(Wrap { trim: true })
+                .render(current_tags_area, buf);
+
+            if state.tags_state.is_filter_empty() {
+                render_tags_list(tags, list_area, buf, &mut state.tags_state.state);
+            } else {
+                let filtered_tags: Vec<TagListItem> = tags
+                    .iter()
+                    .filter_map(|tag| {
+                        if tag
+                            .name
+                            .to_lowercase()
+                            .contains(&state.tags_state.filter_input.value().to_lowercase())
+                        {
+                            return Some(tag.clone());
+                        }
+                        None
+                    })
+                    .collect();
+
+                render_tags_list(filtered_tags, list_area, buf, &mut state.tags_state.state);
+            }
+
+            let input_help = if state.is_typing {
+                Line::from(vec![
+                    "Press ".into(),
+                    " <esc> ".bold().yellow(),
+                    "to stop typing".into(),
+                ])
+            } else {
+                Line::from(vec![
+                    "Press".into(),
+                    " <l> ".bold().yellow(),
+                    "to filter tags".into(),
+                ])
+            };
+
+            render_search_bar(
+                state.is_typing,
+                input_help,
+                &state.tags_state.filter_input,
+                frame,
+                input_area,
+            );
+        }
+    }
 }
 
 fn render_filter_list<'a, T>(items: T, area: Rect, buf: &mut Buffer, state: &mut ListState)
@@ -320,11 +335,29 @@ where
         " Select ".into(),
         "<s>".bold().yellow(),
     ]));
-
     let list = List::new(items)
         .block(list_block)
         .highlight_spacing(HighlightSpacing::Always)
         .highlight_symbol(">> ");
+    StatefulWidget::render(list, area, buf, state);
+}
 
+fn render_tags_list<'a, T>(items: T, area: Rect, buf: &mut Buffer, state: &mut ListState)
+where
+    T: IntoIterator,
+    T::Item: Into<ListItem<'a>>,
+{
+    let list_block = Block::bordered().title(Line::from(vec![
+        " Up/Down ".into(),
+        " <j>/<k> ".bold().yellow(),
+        " toggle include tag ".into(),
+        "<s>".bold().yellow(),
+        " toggle exclude tag ".into(),
+        "<d>".bold().yellow(),
+    ]));
+    let list = List::new(items)
+        .block(list_block)
+        .highlight_spacing(HighlightSpacing::Always)
+        .highlight_symbol(">> ");
     StatefulWidget::render(list, area, buf, state);
 }
