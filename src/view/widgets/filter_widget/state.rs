@@ -218,8 +218,6 @@ pub struct ListItemId {
 pub struct AuthorState;
 #[derive(Default)]
 pub struct ArtistState;
-#[derive(Default)]
-pub struct TagState;
 
 // It's called dynamic because the items must be fetched
 #[derive(Default)]
@@ -229,29 +227,6 @@ pub struct FilterListDynamic<T> {
     pub search_bar: Input,
     pub _is_found: bool,
     _state: PhantomData<T>,
-}
-
-impl FilterListDynamic<TagState> {
-    pub fn toggle_tags(&mut self) {
-        if self.is_search_bar_empty() {
-            self.toggle()
-        } else if let Some(index) = self.state.selected() {
-            if let Some(items) = self.items.as_mut() {
-                if let Some(tag) = items
-                    .iter_mut()
-                    .filter(|tag| {
-                        tag.name
-                            .to_lowercase()
-                            .contains(&self.search_bar.value().to_lowercase())
-                    })
-                    .collect::<Vec<&mut ListItemId>>()
-                    .get_mut(index)
-                {
-                    tag.is_selected = !tag.is_selected;
-                }
-            }
-        }
-    }
 }
 
 impl FilterListDynamic<AuthorState> {
@@ -334,6 +309,88 @@ impl<T> FilterListDynamic<T> {
     }
 }
 
+#[derive(Default, PartialEq, Eq)]
+pub enum TagListItemState {
+    Included,
+    Excluded,
+    #[default]
+    NotSelected,
+}
+
+#[derive(Default)]
+pub struct TagListItem {
+    pub id: String,
+    pub name: String,
+    pub state: TagListItemState,
+}
+
+impl TagListItem {
+    pub fn toggle_include(&mut self) {
+        if self.state == TagListItemState::NotSelected {
+            self.state = TagListItemState::Included;
+        } else {
+            self.state = TagListItemState::NotSelected;
+        }
+    }
+
+    pub fn toggle_exclude(&mut self) {
+        if self.state == TagListItemState::NotSelected {
+            self.state = TagListItemState::Excluded;
+        } else {
+            self.state = TagListItemState::NotSelected;
+        }
+    }
+}
+
+#[derive(Default)]
+pub struct TagsState {
+    pub tags: Option<Vec<TagListItem>>,
+    pub state: ListState,
+    pub filter_input: Input,
+}
+
+impl TagsState {
+    pub fn is_filter_empty(&mut self) -> bool {
+        self.filter_input.value().trim().is_empty()
+    }
+    pub fn get_selected_tag(&mut self) -> Option<&mut TagListItem> {
+        if let Some(tags) = self.tags.as_mut() {
+            if let Some(index) = self.state.selected() {
+                return tags.get_mut(index);
+            }
+            None
+        } else {
+            None
+        }
+    }
+
+    pub fn get_filtered_tags(&mut self) -> Vec<&mut TagListItem> {
+        self.tags
+            .as_mut()
+            .unwrap()
+            .iter_mut()
+            .filter(|tag| {
+                tag.name
+                    .to_lowercase()
+                    .contains(&self.filter_input.value().to_lowercase())
+            })
+            .collect()
+    }
+
+    pub fn include_tags(&mut self) {
+        if self.is_filter_empty() {
+            if let Some(tag) = self.get_selected_tag() {
+                tag.toggle_include();
+            }
+        } else if self.tags.is_some() {
+            if let Some(index) = self.state.selected() {
+                if let Some(tag) = self.get_filtered_tags().get_mut(index) {
+                    tag.toggle_include();
+                }
+            }
+        }
+    }
+}
 pub struct FilterState {
     pub is_open: bool,
     pub id_filter: usize,
@@ -342,7 +399,7 @@ pub struct FilterState {
     pub publication_status: FilterList<PublicationStatusState>,
     pub sort_by_state: FilterList<SortByState>,
     pub magazine_demographic: FilterList<MagazineDemographicState>,
-    pub tags: FilterListDynamic<TagState>,
+    pub tags: TagsState,
     pub author_state: FilterListDynamic<AuthorState>,
     pub artist_state: FilterListDynamic<ArtistState>,
     pub lang_state: FilterList<LanguageState>,
@@ -362,7 +419,7 @@ impl FilterState {
             content_rating: FilterList::<ContentRatingState>::default(),
             publication_status: FilterList::<PublicationStatusState>::default(),
             sort_by_state: FilterList::<SortByState>::default(),
-            tags: FilterListDynamic::<TagState>::default(),
+            tags: TagsState::default(),
             magazine_demographic: FilterList::<MagazineDemographicState>::default(),
             author_state: FilterListDynamic::<AuthorState>::default(),
             artist_state: FilterListDynamic::<ArtistState>::default(),
@@ -374,15 +431,15 @@ impl FilterState {
     }
 
     pub fn reset(&mut self) {
-        if self.tags.items.is_some() {
-            self.tags
-                .items
-                .as_mut()
-                .unwrap()
-                .iter_mut()
-                .for_each(|tag| tag.is_selected = false);
-            self.tags.search_bar.reset();
-        }
+        // if self.tags.tags.is_some() {
+        //     self.tags
+        //         .tags
+        //         .as_mut()
+        //         .unwrap()
+        //         .iter_mut()
+        //         .for_each(|tag| tag.is_selected = false);
+        //     self.tags.search_bar.reset();
+        // }
 
         self.filters = Filters::default();
         self.content_rating = FilterList::<ContentRatingState>::default();
@@ -601,8 +658,8 @@ impl FilterState {
                     self.set_sort_by();
                 }
                 MangaFilters::Tags => {
-                    self.tags.toggle_tags();
-                    self.set_tags();
+                    // self.tags.toggle_tags();
+                    // self.set_tags();
                 }
 
                 MangaFilters::MagazineDemographic => {
@@ -629,6 +686,8 @@ impl FilterState {
             }
         }
     }
+
+    fn include_tags(&mut self) {}
 
     fn set_publication_status(&mut self) {
         self.filters.set_publication_status(

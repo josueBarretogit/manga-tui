@@ -63,8 +63,20 @@ pub enum SortBy {
     YearAscending,
 }
 
-#[derive(Clone, PartialEq, Eq)]
-pub struct Tags(Vec<String>);
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum TagSelection {
+    Included,
+    Excluded,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct TagData {
+    id: String,
+    state: TagSelection,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Tags(Vec<TagData>);
 
 impl IntoParam for Tags {
     fn into_param(self) -> String {
@@ -74,8 +86,12 @@ impl IntoParam for Tags {
             return param;
         }
 
-        for id_tag in self.0 {
-            param.push_str(format!("&includedTags[]={}", id_tag).as_str());
+        for tag in self.0 {
+            let parameter = match tag.state {
+                TagSelection::Included => "&includedTags[]=",
+                TagSelection::Excluded => "&excludedTags[]=",
+            };
+            param.push_str(format!("{}{}", parameter, tag.id).as_str());
         }
 
         param
@@ -470,7 +486,7 @@ impl Filters {
     pub fn set_sort_by(&mut self, sort_by: SortBy) {
         self.sort_by = sort_by;
     }
-    pub fn set_tags(&mut self, tags: Vec<String>) {
+    pub fn set_tags(&mut self, tags: Vec<TagData>) {
         self.tags.0 = tags;
     }
 
