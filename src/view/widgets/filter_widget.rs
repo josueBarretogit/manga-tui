@@ -38,6 +38,18 @@ impl From<ListItemId> for ListItem<'_> {
     }
 }
 
+impl From<TagListItem> for ListItem<'_> {
+    fn from(value: TagListItem) -> Self {
+        let line = match value.state {
+            TagListItemState::Included => Line::from(value.name).on_green(),
+            TagListItemState::Excluded => Line::from(value.name).on_red(),
+            TagListItemState::NotSelected => Line::from(value.name),
+        };
+
+        ListItem::new(line)
+    }
+}
+
 impl<'a> StatefulWidgetFrame for FilterWidget<'a> {
     type State = FilterState;
 
@@ -74,7 +86,7 @@ impl<'a> StatefulWidgetFrame for FilterWidget<'a> {
                     MangaFilters::MagazineDemographic => {
                         state.magazine_demographic.num_filters_active()
                     }
-                    MangaFilters::Tags => state.tags.num_filters_active(),
+                    MangaFilters::Tags => state.tags_state.num_filters_active(),
                     MangaFilters::Authors => state.author_state.num_filters_active(),
                     MangaFilters::Artists => state.artist_state.num_filters_active(),
                 };
@@ -130,18 +142,16 @@ impl<'a> StatefulWidgetFrame for FilterWidget<'a> {
                         Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)])
                             .areas(current_filter_area);
 
-                    if let Some(tags) = state.tags.items.as_ref().cloned() {
-                        if state.tags.is_search_bar_empty() {
-                            render_filter_list(tags, list_area, buf, &mut state.tags.state);
+                    if let Some(tags) = state.tags_state.tags.as_ref().cloned() {
+                        if state.tags_state.is_filter_empty() {
+                            render_filter_list(tags, list_area, buf, &mut state.tags_state.state);
                         } else {
-                            let filtered_tags: Vec<ListItemId> = tags
+                            let filtered_tags: Vec<TagListItem> = tags
                                 .iter()
                                 .filter_map(|tag| {
-                                    if tag
-                                        .name
-                                        .to_lowercase()
-                                        .contains(&state.tags.search_bar.value().to_lowercase())
-                                    {
+                                    if tag.name.to_lowercase().contains(
+                                        &state.tags_state.filter_input.value().to_lowercase(),
+                                    ) {
                                         return Some(tag.clone());
                                     }
                                     None
@@ -152,7 +162,7 @@ impl<'a> StatefulWidgetFrame for FilterWidget<'a> {
                                 filtered_tags,
                                 list_area,
                                 buf,
-                                &mut state.tags.state,
+                                &mut state.tags_state.state,
                             );
                         }
                         let input_help = if state.is_typing {
@@ -172,7 +182,7 @@ impl<'a> StatefulWidgetFrame for FilterWidget<'a> {
                         render_search_bar(
                             state.is_typing,
                             input_help,
-                            &state.tags.search_bar,
+                            &state.tags_state.filter_input,
                             frame,
                             input_area,
                         );
