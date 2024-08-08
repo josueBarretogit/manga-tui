@@ -39,13 +39,12 @@ impl Widget for ChapterItem {
         let layout = Layout::horizontal([
             Constraint::Length(3),
             Constraint::Length(3),
-            Constraint::Length(3),
             Constraint::Fill(50),
             Constraint::Fill(30),
             Constraint::Fill(20),
         ]);
 
-        let [is_read_area, is_downloaded_area, lang_area, title_area, scanlator_area, readable_at_area] =
+        let [is_read_area, is_downloaded_area, title_area, scanlator_area, readable_at_area] =
             layout.areas(area);
 
         let is_read_icon = if self.is_read { "👀" } else { " " };
@@ -58,9 +57,6 @@ impl Widget for ChapterItem {
         Line::from(is_downloaded_icon)
             .style(self.style)
             .render(is_downloaded_area, buf);
-        Line::from(self.translated_language.as_emoji())
-            .style(self.style)
-            .render(lang_area, buf);
 
         Paragraph::new(Line::from(vec![
             format!(" Ch. {} ", self.chapter_number).into(),
@@ -140,7 +136,7 @@ impl PreRender for ChapterItem {
         }
 
         if self.download_loading_state.is_some() {
-            5
+            3
         } else {
             1
         }

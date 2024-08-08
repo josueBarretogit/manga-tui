@@ -22,8 +22,6 @@ use tokio::task::JoinSet;
 
 use self::text::ToSpan;
 
-// Todo! Define all keybindings
-
 #[derive(PartialEq, Eq)]
 pub enum PageState {
     DownloadingChapters,
@@ -90,6 +88,7 @@ pub struct MangaPage {
     local_event_rx: UnboundedReceiver<MangaPageEvents>,
     chapters: Option<ChaptersData>,
     chapter_order: ChapterOrder,
+    chapter_language: Languages,
     state: PageState,
     statistics: Option<MangaStatistics>,
     tasks: JoinSet<()>,
@@ -127,6 +126,12 @@ impl MangaPage {
         local_event_tx.send(MangaPageEvents::SearchChapters).ok();
         local_event_tx.send(MangaPageEvents::FethStatistics).ok();
 
+        let chapter_language = manga
+            .available_languages
+            .iter()
+            .find(|lang| *lang == Languages::get_preferred_lang())
+            .cloned();
+
         Self {
             manga,
             image_state,
@@ -142,6 +147,7 @@ impl MangaPage {
             tasks: JoinSet::new(),
             available_languages_state: ListState::default(),
             is_list_languages_open: false,
+            chapter_language: chapter_language.unwrap_or(Languages::default()),
         }
     }
     fn render_cover(&mut self, area: Rect, buf: &mut Buffer) {
@@ -351,7 +357,10 @@ impl MangaPage {
             );
         } else {
             Paragraph::new(Line::from(vec![
-                "Available languages : ".into(),
+                "Language: ".into(),
+                self.chapter_language.as_emoji().into(),
+                " | ".into(),
+                "Available languages: ".into(),
                 "<l>".bold().yellow(),
             ]))
             .render(language_area, buf);
@@ -373,6 +382,7 @@ impl MangaPage {
                 }
                 KeyCode::Enter | KeyCode::Char('s') => {
                     self.chapters = None;
+                    self.chapter_language = self.get_current_selected_language();
                     self.search_chapters();
                 }
                 KeyCode::Char('l') | KeyCode::Esc => {
@@ -554,28 +564,9 @@ impl MangaPage {
     }
 
     fn get_current_selected_language(&mut self) -> Languages {
-        let preferred_language = Languages::get_preferred_lang();
         match self.available_languages_state.selected() {
-            Some(index) => *self
-                .manga
-                .available_languages
-                .get(index)
-                .unwrap_or(preferred_language),
-            None => {
-                let maybe_preferred_language = self
-                    .manga
-                    .available_languages
-                    .iter()
-                    .find(|lang| *lang == preferred_language);
-
-                maybe_preferred_language.cloned().unwrap_or(
-                    self.manga
-                        .available_languages
-                        .first()
-                        .cloned()
-                        .unwrap_or(*preferred_language),
-                )
-            }
+            Some(index) => self.manga.available_languages[index],
+            None => self.chapter_language,
         }
     }
 
@@ -601,7 +592,7 @@ impl MangaPage {
         self.state = PageState::SearchingChapters;
         let manga_id = self.manga.id.clone();
         let tx = self.local_event_tx.clone();
-        let language = self.get_current_selected_language();
+        let language = self.chapter_language;
         let chapter_order = self.chapter_order;
 
         let page = if let Some(chapters) = self.chapters.as_ref() {

@@ -142,6 +142,7 @@ impl PreRender for MangaItem {
         if context.is_selected {
             self.style = *CURRENT_LIST_ITEM_STYLE;
         }
+
         1
     }
 }

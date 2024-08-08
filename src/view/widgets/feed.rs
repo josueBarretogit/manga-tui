@@ -52,7 +52,7 @@ impl Widget for MangasRead {
 
         let [title_area, recent_chapters_area] = layout.margin(1).areas(area);
 
-        Block::bordered().style(self.style).render(area, buf);
+        Block::bordered().border_style(self.style).render(area, buf);
 
         Paragraph::new(self.title)
             .block(Block::default().borders(Borders::RIGHT))

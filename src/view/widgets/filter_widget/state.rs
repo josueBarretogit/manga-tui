@@ -196,7 +196,7 @@ impl Default for FilterList<LanguageState> {
             .filter(|lang| *lang != Languages::Unkown)
             .map(|lang| FilterListItem {
                 name: format!("{} {}", lang.as_emoji(), lang.as_human_readable()),
-                is_selected: false,
+                is_selected: lang == *Languages::get_preferred_lang(),
             });
 
         Self {

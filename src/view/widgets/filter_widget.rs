@@ -1,4 +1,5 @@
 use super::StatefulWidgetFrame;
+use crate::global::CURRENT_LIST_ITEM_STYLE;
 use crate::utils::{centered_rect, render_search_bar, set_filter_tags_style};
 use ratatui::{prelude::*, widgets::*};
 use state::*;
@@ -274,6 +275,7 @@ impl<'a> FilterWidget<'a> {
                 .filter(|tag| tag.state != TagListItemState::NotSelected)
                 .map(|tag| set_filter_tags_style(tag))
                 .collect();
+
             Paragraph::new(Line::from(tags_filtered))
                 .block(Block::bordered())
                 .wrap(Wrap { trim: true })
@@ -338,7 +340,8 @@ where
     let list = List::new(items)
         .block(list_block)
         .highlight_spacing(HighlightSpacing::Always)
-        .highlight_symbol(">> ");
+        .highlight_style(*CURRENT_LIST_ITEM_STYLE);
+
     StatefulWidget::render(list, area, buf, state);
 }
 
@@ -358,6 +361,6 @@ where
     let list = List::new(items)
         .block(list_block)
         .highlight_spacing(HighlightSpacing::Always)
-        .highlight_symbol(">> ");
+        .highlight_style(*CURRENT_LIST_ITEM_STYLE);
     StatefulWidget::render(list, area, buf, state);
 }

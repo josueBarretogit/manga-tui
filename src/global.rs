@@ -11,4 +11,4 @@ pub static INSTRUCTIONS_STYLE: Lazy<Style> =
 pub static ERROR_STYLE: Lazy<Style> =
     Lazy::new(|| Style::default().bold().underlined().red().on_black());
 
-pub static CURRENT_LIST_ITEM_STYLE: Lazy<Style> = Lazy::new(|| Style::default().yellow().on_blue());
+pub static CURRENT_LIST_ITEM_STYLE: Lazy<Style> = Lazy::new(|| Style::default().on_blue());
