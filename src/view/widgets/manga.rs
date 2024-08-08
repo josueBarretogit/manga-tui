@@ -1,6 +1,6 @@
 use crate::backend::filter::Languages;
 use crate::backend::ChapterResponse;
-use crate::global::ERROR_STYLE;
+use crate::global::{CURRENT_LIST_ITEM_STYLE, ERROR_STYLE};
 use crate::utils::display_dates_since_publication;
 use ratatui::{prelude::*, widgets::*};
 use tui_widget_list::PreRender;
@@ -136,7 +136,7 @@ impl Widget for ChapterItem {
 impl PreRender for ChapterItem {
     fn pre_render(&mut self, context: &tui_widget_list::PreRenderContext) -> u16 {
         if context.is_selected {
-            self.style = Style::new().fg(Color::Yellow).bg(Color::Blue);
+            self.style = *CURRENT_LIST_ITEM_STYLE;
         }
 
         if self.download_loading_state.is_some() {
