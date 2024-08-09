@@ -58,7 +58,7 @@ https://github.com/user-attachments/assets/64880a98-74c8-4656-8cf8-2c1daf5375d2
 ### Using cargo
 
 ```shell
-cargo install manga-tui
+cargo install manga-tui --locked
 ```
 
 ### AUR
