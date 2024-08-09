@@ -1358,7 +1358,7 @@ dependencies = [
 
 [[package]]
 name = "manga-tui"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "bytes",
@@ -1908,9 +1908,8 @@ dependencies = [
 
 [[package]]
 name = "ratatui-image"
-version = "1.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "495167cc53bf2676dcc8c26845bd5df1ae3205aa02fa7df6a57c92c6cf058c5d"
+version = "1.0.5"
+source = "git+https://github.com/josueBarretogit/ratatui-image#afbdd4e79251ef0709e4a2d9281b3ac6eb73291a"
 dependencies = [
  "base64",
  "dyn-clone",

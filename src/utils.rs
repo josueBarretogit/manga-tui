@@ -3,6 +3,7 @@ use crate::backend::fetch::MangadexClient;
 use crate::backend::filter::Languages;
 use crate::backend::Data;
 use crate::common::{Artist, Author, Manga};
+use crate::view::widgets::filter_widget::state::{TagListItem, TagListItemState};
 use crate::view::widgets::ImageHandler;
 use crate::PICKER;
 use image::io::Reader;
@@ -30,6 +31,14 @@ pub fn set_status_style(status: &str) -> Span<'_> {
         "hiatus" => format!(" 🟡 {status} ").into(),
         "cancelled" => format!(" 🟠 {status} ").into(),
         _ => format!(" {status} ").into(),
+    }
+}
+
+pub fn set_filter_tags_style(tag: &TagListItem) -> Span<'_> {
+    match tag.state {
+        TagListItemState::Included => format!(" {} ", tag.name).black().on_green(),
+        TagListItemState::Excluded => format!(" {} ", tag.name).black().on_red(),
+        TagListItemState::NotSelected => Span::from(tag.name.clone()),
     }
 }
 

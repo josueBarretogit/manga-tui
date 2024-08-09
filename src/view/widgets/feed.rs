@@ -1,5 +1,6 @@
 use crate::backend::filter::Languages;
 use crate::backend::ChapterResponse;
+use crate::global::CURRENT_LIST_ITEM_STYLE;
 use crate::utils::display_dates_since_publication;
 use ratatui::{prelude::*, widgets::*};
 use tui_widget_list::PreRender;
@@ -51,7 +52,7 @@ impl Widget for MangasRead {
 
         let [title_area, recent_chapters_area] = layout.margin(1).areas(area);
 
-        Block::bordered().style(self.style).render(area, buf);
+        Block::bordered().border_style(self.style).render(area, buf);
 
         Paragraph::new(self.title)
             .block(Block::default().borders(Borders::RIGHT))
@@ -74,7 +75,7 @@ impl Widget for MangasRead {
 impl PreRender for MangasRead {
     fn pre_render(&mut self, context: &tui_widget_list::PreRenderContext) -> u16 {
         if context.is_selected {
-            self.style = Style::default().fg(Color::Yellow);
+            self.style = *CURRENT_LIST_ITEM_STYLE;
         }
         10
     }

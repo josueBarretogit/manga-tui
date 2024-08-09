@@ -81,8 +81,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         None => PREFERRED_LANGUAGE.set(Languages::default()).unwrap(),
     }
 
+    
     let user_agent = format!(
-        "manga-tui/0.1.0 ({}/{}/{})",
+        "manga-tui/{} ({}/{}/{})",
+        env!("CARGO_PKG_VERSION"),
         std::env::consts::FAMILY,
         std::env::consts::OS,
         std::env::consts::ARCH

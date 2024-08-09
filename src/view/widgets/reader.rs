@@ -1,3 +1,4 @@
+use crate::global::CURRENT_LIST_ITEM_STYLE;
 use ratatui::{prelude::*, widgets::*};
 use throbber_widgets_tui::{Throbber, ThrobberState};
 use tui_widget_list::PreRender;
@@ -47,7 +48,7 @@ impl Widget for PagesItem {
 impl PreRender for PagesItem {
     fn pre_render(&mut self, context: &tui_widget_list::PreRenderContext) -> u16 {
         if context.is_selected {
-            self.style = Style::default().bg(Color::Blue);
+            self.style = *CURRENT_LIST_ITEM_STYLE;
         }
         2
     }

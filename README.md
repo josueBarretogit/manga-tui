@@ -60,6 +60,15 @@ https://github.com/user-attachments/assets/64880a98-74c8-4656-8cf8-2c1daf5375d2
 ```shell
 cargo install manga-tui --locked
 ```
+
+### AUR
+
+You can install `manga-tui` from the [AUR](https://aur.archlinux.org/packages/manga-tui) with using an [AUR helper](https://wiki.archlinux.org/title/AUR_helpers).
+
+```shell
+paru -S manga-tui
+```
+
 ## Binary release
 
 Download a binary from the [releases page](https://github.com/josueBarretogit/manga-tui/releases/latest)

@@ -2,7 +2,7 @@ use std::fmt::Write;
 use strum::{Display, EnumIter, IntoEnumIterator};
 
 use crate::global::PREFERRED_LANGUAGE;
-use crate::view::widgets::filter_widget::state::FilterListItem;
+use crate::view::widgets::filter_widget::state::{FilterListItem, TagListItem, TagListItemState};
 
 pub trait IntoParam {
     fn into_param(self) -> String;
@@ -63,8 +63,45 @@ pub enum SortBy {
     YearAscending,
 }
 
-#[derive(Clone, PartialEq, Eq)]
-pub struct Tags(Vec<String>);
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum TagSelection {
+    Included,
+    Excluded,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct TagData {
+    id: String,
+    state: TagSelection,
+}
+
+impl TagData {
+    pub fn new(id: String, state: TagSelection) -> Self {
+        Self { id, state }
+    }
+}
+
+impl From<&TagListItem> for TagData {
+    fn from(value: &TagListItem) -> Self {
+        Self {
+            id: value.id.clone(),
+            state: if value.state == TagListItemState::Included {
+                TagSelection::Included
+            } else {
+                TagSelection::Excluded
+            },
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Tags(Vec<TagData>);
+
+impl Tags {
+    pub fn new(tags: Vec<TagData>) -> Self {
+        Self(tags)
+    }
+}
 
 impl IntoParam for Tags {
     fn into_param(self) -> String {
@@ -74,8 +111,12 @@ impl IntoParam for Tags {
             return param;
         }
 
-        for id_tag in self.0 {
-            param.push_str(format!("&includedTags[]={}", id_tag).as_str());
+        for tag in self.0 {
+            let parameter = match tag.state {
+                TagSelection::Included => "&includedTags[]=",
+                TagSelection::Excluded => "&excludedTags[]=",
+            };
+            param.push_str(format!("{}{}", parameter, tag.id).as_str());
         }
 
         param
@@ -470,7 +511,7 @@ impl Filters {
     pub fn set_sort_by(&mut self, sort_by: SortBy) {
         self.sort_by = sort_by;
     }
-    pub fn set_tags(&mut self, tags: Vec<String>) {
+    pub fn set_tags(&mut self, tags: Vec<TagData>) {
         self.tags.0 = tags;
     }
 
@@ -501,6 +542,7 @@ impl Filters {
 
 #[cfg(test)]
 mod test {
+
     use super::*;
 
     #[test]
@@ -517,5 +559,48 @@ mod test {
         let conversion: Languages = language_formatted.into();
 
         assert_eq!(conversion, Languages::Spanish);
+    }
+
+    #[test]
+    fn filter_by_tags_works() {
+        let tags = Tags::new(vec![
+            TagData {
+                id: "id_tag_included".to_string(),
+                state: TagSelection::Included,
+            },
+            TagData {
+                id: "id_tag_excluded".to_string(),
+                state: TagSelection::Excluded,
+            },
+        ]);
+
+        assert_eq!(
+            "&includedTags[]=id_tag_included&excludedTags[]=id_tag_excluded",
+            tags.into_param()
+        );
+    }
+
+    #[test]
+    fn filters_combined_work() {
+        PREFERRED_LANGUAGE.set(Languages::default()).unwrap();
+        let filters = Filters::default();
+
+        assert_eq!("&availableTranslatedLanguage[]=en&contentRating[]=safe&contentRating[]=suggestive&order[latestUploadedChapter]=desc", filters.into_param());
+
+        let mut filters = Filters::default();
+
+        filters.set_tags(vec![TagData::new(
+            "id_1".to_string(),
+            TagSelection::Included,
+        )]);
+
+        filters.set_authors(vec![
+            Author::new("id_1".to_string()),
+            Author::new("id_2".to_string()),
+        ]);
+
+        filters.set_languages(vec![Languages::French, Languages::Spanish]);
+
+        assert_eq!("&authors[]=id_1&authors[]=id_2&availableTranslatedLanguage[]=fr&availableTranslatedLanguage[]=es&includedTags[]=id_1&contentRating[]=safe&contentRating[]=suggestive&order[latestUploadedChapter]=desc", filters.into_param());
     }
 }

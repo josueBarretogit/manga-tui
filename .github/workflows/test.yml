@@ -1,0 +1,33 @@
+name: main
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build_and_test:
+    name: Test manga tui
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: setup toolchain
+        uses: hecrj/setup-rust-action@v1
+        with:
+          rust-version: stable
+
+      - name: cargo test
+        run: cargo test 
+
+
+      - name: clippy
+        run: cargo clippy --all --all-features --tests -- -D warnings
+        env:
+          RUST_BACKTRACE: full

@@ -1,6 +1,6 @@
 use crate::backend::filter::Languages;
 use crate::backend::ChapterResponse;
-use crate::global::ERROR_STYLE;
+use crate::global::{CURRENT_LIST_ITEM_STYLE, ERROR_STYLE};
 use crate::utils::display_dates_since_publication;
 use ratatui::{prelude::*, widgets::*};
 use tui_widget_list::PreRender;
@@ -37,28 +37,28 @@ impl Widget for ChapterItem {
         Self: Sized,
     {
         let layout = Layout::horizontal([
-            Constraint::Percentage(50),
-            Constraint::Percentage(30),
-            Constraint::Percentage(20),
+            Constraint::Length(3),
+            Constraint::Length(3),
+            Constraint::Fill(50),
+            Constraint::Fill(30),
+            Constraint::Fill(20),
         ]);
 
-        Block::bordered().border_style(self.style).render(area, buf);
-
-        let [title_area, scanlator_area, readable_at_area] = layout.areas(area.inner(Margin {
-            horizontal: 1,
-            vertical: 1,
-        }));
+        let [is_read_area, is_downloaded_area, title_area, scanlator_area, readable_at_area] =
+            layout.areas(area);
 
         let is_read_icon = if self.is_read { "👀" } else { " " };
 
         let is_downloaded_icon = if self.is_downloaded { "📥" } else { " " };
 
+        Line::from(is_read_icon)
+            .style(self.style)
+            .render(is_read_area, buf);
+        Line::from(is_downloaded_icon)
+            .style(self.style)
+            .render(is_downloaded_area, buf);
+
         Paragraph::new(Line::from(vec![
-            is_read_icon.into(),
-            " ".into(),
-            is_downloaded_icon.into(),
-            " ".into(),
-            self.translated_language.as_emoji().into(),
             format!(" Ch. {} ", self.chapter_number).into(),
             self.title.into(),
         ]))
@@ -83,10 +83,12 @@ impl Widget for ChapterItem {
             None => match self.state {
                 ChapterItemState::Normal => {
                     Paragraph::new(self.scanlator)
+                        .style(self.style)
                         .wrap(Wrap { trim: true })
                         .render(scanlator_area, buf);
 
                     Paragraph::new(self.readable_at)
+                        .style(self.style)
                         .wrap(Wrap { trim: true })
                         .render(readable_at_area, buf);
                 }
@@ -130,13 +132,13 @@ impl Widget for ChapterItem {
 impl PreRender for ChapterItem {
     fn pre_render(&mut self, context: &tui_widget_list::PreRenderContext) -> u16 {
         if context.is_selected {
-            self.style = Style::new().fg(Color::Yellow);
+            self.style = *CURRENT_LIST_ITEM_STYLE;
         }
 
         if self.download_loading_state.is_some() {
-            5
-        } else {
             3
+        } else {
+            1
         }
     }
 }
