@@ -75,6 +75,12 @@ pub struct TagData {
     state: TagSelection,
 }
 
+impl TagData {
+    pub fn new(id: String, state: TagSelection) -> Self {
+        Self { id, state }
+    }
+}
+
 impl From<&TagListItem> for TagData {
     fn from(value: &TagListItem) -> Self {
         Self {
@@ -536,6 +542,7 @@ impl Filters {
 
 #[cfg(test)]
 mod test {
+
     use super::*;
 
     #[test]
@@ -571,5 +578,29 @@ mod test {
             "&includedTags[]=id_tag_included&excludedTags[]=id_tag_excluded",
             tags.into_param()
         );
+    }
+
+    #[test]
+    fn filters_combined_work() {
+        PREFERRED_LANGUAGE.set(Languages::default()).unwrap();
+        let filters = Filters::default();
+
+        assert_eq!("&availableTranslatedLanguage[]=en&contentRating[]=safe&contentRating[]=suggestive&order[latestUploadedChapter]=desc", filters.into_param());
+
+        let mut filters = Filters::default();
+
+        filters.set_tags(vec![TagData::new(
+            "id_1".to_string(),
+            TagSelection::Included,
+        )]);
+
+        filters.set_authors(vec![
+            Author::new("id_1".to_string()),
+            Author::new("id_2".to_string()),
+        ]);
+
+        filters.set_languages(vec![Languages::French, Languages::Spanish]);
+
+        assert_eq!("&authors[]=id_1&authors[]=id_2&availableTranslatedLanguage[]=fr&availableTranslatedLanguage[]=es&includedTags[]=id_1&contentRating[]=safe&contentRating[]=suggestive&order[latestUploadedChapter]=desc", filters.into_param());
     }
 }
