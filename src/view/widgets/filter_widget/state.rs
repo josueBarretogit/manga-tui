@@ -272,9 +272,6 @@ impl<T> FilterListDynamic<T> {
         self.items = None;
     }
 
-    pub fn is_search_bar_empty(&mut self) -> bool {
-        self.search_bar.value().trim().is_empty()
-    }
 
     fn toggle(&mut self) {
         if let Some(items) = self.items.as_mut() {
