@@ -1,14 +1,14 @@
-use std::fmt::Write;
+use std::fmt::{Debug, Write};
 use strum::{Display, EnumIter, IntoEnumIterator};
 
 use crate::global::PREFERRED_LANGUAGE;
 use crate::view::widgets::filter_widget::state::{FilterListItem, TagListItem, TagListItemState};
 
-pub trait IntoParam {
+pub trait IntoParam: Debug {
     fn into_param(self) -> String;
 }
 
-#[derive(Display, Clone)]
+#[derive(Display, Clone, Debug)]
 pub enum ContentRating {
     #[strum(to_string = "safe")]
     Safe,
@@ -32,7 +32,7 @@ impl From<&str> for ContentRating {
     }
 }
 
-#[derive(Display, Clone, EnumIter, PartialEq, Eq, Default)]
+#[derive(Display, Clone, EnumIter, PartialEq, Eq, Default, Debug)]
 pub enum SortBy {
     #[strum(to_string = "Best match")]
     BestMatch,
@@ -167,7 +167,7 @@ impl IntoParam for SortBy {
     }
 }
 
-#[derive(Display, Clone, EnumIter, PartialEq, Eq)]
+#[derive(Display, Clone, EnumIter, PartialEq, Eq, Debug)]
 pub enum MagazineDemographic {
     Shounen,
     Shoujo,
@@ -205,7 +205,7 @@ impl IntoParam for Vec<MagazineDemographic> {
     }
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug)]
 pub struct Author(String);
 
 impl Author {
@@ -214,7 +214,7 @@ impl Author {
     }
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug)]
 pub struct Artist(String);
 
 impl Artist {
@@ -223,8 +223,8 @@ impl Artist {
     }
 }
 
-#[derive(Default, Clone)]
-pub struct User<T: Clone + Default + Sized>(pub Vec<T>);
+#[derive(Default, Clone, Debug)]
+pub struct User<T: Clone + Default>(pub Vec<T>);
 
 impl IntoParam for User<Author> {
     fn into_param(self) -> String {
@@ -254,6 +254,10 @@ impl<T> User<T>
 where
     T: Clone + Default + Sized,
 {
+    pub fn new(users: Vec<T>) -> Self {
+        Self(users)
+    }
+
     pub fn set_one_user(&mut self, user: T) {
         self.0.push(user);
     }
@@ -422,7 +426,7 @@ impl IntoParam for Vec<Languages> {
     }
 }
 
-#[derive(Clone, Display, EnumIter)]
+#[derive(Clone, Display, EnumIter, Debug)]
 pub enum PublicationStatus {
     #[strum(to_string = "ongoing")]
     Ongoing,
@@ -456,7 +460,7 @@ impl IntoParam for Vec<PublicationStatus> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Filters {
     pub content_rating: Vec<ContentRating>,
     pub publication_status: Vec<PublicationStatus>,
@@ -540,13 +544,14 @@ impl Filters {
     }
 }
 
+/// This test may be changed depending on the Mangadex Api
 #[cfg(test)]
 mod test {
 
     use super::*;
 
     #[test]
-    fn language_conversion_works() {
+    fn language_from_filter_list_item() {
         let language_formatted = FilterListItem {
             name: format!(
                 "{} {}",
@@ -559,6 +564,135 @@ mod test {
         let conversion: Languages = language_formatted.into();
 
         assert_eq!(conversion, Languages::Spanish);
+    }
+
+    #[test]
+    fn filter_by_content_rating_works() {
+        let content_rating = vec![
+            ContentRating::Safe,
+            ContentRating::Erotic,
+            ContentRating::Pornographic,
+            ContentRating::Suggestive,
+        ];
+
+        assert_eq!(
+            "&contentRating[]=safe&contentRating[]=erotica&contentRating[]=pornographic&contentRating[]=suggestive",
+            content_rating.into_param()
+        );
+    }
+
+    #[test]
+    fn sort_by_works() {
+        assert_eq!("&order[relevance]=desc", SortBy::BestMatch.into_param());
+
+        assert_eq!("&order[createdAt]=asc", SortBy::OldestAdded.into_param());
+
+        assert_eq!(
+            "&order[followedCount]=desc",
+            SortBy::MostFollows.into_param()
+        );
+
+        assert_eq!(
+            "&order[followedCount]=asc",
+            SortBy::FewestFollows.into_param()
+        );
+
+        assert_eq!(
+            "&order[latestUploadedChapter]=desc",
+            SortBy::LatestUpload.into_param()
+        );
+
+        assert_eq!(
+            "&order[latestUploadedChapter]=asc",
+            SortBy::OldestUpload.into_param()
+        );
+
+        assert_eq!("&order[rating]=desc", SortBy::HighestRating.into_param());
+
+        assert_eq!("&order[rating]=asc", SortBy::LowestRating.into_param());
+
+        assert_eq!("&order[createdAt]=desc", SortBy::RecentlyAdded.into_param());
+
+        assert_eq!("&order[year]=asc", SortBy::YearAscending.into_param());
+
+        assert_eq!("&order[year]=desc", SortBy::YearDescending.into_param());
+
+        assert_eq!("&order[title]=asc", SortBy::TitleAscending.into_param());
+
+        assert_eq!("&order[title]=desc", SortBy::TitleDescending.into_param());
+    }
+
+    #[test]
+    fn filter_by_magazine_demographic_works() {
+        let magazine_demographic = vec![
+            MagazineDemographic::Shounen,
+            MagazineDemographic::Shoujo,
+            MagazineDemographic::Josei,
+            MagazineDemographic::Seinen,
+        ];
+
+        assert_eq!("&publicationDemographic[]=shounen&publicationDemographic[]=shoujo&publicationDemographic[]=josei&publicationDemographic[]=seinen", magazine_demographic.into_param());
+    }
+
+    #[test]
+    fn filter_by_artist_works() {
+        let sample_artists: Vec<Artist> = vec![
+            Artist::new("id_artist1".to_string()),
+            Artist::new("id_artist2".to_string()),
+        ];
+        let filter_artist = User::<Artist>::new(sample_artists);
+        assert_eq!(
+            "&artists[]=id_artist1&artists[]=id_artist2",
+            filter_artist.into_param()
+        );
+    }
+
+    #[test]
+    fn filter_by_author_works() {
+        let sample_authors: Vec<Author> = vec![
+            Author::new("id_author1".to_string()),
+            Author::new("id_author2".to_string()),
+        ];
+        let filter_artist = User::<Author>::new(sample_authors);
+        assert_eq!(
+            "&authors[]=id_author1&authors[]=id_author2",
+            filter_artist.into_param()
+        );
+    }
+
+    #[test]
+    fn filter_by_language_works() {
+        let _ = PREFERRED_LANGUAGE.set(Languages::default());
+
+        let default_language: Vec<Languages> = vec![];
+        assert_eq!(
+            "&availableTranslatedLanguage[]=en",
+            default_language.into_param()
+        );
+
+        let languages: Vec<Languages> = vec![
+            Languages::English,
+            Languages::Spanish,
+            Languages::SpanishLa,
+            Languages::BrazilianPortuguese,
+        ];
+
+        assert_eq!("&availableTranslatedLanguage[]=en&availableTranslatedLanguage[]=es&availableTranslatedLanguage[]=es-la&availableTranslatedLanguage[]=pt-br", languages.into_param());
+    }
+
+    #[test]
+    fn filter_by_publication_status_works() {
+        let publication_status: Vec<PublicationStatus> = vec![
+            PublicationStatus::Ongoing,
+            PublicationStatus::Hiatus,
+            PublicationStatus::Completed,
+            PublicationStatus::Cancelled,
+        ];
+
+        assert_eq!(
+            "&status[]=ongoing&status[]=hiatus&status[]=completed&status[]=cancelled",
+            publication_status.into_param()
+        );
     }
 
     #[test]
@@ -582,7 +716,6 @@ mod test {
 
     #[test]
     fn filters_combined_work() {
-        PREFERRED_LANGUAGE.set(Languages::default()).unwrap();
         let filters = Filters::default();
 
         assert_eq!("&availableTranslatedLanguage[]=en&contentRating[]=safe&contentRating[]=suggestive&order[latestUploadedChapter]=desc", filters.into_param());
