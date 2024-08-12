@@ -1051,9 +1051,16 @@ mod test {
         filter_state.handle_events(Events::Key(KeyCode::Char(character).into()));
     }
 
+    // this action both sets fillter_state.is_open = false and unfocus search_bar input
+    fn close_filter(filter_state: &mut FilterState) {
+        filter_state.handle_events(Events::Key(KeyCode::Esc.into()));
+    }
+
     #[test]
     fn filter_state() {
         let mut filter_state = FilterState::new();
+
+        filter_state.is_open = true;
 
         let mock_response = TagsResponse {
             data: vec![TagsData::default(), TagsData::default()],
@@ -1119,5 +1126,13 @@ mod test {
         type_a_letter(&mut filter_state, 's');
         type_a_letter(&mut filter_state, 't');
         assert_eq!("test", filter_state.tags_state.filter_input.value());
+
+        // First unfocus the filter bar
+        close_filter(&mut filter_state);
+
+        // then "close" the filter
+        close_filter(&mut filter_state);
+
+        assert!(!filter_state.is_open);
     }
 }

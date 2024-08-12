@@ -36,8 +36,8 @@ pub trait ImageHandler: Send + 'static {
     fn not_found(id: String) -> Self;
 }
 
-
-// Use in testing 
+#[allow(dead_code)]
+// Use in testing
 pub fn press_key<T>(page: &mut dyn Component<Actions = T>, key: KeyCode) {
     page.handle_events(Events::Key(key.into()));
 }
