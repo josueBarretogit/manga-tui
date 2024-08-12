@@ -1,6 +1,5 @@
 use std::fmt::{Debug, Write};
 use strum::{Display, EnumIter, IntoEnumIterator};
-#[allow(dead_code)]
 
 use crate::global::PREFERRED_LANGUAGE;
 use crate::view::widgets::filter_widget::state::{FilterListItem, TagListItem, TagListItemState};
