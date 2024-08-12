@@ -1,6 +1,8 @@
 use crate::backend::database::{get_chapters_history_status, save_history, SetChapterDownloaded};
 use crate::backend::database::{set_chapter_downloaded, MangaReadingHistorySave};
-use crate::backend::download::{download_chapter, DownloadChapter};
+use crate::backend::download::{
+    download_all_chapters, download_chapter, DownloadAllChapters, DownloadChapter,
+};
 use crate::backend::error_log::{self, write_to_error_log};
 use crate::backend::fetch::{MangadexClient, ITEMS_PER_PAGE_CHAPTERS};
 use crate::backend::filter::Languages;
@@ -25,6 +27,7 @@ use self::text::ToSpan;
 #[derive(PartialEq, Eq)]
 pub enum PageState {
     DownloadingChapters,
+    DownloadingAllChapters,
     SearchingChapters,
     SearchingChapterData,
     DisplayingChapters,
@@ -33,6 +36,7 @@ pub enum PageState {
 
 pub enum MangaPageActions {
     DownloadChapter,
+    DownloadAllChapter,
     ScrollChapterDown,
     ScrollChapterUp,
     ToggleOrder,
@@ -419,6 +423,11 @@ impl MangaPage {
                 KeyCode::Char('d') => {
                     self.local_action_tx
                         .send(MangaPageActions::DownloadChapter)
+                        .ok();
+                }
+                KeyCode::Esc => {
+                    self.local_action_tx
+                        .send(MangaPageActions::DownloadAllChapter)
                         .ok();
                 }
                 KeyCode::Char('c') => {
@@ -833,6 +842,34 @@ impl MangaPage {
         }
     }
 
+    fn download_all_chapters(&mut self) {
+        self.state == PageState::DownloadingAllChapters;
+        let id = self.manga.id.clone();
+        let manga_title = self.manga.title.clone();
+        let lang = self.get_current_selected_language();
+        let tx = self.local_event_tx.clone();
+        tokio::spawn(async move {
+            let chapter_response = MangadexClient::global()
+                .get_all_chapters_for_manga(&id, lang)
+                .await;
+            match chapter_response {
+                Ok(response) => {
+                    download_all_chapters(
+                        response,
+                        DownloadAllChapters {
+                            manga_title,
+                            manga_id: id,
+                        },
+                        tx,
+                    );
+                }
+                Err(e) => {
+                    write_to_error_log(error_log::ErrorType::FromError(Box::new(e)));
+                }
+            }
+        });
+    }
+
     fn handle_mouse_events(&mut self, mouse_event: MouseEvent) {
         if self.is_list_languages_open {
             match mouse_event.kind {
@@ -918,6 +955,7 @@ impl Component for MangaPage {
     }
     fn update(&mut self, action: Self::Actions) {
         match action {
+            MangaPageActions::DownloadAllChapter => self.download_all_chapters(),
             MangaPageActions::SearchPreviousChapterPage => self.search_previous_chapters(),
             MangaPageActions::SearchNextChapterPage => self.search_next_chapters(),
             MangaPageActions::ScrollDownAvailbleLanguages => self.scroll_language_down(),

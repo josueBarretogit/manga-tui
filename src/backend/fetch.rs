@@ -206,4 +206,21 @@ impl MangadexClient {
 
         Ok(self.client.get(endpoint).send().await?.status())
     }
+
+    pub async fn get_all_chapters_for_manga(
+        &self,
+        id: &str,
+        language: Languages,
+    ) -> Result<ChapterResponse, reqwest::Error> {
+        let language = language.as_iso_code();
+
+        let order = "order[volume]=asc&order[chapter]=asc".to_string();
+
+        let endpoint = format!(
+            "{}/manga/{}/feed?limit=300&offset=0&{}&translatedLanguage[]={}&includes[]=scanlation_group&includeExternalUrl=0&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&contentRating[]=pornographic",
+            API_URL_BASE, id,  order, language
+        );
+
+        self.client.get(endpoint).send().await?.json().await
+    }
 }

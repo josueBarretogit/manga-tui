@@ -8,7 +8,8 @@ use crate::view::pages::manga::MangaPageEvents;
 
 use super::error_log::{write_to_error_log, ErrorType};
 use super::fetch::MangadexClient;
-use super::{ChapterPagesResponse, APP_DATA_DIR};
+use super::filter::Languages;
+use super::{ChapterPagesResponse, ChapterResponse, APP_DATA_DIR};
 
 pub struct DownloadChapter<'a> {
     pub id_chapter: &'a str,
@@ -99,4 +100,47 @@ pub fn download_chapter(
     });
 
     Ok(())
+}
+
+pub struct DownloadAllChapters {
+    pub manga_id: String,
+    pub manga_title: String,
+}
+
+pub fn download_all_chapters(
+    chapter_data: ChapterResponse,
+    manga_details: DownloadAllChapters,
+    tx: UnboundedSender<MangaPageEvents>,
+) {
+    for chapter in chapter_data.data {
+        let id = chapter.id.clone();
+        let manga_id = manga_details.manga_id.clone();
+        let manga_title = manga_details.manga_title.clone();
+        let tx = tx.clone();
+        tokio::spawn(async move {
+            let pages_response = MangadexClient::global().get_chapter_pages(&id).await;
+
+            match pages_response {
+                Ok(res) => {
+                    download_chapter(
+                        DownloadChapter {
+                            id_chapter: &chapter.id,
+                            manga_id: &manga_id,
+                            manga_title: &manga_title,
+                            title: chapter.attributes.title.unwrap_or_default().as_str(),
+                            number: chapter.attributes.chapter.unwrap_or_default().as_str(),
+                            scanlator: "some_scanlator",
+                            lang: &Languages::default().as_human_readable(),
+                        },
+                        res,
+                        tx,
+                    )
+                    .unwrap();
+                }
+                Err(e) => {
+                    write_to_error_log(ErrorType::FromError(Box::new(e)));
+                }
+            }
+        });
+    }
 }
