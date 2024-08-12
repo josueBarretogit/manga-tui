@@ -629,3 +629,43 @@ impl SearchPage {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::view::widgets::press_key;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn search_page_key_events() {
+        let (tx, _) = mpsc::unbounded_channel::<Events>();
+        let mut search_page = SearchPage::init(tx);
+
+        assert!(search_page.state == PageState::Normal);
+
+        // focus search_bar
+        press_key(&mut search_page, KeyCode::Char('s'));
+
+        if let Some(action) = search_page.local_action_rx.recv().await {
+            search_page.update(action)
+        }
+
+        assert!(search_page.input_mode == InputMode::Typing);
+
+        // user is typing in the search_bar
+        press_key(&mut search_page, KeyCode::Char('t'));
+        press_key(&mut search_page, KeyCode::Char('e'));
+
+        assert_eq!("te", search_page.search_bar.value());
+
+        // unfocus search_bar
+        press_key(&mut search_page, KeyCode::Esc);
+
+        if let Some(action) = search_page.local_action_rx.recv().await {
+            search_page.update(action)
+        }
+
+        assert!(search_page.input_mode == InputMode::Idle);
+
+    }
+}

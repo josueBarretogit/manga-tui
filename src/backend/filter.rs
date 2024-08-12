@@ -101,6 +101,9 @@ impl Tags {
     pub fn new(tags: Vec<TagData>) -> Self {
         Self(tags)
     }
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
 }
 
 impl IntoParam for Tags {

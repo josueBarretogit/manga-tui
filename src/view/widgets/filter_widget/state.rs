@@ -905,6 +905,7 @@ impl FilterState {
 mod test {
 
     use crate::backend::authors::Data;
+    use crate::backend::tags::TagsData;
 
     use super::*;
 
@@ -1025,10 +1026,98 @@ mod test {
             .any(|tag| tag.state == TagListItemState::Excluded)));
     }
 
+    // simulate what the user can do
+    fn next_tab(filter_state: &mut FilterState) {
+        filter_state.handle_events(Events::Key(KeyCode::Tab.into()));
+    }
+
+    fn previous_tab(filter_state: &mut FilterState) {
+        filter_state.handle_events(Events::Key(KeyCode::BackTab.into()));
+    }
+
+    fn scroll_down(filter_state: &mut FilterState) {
+        filter_state.handle_events(Events::Key(KeyCode::Char('j').into()));
+    }
+
+    fn press_s(filter_state: &mut FilterState) {
+        filter_state.handle_events(Events::Key(KeyCode::Char('s').into()));
+    }
+
+    fn start_typing(filter_state: &mut FilterState) {
+        filter_state.handle_events(Events::Key(KeyCode::Char('l').into()));
+    }
+
+    fn type_a_letter(filter_state: &mut FilterState, character: char) {
+        filter_state.handle_events(Events::Key(KeyCode::Char(character).into()));
+    }
+
     #[test]
     fn filter_state() {
         let mut filter_state = FilterState::new();
 
-        filter_state.scroll_down_filter_list();
+        let mock_response = TagsResponse {
+            data: vec![TagsData::default(), TagsData::default()],
+            ..Default::default()
+        };
+
+        filter_state.set_tags_from_response(mock_response);
+
+        assert!(filter_state.tags_state.tags.is_some());
+
+        // Go to magazine demographic
+        previous_tab(&mut filter_state);
+        previous_tab(&mut filter_state);
+        previous_tab(&mut filter_state);
+
+        scroll_down(&mut filter_state);
+        press_s(&mut filter_state);
+
+        assert!(filter_state.magazine_demographic.state.selected().is_some());
+
+        assert!(filter_state
+            .magazine_demographic
+            .items
+            .iter()
+            .any(|item| item.is_selected));
+
+        // Go to tags
+        previous_tab(&mut filter_state);
+
+        scroll_down(&mut filter_state);
+        press_s(&mut filter_state);
+
+        assert!(filter_state
+            .tags_state
+            .tags
+            .as_ref()
+            .is_some_and(|tags| tags
+                .iter()
+                .any(|tag| tag.state == TagListItemState::Included)));
+
+        assert!(!filter_state.filters.tags.is_empty());
+
+        // Go to Publication status
+        previous_tab(&mut filter_state);
+        scroll_down(&mut filter_state);
+        press_s(&mut filter_state);
+
+        assert!(filter_state.publication_status.state.selected().is_some());
+        assert!(filter_state
+            .publication_status
+            .items
+            .iter()
+            .any(|item| item.is_selected));
+
+        // Go to tags
+        next_tab(&mut filter_state);
+        start_typing(&mut filter_state);
+
+        assert!(filter_state.is_typing);
+
+        type_a_letter(&mut filter_state, 't');
+        type_a_letter(&mut filter_state, 'e');
+        type_a_letter(&mut filter_state, 's');
+        type_a_letter(&mut filter_state, 't');
+        assert_eq!("test", filter_state.tags_state.filter_input.value());
     }
 }

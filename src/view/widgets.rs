@@ -1,4 +1,5 @@
 use crate::backend::tui::Events;
+use crossterm::event::KeyCode;
 use ratatui::Frame;
 use ratatui_image::protocol::StatefulProtocol;
 
@@ -33,4 +34,10 @@ pub trait StatefulWidgetFrame {
 pub trait ImageHandler: Send + 'static {
     fn load(image: Box<dyn StatefulProtocol>, id: String) -> Self;
     fn not_found(id: String) -> Self;
+}
+
+
+// Use in testing 
+pub fn press_key<T>(page: &mut dyn Component<Actions = T>, key: KeyCode) {
+    page.handle_events(Events::Key(key.into()));
 }
