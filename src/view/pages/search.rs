@@ -64,6 +64,7 @@ impl ImageHandler for SearchPageEvents {
 }
 
 /// These are actions that the user actively does
+#[derive(Debug, PartialEq, Eq)]
 pub enum SearchPageActions {
     StartTyping,
     StopTyping,
@@ -626,6 +627,132 @@ impl SearchPage {
                     self.load_cover(maybe_image, manga_id)
                 }
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::view::widgets::press_key;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn search_page_key_events() {
+        let (tx, _) = mpsc::unbounded_channel::<Events>();
+        let mut search_page = SearchPage::init(tx);
+
+        assert!(search_page.state == PageState::Normal);
+        assert!(!search_page.filter_state.is_open);
+
+        // focus search_bar
+        press_key(&mut search_page, KeyCode::Char('s'));
+
+        if let Some(action) = search_page.local_action_rx.recv().await {
+            search_page.update(action)
+        }
+
+        assert!(search_page.input_mode == InputMode::Typing);
+
+        // user is typing in the search_bar
+        press_key(&mut search_page, KeyCode::Char('t'));
+        press_key(&mut search_page, KeyCode::Char('e'));
+
+        assert_eq!("te", search_page.search_bar.value());
+
+        // unfocus search_bar
+        press_key(&mut search_page, KeyCode::Esc);
+
+        if let Some(action) = search_page.local_action_rx.recv().await {
+            search_page.update(action)
+        }
+
+        assert!(search_page.input_mode == InputMode::Idle);
+
+        // Assuming a search was made and some mangas were found
+        search_page.state = PageState::DisplayingMangasFound;
+        search_page.mangas_found_list.widget.mangas =
+            vec![MangaItem::default(), MangaItem::default()];
+        search_page.mangas_found_list.total_result = 20;
+        search_page.mangas_found_list.page = 1;
+
+        let area = Rect::new(0, 0, 50, 50);
+        let mut buf = Buffer::empty(area);
+
+        // Render the list of mangas found
+        StatefulWidgetRef::render_ref(
+            &search_page.mangas_found_list.widget,
+            area,
+            &mut buf,
+            &mut search_page.mangas_found_list.state,
+        );
+
+        // scroll down the list
+        press_key(&mut search_page, KeyCode::Char('j'));
+
+        if let Some(action) = search_page.local_action_rx.recv().await {
+            search_page.update(action)
+        }
+
+        assert!(search_page.mangas_found_list.state.selected.is_some());
+
+        // open filters
+        press_key(&mut search_page, KeyCode::Char('f'));
+
+        if let Some(action) = search_page.local_action_rx.recv().await {
+            search_page.update(action)
+        }
+
+        assert!(search_page.filter_state.is_open);
+
+        search_page.filter_state.is_open = false;
+
+        // // Add a manga to plan to read
+        // To test the actual funcionality it's necessary the database, so let's assert the right
+        // event is called in the meantime
+        // press_key(&mut search_page, KeyCode::Char('p'));
+        //
+        // if let Some(action) = search_page.local_action_rx.recv().await {
+        //     search_page.update(action)
+        // }
+        //
+        // assert!(search_page.manga_added_to_plan_to_read.is_some());
+
+        // Add a manga to plan to read
+        press_key(&mut search_page, KeyCode::Char('p'));
+
+        if let Some(action) = search_page.local_action_rx.recv().await {
+            assert_eq!(SearchPageActions::PlanToRead, action);
+        } else {
+            panic!("Add plan to read functionality is not being called");
+        }
+
+        // Go next page
+        press_key(&mut search_page, KeyCode::Char('w'));
+
+        if let Some(action) = search_page.local_action_rx.recv().await {
+            search_page.update(action)
+        }
+
+        assert_eq!(2, search_page.mangas_found_list.page);
+
+        search_page.state = PageState::DisplayingMangasFound;
+
+        // Go previous page
+        press_key(&mut search_page, KeyCode::Char('b'));
+
+        if let Some(action) = search_page.local_action_rx.recv().await {
+            search_page.update(action)
+        }
+        assert_eq!(1, search_page.mangas_found_list.page);
+
+        // Go to manga page
+        press_key(&mut search_page, KeyCode::Char('r'));
+
+        if let Some(action) = search_page.local_action_rx.recv().await {
+            assert_eq!(SearchPageActions::GoToMangaPage, action);
+        } else {
+            panic!("The action `go to manga page` is not working");
         }
     }
 }

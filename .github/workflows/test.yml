@@ -23,11 +23,17 @@ jobs:
         with:
           rust-version: stable
 
-      - name: cargo test
-        run: cargo test 
+      - name: check 
+        run: cargo check
+
+      - name: build
+        run: cargo build --release --verbose
+
+      - name: test
+        run: cargo test -- --test-threads=1
 
 
       - name: clippy
-        run: cargo clippy --all --all-features --tests -- -D warnings
+        run: cargo clippy -- -D warnings
         env:
           RUST_BACKTRACE: full

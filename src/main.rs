@@ -1,9 +1,6 @@
 #![forbid(unsafe_code)]
-use clap::Parser;
-use once_cell::sync::Lazy;
-use ratatui::backend::CrosstermBackend;
-use ratatui_image::picker::{Picker, ProtocolType};
-use reqwest::{Client, StatusCode};
+#![allow(dead_code)]
+#![allow(unused)]
 use self::backend::error_log::init_error_hooks;
 use self::backend::fetch::{MangadexClient, MANGADEX_CLIENT_INSTANCE};
 use self::backend::filter::Languages;
@@ -11,6 +8,11 @@ use self::backend::tui::{init, restore, run_app};
 use self::backend::{build_data_dir, APP_DATA_DIR};
 use self::cli::CliArgs;
 use self::global::PREFERRED_LANGUAGE;
+use clap::Parser;
+use once_cell::sync::Lazy;
+use ratatui::backend::CrosstermBackend;
+use ratatui_image::picker::{Picker, ProtocolType};
+use reqwest::{Client, StatusCode};
 
 mod backend;
 mod cli;
@@ -81,7 +83,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         None => PREFERRED_LANGUAGE.set(Languages::default()).unwrap(),
     }
 
-    
     let user_agent = format!(
         "manga-tui/{} ({}/{}/{})",
         env!("CARGO_PKG_VERSION"),

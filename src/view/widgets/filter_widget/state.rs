@@ -21,7 +21,7 @@ pub enum FilterEvents {
     LoadTags(TagsResponse),
 }
 
-#[derive(Display, PartialEq, Eq)]
+#[derive(Display, PartialEq, Eq, Debug)]
 pub enum MangaFilters {
     #[strum(to_string = "Content rating")]
     ContentRating,
@@ -48,7 +48,7 @@ pub const FILTERS: [MangaFilters; 8] = [
     MangaFilters::Artists,
 ];
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct FilterListItem {
     pub is_selected: bool,
     pub name: String,
@@ -60,12 +60,18 @@ impl FilterListItem {
     }
 }
 
+#[derive(Debug)]
 pub struct ContentRatingState;
+#[derive(Debug)]
 pub struct PublicationStatusState;
+#[derive(Debug)]
 pub struct SortByState;
+#[derive(Debug)]
 pub struct MagazineDemographicState;
+#[derive(Debug)]
 pub struct LanguageState;
 
+#[derive(Debug)]
 pub struct FilterList<T> {
     pub items: Vec<FilterListItem>,
     pub state: ListState,
@@ -207,20 +213,21 @@ impl Default for FilterList<LanguageState> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ListItemId {
     pub id: String,
     pub name: String,
     pub is_selected: bool,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct AuthorState;
-#[derive(Default)]
+
+#[derive(Default, Debug)]
 pub struct ArtistState;
 
 // It's called dynamic because the items must be fetched
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct FilterListDynamic<T> {
     pub items: Option<Vec<ListItemId>>,
     pub state: ListState,
@@ -271,7 +278,6 @@ impl<T> FilterListDynamic<T> {
     fn set_users_not_found(&mut self) {
         self.items = None;
     }
-
 
     fn toggle(&mut self) {
         if let Some(items) = self.items.as_mut() {
@@ -422,6 +428,8 @@ impl TagsState {
         }
     }
 }
+
+#[derive(Debug)]
 pub struct FilterState {
     pub is_open: bool,
     pub id_filter: usize,
@@ -890,5 +898,241 @@ impl FilterState {
             name: artist.name,
         }]);
         self.filters.artists.set_one_user(Artist::new(artist.id))
+    }
+}
+
+#[cfg(test)]
+mod test {
+
+    use crate::backend::authors::Data;
+    use crate::backend::tags::TagsData;
+
+    use super::*;
+
+    #[test]
+    fn filter_list_works() {
+        let mut filter_list: FilterList<MagazineDemographicState> = FilterList::default();
+
+        filter_list.scroll_down();
+
+        filter_list.toggle();
+
+        assert_eq!(Some(0), filter_list.state.selected());
+
+        assert!(filter_list.items.iter().any(|item| item.is_selected));
+
+        assert_eq!(1, filter_list.num_filters_active());
+
+        filter_list.scroll_down();
+
+        filter_list.toggle();
+
+        assert_eq!(Some(1), filter_list.state.selected());
+
+        assert_eq!(2, filter_list.num_filters_active());
+
+        filter_list.scroll_up();
+
+        assert_eq!(Some(0), filter_list.state.selected());
+    }
+
+    #[test]
+    fn language_filter_list_works() {
+        let filter_list: FilterList<LanguageState> = FilterList::default();
+
+        assert_eq!(
+            Languages::default(),
+            filter_list
+                .items
+                .iter()
+                .find(|filter_list_item| filter_list_item.is_selected)
+                .cloned()
+                .unwrap()
+                .into()
+        );
+
+        let language_items: Vec<Languages> = filter_list
+            .items
+            .into_iter()
+            .map(|filter_list_item| filter_list_item.into())
+            .collect();
+
+        assert!(!language_items.iter().any(|lang| *lang == Languages::Unkown));
+    }
+
+    #[test]
+    fn sort_by_state_works() {
+        let mut filter_list: FilterList<SortByState> = FilterList::default();
+
+        filter_list.scroll_down();
+        filter_list.toggle_sort_by();
+        filter_list.scroll_down();
+        filter_list.toggle_sort_by();
+
+        // for the sort_by filter only one can be selected at a time
+        assert_eq!(1, filter_list.num_filters_active());
+    }
+
+    #[test]
+    fn filter_list_dynamic_works() {
+        let mut filter_list: FilterListDynamic<AuthorState> = FilterListDynamic::default();
+
+        let mock_response = AuthorsResponse {
+            data: vec![Data::default()],
+            ..Default::default()
+        };
+
+        assert_eq!(0, filter_list.num_filters_active());
+
+        filter_list.toggle();
+
+        filter_list.load_users(Some(mock_response));
+
+        assert!(filter_list.items.is_some());
+
+        filter_list.state.select_next();
+
+        filter_list.toggle();
+
+        assert!(filter_list
+            .items
+            .as_ref()
+            .is_some_and(|items| items.iter().any(|item| item.is_selected)));
+
+        filter_list.load_users(Some(AuthorsResponse::default()));
+
+        assert!(filter_list.items.is_none());
+    }
+
+    #[test]
+    fn tag_state_works() {
+        let mut tag_state = TagsState {
+            tags: Some(vec![TagListItem::default(), TagListItem::default()]),
+            ..Default::default()
+        };
+
+        tag_state.state.select_next();
+
+        tag_state.include_tag();
+
+        assert!(tag_state.tags.as_ref().is_some_and(|tags| tags
+            .iter()
+            .any(|tag| tag.state == TagListItemState::Included)));
+
+        tag_state.exclude_tag();
+
+        assert!(tag_state.tags.as_ref().is_some_and(|tags| tags
+            .iter()
+            .any(|tag| tag.state == TagListItemState::Excluded)));
+    }
+
+    // simulate what the user can do
+    fn next_tab(filter_state: &mut FilterState) {
+        filter_state.handle_events(Events::Key(KeyCode::Tab.into()));
+    }
+
+    fn previous_tab(filter_state: &mut FilterState) {
+        filter_state.handle_events(Events::Key(KeyCode::BackTab.into()));
+    }
+
+    fn scroll_down(filter_state: &mut FilterState) {
+        filter_state.handle_events(Events::Key(KeyCode::Char('j').into()));
+    }
+
+    fn press_s(filter_state: &mut FilterState) {
+        filter_state.handle_events(Events::Key(KeyCode::Char('s').into()));
+    }
+
+    fn start_typing(filter_state: &mut FilterState) {
+        filter_state.handle_events(Events::Key(KeyCode::Char('l').into()));
+    }
+
+    fn type_a_letter(filter_state: &mut FilterState, character: char) {
+        filter_state.handle_events(Events::Key(KeyCode::Char(character).into()));
+    }
+
+    // this action both sets fillter_state.is_open = false and unfocus search_bar input
+    fn close_filter(filter_state: &mut FilterState) {
+        filter_state.handle_events(Events::Key(KeyCode::Esc.into()));
+    }
+
+    #[test]
+    fn filter_state() {
+        let mut filter_state = FilterState::new();
+
+        filter_state.is_open = true;
+
+        let mock_response = TagsResponse {
+            data: vec![TagsData::default(), TagsData::default()],
+            ..Default::default()
+        };
+
+        filter_state.set_tags_from_response(mock_response);
+
+        assert!(filter_state.tags_state.tags.is_some());
+
+        // Go to magazine demographic
+        previous_tab(&mut filter_state);
+        previous_tab(&mut filter_state);
+        previous_tab(&mut filter_state);
+
+        scroll_down(&mut filter_state);
+        press_s(&mut filter_state);
+
+        assert!(filter_state.magazine_demographic.state.selected().is_some());
+
+        assert!(filter_state
+            .magazine_demographic
+            .items
+            .iter()
+            .any(|item| item.is_selected));
+
+        // Go to tags
+        previous_tab(&mut filter_state);
+
+        scroll_down(&mut filter_state);
+        press_s(&mut filter_state);
+
+        assert!(filter_state
+            .tags_state
+            .tags
+            .as_ref()
+            .is_some_and(|tags| tags
+                .iter()
+                .any(|tag| tag.state == TagListItemState::Included)));
+
+        assert!(!filter_state.filters.tags.is_empty());
+
+        // Go to Publication status
+        previous_tab(&mut filter_state);
+        scroll_down(&mut filter_state);
+        press_s(&mut filter_state);
+
+        assert!(filter_state.publication_status.state.selected().is_some());
+        assert!(filter_state
+            .publication_status
+            .items
+            .iter()
+            .any(|item| item.is_selected));
+
+        // Go to tags
+        next_tab(&mut filter_state);
+        start_typing(&mut filter_state);
+
+        assert!(filter_state.is_typing);
+
+        type_a_letter(&mut filter_state, 't');
+        type_a_letter(&mut filter_state, 'e');
+        type_a_letter(&mut filter_state, 's');
+        type_a_letter(&mut filter_state, 't');
+        assert_eq!("test", filter_state.tags_state.filter_input.value());
+
+        // First unfocus the filter bar
+        close_filter(&mut filter_state);
+
+        // then "close" the filter
+        close_filter(&mut filter_state);
+
+        assert!(!filter_state.is_open);
     }
 }
