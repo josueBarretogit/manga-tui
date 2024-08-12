@@ -707,14 +707,25 @@ mod test {
 
         search_page.filter_state.is_open = false;
 
+        // // Add a manga to plan to read
+        // To test the actual funcionality it's necessary the database, so let's assert the right
+        // event is called in the meantime
+        // press_key(&mut search_page, KeyCode::Char('p'));
+        //
+        // if let Some(action) = search_page.local_action_rx.recv().await {
+        //     search_page.update(action)
+        // }
+        //
+        // assert!(search_page.manga_added_to_plan_to_read.is_some());
+
         // Add a manga to plan to read
         press_key(&mut search_page, KeyCode::Char('p'));
 
         if let Some(action) = search_page.local_action_rx.recv().await {
-            search_page.update(action)
+            assert_eq!(SearchPageActions::PlanToRead, action);
+        } else {
+            panic!("Add plan to read functionality is not being called");
         }
-
-        assert!(search_page.manga_added_to_plan_to_read.is_some());
 
         // Go next page
         press_key(&mut search_page, KeyCode::Char('w'));
