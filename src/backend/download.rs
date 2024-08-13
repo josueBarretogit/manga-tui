@@ -173,6 +173,7 @@ pub fn download_chapter(
 pub struct DownloadAllChapters {
     pub manga_id: String,
     pub manga_title: String,
+    pub quality: PageType,
 }
 
 pub fn download_all_chapters(
@@ -184,6 +185,7 @@ pub fn download_all_chapters(
         let id = chapter.id.clone();
         let manga_id = manga_details.manga_id.clone();
         let manga_title = manga_details.manga_title.clone();
+
         let tx = tx.clone();
 
         let scanlator = chapter
@@ -208,7 +210,7 @@ pub fn download_all_chapters(
                             lang: &Languages::default().as_human_readable(),
                         },
                         res,
-                        PageType::LowQuality,
+                        manga_details.quality,
                         tx,
                     )
                     .unwrap();
@@ -218,6 +220,6 @@ pub fn download_all_chapters(
                 }
             }
         });
-        std::thread::sleep(Duration::from_secs(3));
+        std::thread::sleep(Duration::from_secs(4));
     }
 }

@@ -1,4 +1,5 @@
-use strum::Display;
+use ratatui::widgets::ListItem;
+use strum::{Display, EnumIter};
 
 use crate::backend::filter::Languages;
 
@@ -30,10 +31,26 @@ pub struct Manga {
     pub created_at: String,
 }
 
-#[derive(Display)]
+#[derive(Display, Clone, Copy, EnumIter)]
 pub enum PageType {
     #[strum(to_string = "data")]
     HighQuality,
     #[strum(to_string = "data-saver")]
     LowQuality,
+}
+
+impl PageType {
+    pub fn toggle(self) -> Self {
+        match self {
+            Self::LowQuality => Self::HighQuality,
+            Self::HighQuality => Self::LowQuality,
+        }
+    }
+
+    pub fn as_human_readable(&self) -> &str {
+        match self {
+            Self::LowQuality => "Low quality",
+            Self::HighQuality => "High quality",
+        }
+    }
 }

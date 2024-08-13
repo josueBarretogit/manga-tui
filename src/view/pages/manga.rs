@@ -8,7 +8,7 @@ use crate::backend::fetch::{MangadexClient, ITEMS_PER_PAGE_CHAPTERS};
 use crate::backend::filter::Languages;
 use crate::backend::tui::Events;
 use crate::backend::{ChapterResponse, MangaStatisticsResponse, Statistics};
-use crate::common::Manga;
+use crate::common::{Manga, PageType};
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
 use crate::utils::{set_status_style, set_tags_style};
 use crate::view::widgets::manga::{ChapterItem, ChaptersListWidget};
@@ -30,7 +30,8 @@ use self::text::ToSpan;
 pub enum PageState {
     DownloadingChapters,
     IsAskingDownloadAllChapters,
-    DownloadAllChapters,
+    SettingDownloadQuality,
+    DownloadingAllChapters,
     SearchingChapters,
     SearchingChapterData,
     DisplayingChapters,
@@ -39,6 +40,8 @@ pub enum PageState {
 
 pub enum MangaPageActions {
     DownloadChapter,
+    DownloadAllChapter,
+    ToggleImageQuality,
     ConfirmDownloadAll,
     NegateDownloadAll,
     AskDownloadAllChapters,
@@ -60,8 +63,11 @@ pub enum MangaPageEvents {
     FethStatistics,
     CheckChapterStatus,
     ChapterFinishedDownloading(String),
+    /// Percentage, id chapter
     SetDownloadProgress(f64, String),
+    /// id_chapter, chapter_title
     SaveChapterDownloadStatus(String, String),
+    /// id_chapter
     DownloadError(String),
     ReadError(String),
     ReadSuccesful,
@@ -101,6 +107,7 @@ pub struct MangaPage {
     state: PageState,
     statistics: Option<MangaStatistics>,
     tasks: JoinSet<()>,
+    image_quality: PageType,
     available_languages_state: ListState,
     is_list_languages_open: bool,
 }
@@ -156,6 +163,7 @@ impl MangaPage {
             tasks: JoinSet::new(),
             available_languages_state: ListState::default(),
             is_list_languages_open: false,
+            image_quality: PageType::LowQuality,
             chapter_language: chapter_language.unwrap_or(Languages::default()),
         }
     }
@@ -253,16 +261,14 @@ impl MangaPage {
 
         let [sorting_buttons_area, chapters_area] = layout.areas(area);
 
-        if self.state == PageState::IsAskingDownloadAllChapters {
-            Block::bordered().render(area, buf);
-            let download_information_area = area.inner(Margin {
-                horizontal: 2,
-                vertical: 2,
-            });
-            Paragraph::new("do you want to download all chapters? Yes : <Enter> , no : <Esc>")
-                .render(download_information_area, buf);
-
-            return;
+        match self.state {
+            PageState::IsAskingDownloadAllChapters
+            | PageState::SettingDownloadQuality
+            | PageState::DownloadingAllChapters => {
+                self.render_download_all_chapters_area(area, buf);
+                return;
+            }
+            _ => {}
         }
 
         match self.chapters.as_mut() {
@@ -321,6 +327,51 @@ impl MangaPage {
                     .title(title)
                     .render(area, frame.buffer_mut());
             }
+        }
+    }
+
+    fn render_download_all_chapters_area(&mut self, area: Rect, buf: &mut Buffer) {
+        Block::bordered().render(area, buf);
+
+        let download_information_area = area.inner(Margin {
+            horizontal: 2,
+            vertical: 2,
+        });
+
+        match self.state {
+            PageState::IsAskingDownloadAllChapters => {
+                let instructions = vec![
+                    "Do you want to download all chapters? Yes: ".into(),
+                    "<Enter>".to_span().style(*INSTRUCTIONS_STYLE),
+                    " no ".into(),
+                    "<Esc>".to_span().style(*INSTRUCTIONS_STYLE),
+                ];
+
+                Paragraph::new(Line::from(instructions)).render(download_information_area, buf);
+            }
+            PageState::SettingDownloadQuality => {
+                Widget::render(
+                    List::new([
+                        Line::from(vec![
+                            "Choose image quality ".into(),
+                            "<t>".to_span().style(*INSTRUCTIONS_STYLE),
+                        ]),
+                        self.image_quality.as_human_readable().into(),
+                        "Lower image quality is recommended for slow internet".into(),
+                        Line::from(vec![
+                            "Start download: ".into(),
+                            "<Spacebar>".to_span().style(*INSTRUCTIONS_STYLE),
+                        ]),
+                    ]),
+                    download_information_area,
+                    buf,
+                );
+            }
+            PageState::DownloadingAllChapters => {
+                Paragraph::new("Downloading all chapters, this will take a while")
+                    .render(download_information_area, buf);
+            }
+            _ => {}
         }
     }
 
@@ -388,6 +439,15 @@ impl MangaPage {
         }
     }
 
+    fn is_downloading_all_chapters(&self) -> bool {
+        matches!(
+            self.state,
+            PageState::DownloadingAllChapters
+                | PageState::SettingDownloadQuality
+                | PageState::IsAskingDownloadAllChapters
+        )
+    }
+
     fn handle_key_events(&mut self, key_event: KeyEvent) {
         if self.is_list_languages_open {
             match key_event.code {
@@ -414,17 +474,29 @@ impl MangaPage {
                 _ => {}
             }
         } else if self.state != PageState::SearchingChapterData {
-            if self.state == PageState::IsAskingDownloadAllChapters {
+            if self.is_downloading_all_chapters() {
                 match key_event.code {
                     KeyCode::Esc => {
                         self.local_action_tx
                             .send(MangaPageActions::NegateDownloadAll)
                             .ok();
                     }
+                    KeyCode::Char('t') => {
+                        self.local_action_tx
+                            .send(MangaPageActions::ToggleImageQuality)
+                            .ok();
+                    }
                     KeyCode::Enter => {
                         self.local_action_tx
                             .send(MangaPageActions::ConfirmDownloadAll)
                             .ok();
+                    }
+                    KeyCode::Char(' ') => {
+                        if self.state == PageState::SettingDownloadQuality {
+                            self.local_action_tx
+                                .send(MangaPageActions::DownloadAllChapter)
+                                .ok();
+                        }
                     }
                     _ => {}
                 }
@@ -876,11 +948,12 @@ impl MangaPage {
     }
 
     fn download_all_chapters(&mut self) {
-        self.state == PageState::IsAskingDownloadAllChapters;
+        self.state == PageState::DownloadingAllChapters;
         let id = self.manga.id.clone();
         let manga_title = self.manga.title.clone();
         let lang = self.get_current_selected_language();
         let tx = self.local_event_tx.clone();
+        let quality = self.image_quality;
         tokio::spawn(async move {
             let chapter_response = MangadexClient::global()
                 .get_all_chapters_for_manga(&id, lang)
@@ -892,6 +965,7 @@ impl MangaPage {
                         DownloadAllChapters {
                             manga_title,
                             manga_id: id,
+                            quality,
                         },
                         tx,
                     );
@@ -909,9 +983,23 @@ impl MangaPage {
         }
     }
 
+    fn confirm_download_all(&mut self) {
+        self.state = PageState::SettingDownloadQuality;
+    }
+
     fn negate_download_all_chapters(&mut self) {
         self.state = PageState::DisplayingChapters
     }
+
+    fn set_download_quality(&mut self) {
+        self.image_quality = PageType::LowQuality;
+    }
+
+    fn toggle_image_quality(&mut self) {
+        self.image_quality = self.image_quality.toggle();
+    }
+
+    fn init_download_all_chapters(&mut self) {}
 
     fn handle_mouse_events(&mut self, mouse_event: MouseEvent) {
         if self.is_list_languages_open {
@@ -998,9 +1086,11 @@ impl Component for MangaPage {
     }
     fn update(&mut self, action: Self::Actions) {
         match action {
+            MangaPageActions::DownloadAllChapter => self.download_all_chapters(),
+            MangaPageActions::ToggleImageQuality => self.toggle_image_quality(),
             MangaPageActions::NegateDownloadAll => self.negate_download_all_chapters(),
             MangaPageActions::AskDownloadAllChapters => self.ask_download_all_chapters(),
-            MangaPageActions::ConfirmDownloadAll => self.download_all_chapters(),
+            MangaPageActions::ConfirmDownloadAll => self.confirm_download_all(),
             MangaPageActions::SearchPreviousChapterPage => self.search_previous_chapters(),
             MangaPageActions::SearchNextChapterPage => self.search_next_chapters(),
             MangaPageActions::ScrollDownAvailbleLanguages => self.scroll_language_down(),
