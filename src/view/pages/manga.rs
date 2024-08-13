@@ -1,7 +1,7 @@
 use crate::backend::database::{get_chapters_history_status, save_history, SetChapterDownloaded};
 use crate::backend::database::{set_chapter_downloaded, MangaReadingHistorySave};
 use crate::backend::download::{
-    download_all_chapters, download_chapter, DownloadAllChapters, DownloadChapter,
+    download_all_chapters, download_single_chaper, DownloadAllChapters, DownloadChapter,
 };
 use crate::backend::error_log::{self, write_to_error_log};
 use crate::backend::fetch::{MangadexClient, ITEMS_PER_PAGE_CHAPTERS};
@@ -14,7 +14,9 @@ use crate::utils::{set_status_style, set_tags_style};
 use crate::view::widgets::manga::{ChapterItem, ChaptersListWidget};
 use crate::view::widgets::Component;
 use crate::PICKER;
-use crossterm::event::{KeyCode, KeyEvent, MouseEvent, MouseEventKind};
+use crossterm::event::{
+    KeyCode, KeyEvent, KeyModifiers, ModifierKeyCode, MouseEvent, MouseEventKind,
+};
 use ratatui::{prelude::*, widgets::*};
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::{Resize, StatefulImage};
@@ -27,7 +29,8 @@ use self::text::ToSpan;
 #[derive(PartialEq, Eq)]
 pub enum PageState {
     DownloadingChapters,
-    DownloadingAllChapters,
+    IsAskingDownloadAllChapters,
+    DownloadAllChapters,
     SearchingChapters,
     SearchingChapterData,
     DisplayingChapters,
@@ -36,7 +39,9 @@ pub enum PageState {
 
 pub enum MangaPageActions {
     DownloadChapter,
-    DownloadAllChapter,
+    ConfirmDownloadAll,
+    NegateDownloadAll,
+    AskDownloadAllChapters,
     ScrollChapterDown,
     ScrollChapterUp,
     ToggleOrder,
@@ -248,6 +253,18 @@ impl MangaPage {
 
         let [sorting_buttons_area, chapters_area] = layout.areas(area);
 
+        if self.state == PageState::IsAskingDownloadAllChapters {
+            Block::bordered().render(area, buf);
+            let download_information_area = area.inner(Margin {
+                horizontal: 2,
+                vertical: 2,
+            });
+            Paragraph::new("do you want to download all chapters? Yes : <Enter> , no : <Esc>")
+                .render(download_information_area, buf);
+
+            return;
+        }
+
         match self.chapters.as_mut() {
             Some(chapters) => {
                 let tota_pages = chapters.total_result as f64 / 16_f64;
@@ -397,66 +414,82 @@ impl MangaPage {
                 _ => {}
             }
         } else if self.state != PageState::SearchingChapterData {
-            match key_event.code {
-                KeyCode::Char('j') | KeyCode::Down => {
-                    self.local_action_tx
-                        .send(MangaPageActions::ScrollChapterDown)
-                        .ok();
-                }
-                KeyCode::Char('k') | KeyCode::Up => {
-                    self.local_action_tx
-                        .send(MangaPageActions::ScrollChapterUp)
-                        .ok();
-                }
-                KeyCode::Char('t') => {
-                    self.local_action_tx
-                        .send(MangaPageActions::ToggleOrder)
-                        .ok();
-                }
-                KeyCode::Char('r') | KeyCode::Enter => {
-                    if PICKER.is_some() {
+            if self.state == PageState::IsAskingDownloadAllChapters {
+                match key_event.code {
+                    KeyCode::Esc => {
                         self.local_action_tx
-                            .send(MangaPageActions::ReadChapter)
+                            .send(MangaPageActions::NegateDownloadAll)
                             .ok();
                     }
+                    KeyCode::Enter => {
+                        self.local_action_tx
+                            .send(MangaPageActions::ConfirmDownloadAll)
+                            .ok();
+                    }
+                    _ => {}
                 }
-                KeyCode::Char('d') => {
-                    self.local_action_tx
-                        .send(MangaPageActions::DownloadChapter)
-                        .ok();
-                }
-                KeyCode::Esc => {
-                    self.local_action_tx
-                        .send(MangaPageActions::DownloadAllChapter)
-                        .ok();
-                }
-                KeyCode::Char('c') => {
-                    self.local_action_tx
-                        .send(MangaPageActions::GoMangasAuthor)
-                        .ok();
-                }
-                KeyCode::Char('v') => {
-                    self.local_action_tx
-                        .send(MangaPageActions::GoMangasArtist)
-                        .ok();
-                }
-                KeyCode::Char('l') | KeyCode::Esc => {
-                    self.local_action_tx
-                        .send(MangaPageActions::OpenAvailableLanguagesList)
-                        .ok();
-                }
-                KeyCode::Char('w') => {
-                    self.local_action_tx
-                        .send(MangaPageActions::SearchNextChapterPage)
-                        .ok();
-                }
-                KeyCode::Char('b') => {
-                    self.local_action_tx
-                        .send(MangaPageActions::SearchPreviousChapterPage)
-                        .ok();
-                }
+            } else {
+                match key_event.code {
+                    KeyCode::Char('j') | KeyCode::Down => {
+                        self.local_action_tx
+                            .send(MangaPageActions::ScrollChapterDown)
+                            .ok();
+                    }
+                    KeyCode::Char('k') | KeyCode::Up => {
+                        self.local_action_tx
+                            .send(MangaPageActions::ScrollChapterUp)
+                            .ok();
+                    }
+                    KeyCode::Char('t') => {
+                        self.local_action_tx
+                            .send(MangaPageActions::ToggleOrder)
+                            .ok();
+                    }
+                    KeyCode::Char('r') | KeyCode::Enter => {
+                        if PICKER.is_some() {
+                            self.local_action_tx
+                                .send(MangaPageActions::ReadChapter)
+                                .ok();
+                        }
+                    }
+                    KeyCode::Char('d') => {
+                        self.local_action_tx
+                            .send(MangaPageActions::DownloadChapter)
+                            .ok();
+                    }
+                    KeyCode::Char('a') => {
+                        self.local_action_tx
+                            .send(MangaPageActions::AskDownloadAllChapters)
+                            .ok();
+                    }
+                    KeyCode::Char('c') => {
+                        self.local_action_tx
+                            .send(MangaPageActions::GoMangasAuthor)
+                            .ok();
+                    }
+                    KeyCode::Char('v') => {
+                        self.local_action_tx
+                            .send(MangaPageActions::GoMangasArtist)
+                            .ok();
+                    }
+                    KeyCode::Char('l') => {
+                        self.local_action_tx
+                            .send(MangaPageActions::OpenAvailableLanguagesList)
+                            .ok();
+                    }
+                    KeyCode::Char('w') => {
+                        self.local_action_tx
+                            .send(MangaPageActions::SearchNextChapterPage)
+                            .ok();
+                    }
+                    KeyCode::Char('b') => {
+                        self.local_action_tx
+                            .send(MangaPageActions::SearchPreviousChapterPage)
+                            .ok();
+                    }
 
-                _ => {}
+                    _ => {}
+                }
             }
         }
     }
@@ -693,7 +726,7 @@ impl MangaPage {
                     .await;
                 match manga_response {
                     Ok(res) => {
-                        let download_chapter_task = download_chapter(
+                        let download_chapter_task = download_single_chaper(
                             DownloadChapter {
                                 id_chapter: &chapter_id,
                                 manga_id: &manga_id,
@@ -843,7 +876,7 @@ impl MangaPage {
     }
 
     fn download_all_chapters(&mut self) {
-        self.state == PageState::DownloadingAllChapters;
+        self.state == PageState::IsAskingDownloadAllChapters;
         let id = self.manga.id.clone();
         let manga_title = self.manga.title.clone();
         let lang = self.get_current_selected_language();
@@ -868,6 +901,16 @@ impl MangaPage {
                 }
             }
         });
+    }
+
+    fn ask_download_all_chapters(&mut self) {
+        if self.state == PageState::DisplayingChapters {
+            self.state = PageState::IsAskingDownloadAllChapters;
+        }
+    }
+
+    fn negate_download_all_chapters(&mut self) {
+        self.state = PageState::DisplayingChapters
     }
 
     fn handle_mouse_events(&mut self, mouse_event: MouseEvent) {
@@ -955,7 +998,9 @@ impl Component for MangaPage {
     }
     fn update(&mut self, action: Self::Actions) {
         match action {
-            MangaPageActions::DownloadAllChapter => self.download_all_chapters(),
+            MangaPageActions::NegateDownloadAll => self.negate_download_all_chapters(),
+            MangaPageActions::AskDownloadAllChapters => self.ask_download_all_chapters(),
+            MangaPageActions::ConfirmDownloadAll => self.download_all_chapters(),
             MangaPageActions::SearchPreviousChapterPage => self.search_previous_chapters(),
             MangaPageActions::SearchNextChapterPage => self.search_next_chapters(),
             MangaPageActions::ScrollDownAvailbleLanguages => self.scroll_language_down(),

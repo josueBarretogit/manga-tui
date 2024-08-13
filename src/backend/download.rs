@@ -1,9 +1,11 @@
 use manga_tui::exists;
 use std::fs::{create_dir, File};
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::time::Duration;
 use tokio::sync::mpsc::UnboundedSender;
 
+use crate::common::PageType;
 use crate::view::pages::manga::MangaPageEvents;
 
 use super::error_log::{write_to_error_log, ErrorType};
@@ -21,11 +23,9 @@ pub struct DownloadChapter<'a> {
     pub lang: &'a str,
 }
 
-pub fn download_chapter(
-    chapter: DownloadChapter<'_>,
-    chapter_data: ChapterPagesResponse,
-    tx: UnboundedSender<MangaPageEvents>,
-) -> Result<(), std::io::Error> {
+fn create_manga_directory(
+    chapter: &DownloadChapter<'_>,
+) -> Result<(PathBuf, String), std::io::Error> {
     // need directory with the manga's title, and its id to make it unique
     let chapter_id = chapter.id_chapter.to_string();
 
@@ -61,6 +61,16 @@ pub fn download_chapter(
     if !exists!(&chapter_dir) {
         create_dir(&chapter_dir)?;
     }
+
+    Ok((chapter_dir, chapter_id))
+}
+
+pub fn download_single_chaper(
+    chapter: DownloadChapter<'_>,
+    chapter_data: ChapterPagesResponse,
+    tx: UnboundedSender<MangaPageEvents>,
+) -> Result<(), std::io::Error> {
+    let (chapter_dir, chapter_id) = create_manga_directory(&chapter)?;
 
     let total_chapters = chapter_data.chapter.data.len();
 
@@ -102,6 +112,64 @@ pub fn download_chapter(
     Ok(())
 }
 
+pub fn download_chapter(
+    chapter: DownloadChapter<'_>,
+    chapter_data: ChapterPagesResponse,
+    chapter_quality: PageType,
+    tx: UnboundedSender<MangaPageEvents>,
+) -> Result<(), std::io::Error> {
+    let (chapter_dir, chapter_id) = create_manga_directory(&chapter)?;
+
+    let total_chapters = chapter_data.chapter.data.len();
+
+    let files = match chapter_quality {
+        PageType::HighQuality => chapter_data.chapter.data,
+        PageType::LowQuality => chapter_data.chapter.data_saver,
+    };
+
+    tokio::spawn(async move {
+        for (index, file_name) in files.into_iter().enumerate() {
+            let endpoint = format!(
+                "{}/{}/{}",
+                chapter_data.base_url, chapter_quality, chapter_data.chapter.hash
+            );
+
+            let image_response = MangadexClient::global()
+                .get_chapter_page(&endpoint, &file_name)
+                .await;
+
+            let file_name = Path::new(&file_name);
+
+            match image_response {
+                Ok(bytes) => {
+                    let image_name = format!(
+                        "{}.{}",
+                        index + 1,
+                        file_name.extension().unwrap().to_str().unwrap()
+                    );
+                    if exists!(&chapter_dir.join(&image_name)) {
+                        return;
+                    }
+
+                    let mut image_created = File::create(chapter_dir.join(image_name)).unwrap();
+                    image_created.write_all(&bytes).unwrap();
+
+                    // tx.send(MangaPageEvents::SetDownloadProgress(
+                    //     (index as f64) / (total_chapters as f64),
+                    //     chapter_id.clone(),
+                    // ))
+                    // .ok();
+                }
+                Err(e) => write_to_error_log(ErrorType::FromError(Box::new(e))),
+            }
+        }
+        // tx.send(MangaPageEvents::ChapterFinishedDownloading(chapter_id))
+        // .ok();
+    });
+
+    Ok(())
+}
+
 pub struct DownloadAllChapters {
     pub manga_id: String,
     pub manga_title: String,
@@ -117,6 +185,13 @@ pub fn download_all_chapters(
         let manga_id = manga_details.manga_id.clone();
         let manga_title = manga_details.manga_title.clone();
         let tx = tx.clone();
+
+        let scanlator = chapter
+            .relationships
+            .iter()
+            .find(|rel| rel.type_field == "scanlation_group")
+            .map(|rel| rel.attributes.as_ref().unwrap().name.to_string());
+
         tokio::spawn(async move {
             let pages_response = MangadexClient::global().get_chapter_pages(&id).await;
 
@@ -129,10 +204,11 @@ pub fn download_all_chapters(
                             manga_title: &manga_title,
                             title: chapter.attributes.title.unwrap_or_default().as_str(),
                             number: chapter.attributes.chapter.unwrap_or_default().as_str(),
-                            scanlator: "some_scanlator",
+                            scanlator: &scanlator.unwrap_or_default(),
                             lang: &Languages::default().as_human_readable(),
                         },
                         res,
+                        PageType::LowQuality,
                         tx,
                     )
                     .unwrap();
@@ -142,5 +218,6 @@ pub fn download_all_chapters(
                 }
             }
         });
+        std::thread::sleep(Duration::from_secs(3));
     }
 }

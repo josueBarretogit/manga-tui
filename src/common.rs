@@ -1,3 +1,5 @@
+use strum::Display;
+
 use crate::backend::filter::Languages;
 
 #[derive(Default, Clone, Debug)]
@@ -18,7 +20,7 @@ pub struct Manga {
     pub title: String,
     pub description: String,
     pub content_rating: String,
-    pub publication_demographic : String,
+    pub publication_demographic: String,
     pub tags: Vec<String>,
     pub status: String,
     pub img_url: Option<String>,
@@ -26,4 +28,12 @@ pub struct Manga {
     pub artist: Artist,
     pub available_languages: Vec<Languages>,
     pub created_at: String,
+}
+
+#[derive(Display)]
+pub enum PageType {
+    #[strum(to_string = "data")]
+    HighQuality,
+    #[strum(to_string = "data-saver")]
+    LowQuality,
 }
