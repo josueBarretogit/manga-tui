@@ -158,7 +158,7 @@ pub fn download_chapter(
             }
         }
 
-        tx.send(MangaPageEvents::SetDownloadAllChaptersProgress(1_f64))
+        tx.send(MangaPageEvents::SetDownloadAllChaptersProgress)
             .ok();
     });
 
@@ -179,12 +179,15 @@ pub fn download_all_chapters(
     tx: UnboundedSender<MangaPageEvents>,
 ) {
     let total_chapters = chapter_data.data.len();
-    let download_chapter_delay = if total_chapters < 15 {
+
+    let download_chapter_delay = if total_chapters <= 20 {
         1
-    } else if total_chapters <= 40 {
-        3
+    } else if total_chapters >= 40 {
+        4
+    } else if total_chapters >= 100 {
+        6
     } else {
-        5
+        8
     };
 
     for (index, chapter) in chapter_data.data.into_iter().enumerate() {
@@ -205,7 +208,7 @@ pub fn download_all_chapters(
 
             match pages_response {
                 Ok(res) => {
-                    download_chapter(
+                    let download_proccess = download_chapter(
                         DownloadChapter {
                             id_chapter: &chapter.id,
                             manga_id: &manga_id,
@@ -213,18 +216,31 @@ pub fn download_all_chapters(
                             title: chapter.attributes.title.unwrap_or_default().as_str(),
                             number: chapter.attributes.chapter.unwrap_or_default().as_str(),
                             scanlator: &scanlator.unwrap_or_default(),
-                            lang: &Languages::default().as_human_readable(),
+                            lang: &manga_details.lang.as_human_readable(),
                         },
                         res,
                         manga_details.quality,
                         index,
                         total_chapters,
-                        tx,
-                    )
-                    .unwrap();
+                        tx.clone(),
+                    );
+
+                    if let Err(e) = download_proccess {
+                        let error_message = format!(
+                            "Chapter: {} could not be downloaded, details: {}",
+                            manga_title, e
+                        );
+
+                        tx.send(MangaPageEvents::SetDownloadAllChaptersProgress)
+                            .ok();
+
+                        write_to_error_log(ErrorType::FromError(Box::from(error_message)));
+                    }
                 }
                 Err(e) => {
-                    write_to_error_log(ErrorType::FromError(Box::new(e)));
+                    tx.send(MangaPageEvents::DownloadAllChaptersError).ok();
+
+                    write_to_error_log(ErrorType::FromError(Box::from(e)));
                 }
             }
         });

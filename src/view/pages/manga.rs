@@ -63,11 +63,11 @@ pub enum MangaPageEvents {
     FethStatistics,
     CheckChapterStatus,
     ChapterFinishedDownloading(String),
-    DownloadAllChaptersFinished,
+    DownloadAllChaptersError,
     /// Percentage, id chapter
     SetDownloadProgress(f64, String),
     StartDownloadProgress(f64),
-    SetDownloadAllChaptersProgress(f64),
+    SetDownloadAllChaptersProgress,
     /// id_chapter, chapter_title
     SaveChapterDownloadStatus(String, String),
     /// id_chapter
@@ -279,6 +279,8 @@ impl MangaPage {
                     Span::raw(" <j>/<k> ").style(*INSTRUCTIONS_STYLE),
                     " Download chapter ".into(),
                     Span::raw(" <d> ").style(*INSTRUCTIONS_STYLE),
+                    " Download all chapters ".into(),
+                    Span::raw(" <a> ").style(*INSTRUCTIONS_STYLE),
                 ];
 
                 if PICKER.is_some() {
@@ -901,11 +903,12 @@ impl MangaPage {
         }
     }
 
-    fn set_manga_download_progress(&mut self, progress: f64) {
+    fn set_manga_download_progress(&mut self) {
         self.download_all_chapters_state.set_download_progress();
     }
 
     fn download_all_chapters(&mut self) {
+        self.download_all_chapters_state.start_fectch();
         let id = self.manga.id.clone();
         let manga_title = self.manga.title.clone();
         let lang = self.get_current_selected_language();
@@ -949,22 +952,37 @@ impl MangaPage {
     }
 
     fn cancel_download_all_chapters(&mut self) {
-        self.state = PageState::DisplayingChapters;
-        self.download_all_chapters_state.cancel();
+        if !self.download_all_chapters_state.is_downloading() {
+            self.state = PageState::DisplayingChapters;
+            self.download_all_chapters_state.cancel();
+        }
     }
 
     fn toggle_image_quality(&mut self) {
-        self.download_all_chapters_state.image_quality.toggle();
+        self.download_all_chapters_state.toggle_image_quality();
     }
 
     fn start_download_all_chapters(&mut self, total_chapters: f64) {
         self.download_all_chapters_state
             .set_total_chapters(total_chapters);
+        self.download_all_chapters_state.set_download_location(
+            AppDirectories::MangaDownloads
+                .into_path_buf()
+                .join(&self.manga.title),
+        );
         self.download_all_chapters_state.start_download();
+    }
+
+    pub fn is_downloading_all_chapters(&self) -> bool {
+        self.download_all_chapters_state.is_downloading()
     }
 
     fn finish_download_all_chapters(&mut self) {
         self.state = PageState::DisplayingChapters;
+    }
+
+    fn set_download_all_chapters_error(&mut self) {
+        self.download_all_chapters_state.set_download_error();
     }
 
     fn handle_mouse_events(&mut self, mouse_event: MouseEvent) {
@@ -1000,14 +1018,17 @@ impl MangaPage {
     }
 
     fn tick(&mut self) {
+        if self.download_process_started() {
+            self.download_all_chapters_state.tick();
+        }
         if let Ok(background_event) = self.local_event_rx.try_recv() {
             match background_event {
-                MangaPageEvents::DownloadAllChaptersFinished => todo!(),
+                MangaPageEvents::DownloadAllChaptersError => self.set_download_all_chapters_error(),
                 MangaPageEvents::StartDownloadProgress(total_chapters) => {
                     self.start_download_all_chapters(total_chapters)
                 }
-                MangaPageEvents::SetDownloadAllChaptersProgress(progress) => {
-                    self.set_manga_download_progress(progress)
+                MangaPageEvents::SetDownloadAllChaptersProgress => {
+                    self.set_manga_download_progress()
                 }
                 MangaPageEvents::ReadError(chapter_id) => {
                     self.set_chapter_read_error(chapter_id);

@@ -1,9 +1,12 @@
+use std::path::PathBuf;
+
 use crate::backend::filter::Languages;
 use crate::backend::{AppDirectories, ChapterResponse};
 use crate::common::PageType;
 use crate::global::{CURRENT_LIST_ITEM_STYLE, ERROR_STYLE, INSTRUCTIONS_STYLE};
 use crate::utils::display_dates_since_publication;
 use ratatui::{prelude::*, widgets::*};
+use throbber_widgets_tui::{Throbber, ThrobberState};
 use tui_widget_list::PreRender;
 
 use self::text::ToSpan;
@@ -251,6 +254,7 @@ pub enum DownloadPhase {
     SettingQuality,
     FetchingChaptersData,
     DownloadingChapters,
+    ErrorChaptersData,
 }
 
 #[derive(Default)]
@@ -258,11 +262,13 @@ pub struct DownloadAllChaptersState {
     pub phase: DownloadPhase,
     pub image_quality: PageType,
     pub total_chapters: f64,
+    pub loader_state: ThrobberState,
     pub download_progress: f64,
+    pub download_location: PathBuf,
 }
 
 impl DownloadAllChaptersState {
-    pub fn is_downloading_chapters(&self) -> bool {
+    pub fn is_downloading(&self) -> bool {
         self.phase == DownloadPhase::DownloadingChapters
     }
 
@@ -279,23 +285,57 @@ impl DownloadAllChaptersState {
     }
 
     pub fn ask_for_confirmation(&mut self) {
-        self.phase = DownloadPhase::Asking;
+        if !self.is_downloading() {
+            self.phase = DownloadPhase::Asking;
+        }
     }
 
     pub fn confirm(&mut self) {
-        self.phase = DownloadPhase::SettingQuality;
+        if !self.is_downloading() {
+            self.phase = DownloadPhase::SettingQuality;
+        }
+    }
+
+    pub fn start_fectch(&mut self) {
+        if !self.is_downloading() {
+            self.total_chapters = 0.0;
+            self.download_progress = 0.0;
+            self.phase = DownloadPhase::FetchingChaptersData;
+        }
     }
 
     pub fn start_download(&mut self) {
-        self.phase = DownloadPhase::DownloadingChapters;
+        if !self.is_downloading() {
+            self.phase = DownloadPhase::DownloadingChapters;
+        }
     }
 
     pub fn cancel(&mut self) {
         self.phase = DownloadPhase::ProccessNotStarted;
     }
 
-    pub fn set_total_chapters(&mut self, total_chapters : f64) {
+    pub fn set_total_chapters(&mut self, total_chapters: f64) {
         self.total_chapters = total_chapters;
+    }
+
+    pub fn finished_downloading(&self) -> bool {
+        self.download_progress == self.total_chapters
+    }
+
+    pub fn set_download_error(&mut self) {
+        self.phase = DownloadPhase::ErrorChaptersData;
+    }
+
+    pub fn set_download_location(&mut self, location: PathBuf) {
+        self.download_location = location
+    }
+
+    pub fn toggle_image_quality(&mut self) {
+        self.image_quality = self.image_quality.toggle();
+    }
+
+    pub fn tick(&mut self) {
+        self.loader_state.calc_next();
     }
 }
 
@@ -309,10 +349,41 @@ impl<'a> DownloadAllChaptersWidget<'a> {
     }
 }
 
+impl<'a> DownloadAllChaptersWidget<'a> {
+    fn render_download_information(
+        &mut self,
+        area: Rect,
+        buf: &mut Buffer,
+        state: &mut DownloadAllChaptersState,
+    ) {
+        let [information_area, loader_area] =
+            Layout::horizontal([Constraint::Fill(2), Constraint::Fill(1)]).areas(area);
+
+        let download_location = format!(
+            "Download location : {}",
+            state.download_location.to_str().unwrap(),
+        );
+
+        Paragraph::new(Line::from(vec![
+            "Downloading all chapters, this will take a while, ".into(),
+            download_location.into(),
+        ]))
+        .wrap(Wrap { trim: true })
+        .render(information_area, buf);
+
+        let loader = Throbber::default()
+            .label("Download in progress")
+            .style(Style::default().fg(Color::Yellow))
+            .throbber_set(throbber_widgets_tui::BRAILLE_SIX)
+            .use_type(throbber_widgets_tui::WhichUse::Spin);
+        StatefulWidget::render(loader, loader_area, buf, &mut state.loader_state);
+    }
+}
+
 impl<'a> StatefulWidget for DownloadAllChaptersWidget<'a> {
     type State = DownloadAllChaptersState;
 
-    fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+    fn render(mut self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         Block::bordered().render(area, buf);
 
         let download_information_area = area.inner(Margin {
@@ -351,27 +422,44 @@ impl<'a> StatefulWidget for DownloadAllChaptersWidget<'a> {
                 );
             }
             DownloadPhase::FetchingChaptersData => {
-                // add throbber
-                "fetching manga data after this each chapter will be downloaded"
+                let loader = Throbber::default()
+                    .label(
+                        "fetching manga data after this each chapter will begin to be downloaded",
+                    )
+                    .style(Style::default().fg(Color::Yellow))
+                    .throbber_set(throbber_widgets_tui::BRAILLE_SIX)
+                    .use_type(throbber_widgets_tui::WhichUse::Spin);
+
+                StatefulWidget::render(
+                    loader,
+                    download_information_area,
+                    buf,
+                    &mut state.loader_state,
+                );
+            }
+            DownloadPhase::ErrorChaptersData => {
+                "Could not get chapters data, press <Spacebar> to try again"
+                    .to_span()
+                    .style(*ERROR_STYLE)
                     .render(download_information_area, buf);
             }
             DownloadPhase::DownloadingChapters => {
+                if state.finished_downloading() {
+                    state.cancel();
+                    return;
+                }
+
                 let [information_area, progress_area] =
                     Layout::vertical([Constraint::Fill(1), Constraint::Fill(1)])
                         .areas(download_information_area);
-                Paragraph::new("Downloading all chapters, this will take a while")
-                    .render(information_area, buf);
+
+                self.render_download_information(information_area, buf, state);
 
                 LineGauge::default()
                     .block(Block::bordered().title(format!(
-                                    "Total chapters: {}, you can check the download at : {}",
-                                    state.total_chapters,
-                                    AppDirectories::MangaDownloads
-                                        .into_path_buf()
-                                        .join(self.manga_title)
-                                        .to_str()
-                                        .unwrap()
-                                )))
+                        "Total chapters: {}, chapters downloaded : {}",
+                        state.total_chapters, state.download_progress
+                    )))
                     .filled_style(
                         Style::default()
                             .fg(Color::Blue)
