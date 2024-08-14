@@ -116,11 +116,11 @@ pub fn download_chapter(
     chapter: DownloadChapter<'_>,
     chapter_data: ChapterPagesResponse,
     chapter_quality: PageType,
+    chapter_number: usize,
+    total_chapters: usize,
     tx: UnboundedSender<MangaPageEvents>,
 ) -> Result<(), std::io::Error> {
     let (chapter_dir, chapter_id) = create_manga_directory(&chapter)?;
-
-    let total_chapters = chapter_data.chapter.data.len();
 
     let files = match chapter_quality {
         PageType::HighQuality => chapter_data.chapter.data,
@@ -153,27 +153,24 @@ pub fn download_chapter(
 
                     let mut image_created = File::create(chapter_dir.join(image_name)).unwrap();
                     image_created.write_all(&bytes).unwrap();
-
-                    // tx.send(MangaPageEvents::SetDownloadProgress(
-                    //     (index as f64) / (total_chapters as f64),
-                    //     chapter_id.clone(),
-                    // ))
-                    // .ok();
                 }
                 Err(e) => write_to_error_log(ErrorType::FromError(Box::new(e))),
             }
         }
-        // tx.send(MangaPageEvents::ChapterFinishedDownloading(chapter_id))
-        // .ok();
+
+        tx.send(MangaPageEvents::SetDownloadAllChaptersProgress(1_f64))
+            .ok();
     });
 
     Ok(())
 }
 
+#[derive(Default)]
 pub struct DownloadAllChapters {
     pub manga_id: String,
     pub manga_title: String,
     pub quality: PageType,
+    pub lang: Languages,
 }
 
 pub fn download_all_chapters(
@@ -181,7 +178,16 @@ pub fn download_all_chapters(
     manga_details: DownloadAllChapters,
     tx: UnboundedSender<MangaPageEvents>,
 ) {
-    for chapter in chapter_data.data {
+    let total_chapters = chapter_data.data.len();
+    let download_chapter_delay = if total_chapters < 15 {
+        1
+    } else if total_chapters <= 40 {
+        3
+    } else {
+        5
+    };
+
+    for (index, chapter) in chapter_data.data.into_iter().enumerate() {
         let id = chapter.id.clone();
         let manga_id = manga_details.manga_id.clone();
         let manga_title = manga_details.manga_title.clone();
@@ -211,6 +217,8 @@ pub fn download_all_chapters(
                         },
                         res,
                         manga_details.quality,
+                        index,
+                        total_chapters,
                         tx,
                     )
                     .unwrap();
@@ -220,6 +228,6 @@ pub fn download_all_chapters(
                 }
             }
         });
-        std::thread::sleep(Duration::from_secs(4));
+        std::thread::sleep(Duration::from_secs(download_chapter_delay));
     }
 }

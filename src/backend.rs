@@ -25,6 +25,25 @@ pub enum AppDirectories {
     History,
 }
 
+impl AppDirectories {
+    pub fn into_path_buf(self) -> PathBuf {
+        let base_directory = APP_DATA_DIR.as_ref();
+        match self {
+            Self::MangaDownloads => PathBuf::from(
+                &base_directory
+                    .unwrap()
+                    .join(Self::MangaDownloads.to_string()),
+            ),
+            Self::History => {
+                PathBuf::from(&base_directory.unwrap().join(Self::History.to_string()))
+            }
+            Self::ErrorLogs => {
+                PathBuf::from(&base_directory.unwrap().join(Self::ErrorLogs.to_string()))
+            }
+        }
+    }
+}
+
 pub static APP_DATA_DIR: Lazy<Option<PathBuf>> = Lazy::new(|| {
     directories::ProjectDirs::from("", "", "manga-tui").map(|dirs| {
         match std::env::var("MANGA_TUI_DATA_DIR").ok() {

@@ -31,11 +31,12 @@ pub struct Manga {
     pub created_at: String,
 }
 
-#[derive(Display, Clone, Copy, EnumIter)]
+#[derive(Display, Clone, Copy, EnumIter, Default)]
 pub enum PageType {
     #[strum(to_string = "data")]
     HighQuality,
     #[strum(to_string = "data-saver")]
+    #[default]
     LowQuality,
 }
 
