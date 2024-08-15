@@ -5,8 +5,10 @@ use crate::backend::{AppDirectories, ChapterResponse};
 use crate::common::PageType;
 use crate::global::{CURRENT_LIST_ITEM_STYLE, ERROR_STYLE, INSTRUCTIONS_STYLE};
 use crate::utils::display_dates_since_publication;
+use crate::view::pages::manga::MangaPageEvents;
 use ratatui::{prelude::*, widgets::*};
 use throbber_widgets_tui::{Throbber, ThrobberState};
+use tokio::sync::mpsc::UnboundedSender;
 use tui_widget_list::PreRender;
 
 use self::text::ToSpan;
@@ -257,7 +259,6 @@ pub enum DownloadPhase {
     ErrorChaptersData,
 }
 
-#[derive(Default)]
 pub struct DownloadAllChaptersState {
     pub phase: DownloadPhase,
     pub image_quality: PageType,
@@ -265,9 +266,22 @@ pub struct DownloadAllChaptersState {
     pub loader_state: ThrobberState,
     pub download_progress: f64,
     pub download_location: PathBuf,
+    pub tx: UnboundedSender<MangaPageEvents>,
 }
 
 impl DownloadAllChaptersState {
+    pub fn new(tx: UnboundedSender<MangaPageEvents>) -> Self {
+        Self {
+            phase: DownloadPhase::default(),
+            image_quality: PageType::default(),
+            total_chapters: 0.0,
+            loader_state: ThrobberState::default(),
+            download_progress: 0.0,
+            download_location: PathBuf::default(),
+            tx,
+        }
+    }
+
     pub fn is_downloading(&self) -> bool {
         self.phase == DownloadPhase::DownloadingChapters
     }
@@ -276,8 +290,10 @@ impl DownloadAllChaptersState {
         self.phase != DownloadPhase::ProccessNotStarted
     }
 
-    pub fn is_ready_to_download(&self) -> bool {
+    /// Either phase can start download
+    pub fn is_ready_to_fetch_data(&self) -> bool {
         self.phase == DownloadPhase::SettingQuality
+            || self.phase == DownloadPhase::ErrorChaptersData
     }
 
     pub fn set_download_progress(&mut self) {
@@ -445,7 +461,10 @@ impl<'a> StatefulWidget for DownloadAllChaptersWidget<'a> {
             }
             DownloadPhase::DownloadingChapters => {
                 if state.finished_downloading() {
-                    state.cancel();
+                    state
+                        .tx
+                        .send(MangaPageEvents::FinishedDownloadingAllChapters)
+                        .ok();
                     return;
                 }
 

@@ -89,12 +89,16 @@ pub fn download_single_chaper(
 
             match image_response {
                 Ok(bytes) => {
-                    let mut image_created = File::create(chapter_dir.join(format!(
+                    let image_name = format!(
                         "{}.{}",
                         index + 1,
                         file_name.extension().unwrap().to_str().unwrap()
-                    )))
-                    .unwrap();
+                    );
+                    if exists!(&chapter_dir.join(&image_name)) {
+                        return;
+                    }
+
+                    let mut image_created = File::create(image_name).unwrap();
                     image_created.write_all(&bytes).unwrap();
                     tx.send(MangaPageEvents::SetDownloadProgress(
                         (index as f64) / (total_chapters as f64),
@@ -182,9 +186,9 @@ pub fn download_all_chapters(
 
     let download_chapter_delay = if total_chapters <= 20 {
         1
-    } else if total_chapters >= 40 {
+    } else if (40..100).contains(&total_chapters) {
         4
-    } else if total_chapters >= 100 {
+    } else if (100..200).contains(&total_chapters) {
         6
     } else {
         8
@@ -208,12 +212,13 @@ pub fn download_all_chapters(
 
             match pages_response {
                 Ok(res) => {
+                    let chapter_title = chapter.attributes.title.unwrap_or_default();
                     let download_proccess = download_chapter(
                         DownloadChapter {
                             id_chapter: &chapter.id,
                             manga_id: &manga_id,
                             manga_title: &manga_title,
-                            title: chapter.attributes.title.unwrap_or_default().as_str(),
+                            title: chapter_title.as_str(),
                             number: chapter.attributes.chapter.unwrap_or_default().as_str(),
                             scanlator: &scanlator.unwrap_or_default(),
                             lang: &manga_details.lang.as_human_readable(),
@@ -235,12 +240,23 @@ pub fn download_all_chapters(
                             .ok();
 
                         write_to_error_log(ErrorType::FromError(Box::from(error_message)));
+                        return;
                     }
+                    tx.send(MangaPageEvents::SaveChapterDownloadStatus(
+                        chapter.id,
+                        chapter_title,
+                    ))
+                    .ok();
                 }
                 Err(e) => {
-                    tx.send(MangaPageEvents::DownloadAllChaptersError).ok();
+                    let error_message = format!(
+                        "Chapter: {} could not be downloaded, details: {}",
+                        manga_title, e
+                    );
 
-                    write_to_error_log(ErrorType::FromError(Box::from(e)));
+                    tx.send(MangaPageEvents::SetDownloadAllChaptersProgress)
+                        .ok();
+                    write_to_error_log(ErrorType::FromError(Box::from(error_message)));
                 }
             }
         });

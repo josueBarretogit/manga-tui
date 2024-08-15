@@ -29,6 +29,8 @@ use tokio::task::JoinSet;
 
 use self::text::ToSpan;
 
+use super::reader::MangaReaderEvents;
+
 #[derive(PartialEq, Eq)]
 pub enum PageState {
     DownloadingChapters,
@@ -43,7 +45,7 @@ pub enum MangaPageActions {
     DownloadAllChapter,
     ToggleImageQuality,
     ConfirmDownloadAll,
-    NegateDownloadAll,
+    CancelDownloadAll,
     AskDownloadAllChapters,
     ScrollChapterDown,
     ScrollChapterUp,
@@ -68,6 +70,7 @@ pub enum MangaPageEvents {
     SetDownloadProgress(f64, String),
     StartDownloadProgress(f64),
     SetDownloadAllChaptersProgress,
+    FinishedDownloadingAllChapters,
     /// id_chapter, chapter_title
     SaveChapterDownloadStatus(String, String),
     /// id_chapter
@@ -157,7 +160,7 @@ impl MangaPage {
             global_event_tx,
             local_action_tx,
             local_action_rx,
-            local_event_tx,
+            local_event_tx: local_event_tx.clone(),
             local_event_rx,
             chapters: None,
             chapter_order: ChapterOrder::default(),
@@ -166,7 +169,7 @@ impl MangaPage {
             tasks: JoinSet::new(),
             available_languages_state: ListState::default(),
             is_list_languages_open: false,
-            download_all_chapters_state: DownloadAllChaptersState::default(),
+            download_all_chapters_state: DownloadAllChaptersState::new(local_event_tx),
             chapter_language: chapter_language.unwrap_or(Languages::default()),
         }
     }
@@ -434,7 +437,7 @@ impl MangaPage {
                 match key_event.code {
                     KeyCode::Esc => {
                         self.local_action_tx
-                            .send(MangaPageActions::NegateDownloadAll)
+                            .send(MangaPageActions::CancelDownloadAll)
                             .ok();
                     }
                     KeyCode::Char('t') => {
@@ -448,7 +451,7 @@ impl MangaPage {
                             .ok();
                     }
                     KeyCode::Char(' ') => {
-                        if self.download_all_chapters_state.is_ready_to_download() {
+                        if self.download_all_chapters_state.is_ready_to_fetch_data() {
                             self.local_action_tx
                                 .send(MangaPageActions::DownloadAllChapter)
                                 .ok();
@@ -937,6 +940,7 @@ impl MangaPage {
                     );
                 }
                 Err(e) => {
+                    tx.send(MangaPageEvents::DownloadAllChaptersError).ok();
                     write_to_error_log(error_log::ErrorType::FromError(Box::new(e)));
                 }
             }
@@ -978,7 +982,11 @@ impl MangaPage {
     }
 
     fn finish_download_all_chapters(&mut self) {
+        self.download_all_chapters_state.cancel();
         self.state = PageState::DisplayingChapters;
+        self.local_event_tx
+            .send(MangaPageEvents::CheckChapterStatus)
+            .ok();
     }
 
     fn set_download_all_chapters_error(&mut self) {
@@ -1023,6 +1031,9 @@ impl MangaPage {
         }
         if let Ok(background_event) = self.local_event_rx.try_recv() {
             match background_event {
+                MangaPageEvents::FinishedDownloadingAllChapters => {
+                    self.finish_download_all_chapters()
+                }
                 MangaPageEvents::DownloadAllChaptersError => self.set_download_all_chapters_error(),
                 MangaPageEvents::StartDownloadProgress(total_chapters) => {
                     self.start_download_all_chapters(total_chapters)
@@ -1082,7 +1093,7 @@ impl Component for MangaPage {
         match action {
             MangaPageActions::DownloadAllChapter => self.download_all_chapters(),
             MangaPageActions::ToggleImageQuality => self.toggle_image_quality(),
-            MangaPageActions::NegateDownloadAll => self.cancel_download_all_chapters(),
+            MangaPageActions::CancelDownloadAll => self.cancel_download_all_chapters(),
             MangaPageActions::AskDownloadAllChapters => self.ask_download_all_chapters(),
             MangaPageActions::ConfirmDownloadAll => self.confirm_download_all(),
             MangaPageActions::SearchPreviousChapterPage => self.search_previous_chapters(),
