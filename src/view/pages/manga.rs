@@ -31,7 +31,7 @@ use self::text::ToSpan;
 
 use super::reader::MangaReaderEvents;
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum PageState {
     DownloadingChapters,
     SearchingChapters,
@@ -40,6 +40,7 @@ pub enum PageState {
     ChaptersNotFound,
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub enum MangaPageActions {
     DownloadChapter,
     DownloadAllChapter,
@@ -60,6 +61,7 @@ pub enum MangaPageActions {
     SearchPreviousChapterPage,
 }
 
+#[derive(Debug, PartialEq)]
 pub enum MangaPageEvents {
     SearchChapters,
     FethStatistics,
@@ -451,11 +453,9 @@ impl MangaPage {
                             .ok();
                     }
                     KeyCode::Char(' ') => {
-                        if self.download_all_chapters_state.is_ready_to_fetch_data() {
-                            self.local_action_tx
-                                .send(MangaPageActions::DownloadAllChapter)
-                                .ok();
-                        }
+                        self.local_action_tx
+                            .send(MangaPageActions::DownloadAllChapter)
+                            .ok();
                     }
                     _ => {}
                 }
@@ -911,7 +911,7 @@ impl MangaPage {
     }
 
     fn download_all_chapters(&mut self) {
-        self.download_all_chapters_state.start_fectch();
+        self.download_all_chapters_state.start_fetch();
         let id = self.manga.id.clone();
         let manga_title = self.manga.title.clone();
         let lang = self.get_current_selected_language();
@@ -1131,5 +1131,81 @@ impl Component for MangaPage {
         self.abort_tasks();
         self.manga.tags = vec![];
         self.manga.description = String::new();
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::backend::{ChapterData, Data};
+    use crate::view::widgets::press_key;
+
+    use super::*;
+
+    #[test]
+    fn manga_page_initialized_correctly() {
+        let manga = Manga::default();
+        let (tx, mut rx) = mpsc::unbounded_channel::<Events>();
+        let mut manga_page = MangaPage::new(manga, None, tx);
+
+        assert_eq!(manga_page.chapter_language, Languages::default());
+
+        assert_eq!(PageState::SearchingChapters, manga_page.state);
+
+        assert!(!manga_page.is_list_languages_open);
+
+        let first_event = manga_page.local_event_rx.blocking_recv().unwrap();
+        let second_event = manga_page.local_event_rx.blocking_recv().unwrap();
+
+        assert!(
+            first_event == MangaPageEvents::FethStatistics
+                || first_event == MangaPageEvents::SearchChapters
+        );
+        assert!(
+            second_event == MangaPageEvents::FethStatistics
+                || second_event == MangaPageEvents::SearchChapters
+        );
+    }
+
+    #[test]
+    fn manga_page_key_events() {
+        let manga = Manga::default();
+        let (tx, mut rx) = mpsc::unbounded_channel::<Events>();
+        let mut manga_page = MangaPage::new(manga, None, tx);
+
+        let mock_chapter_response = ChapterResponse {
+            data: vec![ChapterData::default(), ChapterData::default()],
+            ..Default::default()
+        };
+
+        // Assuming chapters were found
+        manga_page.load_chapters(Some(mock_chapter_response));
+
+        assert!(manga_page.chapters.is_some());
+
+        press_key(&mut manga_page, KeyCode::Char('j'));
+
+        let action = manga_page.local_action_rx.blocking_recv().unwrap();
+
+        assert_eq!(MangaPageActions::ScrollChapterDown, action);
+
+        manga_page.update(action);
+
+        assert!(manga_page
+            .chapters
+            .as_ref()
+            .unwrap()
+            .state
+            .selected
+            .is_some());
+
+        press_key(&mut manga_page, KeyCode::Char('l'));
+
+        let action = manga_page.local_action_rx.blocking_recv().unwrap();
+
+        assert_eq!(MangaPageActions::OpenAvailableLanguagesList, action);
+
+        manga_page.update(action);
+
+        assert!(manga_page.is_list_languages_open);
     }
 }

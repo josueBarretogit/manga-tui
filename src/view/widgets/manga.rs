@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use crate::backend::filter::Languages;
 use crate::backend::{AppDirectories, ChapterResponse};
 use crate::common::PageType;
@@ -7,6 +5,7 @@ use crate::global::{CURRENT_LIST_ITEM_STYLE, ERROR_STYLE, INSTRUCTIONS_STYLE};
 use crate::utils::display_dates_since_publication;
 use crate::view::pages::manga::MangaPageEvents;
 use ratatui::{prelude::*, widgets::*};
+use std::path::PathBuf;
 use throbber_widgets_tui::{Throbber, ThrobberState};
 use tokio::sync::mpsc::UnboundedSender;
 use tui_widget_list::PreRender;
@@ -259,6 +258,7 @@ pub enum DownloadPhase {
     ErrorChaptersData,
 }
 
+#[derive(Debug)]
 pub struct DownloadAllChaptersState {
     pub phase: DownloadPhase,
     pub image_quality: PageType,
@@ -312,8 +312,8 @@ impl DownloadAllChaptersState {
         }
     }
 
-    pub fn start_fectch(&mut self) {
-        if !self.is_downloading() {
+    pub fn start_fetch(&mut self) {
+        if self.is_ready_to_fetch_data() {
             self.total_chapters = 0.0;
             self.download_progress = 0.0;
             self.phase = DownloadPhase::FetchingChaptersData;
@@ -490,5 +490,107 @@ impl<'a> StatefulWidget for DownloadAllChaptersWidget<'a> {
                     .render(progress_area, buf);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use tokio::sync::mpsc;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn download_state_works() {
+        let (tx, mut rx) = mpsc::unbounded_channel::<MangaPageEvents>();
+        let mut download_all_chapters_state = DownloadAllChaptersState::new(tx);
+
+        assert_eq!(
+            DownloadPhase::ProccessNotStarted,
+            download_all_chapters_state.phase
+        );
+        assert!(!download_all_chapters_state.process_started());
+        assert!(!download_all_chapters_state.is_downloading());
+        assert_eq!(
+            PageType::default(),
+            download_all_chapters_state.image_quality
+        );
+        assert_eq!(0.0, download_all_chapters_state.download_progress);
+
+        download_all_chapters_state.ask_for_confirmation();
+
+        assert_eq!(DownloadPhase::Asking, download_all_chapters_state.phase);
+
+        download_all_chapters_state.confirm();
+
+        assert_eq!(
+            DownloadPhase::SettingQuality,
+            download_all_chapters_state.phase
+        );
+
+        download_all_chapters_state.toggle_image_quality();
+
+        assert_eq!(
+            PageType::default().toggle(),
+            download_all_chapters_state.image_quality
+        );
+
+        download_all_chapters_state.start_fetch();
+
+        assert_eq!(
+            DownloadPhase::FetchingChaptersData,
+            download_all_chapters_state.phase
+        );
+
+        download_all_chapters_state.set_download_error();
+
+        assert_eq!(
+            DownloadPhase::ErrorChaptersData,
+            download_all_chapters_state.phase
+        );
+
+        download_all_chapters_state.start_fetch();
+
+        assert_eq!(
+            DownloadPhase::FetchingChaptersData,
+            download_all_chapters_state.phase
+        );
+
+        download_all_chapters_state.start_download();
+
+        download_all_chapters_state.set_total_chapters(3.0);
+
+        assert_eq!(
+            DownloadPhase::DownloadingChapters,
+            download_all_chapters_state.phase
+        );
+        assert_eq!(3.0, download_all_chapters_state.total_chapters);
+
+        download_all_chapters_state.set_download_progress();
+        download_all_chapters_state.set_download_progress();
+        download_all_chapters_state.set_download_progress();
+
+        let area = Rect::new(0, 0, 50, 50);
+        let mut buf = Buffer::empty(area);
+
+        StatefulWidget::render(
+            DownloadAllChaptersWidget::new("some_title"),
+            area,
+            &mut buf,
+            &mut download_all_chapters_state,
+        );
+
+        let download_finished = rx.recv().await.unwrap();
+
+        assert_eq!(
+            MangaPageEvents::FinishedDownloadingAllChapters,
+            download_finished
+        );
+
+        download_all_chapters_state.cancel();
+
+        assert_eq!(
+            DownloadPhase::ProccessNotStarted,
+            download_all_chapters_state.phase
+        );
     }
 }

@@ -210,9 +210,9 @@ pub fn download_all_chapters(
         tokio::spawn(async move {
             let pages_response = MangadexClient::global().get_chapter_pages(&id).await;
 
+            let chapter_title = chapter.attributes.title.unwrap_or_default();
             match pages_response {
                 Ok(res) => {
-                    let chapter_title = chapter.attributes.title.unwrap_or_default();
                     let download_proccess = download_chapter(
                         DownloadChapter {
                             id_chapter: &chapter.id,
@@ -233,7 +233,7 @@ pub fn download_all_chapters(
                     if let Err(e) = download_proccess {
                         let error_message = format!(
                             "Chapter: {} could not be downloaded, details: {}",
-                            manga_title, e
+                            chapter_title, e
                         );
 
                         tx.send(MangaPageEvents::SetDownloadAllChaptersProgress)
@@ -251,7 +251,7 @@ pub fn download_all_chapters(
                 Err(e) => {
                     let error_message = format!(
                         "Chapter: {} could not be downloaded, details: {}",
-                        manga_title, e
+                        chapter_title, e
                     );
 
                     tx.send(MangaPageEvents::SetDownloadAllChaptersProgress)
