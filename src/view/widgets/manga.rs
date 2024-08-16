@@ -12,7 +12,7 @@ use tui_widget_list::PreRender;
 
 use self::text::ToSpan;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum ChapterItemState {
     Normal,
     /// When the user tried to download a chapter and there was an error
@@ -21,7 +21,7 @@ pub enum ChapterItemState {
     ReadError,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ChapterItem {
     pub id: String,
     pub title: String,
@@ -186,7 +186,7 @@ impl ChapterItem {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ChaptersListWidget {
     pub chapters: Vec<ChapterItem>,
 }

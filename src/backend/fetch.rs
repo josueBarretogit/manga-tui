@@ -1,9 +1,11 @@
+use std::time::Duration as StdDuration;
+
 use super::filter::Languages;
 use super::{ChapterPagesResponse, ChapterResponse, MangaStatisticsResponse, SearchMangaResponse};
 use crate::backend::filter::{Filters, IntoParam};
 use crate::view::pages::manga::ChapterOrder;
 use bytes::Bytes;
-use chrono::Months;
+use chrono::{Duration, Months};
 use once_cell::sync::OnceCell;
 use reqwest::StatusCode;
 
@@ -94,6 +96,7 @@ impl MangadexClient {
     ) -> Result<Bytes, reqwest::Error> {
         self.client
             .get(format!("{}/{}", endpoint, file_name))
+            .timeout(StdDuration::from_secs(20))
             .send()
             .await?
             .bytes()

@@ -72,17 +72,17 @@ pub fn download_single_chaper(
 ) -> Result<(), std::io::Error> {
     let (chapter_dir, chapter_id) = create_manga_directory(&chapter)?;
 
-    let total_chapters = chapter_data.chapter.data.len();
+    let total_pages = chapter_data.chapter.data.len();
 
     tokio::spawn(async move {
-        for (index, file_name) in chapter_data.chapter.data.iter().enumerate() {
+        for (index, file_name) in chapter_data.chapter.data.into_iter().enumerate() {
             let endpoint = format!(
                 "{}/data/{}",
                 chapter_data.base_url, chapter_data.chapter.hash
             );
 
             let image_response = MangadexClient::global()
-                .get_chapter_page(&endpoint, file_name)
+                .get_chapter_page(&endpoint, &file_name)
                 .await;
 
             let file_name = Path::new(&file_name);
@@ -94,14 +94,11 @@ pub fn download_single_chaper(
                         index + 1,
                         file_name.extension().unwrap().to_str().unwrap()
                     );
-                    if exists!(&chapter_dir.join(&image_name)) {
-                        return;
-                    }
-
-                    let mut image_created = File::create(image_name).unwrap();
+                    let mut image_created = File::create(chapter_dir.join(image_name)).unwrap();
                     image_created.write_all(&bytes).unwrap();
+
                     tx.send(MangaPageEvents::SetDownloadProgress(
-                        (index as f64) / (total_chapters as f64),
+                        (index as f64) / (total_pages as f64),
                         chapter_id.clone(),
                     ))
                     .ok();
@@ -151,6 +148,7 @@ pub fn download_chapter(
                         index + 1,
                         file_name.extension().unwrap().to_str().unwrap()
                     );
+
                     if exists!(&chapter_dir.join(&image_name)) {
                         return;
                     }
@@ -187,7 +185,7 @@ pub fn download_all_chapters(
     let download_chapter_delay = if total_chapters <= 20 {
         1
     } else if (40..100).contains(&total_chapters) {
-        4
+        3
     } else if (100..200).contains(&total_chapters) {
         6
     } else {
