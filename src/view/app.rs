@@ -4,7 +4,7 @@ use self::manga::MangaPage;
 use self::reader::MangaReader;
 use self::search::{InputMode, SearchPage};
 use crate::backend::tui::{Action, Events};
-use crate::backend::{ChapterPagesResponse};
+use crate::backend::ChapterPagesResponse;
 use crate::global::INSTRUCTIONS_STYLE;
 use crate::view::pages::*;
 use ::crossterm::event::KeyCode;
@@ -165,6 +165,14 @@ impl App {
     }
 
     fn handle_key_events(&mut self, key_event: KeyEvent) {
+        if self
+            .manga_page
+            .as_ref()
+            .is_some_and(|page| page.is_downloading_all_chapters())
+        {
+            return;
+        }
+
         if self.search_page.input_mode != InputMode::Typing
             && !self.search_page.is_typing_filter()
             && !self.feed_page.is_typing()
