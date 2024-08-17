@@ -1,7 +1,7 @@
 use crate::backend::database::{get_chapters_history_status, save_history, SetChapterDownloaded};
 use crate::backend::database::{set_chapter_downloaded, MangaReadingHistorySave};
 use crate::backend::download::{
-    download_all_chapters, download_single_chaper, DownloadAllChapters, DownloadChapter,
+    download_all_chapters, download_single_chaper_raw_images, DownloadAllChapters, DownloadChapter,
 };
 use crate::backend::error_log::{self, write_to_error_log};
 use crate::backend::fetch::{MangadexClient, ITEMS_PER_PAGE_CHAPTERS};
@@ -758,7 +758,7 @@ impl MangaPage {
                     .await;
                 match manga_response {
                     Ok(res) => {
-                        let download_chapter_task = download_single_chaper(
+                        let download_chapter_task = download_single_chaper_raw_images(
                             DownloadChapter {
                                 id_chapter: &chapter_id,
                                 manga_id: &manga_id,

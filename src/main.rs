@@ -22,6 +22,7 @@ mod common;
 mod global;
 mod utils;
 mod view;
+mod config;
 
 #[cfg(unix)]
 pub static PICKER: Lazy<Option<Picker>> = Lazy::new(|| {
@@ -132,6 +133,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             return Ok(());
         }
     }
+
+    
 
     init_error_hooks()?;
     init()?;

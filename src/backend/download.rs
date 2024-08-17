@@ -4,6 +4,8 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tokio::sync::mpsc::UnboundedSender;
+use zip::write::{FileOptions, SimpleFileOptions};
+use zip::ZipWriter;
 
 use crate::common::PageType;
 use crate::view::pages::manga::MangaPageEvents;
@@ -65,7 +67,7 @@ fn create_manga_directory(
     Ok((chapter_dir, chapter_id))
 }
 
-pub fn download_single_chaper(
+pub fn download_single_chaper_raw_images(
     chapter: DownloadChapter<'_>,
     chapter_data: ChapterPagesResponse,
     tx: UnboundedSender<MangaPageEvents>,
@@ -106,6 +108,66 @@ pub fn download_single_chaper(
                 Err(e) => write_to_error_log(ErrorType::FromError(Box::new(e))),
             }
         }
+
+        tx.send(MangaPageEvents::ChapterFinishedDownloading(chapter_id))
+            .ok();
+    });
+
+    Ok(())
+}
+
+pub fn download_single_chapter_cbz(
+    chapter: DownloadChapter<'_>,
+    chapter_data: ChapterPagesResponse,
+    tx: UnboundedSender<MangaPageEvents>,
+) -> Result<(), std::io::Error> {
+    let (chapter_dir, chapter_id) = create_manga_directory(&chapter)?;
+
+    let total_pages = chapter_data.chapter.data.len();
+
+    tokio::spawn(async move {
+        let chapter_zip_file = File::create(chapter_dir.join("test.zip")).unwrap();
+
+        let mut zip = ZipWriter::new(chapter_zip_file);
+
+        let options = SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated)
+            .unix_permissions(0o755);
+
+        for (index, file_name) in chapter_data.chapter.data.into_iter().enumerate() {
+            let endpoint = format!(
+                "{}/data/{}",
+                chapter_data.base_url, chapter_data.chapter.hash
+            );
+
+            let image_response = MangadexClient::global()
+                .get_chapter_page(&endpoint, &file_name)
+                .await;
+
+            let file_name = Path::new(&file_name);
+
+            match image_response {
+                Ok(bytes) => {
+                    let image_name = format!(
+                        "{}.{}",
+                        index + 1,
+                        file_name.extension().unwrap().to_str().unwrap()
+                    );
+
+                    zip.start_file(chapter_dir.join(image_name).to_str().unwrap(), options);
+                    zip.write_all(&bytes).unwrap();
+
+                    tx.send(MangaPageEvents::SetDownloadProgress(
+                        (index as f64) / (total_pages as f64),
+                        chapter_id.clone(),
+                    ))
+                    .ok();
+                }
+                Err(e) => write_to_error_log(ErrorType::FromError(Box::new(e))),
+            }
+        }
+        zip.finish().unwrap();
+
         tx.send(MangaPageEvents::ChapterFinishedDownloading(chapter_id))
             .ok();
     });
