@@ -261,7 +261,6 @@ pub enum DownloadPhase {
 #[derive(Debug)]
 pub struct DownloadAllChaptersState {
     pub phase: DownloadPhase,
-    pub image_quality: PageType,
     pub total_chapters: f64,
     pub loader_state: ThrobberState,
     pub download_progress: f64,
@@ -273,7 +272,6 @@ impl DownloadAllChaptersState {
     pub fn new(tx: UnboundedSender<MangaPageEvents>) -> Self {
         Self {
             phase: DownloadPhase::default(),
-            image_quality: PageType::default(),
             total_chapters: 0.0,
             loader_state: ThrobberState::default(),
             download_progress: 0.0,
@@ -344,10 +342,6 @@ impl DownloadAllChaptersState {
 
     pub fn set_download_location(&mut self, location: PathBuf) {
         self.download_location = location
-    }
-
-    pub fn toggle_image_quality(&mut self) {
-        self.image_quality = self.image_quality.toggle();
     }
 
     pub fn tick(&mut self) {
@@ -422,12 +416,6 @@ impl<'a> StatefulWidget for DownloadAllChaptersWidget<'a> {
             DownloadPhase::SettingQuality => {
                 Widget::render(
                     List::new([
-                        Line::from(vec![
-                            "Choose image quality ".into(),
-                            "<t>".to_span().style(*INSTRUCTIONS_STYLE),
-                        ]),
-                        "Lower image quality is recommended for slow internet".into(),
-                        state.image_quality.as_human_readable().into(),
                         Line::from(vec![
                             "Start download: ".into(),
                             "<Spacebar>".to_span().style(*INSTRUCTIONS_STYLE),
@@ -510,10 +498,7 @@ mod test {
         );
         assert!(!download_all_chapters_state.process_started());
         assert!(!download_all_chapters_state.is_downloading());
-        assert_eq!(
-            PageType::default(),
-            download_all_chapters_state.image_quality
-        );
+        
         assert_eq!(0.0, download_all_chapters_state.download_progress);
 
         download_all_chapters_state.ask_for_confirmation();
@@ -527,12 +512,7 @@ mod test {
             download_all_chapters_state.phase
         );
 
-        download_all_chapters_state.toggle_image_quality();
-
-        assert_eq!(
-            PageType::default().toggle(),
-            download_all_chapters_state.image_quality
-        );
+        
 
         download_all_chapters_state.start_fetch();
 

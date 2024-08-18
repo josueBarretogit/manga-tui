@@ -18,9 +18,18 @@ pub enum DownloadType {
     Pdf,
 }
 
+#[derive(Default, Debug, Serialize, Deserialize, Display, EnumIter)]
+#[serde(rename_all = "snake_case")]
+pub enum ImageQuality {
+    #[default]
+    Low,
+    High,
+}
+
 #[derive(Default, Debug, Serialize, Deserialize)]
 pub struct MangaTuiConfig {
     pub download_type: DownloadType,
+    pub image_quality: ImageQuality,
 }
 
 pub static CONFIG_FILE: &str = "manga-tui-config.toml";
@@ -45,12 +54,27 @@ impl MangaTuiConfig {
         Ok(contents)
     }
 
+    #[allow(clippy::format_collect)]
     pub fn write_config(base_directory: &Path) -> Result<(), std::io::Error> {
-        let contents = r#"
-        # available values : cbz, raw, pdf
+        let default_config = MangaTuiConfig::default();
+
+        let contents = r#" 
+        
+        # The format of the manga downloaded
+        # values : cbz , raw, pdf 
+        # default : cbz
         download_type = "cbz"
 
+        # Download image quality, low quality means images are compressed and is recommended for slow internet connections
+        # values : low, high
+        # default : low
+        image_quality = "low"
         "#;
+
+        let contents: String = contents
+            .lines()
+            .map(|line| format!("{} \n", line.trim()))
+            .collect();
 
         let config_file = base_directory
             .join(AppDirectories::Config.to_string())

@@ -1,7 +1,8 @@
 use crate::backend::database::{get_chapters_history_status, save_history, SetChapterDownloaded};
 use crate::backend::database::{set_chapter_downloaded, MangaReadingHistorySave};
 use crate::backend::download::{
-    download_all_chapters, download_single_chaper_raw_images, DownloadAllChapters, DownloadChapter,
+    download_all_chapters, download_chapter_cbz, download_chapter_raw_images, DownloadAllChapters,
+    DownloadChapter,
 };
 use crate::backend::error_log::{self, write_to_error_log};
 use crate::backend::fetch::{MangadexClient, ITEMS_PER_PAGE_CHAPTERS};
@@ -9,6 +10,7 @@ use crate::backend::filter::Languages;
 use crate::backend::tui::Events;
 use crate::backend::{AppDirectories, ChapterResponse, MangaStatisticsResponse, Statistics};
 use crate::common::{Manga, PageType};
+use crate::config::{DownloadType, ImageQuality, MangaTuiConfig};
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
 use crate::utils::{set_status_style, set_tags_style};
 use crate::view::tasks::manga::search_chapters_operation;
@@ -45,7 +47,6 @@ pub enum PageState {
 pub enum MangaPageActions {
     DownloadChapter,
     DownloadAllChapter,
-    ToggleImageQuality,
     ConfirmDownloadAll,
     CancelDownloadAll,
     AskDownloadAllChapters,
@@ -451,11 +452,7 @@ impl MangaPage {
                             .send(MangaPageActions::CancelDownloadAll)
                             .ok();
                     }
-                    KeyCode::Char('t') => {
-                        self.local_action_tx
-                            .send(MangaPageActions::ToggleImageQuality)
-                            .ok();
-                    }
+
                     KeyCode::Enter => {
                         self.local_action_tx
                             .send(MangaPageActions::ConfirmDownloadAll)
@@ -757,21 +754,43 @@ impl MangaPage {
                     .get_chapter_pages(&chapter_id)
                     .await;
                 match manga_response {
-                    Ok(res) => {
-                        let download_chapter_task = download_single_chaper_raw_images(
-                            DownloadChapter {
-                                id_chapter: &chapter_id,
-                                manga_id: &manga_id,
-                                manga_title: &manga_title,
-                                title: &title,
-                                number: &number,
-                                scanlator: &scanlator,
-                                lang: &lang,
-                            },
-                            res,
-                            tx.clone(),
-                        );
+                    Ok(response) => {
+                        let config = MangaTuiConfig::get();
 
+                        let (files, quality) = match config.image_quality {
+                            ImageQuality::Low => {
+                                (response.chapter.data_saver, PageType::LowQuality)
+                            }
+                            ImageQuality::High => (response.chapter.data, PageType::HighQuality),
+                        };
+
+                        let endpoint = format!(
+                            "{}/{}/{}",
+                            response.base_url, quality, response.chapter.hash
+                        );
+                        let chapter = DownloadChapter {
+                            id_chapter: &chapter_id,
+                            manga_id: &manga_id,
+                            manga_title: &manga_title,
+                            title: &title,
+                            number: &number,
+                            scanlator: &scanlator,
+                            lang: &lang,
+                        };
+
+                        let download_chapter_task = match config.download_type {
+                            DownloadType::Raw => download_chapter_raw_images(
+                                false,
+                                chapter,
+                                files,
+                                endpoint,
+                                tx.clone(),
+                            ),
+                            DownloadType::Cbz => {
+                                download_chapter_cbz(false, chapter, files, endpoint, tx.clone())
+                            }
+                            DownloadType::Pdf => Ok(()),
+                        };
                         if let Err(e) = download_chapter_task {
                             write_to_error_log(error_log::ErrorType::FromError(Box::new(e)));
                             tx.send(MangaPageEvents::DownloadError(chapter_id)).ok();
@@ -917,7 +936,6 @@ impl MangaPage {
         let manga_title = self.manga.title.clone();
         let lang = self.get_current_selected_language();
         let tx = self.local_event_tx.clone();
-        let quality = self.download_all_chapters_state.image_quality;
         #[cfg(not(test))]
         tokio::spawn(async move {
             let chapter_response = MangadexClient::global()
@@ -935,7 +953,6 @@ impl MangaPage {
                         DownloadAllChapters {
                             manga_title,
                             manga_id: id,
-                            quality,
                             lang,
                         },
                         tx,
@@ -962,10 +979,6 @@ impl MangaPage {
             self.state = PageState::DisplayingChapters;
             self.download_all_chapters_state.cancel();
         }
-    }
-
-    fn toggle_image_quality(&mut self) {
-        self.download_all_chapters_state.toggle_image_quality();
     }
 
     fn start_download_all_chapters(&mut self, total_chapters: f64) {
@@ -1105,7 +1118,6 @@ impl Component for MangaPage {
         match action {
             MangaPageActions::SearchByLanguage => self.search_by_language(),
             MangaPageActions::DownloadAllChapter => self.download_all_chapters(),
-            MangaPageActions::ToggleImageQuality => self.toggle_image_quality(),
             MangaPageActions::CancelDownloadAll => self.cancel_download_all_chapters(),
             MangaPageActions::AskDownloadAllChapters => self.ask_download_all_chapters(),
             MangaPageActions::ConfirmDownloadAll => self.confirm_download_all(),
@@ -1290,12 +1302,6 @@ mod test {
         assert_eq!(MangaPageActions::ConfirmDownloadAll, action);
 
         manga_page.confirm_download_all();
-
-        // toggle image quality for chapters to be downloaded
-        press_key(&mut manga_page, KeyCode::Char('t'));
-        let action = manga_page.local_action_rx.recv().await.unwrap();
-
-        assert_eq!(MangaPageActions::ToggleImageQuality, action);
 
         // download all chapters
         press_key(&mut manga_page, KeyCode::Char(' '));

@@ -78,7 +78,7 @@ pub fn build_data_dir() -> Result<(), std::io::Error> {
             let config_contents = MangaTuiConfig::read_config(dir)?;
 
             let config_contents: MangaTuiConfig =
-                toml::from_str(&config_contents).map_err(std::io::Error::other)?;
+                toml::from_str(&config_contents).unwrap_or_default();
 
             CONFIG.set(config_contents).unwrap();
 
