@@ -22,7 +22,7 @@ pub struct DownloadChapter<'a> {
     pub id_chapter: &'a str,
     pub manga_id: &'a str,
     pub manga_title: &'a str,
-    pub title: &'a str,
+    pub chapter_title: &'a str,
     pub number: &'a str,
     pub scanlator: &'a str,
     pub lang: &'a str,
@@ -68,7 +68,7 @@ pub fn download_chapter_raw_images(
     let chapter_dir = chapter_language_dir.join(format!(
         "Ch. {} {} {} {}",
         chapter.number,
-        chapter.title.trim(),
+        chapter.chapter_title.trim(),
         chapter.scanlator.trim(),
         chapter.id_chapter,
     ));
@@ -134,7 +134,7 @@ pub fn download_chapter_epub(
     let chapter_name = format!(
         "Ch. {} {} {} {}",
         chapter.number,
-        chapter.title.trim(),
+        chapter.chapter_title.trim(),
         chapter.scanlator.trim(),
         chapter.id_chapter,
     );
@@ -150,22 +150,8 @@ pub fn download_chapter_epub(
 
         epub.epub_version(epub_builder::EpubVersion::V30);
 
-        epub.metadata("author", env!("CARGO_PKG_AUTHORS"));
         epub.metadata("title", chapter_name);
 
-        let image_style = r#"
-div.centered_image {
-  width: 100%;
-  height : 100%;
-  margin: auto;
-}
-div.centered_image img {
-  width: 100%;
-  height : 100%;
-}
-        "#;
-
-        epub.stylesheet(image_style.as_bytes()).unwrap();
 
         for (index, file_name) in files.into_iter().enumerate() {
             let image_response = MangadexClient::global()
@@ -193,23 +179,19 @@ div.centered_image img {
                         format!("{}.xhtml", index + 1),
                         format!(
                             r#" 
-
-<?xml version='3.0' encoding='utf-8'?>
-<!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml">
-  <head>
-    <title>Panel</title>
-    <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
-  <link href="./stylesheet.css" rel="stylesheet" type="text/css"/>
-  </head>
-  
-  <body>
-<div class="centered_image">
-    <img src="{}" alt="Panel" />
-</div>
-  </body>
-</html>
-
+                            <?xml version='1.0' encoding='utf-8'?>
+                            <!DOCTYPE html>
+                            <html xmlns="http://www.w3.org/1999/xhtml">
+                              <head>
+                                <title>Panel</title>
+                                <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+                              </head>
+                              <body>
+                                <div class="centered_image">
+                                    <img src="{}" alt="Panel" />
+                                </div>
+                              </body>
+                            </html>
                         "#,
                             image_path
                         )
@@ -256,7 +238,7 @@ pub fn download_chapter_cbz(
     let chapter_name = format!(
         "Ch. {} {} {} {}",
         chapter.number,
-        chapter.title.trim(),
+        chapter.chapter_title.trim(),
         chapter.scanlator.trim(),
         chapter.id_chapter,
     );
@@ -324,127 +306,4 @@ pub struct DownloadAllChapters {
     pub manga_id: String,
     pub manga_title: String,
     pub lang: Languages,
-}
-
-pub fn download_all_chapters(
-    chapter_data: ChapterResponse,
-    manga_details: DownloadAllChapters,
-    tx: UnboundedSender<MangaPageEvents>,
-) {
-    let total_chapters = chapter_data.data.len();
-
-    let download_chapter_delay = if total_chapters <= 20 {
-        1
-    } else if (40..100).contains(&total_chapters) {
-        3
-    } else if (100..200).contains(&total_chapters) {
-        6
-    } else {
-        8
-    };
-    let config = MangaTuiConfig::get();
-
-    for (index, chapter) in chapter_data.data.into_iter().enumerate() {
-        let id = chapter.id.clone();
-        let chapter_number = chapter.attributes.chapter.unwrap_or_default();
-        let manga_id = manga_details.manga_id.clone();
-        let manga_title = manga_details.manga_title.clone();
-        let lang = manga_details.lang;
-
-        let tx = tx.clone();
-
-        let scanlator = chapter
-            .relationships
-            .iter()
-            .find(|rel| rel.type_field == "scanlation_group")
-            .map(|rel| rel.attributes.as_ref().unwrap().name.to_string());
-
-        tokio::spawn(async move {
-            let pages_response = MangadexClient::global().get_chapter_pages(&id).await;
-
-            let chapter_title = chapter.attributes.title.unwrap_or_default();
-            let scanlator = scanlator.unwrap_or_default();
-            match pages_response {
-                Ok(response) => {
-                    let (files, quality) = match config.image_quality {
-                        ImageQuality::Low => (response.chapter.data_saver, PageType::LowQuality),
-                        ImageQuality::High => (response.chapter.data, PageType::HighQuality),
-                    };
-
-                    let endpoint = format!(
-                        "{}/{}/{}",
-                        response.base_url, quality, response.chapter.hash
-                    );
-
-                    let manga_title = to_filename(&manga_title);
-                    let chapter_title = to_filename(&chapter_title);
-                    let scanlator = to_filename(&scanlator);
-
-                    let chapter_to_download = DownloadChapter {
-                        id_chapter: &chapter.id,
-                        manga_id: &manga_id,
-                        manga_title: &manga_title,
-                        title: &chapter_title,
-                        number: &chapter_number,
-                        scanlator: &scanlator,
-                        lang: &lang.as_human_readable(),
-                    };
-
-                    let download_proccess = match config.download_type {
-                        DownloadType::Cbz => download_chapter_cbz(
-                            true,
-                            chapter_to_download,
-                            files,
-                            endpoint,
-                            tx.clone(),
-                        ),
-                        DownloadType::Raw => download_chapter_raw_images(
-                            true,
-                            chapter_to_download,
-                            files,
-                            endpoint,
-                            tx.clone(),
-                        ),
-                        DownloadType::Epub => download_chapter_epub(
-                            true,
-                            chapter_to_download,
-                            files,
-                            endpoint,
-                            tx.clone(),
-                        ),
-                    };
-
-                    if let Err(e) = download_proccess {
-                        let error_message = format!(
-                            "Chapter: {} could not be downloaded, details: {}",
-                            chapter_title, e
-                        );
-
-                        tx.send(MangaPageEvents::SetDownloadAllChaptersProgress)
-                            .ok();
-
-                        write_to_error_log(ErrorType::FromError(Box::from(error_message)));
-                        return;
-                    }
-
-                    tx.send(MangaPageEvents::SaveChapterDownloadStatus(
-                        chapter.id,
-                        chapter_title,
-                    ))
-                    .ok();
-                }
-                Err(e) => {
-                    let error_message = format!(
-                        "Chapter: {} could not be downloaded, details: {}",
-                        chapter_title, e
-                    );
-
-                    tx.send(MangaPageEvents::SetDownloadAllChaptersProgress)
-                        .ok();
-                    write_to_error_log(ErrorType::FromError(Box::from(error_message)));
-                }
-            }
-        });
-        std::thread::sleep(Duration::from_secs(download_chapter_delay));
-    }
 }

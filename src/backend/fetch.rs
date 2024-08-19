@@ -217,7 +217,7 @@ impl MangadexClient {
     ) -> Result<ChapterResponse, reqwest::Error> {
         let language = language.as_iso_code();
 
-        let order = "order[volume]=asc&order[chapter]=asc".to_string();
+        let order = "order[volume]=asc&order[chapter]=asc";
 
         let endpoint = format!(
             "{}/manga/{}/feed?limit=300&offset=0&{}&translatedLanguage[]={}&includes[]=scanlation_group&includeExternalUrl=0&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&contentRating[]=pornographic",
