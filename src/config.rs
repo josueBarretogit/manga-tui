@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
@@ -15,7 +16,7 @@ pub enum DownloadType {
     #[default]
     Cbz,
     Raw,
-    Pdf,
+    Epub,
 }
 
 #[derive(Default, Debug, Serialize, Deserialize, Display, EnumIter)]
@@ -31,6 +32,7 @@ pub struct MangaTuiConfig {
     pub download_type: DownloadType,
     pub image_quality: ImageQuality,
 }
+
 
 pub static CONFIG_FILE: &str = "manga-tui-config.toml";
 
@@ -56,31 +58,28 @@ impl MangaTuiConfig {
 
     #[allow(clippy::format_collect)]
     pub fn write_config(base_directory: &Path) -> Result<(), std::io::Error> {
-        let default_config = MangaTuiConfig::default();
-
-        let contents = r#" 
-        
-        # The format of the manga downloaded
-        # values : cbz , raw, pdf 
-        # default : cbz
-        download_type = "cbz"
-
-        # Download image quality, low quality means images are compressed and is recommended for slow internet connections
-        # values : low, high
-        # default : low
-        image_quality = "low"
-        "#;
-
-        let contents: String = contents
-            .lines()
-            .map(|line| format!("{} \n", line.trim()))
-            .collect();
-
         let config_file = base_directory
             .join(AppDirectories::Config.to_string())
             .join(CONFIG_FILE);
 
         if !exists!(&config_file) {
+            let contents = r#" 
+            # The format of the manga downloaded
+            # values : cbz , raw, epub 
+            # default : cbz
+            download_type = "cbz"
+
+            # Download image quality, low quality means images are compressed and is recommended for slow internet connections
+            # values : low, high
+            # default : low
+            image_quality = "low"
+            "#;
+
+            let contents: String = contents
+                .trim()
+                .lines()
+                .map(|line| format!("{} \n", line.trim()))
+                .collect();
             let mut config_file = File::create(config_file)?;
             config_file.write_all(contents.as_bytes())?
         }

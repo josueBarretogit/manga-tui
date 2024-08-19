@@ -1,8 +1,8 @@
 use crate::backend::database::{get_chapters_history_status, save_history, SetChapterDownloaded};
 use crate::backend::database::{set_chapter_downloaded, MangaReadingHistorySave};
 use crate::backend::download::{
-    download_all_chapters, download_chapter_cbz, download_chapter_raw_images, DownloadAllChapters,
-    DownloadChapter,
+    download_all_chapters, download_chapter_cbz, download_chapter_epub,
+    download_chapter_raw_images, DownloadAllChapters, DownloadChapter,
 };
 use crate::backend::error_log::{self, write_to_error_log};
 use crate::backend::fetch::{MangadexClient, ITEMS_PER_PAGE_CHAPTERS};
@@ -12,7 +12,7 @@ use crate::backend::{AppDirectories, ChapterResponse, MangaStatisticsResponse, S
 use crate::common::{Manga, PageType};
 use crate::config::{DownloadType, ImageQuality, MangaTuiConfig};
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
-use crate::utils::{set_status_style, set_tags_style};
+use crate::utils::{set_status_style, set_tags_style, to_filename};
 use crate::view::tasks::manga::search_chapters_operation;
 use crate::view::widgets::manga::{
     ChapterItem, ChaptersListWidget, DownloadAllChaptersState, DownloadAllChaptersWidget,
@@ -768,11 +768,15 @@ impl MangaPage {
                             "{}/{}/{}",
                             response.base_url, quality, response.chapter.hash
                         );
+                        let manga_title = to_filename(&manga_title);
+                        let chapter_title = to_filename(&title);
+                        let scanlator = to_filename(&scanlator);
+
                         let chapter = DownloadChapter {
                             id_chapter: &chapter_id,
                             manga_id: &manga_id,
                             manga_title: &manga_title,
-                            title: &title,
+                            title: &chapter_title,
                             number: &number,
                             scanlator: &scanlator,
                             lang: &lang,
@@ -789,8 +793,11 @@ impl MangaPage {
                             DownloadType::Cbz => {
                                 download_chapter_cbz(false, chapter, files, endpoint, tx.clone())
                             }
-                            DownloadType::Pdf => Ok(()),
+                            DownloadType::Epub => {
+                                download_chapter_epub(false, chapter, files, endpoint, tx.clone())
+                            }
                         };
+
                         if let Err(e) = download_chapter_task {
                             write_to_error_log(error_log::ErrorType::FromError(Box::new(e)));
                             tx.send(MangaPageEvents::DownloadError(chapter_id)).ok();
