@@ -1,6 +1,7 @@
 use crate::backend::error_log::{write_to_error_log, ErrorType};
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
+use crate::common::PageType;
 use crate::global::INSTRUCTIONS_STYLE;
 use crate::view::widgets::reader::{PageItemState, PagesItem, PagesList};
 use crate::view::widgets::Component;
@@ -11,7 +12,6 @@ use image::GenericImageView;
 use ratatui::{prelude::*, widgets::*};
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::{Resize, StatefulImage};
-use strum::Display;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
@@ -33,14 +33,6 @@ pub struct PageData {
 pub enum MangaReaderEvents {
     FetchPages,
     LoadPage(Option<PageData>),
-}
-
-#[derive(Display)]
-pub enum PageType {
-    #[strum(to_string = "data")]
-    HighQuality,
-    #[strum(to_string = "data-saver")]
-    LowQuality,
 }
 
 pub struct Page {

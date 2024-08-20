@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 #![allow(dead_code)]
-#![allow(unused)]
+use std::time::Duration;
+
 use self::backend::error_log::init_error_hooks;
 use self::backend::fetch::{MangadexClient, MANGADEX_CLIENT_INSTANCE};
 use self::backend::filter::Languages;
@@ -20,6 +21,7 @@ mod common;
 mod global;
 mod utils;
 mod view;
+mod config;
 
 #[cfg(unix)]
 pub static PICKER: Lazy<Option<Picker>> = Lazy::new(|| {
@@ -91,8 +93,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::env::consts::ARCH
     );
 
-    let mangadex_client =
-        MangadexClient::new(Client::builder().user_agent(user_agent).build().unwrap());
+    let mangadex_client = MangadexClient::new(
+        Client::builder()
+            .timeout(Duration::from_secs(10))
+            .user_agent(user_agent)
+            .build()
+            .unwrap(),
+    );
 
     println!("Checking mangadex status...");
 
@@ -125,6 +132,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             return Ok(());
         }
     }
+
+    
 
     init_error_hooks()?;
     init()?;

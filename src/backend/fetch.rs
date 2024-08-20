@@ -6,6 +6,7 @@ use bytes::Bytes;
 use chrono::Months;
 use once_cell::sync::OnceCell;
 use reqwest::StatusCode;
+use std::time::Duration as StdDuration;
 
 #[derive(Clone, Debug)]
 pub struct MangadexClient {
@@ -94,6 +95,7 @@ impl MangadexClient {
     ) -> Result<Bytes, reqwest::Error> {
         self.client
             .get(format!("{}/{}", endpoint, file_name))
+            .timeout(StdDuration::from_secs(20))
             .send()
             .await?
             .bytes()
@@ -205,5 +207,28 @@ impl MangadexClient {
         let endpoint = format!("{}/ping", API_URL_BASE);
 
         Ok(self.client.get(endpoint).send().await?.status())
+    }
+
+    pub async fn get_all_chapters_for_manga(
+        &self,
+        id: &str,
+        language: Languages,
+    ) -> Result<ChapterResponse, reqwest::Error> {
+        let language = language.as_iso_code();
+
+        let order = "order[volume]=asc&order[chapter]=asc";
+
+        let endpoint = format!(
+            "{}/manga/{}/feed?limit=300&offset=0&{}&translatedLanguage[]={}&includes[]=scanlation_group&includeExternalUrl=0&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&contentRating[]=pornographic",
+            API_URL_BASE, id,  order, language
+        );
+
+        self.client
+            .get(endpoint)
+            .timeout(StdDuration::from_secs(10))
+            .send()
+            .await?
+            .json()
+            .await
     }
 }
