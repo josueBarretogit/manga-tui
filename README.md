@@ -94,11 +94,15 @@ No images will be displayed if the terminal does not have image support (but `ma
 
 ## Usage
 
-After installation run the binary
+After installation just run the binary
 
 ```shell
 manga-tui
 ```
+
+
+## Configuration
+
 
 Manga downloads and reading history is stored in the `manga-tui` directory, to know where it is run: 
 
@@ -115,7 +119,7 @@ On linux it will output something like: `~/.local/share/manga-tui` <br />
 
 On the `manga-tui` directory there will be 4 directories
 - `history`, which contains a sqlite database to store reading history
-- `config`, which contains a TOML file with extra configuration
+- `config`, which contains a TOML file with extra configuration (download format and download quality)
 - `mangaDownloads`, where manga will be downloaded 
 - `errorLogs`, for storing posible errors / bugs 
 
@@ -123,14 +127,6 @@ If you want to change the location you can set the environment variable `MANGA_T
 
 ```shell
 export MANGA_TUI_DATA_DIR="/home/user/Desktop/mangas"
-```
-
-
-## Configuration
-
-Go to the TOML file located at `config`, there you can change download format and image quality to know where it is run: 
-```shell
-manga-tui --data-dir 
 ```
 
 By default `manga-tui` will search mangas in english, you can change the language by running:
