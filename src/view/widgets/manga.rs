@@ -252,16 +252,15 @@ pub enum DownloadPhase {
     #[default]
     ProccessNotStarted,
     Asking,
-    SettingQuality,
     FetchingChaptersData,
     DownloadingChapters,
+    AskAbortProcess,
     ErrorChaptersData,
 }
 
 #[derive(Debug)]
 pub struct DownloadAllChaptersState {
     pub phase: DownloadPhase,
-    pub image_quality: PageType,
     pub total_chapters: f64,
     pub loader_state: ThrobberState,
     pub download_progress: f64,
@@ -273,7 +272,6 @@ impl DownloadAllChaptersState {
     pub fn new(tx: UnboundedSender<MangaPageEvents>) -> Self {
         Self {
             phase: DownloadPhase::default(),
-            image_quality: PageType::default(),
             total_chapters: 0.0,
             loader_state: ThrobberState::default(),
             download_progress: 0.0,
@@ -292,8 +290,7 @@ impl DownloadAllChaptersState {
 
     /// Either phase can start download
     pub fn is_ready_to_fetch_data(&self) -> bool {
-        self.phase == DownloadPhase::SettingQuality
-            || self.phase == DownloadPhase::ErrorChaptersData
+        self.phase == DownloadPhase::Asking || self.phase == DownloadPhase::ErrorChaptersData
     }
 
     pub fn set_download_progress(&mut self) {
@@ -306,16 +303,8 @@ impl DownloadAllChaptersState {
         }
     }
 
-    pub fn confirm(&mut self) {
+    pub fn fetch_chapters_data(&mut self) {
         if !self.is_downloading() {
-            self.phase = DownloadPhase::SettingQuality;
-        }
-    }
-
-    pub fn start_fetch(&mut self) {
-        if self.is_ready_to_fetch_data() {
-            self.total_chapters = 0.0;
-            self.download_progress = 0.0;
             self.phase = DownloadPhase::FetchingChaptersData;
         }
     }
@@ -323,11 +312,41 @@ impl DownloadAllChaptersState {
     pub fn start_download(&mut self) {
         if !self.is_downloading() {
             self.phase = DownloadPhase::DownloadingChapters;
+            self.total_chapters = 0.0;
+            self.download_progress = 0.0;
         }
     }
 
     pub fn cancel(&mut self) {
-        self.phase = DownloadPhase::ProccessNotStarted;
+        if !self.is_downloading() {
+            self.phase = DownloadPhase::ProccessNotStarted;
+        }
+    }
+
+    pub fn reset(&mut self) {
+        if self.is_downloading() || self.phase == DownloadPhase::AskAbortProcess {
+            self.phase = DownloadPhase::ProccessNotStarted;
+            self.total_chapters = 0.0;
+            self.download_progress = 0.0;
+        }
+    }
+
+    pub fn ask_abort_proccess(&mut self) {
+        if self.is_downloading() {
+            self.phase = DownloadPhase::AskAbortProcess;
+        }
+    }
+
+    pub fn abort_proccess(&mut self) {
+        if self.is_downloading() || self.phase == DownloadPhase::AskAbortProcess {
+            self.reset();
+        }
+    }
+
+    pub fn continue_download(&mut self) {
+        if self.phase == DownloadPhase::AskAbortProcess {
+            self.phase = DownloadPhase::DownloadingChapters;
+        }
     }
 
     pub fn set_total_chapters(&mut self, total_chapters: f64) {
@@ -344,10 +363,6 @@ impl DownloadAllChaptersState {
 
     pub fn set_download_location(&mut self, location: PathBuf) {
         self.download_location = location
-    }
-
-    pub fn toggle_image_quality(&mut self) {
-        self.image_quality = self.image_quality.toggle();
     }
 
     pub fn tick(&mut self) {
@@ -377,12 +392,15 @@ impl<'a> DownloadAllChaptersWidget<'a> {
 
         let download_location = format!(
             "Download location : {}",
-            state.download_location.to_str().unwrap(),
+            state.download_location.as_path().display(),
         );
 
         Paragraph::new(Line::from(vec![
             "Downloading all chapters, this will take a while, ".into(),
             download_location.into(),
+            " ".into(),
+            "Cancel download: ".into(),
+            "<Esc>".to_span().style(*INSTRUCTIONS_STYLE),
         ]))
         .wrap(Wrap { trim: true })
         .render(information_area, buf);
@@ -419,23 +437,15 @@ impl<'a> StatefulWidget for DownloadAllChaptersWidget<'a> {
 
                 Paragraph::new(Line::from(instructions)).render(download_information_area, buf);
             }
-            DownloadPhase::SettingQuality => {
-                Widget::render(
-                    List::new([
-                        Line::from(vec![
-                            "Choose image quality ".into(),
-                            "<t>".to_span().style(*INSTRUCTIONS_STYLE),
-                        ]),
-                        "Lower image quality is recommended for slow internet".into(),
-                        state.image_quality.as_human_readable().into(),
-                        Line::from(vec![
-                            "Start download: ".into(),
-                            "<Spacebar>".to_span().style(*INSTRUCTIONS_STYLE),
-                        ]),
-                    ]),
-                    download_information_area,
-                    buf,
-                );
+            DownloadPhase::AskAbortProcess => {
+                let instructions = vec![
+                    "Are you sure you want to cancel? yes: ".into(),
+                    "<Enter>".to_span().style(*INSTRUCTIONS_STYLE),
+                    " no: ".into(),
+                    "<Esc>".to_span().style(*INSTRUCTIONS_STYLE),
+                ];
+
+                Paragraph::new(Line::from(instructions)).render(download_information_area, buf);
             }
             DownloadPhase::FetchingChaptersData => {
                 let loader = Throbber::default()
@@ -510,34 +520,35 @@ mod test {
         );
         assert!(!download_all_chapters_state.process_started());
         assert!(!download_all_chapters_state.is_downloading());
-        assert_eq!(
-            PageType::default(),
-            download_all_chapters_state.image_quality
-        );
+
         assert_eq!(0.0, download_all_chapters_state.download_progress);
 
         download_all_chapters_state.ask_for_confirmation();
 
         assert_eq!(DownloadPhase::Asking, download_all_chapters_state.phase);
 
-        download_all_chapters_state.confirm();
+        // The user cancelled
+        download_all_chapters_state.cancel();
 
         assert_eq!(
-            DownloadPhase::SettingQuality,
+            DownloadPhase::ProccessNotStarted,
             download_all_chapters_state.phase
         );
 
-        download_all_chapters_state.toggle_image_quality();
+        download_all_chapters_state.ask_for_confirmation();
 
-        assert_eq!(
-            PageType::default().toggle(),
-            download_all_chapters_state.image_quality
-        );
-
-        download_all_chapters_state.start_fetch();
+        // The user confirmed
+        download_all_chapters_state.fetch_chapters_data();
 
         assert_eq!(
             DownloadPhase::FetchingChaptersData,
+            download_all_chapters_state.phase
+        );
+
+        download_all_chapters_state.start_download();
+
+        assert_eq!(
+            DownloadPhase::DownloadingChapters,
             download_all_chapters_state.phase
         );
 
@@ -548,7 +559,7 @@ mod test {
             download_all_chapters_state.phase
         );
 
-        download_all_chapters_state.start_fetch();
+        download_all_chapters_state.fetch_chapters_data();
 
         assert_eq!(
             DownloadPhase::FetchingChaptersData,
@@ -584,13 +595,6 @@ mod test {
         assert_eq!(
             MangaPageEvents::FinishedDownloadingAllChapters,
             download_finished
-        );
-
-        download_all_chapters_state.cancel();
-
-        assert_eq!(
-            DownloadPhase::ProccessNotStarted,
-            download_all_chapters_state.phase
         );
     }
 }

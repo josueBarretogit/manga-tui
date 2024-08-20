@@ -4,7 +4,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::{create_dir, create_dir_all, File};
 use std::path::{Path, PathBuf};
-use strum::Display;
+use strum::{Display, EnumIter, IntoEnumIterator};
+
+use crate::config::{MangaTuiConfig, CONFIG};
 
 use self::error_log::ERROR_LOGS_FILE;
 
@@ -15,7 +17,7 @@ pub mod fetch;
 pub mod filter;
 pub mod tui;
 
-#[derive(Display)]
+#[derive(Display, EnumIter)]
 pub enum AppDirectories {
     #[strum(to_string = "mangaDownloads")]
     MangaDownloads,
@@ -23,24 +25,23 @@ pub enum AppDirectories {
     ErrorLogs,
     #[strum(to_string = "history")]
     History,
+    #[strum(to_string = "config")]
+    Config,
 }
 
 impl AppDirectories {
     pub fn into_path_buf(self) -> PathBuf {
         let base_directory = APP_DATA_DIR.as_ref();
-        match self {
-            Self::MangaDownloads => PathBuf::from(
-                &base_directory
-                    .unwrap()
-                    .join(Self::MangaDownloads.to_string()),
-            ),
-            Self::History => {
-                PathBuf::from(&base_directory.unwrap().join(Self::History.to_string()))
-            }
-            Self::ErrorLogs => {
-                PathBuf::from(&base_directory.unwrap().join(Self::ErrorLogs.to_string()))
+        PathBuf::from(&base_directory.unwrap().join(self.to_string()))
+    }
+
+    pub fn build_if_not_exists(base_directory: &Path) -> Result<(), std::io::Error> {
+        for dir in AppDirectories::iter() {
+            if !exists!(&base_directory.join(dir.to_string())) {
+                create_dir(base_directory.join(dir.to_string()))?;
             }
         }
+        Ok(())
     }
 }
 
@@ -60,18 +61,7 @@ pub fn build_data_dir() -> Result<(), std::io::Error> {
             if !exists!(dir) {
                 create_dir_all(dir)?;
             }
-
-            if !exists!(&dir.join(AppDirectories::MangaDownloads.to_string())) {
-                create_dir(dir.join(AppDirectories::MangaDownloads.to_string()))?;
-            }
-
-            if !exists!(&dir.join(AppDirectories::ErrorLogs.to_string())) {
-                create_dir(dir.join(AppDirectories::ErrorLogs.to_string()))?;
-            }
-
-            if !exists!(&dir.join(AppDirectories::History.to_string())) {
-                create_dir(dir.join(AppDirectories::History.to_string()))?;
-            }
+            AppDirectories::build_if_not_exists(dir)?;
 
             if !exists!(&dir
                 .join(AppDirectories::ErrorLogs.to_string())
@@ -82,6 +72,15 @@ pub fn build_data_dir() -> Result<(), std::io::Error> {
                         .join(ERROR_LOGS_FILE),
                 )?;
             }
+
+            MangaTuiConfig::write_config(dir)?;
+
+            let config_contents = MangaTuiConfig::read_config(dir)?;
+
+            let config_contents: MangaTuiConfig =
+                toml::from_str(&config_contents).unwrap_or_default();
+
+            CONFIG.set(config_contents).unwrap();
 
             Ok(())
         }
