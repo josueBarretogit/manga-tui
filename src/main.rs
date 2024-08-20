@@ -1,6 +1,5 @@
 #![forbid(unsafe_code)]
 #![allow(dead_code)]
-#![allow(unused)]
 use std::time::Duration;
 
 use self::backend::error_log::init_error_hooks;

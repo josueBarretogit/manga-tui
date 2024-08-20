@@ -11,6 +11,9 @@
     <a href="https://crates.io/crates/manga-tui">
         <img alt="crates io downloads" src="https://img.shields.io/crates/d/manga-tui?logo=rust&label=crates.io downloads">
     </a>
+    <a href="https://github.com/josueBarretogit/manga-tui/releases/latest">
+        <img alt="downloads" src="https://img.shields.io/github/downloads/josuebarretogit/manga-tui/total">
+    </a>
     <a href="https://github.com/josueBarretogit/manga-tui/blob/main/LICENSE">
         <img alt="License" src="https://img.shields.io/github/license/josueBarretogit/Manga-tui?style=flat-square&color=blue">
     </a>
@@ -48,9 +51,13 @@ https://github.com/user-attachments/assets/70f321ff-13d1-4c4b-9c37-604271456ab2
 
  https://github.com/user-attachments/assets/47e88e89-f73c-4575-9645-2abb80ca7d63
 
-- Download manga
+- Download manga 
 
-https://github.com/user-attachments/assets/64880a98-74c8-4656-8cf8-2c1daf5375d2
+https://github.com/user-attachments/assets/ba785668-7cf1-4367-93f9-6e6e1f72c12c
+
+- Download all chapters of a manga 
+
+https://github.com/user-attachments/assets/26ad493f-633c-41fc-9d09-49b316118923
 
 
 ## Installation
@@ -75,9 +82,13 @@ Download a binary from the [releases page](https://github.com/josueBarretogit/ma
 
 ## Image rendering
 
-Use a terminal that can render images such as Wezterm (Personally I recommend using this one It's the one used in the videos), iTerm2 or Kitty, <br />
+Use a terminal that can render images such as Wezterm (Personally I recommend using this one It's the one used in the videos), iTerm2<br />
 
 For more information see : [image-support](https://github.com/benjajaja/ratatui-image?tab=readme-ov-file#compatibility-matrix)
+
+> [!NOTE]
+> There is an issue with kitty terminal, see [#12](https://github.com/josueBarretogit/manga-tui/issues/12)
+
 
 No images will be displayed if the terminal does not have image support (but `manga-tui` will still work as a manga downloader)
 
@@ -102,8 +113,9 @@ manga-tui -d
 
 On linux it will output something like: `~/.local/share/manga-tui` <br />
 
-On the `manga-tui` directory there will be 3 directories
+On the `manga-tui` directory there will be 4 directories
 - `history`, which contains a sqlite database to store reading history
+- `config`, which contains a TOML file with extra configuration
 - `mangaDownloads`, where manga will be downloaded 
 - `errorLogs`, for storing posible errors / bugs 
 
@@ -115,6 +127,11 @@ export MANGA_TUI_DATA_DIR="/home/user/Desktop/mangas"
 
 
 ## Configuration
+
+Go to the TOML file located at `config`, there you can change download format and image quality to know where it is run: 
+```shell
+manga-tui --data-dir 
+```
 
 By default `manga-tui` will search mangas in english, you can change the language by running:
 

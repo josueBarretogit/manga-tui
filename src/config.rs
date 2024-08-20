@@ -1,13 +1,10 @@
-use std::fmt::Display;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
-
 use manga_tui::exists;
-use once_cell::sync::{Lazy, OnceCell};
+use once_cell::sync::{ OnceCell};
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumIter};
-
 use crate::backend::AppDirectories;
 
 #[derive(Default, Debug, Serialize, Deserialize, Display, EnumIter)]

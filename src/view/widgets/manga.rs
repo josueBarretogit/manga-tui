@@ -1,6 +1,5 @@
 use crate::backend::filter::Languages;
-use crate::backend::{AppDirectories, ChapterResponse};
-use crate::common::PageType;
+use crate::backend::{ChapterResponse};
 use crate::global::{CURRENT_LIST_ITEM_STYLE, ERROR_STYLE, INSTRUCTIONS_STYLE};
 use crate::utils::display_dates_since_publication;
 use crate::view::pages::manga::MangaPageEvents;
@@ -281,7 +280,7 @@ impl DownloadAllChaptersState {
     }
 
     pub fn is_downloading(&self) -> bool {
-        self.phase == DownloadPhase::DownloadingChapters
+        self.phase == DownloadPhase::DownloadingChapters || self.phase == DownloadPhase::AskAbortProcess
     }
 
     pub fn process_started(&self) -> bool {
@@ -399,8 +398,6 @@ impl<'a> DownloadAllChaptersWidget<'a> {
             "Downloading all chapters, this will take a while, ".into(),
             download_location.into(),
             " ".into(),
-            "Cancel download: ".into(),
-            "<Esc>".to_span().style(*INSTRUCTIONS_STYLE),
         ]))
         .wrap(Wrap { trim: true })
         .render(information_area, buf);
@@ -484,11 +481,18 @@ impl<'a> StatefulWidget for DownloadAllChaptersWidget<'a> {
 
                 self.render_download_information(information_area, buf, state);
 
-                LineGauge::default()
-                    .block(Block::bordered().title(format!(
-                        "Total chapters: {}, chapters downloaded : {}",
+                let download_progress_title = vec![
+                    format!(
+                        "Total chapters: {}, chapters downloaded : {} ",
                         state.total_chapters, state.download_progress
-                    )))
+                    )
+                    .into(),
+                    "Cancel download: ".into(),
+                    "<Esc>".to_span().style(*INSTRUCTIONS_STYLE),
+                ];
+
+                LineGauge::default()
+                    .block(Block::bordered().title(download_progress_title))
                     .filled_style(
                         Style::default()
                             .fg(Color::Blue)

@@ -1,13 +1,12 @@
-use std::time::Duration as StdDuration;
-
 use super::filter::Languages;
 use super::{ChapterPagesResponse, ChapterResponse, MangaStatisticsResponse, SearchMangaResponse};
 use crate::backend::filter::{Filters, IntoParam};
 use crate::view::pages::manga::ChapterOrder;
 use bytes::Bytes;
-use chrono::{Duration, Months};
+use chrono::Months;
 use once_cell::sync::OnceCell;
 use reqwest::StatusCode;
+use std::time::Duration as StdDuration;
 
 #[derive(Clone, Debug)]
 pub struct MangadexClient {
@@ -224,6 +223,12 @@ impl MangadexClient {
             API_URL_BASE, id,  order, language
         );
 
-        self.client.get(endpoint).send().await?.json().await
+        self.client
+            .get(endpoint)
+            .timeout(StdDuration::from_secs(10))
+            .send()
+            .await?
+            .json()
+            .await
     }
 }

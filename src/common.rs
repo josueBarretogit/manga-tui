@@ -1,6 +1,4 @@
-use ratatui::widgets::ListItem;
 use strum::{Display, EnumIter};
-
 use crate::backend::filter::Languages;
 
 #[derive(Default, Clone, Debug)]

@@ -1,22 +1,14 @@
-use image::io::Reader;
+use crate::view::pages::manga::MangaPageEvents;
 use manga_tui::exists;
 use std::fs::{create_dir, File};
-use std::io::{BufRead, BufReader, Cursor, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::time::Duration;
 use tokio::sync::mpsc::UnboundedSender;
-use zip::write::{FileOptions, SimpleFileOptions};
+use zip::write::SimpleFileOptions;
 use zip::ZipWriter;
-
-use crate::common::PageType;
-use crate::config::{DownloadType, ImageQuality, MangaTuiConfig};
-use crate::utils::to_filename;
-use crate::view::pages::manga::MangaPageEvents;
-
 use super::error_log::{write_to_error_log, ErrorType};
 use super::fetch::MangadexClient;
-use super::filter::Languages;
-use super::{ChapterPagesResponse, ChapterResponse, APP_DATA_DIR};
+use super::APP_DATA_DIR;
 
 pub struct DownloadChapter<'a> {
     pub id_chapter: &'a str,
@@ -28,9 +20,8 @@ pub struct DownloadChapter<'a> {
     pub lang: &'a str,
 }
 
-fn create_manga_directory(chapter: &DownloadChapter<'_>) -> Result<(PathBuf), std::io::Error> {
+fn create_manga_directory(chapter: &DownloadChapter<'_>) -> Result<PathBuf, std::io::Error> {
     // need directory with the manga's title, and its id to make it unique
-    let chapter_id = chapter.id_chapter.to_string();
 
     let dir_manga_downloads = APP_DATA_DIR.as_ref().unwrap().join("mangaDownloads");
 
@@ -128,7 +119,7 @@ pub fn download_chapter_epub(
     endpoint: String,
     tx: UnboundedSender<MangaPageEvents>,
 ) -> Result<(), std::io::Error> {
-    let (chapter_dir_language) = create_manga_directory(&chapter)?;
+    let chapter_dir_language = create_manga_directory(&chapter)?;
 
     let chapter_id = chapter.id_chapter.to_string();
     let chapter_name = format!(
@@ -150,8 +141,7 @@ pub fn download_chapter_epub(
 
         epub.epub_version(epub_builder::EpubVersion::V30);
 
-        epub.metadata("title", chapter_name);
-
+        let _ = epub.metadata("title", chapter_name);
 
         for (index, file_name) in files.into_iter().enumerate() {
             let image_response = MangadexClient::global()
@@ -232,7 +222,7 @@ pub fn download_chapter_cbz(
     endpoint: String,
     tx: UnboundedSender<MangaPageEvents>,
 ) -> Result<(), std::io::Error> {
-    let (chapter_dir_language) = create_manga_directory(&chapter)?;
+    let chapter_dir_language = create_manga_directory(&chapter)?;
 
     let chapter_id = chapter.id_chapter.to_string();
     let chapter_name = format!(
@@ -270,11 +260,13 @@ pub fn download_chapter_cbz(
                         file_name.extension().unwrap().to_str().unwrap()
                     );
 
-                    zip.start_file(
+                    let _ = zip.start_file(
                         chapter_dir_language.join(image_name).to_str().unwrap(),
                         options,
                     );
-                    zip.write_all(&bytes).unwrap();
+
+                    let _ = zip.write_all(&bytes);
+
 
                     if !is_downloading_all_chapters {
                         tx.send(MangaPageEvents::SetDownloadProgress(
@@ -301,9 +293,3 @@ pub fn download_chapter_cbz(
     Ok(())
 }
 
-#[derive(Default)]
-pub struct DownloadAllChapters {
-    pub manga_id: String,
-    pub manga_title: String,
-    pub lang: Languages,
-}

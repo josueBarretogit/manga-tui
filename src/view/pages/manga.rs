@@ -1,12 +1,10 @@
-use std::time::Duration;
-
 use crate::backend::database::{get_chapters_history_status, save_history, SetChapterDownloaded};
 use crate::backend::database::{set_chapter_downloaded, MangaReadingHistorySave};
 use crate::backend::download::{
-    download_chapter_cbz, download_chapter_epub, download_chapter_raw_images, DownloadAllChapters,
+    download_chapter_cbz, download_chapter_epub, download_chapter_raw_images,
     DownloadChapter,
 };
-use crate::backend::error_log::{self, write_to_error_log, ErrorType};
+use crate::backend::error_log::{self, write_to_error_log};
 use crate::backend::fetch::{MangadexClient, ITEMS_PER_PAGE_CHAPTERS};
 use crate::backend::filter::Languages;
 use crate::backend::tui::Events;
@@ -25,7 +23,7 @@ use crate::view::widgets::manga::{
 use crate::view::widgets::Component;
 use crate::PICKER;
 use crossterm::event::{
-    KeyCode, KeyEvent, KeyModifiers, ModifierKeyCode, MouseEvent, MouseEventKind,
+    KeyCode, KeyEvent, MouseEvent, MouseEventKind,
 };
 use ratatui::{prelude::*, widgets::*};
 use ratatui_image::protocol::StatefulProtocol;
@@ -36,7 +34,6 @@ use tokio::task::JoinSet;
 
 use self::text::ToSpan;
 
-use super::reader::MangaReaderEvents;
 
 #[derive(PartialEq, Eq, Debug)]
 pub enum PageState {
@@ -453,7 +450,7 @@ impl MangaPage {
             if self.download_process_started() {
                 match key_event.code {
                     KeyCode::Esc => {
-                        if self.is_downloading_all_chapters() {
+                        if self.download_all_chapters_state.phase == DownloadPhase::DownloadingChapters {
                             self.local_action_tx
                                 .send(MangaPageActions::AskAbortProcces)
                                 .ok();
@@ -1016,9 +1013,6 @@ impl MangaPage {
             .ok();
     }
 
-    fn continue_downloading_all_chapters(&mut self) {
-        self.download_all_chapters_state.continue_download();
-    }
 
     fn set_download_all_chapters_error(&mut self) {
         self.download_all_chapters_state.set_download_error();
@@ -1181,14 +1175,14 @@ impl Component for MangaPage {
 #[cfg(test)]
 mod test {
 
-    use crate::backend::{ChapterData, Data};
+    use crate::backend::{ChapterData};
     use crate::view::widgets::press_key;
 
     use super::*;
 
     fn get_manga_page() -> MangaPage {
         let manga = Manga::default();
-        let (tx, mut rx) = mpsc::unbounded_channel::<Events>();
+        let (tx, _) = mpsc::unbounded_channel::<Events>();
         MangaPage::new(manga, None, tx)
     }
 
@@ -1418,7 +1412,7 @@ mod test {
         let action = MangaPageActions::ToggleOrder;
         manga_page.update(action);
 
-        /// when searching chapters avoid triggering another search by toggling order
+        // when searching chapters avoid triggering another search by toggling order
         assert_eq!(ChapterOrder::default(), manga_page.chapter_order);
 
         manga_page.state = PageState::DisplayingChapters;
