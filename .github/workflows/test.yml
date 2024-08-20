@@ -24,7 +24,7 @@ jobs:
           rust-version: stable
 
       - name: check 
-        run: cargo check
+        run: cargo check --locked
 
       - name: build
         run: cargo build --release --verbose
