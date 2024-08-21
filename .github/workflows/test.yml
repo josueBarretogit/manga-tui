@@ -21,7 +21,10 @@ jobs:
       - name: setup toolchain
         uses: hecrj/setup-rust-action@v1
         with:
-          rust-version: stable
+          rust-version: nightly-2024-06-25
+
+      - name: check-fmt
+        run: cargo fmt --check
 
       - name: check 
         run: cargo check --locked
@@ -31,7 +34,6 @@ jobs:
 
       - name: test
         run: cargo test -- --test-threads=1
-
 
       - name: clippy
         run: cargo clippy -- -D warnings

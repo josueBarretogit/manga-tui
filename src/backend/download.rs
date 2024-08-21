@@ -1,14 +1,16 @@
-use crate::view::pages::manga::MangaPageEvents;
-use manga_tui::exists;
 use std::fs::{create_dir, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+
+use manga_tui::exists;
 use tokio::sync::mpsc::UnboundedSender;
 use zip::write::SimpleFileOptions;
 use zip::ZipWriter;
+
 use super::error_log::{write_to_error_log, ErrorType};
 use super::fetch::MangadexClient;
 use super::APP_DATA_DIR;
+use crate::view::pages::manga::MangaPageEvents;
 
 pub struct DownloadChapter<'a> {
     pub id_chapter: &'a str,
@@ -25,11 +27,7 @@ fn create_manga_directory(chapter: &DownloadChapter<'_>) -> Result<PathBuf, std:
 
     let dir_manga_downloads = APP_DATA_DIR.as_ref().unwrap().join("mangaDownloads");
 
-    let dir_manga = dir_manga_downloads.join(format!(
-        "{} {}",
-        chapter.manga_title.trim(),
-        chapter.manga_id
-    ));
+    let dir_manga = dir_manga_downloads.join(format!("{} {}", chapter.manga_title.trim(), chapter.manga_id));
 
     if !exists!(&dir_manga) {
         create_dir(&dir_manga)?;
@@ -72,40 +70,29 @@ pub fn download_chapter_raw_images(
     tokio::spawn(async move {
         let total_pages = files.len();
         for (index, file_name) in files.into_iter().enumerate() {
-            let image_response = MangadexClient::global()
-                .get_chapter_page(&endpoint, &file_name)
-                .await;
+            let image_response = MangadexClient::global().get_chapter_page(&endpoint, &file_name).await;
 
             let file_name = Path::new(&file_name);
 
             match image_response {
                 Ok(bytes) => {
-                    let image_name = format!(
-                        "{}.{}",
-                        index + 1,
-                        file_name.extension().unwrap().to_str().unwrap()
-                    );
+                    let image_name = format!("{}.{}", index + 1, file_name.extension().unwrap().to_str().unwrap());
                     let mut image_created = File::create(chapter_dir.join(image_name)).unwrap();
                     image_created.write_all(&bytes).unwrap();
 
                     if !is_downloading_all_chapters {
-                        tx.send(MangaPageEvents::SetDownloadProgress(
-                            (index as f64) / (total_pages as f64),
-                            chapter_id.clone(),
-                        ))
-                        .ok();
+                        tx.send(MangaPageEvents::SetDownloadProgress((index as f64) / (total_pages as f64), chapter_id.clone()))
+                            .ok();
                     }
-                }
+                },
                 Err(e) => write_to_error_log(ErrorType::FromError(Box::new(e))),
             }
         }
 
         if is_downloading_all_chapters {
-            tx.send(MangaPageEvents::SetDownloadAllChaptersProgress)
-                .ok();
+            tx.send(MangaPageEvents::SetDownloadAllChaptersProgress).ok();
         } else {
-            tx.send(MangaPageEvents::ChapterFinishedDownloading(chapter_id))
-                .ok();
+            tx.send(MangaPageEvents::ChapterFinishedDownloading(chapter_id)).ok();
         }
     });
 
@@ -122,31 +109,22 @@ pub fn download_chapter_epub(
     let chapter_dir_language = create_manga_directory(&chapter)?;
 
     let chapter_id = chapter.id_chapter.to_string();
-    let chapter_name = format!(
-        "Ch. {} {} {} {}",
-        chapter.number,
-        chapter.chapter_title.trim(),
-        chapter.scanlator.trim(),
-        chapter.id_chapter,
-    );
+    let chapter_name =
+        format!("Ch. {} {} {} {}", chapter.number, chapter.chapter_title.trim(), chapter.scanlator.trim(), chapter.id_chapter,);
 
     tokio::spawn(async move {
         let total_pages = files.len();
 
-        let mut epub_output =
-            File::create(chapter_dir_language.join(format!("{}.epub", chapter_name))).unwrap();
+        let mut epub_output = File::create(chapter_dir_language.join(format!("{}.epub", chapter_name))).unwrap();
 
-        let mut epub =
-            epub_builder::EpubBuilder::new(epub_builder::ZipLibrary::new().unwrap()).unwrap();
+        let mut epub = epub_builder::EpubBuilder::new(epub_builder::ZipLibrary::new().unwrap()).unwrap();
 
         epub.epub_version(epub_builder::EpubVersion::V30);
 
         let _ = epub.metadata("title", chapter_name);
 
         for (index, file_name) in files.into_iter().enumerate() {
-            let image_response = MangadexClient::global()
-                .get_chapter_page(&endpoint, &file_name)
-                .await;
+            let image_response = MangadexClient::global().get_chapter_page(&endpoint, &file_name).await;
 
             match image_response {
                 Ok(bytes) => {
@@ -154,16 +132,13 @@ pub fn download_chapter_epub(
 
                     let file_name = Path::new(&file_name);
 
-                    let mime_type =
-                        format!("image/{}", file_name.extension().unwrap().to_str().unwrap());
+                    let mime_type = format!("image/{}", file_name.extension().unwrap().to_str().unwrap());
 
                     if index == 0 {
-                        epub.add_cover_image(&image_path, bytes.as_ref(), &mime_type)
-                            .unwrap();
+                        epub.add_cover_image(&image_path, bytes.as_ref(), &mime_type).unwrap();
                     }
 
-                    epub.add_resource(&image_path, bytes.as_ref(), &mime_type)
-                        .unwrap();
+                    epub.add_resource(&image_path, bytes.as_ref(), &mime_type).unwrap();
 
                     epub.add_content(epub_builder::EpubContent::new(
                         format!("{}.xhtml", index + 1),
@@ -196,7 +171,7 @@ pub fn download_chapter_epub(
                         ))
                         .ok();
                     }
-                }
+                },
                 Err(e) => write_to_error_log(ErrorType::FromError(Box::new(e))),
             }
         }
@@ -204,11 +179,9 @@ pub fn download_chapter_epub(
         epub.generate(&mut epub_output).unwrap();
 
         if is_downloading_all_chapters {
-            tx.send(MangaPageEvents::SetDownloadAllChaptersProgress)
-                .ok();
+            tx.send(MangaPageEvents::SetDownloadAllChaptersProgress).ok();
         } else {
-            tx.send(MangaPageEvents::ChapterFinishedDownloading(chapter_id))
-                .ok();
+            tx.send(MangaPageEvents::ChapterFinishedDownloading(chapter_id)).ok();
         }
     });
 
@@ -225,13 +198,8 @@ pub fn download_chapter_cbz(
     let chapter_dir_language = create_manga_directory(&chapter)?;
 
     let chapter_id = chapter.id_chapter.to_string();
-    let chapter_name = format!(
-        "Ch. {} {} {} {}",
-        chapter.number,
-        chapter.chapter_title.trim(),
-        chapter.scanlator.trim(),
-        chapter.id_chapter,
-    );
+    let chapter_name =
+        format!("Ch. {} {} {} {}", chapter.number, chapter.chapter_title.trim(), chapter.scanlator.trim(), chapter.id_chapter,);
 
     let chapter_name = format!("{}.cbz", chapter_name);
 
@@ -246,27 +214,17 @@ pub fn download_chapter_cbz(
             .unix_permissions(0o755);
 
         for (index, file_name) in files.into_iter().enumerate() {
-            let image_response = MangadexClient::global()
-                .get_chapter_page(&endpoint, &file_name)
-                .await;
+            let image_response = MangadexClient::global().get_chapter_page(&endpoint, &file_name).await;
 
             let file_name = Path::new(&file_name);
 
             match image_response {
                 Ok(bytes) => {
-                    let image_name = format!(
-                        "{}.{}",
-                        index + 1,
-                        file_name.extension().unwrap().to_str().unwrap()
-                    );
+                    let image_name = format!("{}.{}", index + 1, file_name.extension().unwrap().to_str().unwrap());
 
-                    let _ = zip.start_file(
-                        chapter_dir_language.join(image_name).to_str().unwrap(),
-                        options,
-                    );
+                    let _ = zip.start_file(chapter_dir_language.join(image_name).to_str().unwrap(), options);
 
                     let _ = zip.write_all(&bytes);
-
 
                     if !is_downloading_all_chapters {
                         tx.send(MangaPageEvents::SetDownloadProgress(
@@ -275,21 +233,18 @@ pub fn download_chapter_cbz(
                         ))
                         .ok();
                     }
-                }
+                },
                 Err(e) => write_to_error_log(ErrorType::FromError(Box::new(e))),
             }
         }
         zip.finish().unwrap();
 
         if is_downloading_all_chapters {
-            tx.send(MangaPageEvents::SetDownloadAllChaptersProgress)
-                .ok();
+            tx.send(MangaPageEvents::SetDownloadAllChaptersProgress).ok();
         } else {
-            tx.send(MangaPageEvents::ChapterFinishedDownloading(chapter_id))
-                .ok();
+            tx.send(MangaPageEvents::ChapterFinishedDownloading(chapter_id)).ok();
         }
     });
 
     Ok(())
 }
-

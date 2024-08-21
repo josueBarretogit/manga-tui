@@ -2,6 +2,12 @@
 #![allow(dead_code)]
 use std::time::Duration;
 
+use clap::Parser;
+use once_cell::sync::Lazy;
+use ratatui::backend::CrosstermBackend;
+use ratatui_image::picker::{Picker, ProtocolType};
+use reqwest::{Client, StatusCode};
+
 use self::backend::error_log::init_error_hooks;
 use self::backend::fetch::{MangadexClient, MANGADEX_CLIENT_INSTANCE};
 use self::backend::filter::Languages;
@@ -9,19 +15,14 @@ use self::backend::tui::{init, restore, run_app};
 use self::backend::{build_data_dir, APP_DATA_DIR};
 use self::cli::CliArgs;
 use self::global::PREFERRED_LANGUAGE;
-use clap::Parser;
-use once_cell::sync::Lazy;
-use ratatui::backend::CrosstermBackend;
-use ratatui_image::picker::{Picker, ProtocolType};
-use reqwest::{Client, StatusCode};
 
 mod backend;
 mod cli;
 mod common;
+mod config;
 mod global;
 mod utils;
 mod view;
-mod config;
 
 #[cfg(unix)]
 pub static PICKER: Lazy<Option<Picker>> = Lazy::new(|| {
@@ -71,16 +72,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let try_lang = Languages::try_from_iso_code(lang.as_str());
 
                         if try_lang.is_none() {
-                            println!("`{}` is not a valid ISO language code, run `{} lang --print` to list available languages and their ISO codes", lang, env!("CARGO_BIN_NAME"));
+                            println!(
+                                "`{}` is not a valid ISO language code, run `{} lang --print` to list available languages and their ISO codes",
+                                lang,
+                                env!("CARGO_BIN_NAME")
+                            );
 
                             return Ok(());
                         }
 
                         PREFERRED_LANGUAGE.set(try_lang.unwrap()).unwrap()
-                    }
+                    },
                     None => PREFERRED_LANGUAGE.set(Languages::default()).unwrap(),
                 }
-            }
+            },
         },
         None => PREFERRED_LANGUAGE.set(Languages::default()).unwrap(),
     }
@@ -93,13 +98,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::env::consts::ARCH
     );
 
-    let mangadex_client = MangadexClient::new(
-        Client::builder()
-            .timeout(Duration::from_secs(10))
-            .user_agent(user_agent)
-            .build()
-            .unwrap(),
-    );
+    let mangadex_client =
+        MangadexClient::new(Client::builder().timeout(Duration::from_secs(10)).user_agent(user_agent).build().unwrap());
 
     println!("Checking mangadex status...");
 
@@ -111,17 +111,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("Mangadex appears to be in maintenance, please come backe later");
                 return Ok(());
             }
-        }
+        },
         Err(_) => {
             println!("Mangadex appears to be in maintenance, please come backe later");
             return Ok(());
-        }
+        },
     }
 
     MANGADEX_CLIENT_INSTANCE.set(mangadex_client).unwrap();
 
     match build_data_dir() {
-        Ok(_) => {}
+        Ok(_) => {},
         Err(e) => {
             eprint!(
             "Data directory could not be created, this is where your manga history and manga downloads is stored
@@ -130,10 +130,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             \n Error details : {e}"
             );
             return Ok(());
-        }
+        },
     }
-
-    
 
     init_error_hooks()?;
     init()?;

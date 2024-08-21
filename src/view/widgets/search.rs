@@ -1,13 +1,15 @@
+use ratatui::prelude::*;
+use ratatui::widgets::*;
+use ratatui_image::protocol::StatefulProtocol;
+use ratatui_image::{Resize, StatefulImage};
+use throbber_widgets_tui::{Throbber, ThrobberState};
+use tui_widget_list::PreRender;
+
 use crate::backend::Data;
 use crate::common::Manga;
 use crate::global::CURRENT_LIST_ITEM_STYLE;
 use crate::utils::{from_manga_response, set_status_style, set_tags_style};
 use crate::PICKER;
-use ratatui::{prelude::*, widgets::*};
-use ratatui_image::protocol::StatefulProtocol;
-use ratatui_image::{Resize, StatefulImage};
-use throbber_widgets_tui::{Throbber, ThrobberState};
-use tui_widget_list::PreRender;
 
 pub struct MangaPreview<'a> {
     title: &'a str,
@@ -37,12 +39,7 @@ impl<'a> MangaPreview<'a> {
         }
     }
 
-    pub fn render_cover_and_details_area(
-        &mut self,
-        area: Rect,
-        buf: &mut Buffer,
-        state: &mut Option<Box<dyn StatefulProtocol>>,
-    ) {
+    pub fn render_cover_and_details_area(&mut self, area: Rect, buf: &mut Buffer, state: &mut Option<Box<dyn StatefulProtocol>>) {
         let layout = Layout::horizontal([Constraint::Percentage(30), Constraint::Percentage(80)]);
         let [cover_area, details_area] = layout.areas(area);
 
@@ -53,7 +50,7 @@ impl<'a> MangaPreview<'a> {
                 Some(image_state) => {
                     let cover = StatefulImage::new(None).resize(Resize::Fit(None));
                     StatefulWidget::render(cover, cover_area, buf, image_state)
-                }
+                },
                 None => {
                     Block::bordered().render(cover_area, buf);
                     let loader = Throbber::default()
@@ -70,7 +67,7 @@ impl<'a> MangaPreview<'a> {
                         buf,
                         &mut self.loader_state,
                     );
-                }
+                },
             };
         }
     }
@@ -83,9 +80,7 @@ impl<'a> MangaPreview<'a> {
             vertical: 2,
         });
 
-        Paragraph::new(self.description)
-            .wrap(Wrap { trim: true })
-            .render(inner, buf);
+        Paragraph::new(self.description).wrap(Wrap { trim: true }).render(inner, buf);
     }
 
     pub fn render_details(&mut self, area: Rect, buf: &mut Buffer) {
@@ -100,9 +95,7 @@ impl<'a> MangaPreview<'a> {
 
         Paragraph::new(Line::from(vec![content_rating, status])).render(details_area, buf);
 
-        Paragraph::new(Line::from(tags_list))
-            .wrap(Wrap { trim: true })
-            .render(tags_area, buf);
+        Paragraph::new(Line::from(tags_list)).wrap(Wrap { trim: true }).render(tags_area, buf);
     }
 }
 
@@ -183,6 +176,7 @@ impl ListMangasFoundWidget {
 
 impl StatefulWidgetRef for ListMangasFoundWidget {
     type State = tui_widget_list::ListState;
+
     fn render_ref(&self, area: ratatui::prelude::Rect, buf: &mut Buffer, state: &mut Self::State) {
         let list = tui_widget_list::List::new(self.mangas.clone());
         StatefulWidget::render(list, area, buf, state);

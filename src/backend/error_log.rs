@@ -28,12 +28,7 @@ pub fn write_to_error_log(e: ErrorType<'_>) {
     let now = offset::Local::now();
 
     let error_format = match e {
-        ErrorType::FromPanic(panic_info) => format!(
-            "{} | {} | {} \n \n",
-            now,
-            panic_info,
-            panic_info.location().unwrap()
-        ),
+        ErrorType::FromPanic(panic_info) => format!("{} | {} | {} \n \n", now, panic_info, panic_info.location().unwrap()),
         ErrorType::FromError(boxed_err) => format!("{} | {} \n \n", now, boxed_err),
     };
 
@@ -44,10 +39,7 @@ pub fn write_to_error_log(e: ErrorType<'_>) {
 
         error_logs.write_all(error_format_bytes).unwrap();
     } else {
-        let mut error_logs = OpenOptions::new()
-            .append(true)
-            .open(error_file_name)
-            .unwrap();
+        let mut error_logs = OpenOptions::new().append(true).open(error_file_name).unwrap();
 
         error_logs.write_all(error_format_bytes).unwrap();
     }

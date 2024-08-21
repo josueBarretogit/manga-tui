@@ -25,15 +25,8 @@ pub struct CliArgs {
 impl CliArgs {
     pub fn print_available_languages() {
         println!("The available languages are:");
-        Languages::iter()
-            .filter(|lang| *lang != Languages::Unkown)
-            .for_each(|lang| {
-                println!(
-                    "{} {} | iso code : {}",
-                    lang.as_emoji(),
-                    lang.as_human_readable().to_lowercase(),
-                    lang.as_iso_code()
-                )
-            });
+        Languages::iter().filter(|lang| *lang != Languages::Unkown).for_each(|lang| {
+            println!("{} {} | iso code : {}", lang.as_emoji(), lang.as_human_readable().to_lowercase(), lang.as_iso_code())
+        });
     }
 }
