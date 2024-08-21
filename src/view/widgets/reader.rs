@@ -1,7 +1,9 @@
-use crate::global::CURRENT_LIST_ITEM_STYLE;
-use ratatui::{prelude::*, widgets::*};
+use ratatui::prelude::*;
+use ratatui::widgets::*;
 use throbber_widgets_tui::{Throbber, ThrobberState};
 use tui_widget_list::PreRender;
+
+use crate::global::CURRENT_LIST_ITEM_STYLE;
 
 #[derive(PartialEq, Eq, Clone)]
 pub enum PageItemState {
@@ -63,6 +65,7 @@ impl PagesItem {
             style: Style::default(),
         }
     }
+
     pub fn on_tick(&mut self) {
         self.loading_state.calc_next();
     }
@@ -77,6 +80,7 @@ impl PagesList {
     pub fn new(pages: Vec<PagesItem>) -> Self {
         Self { pages }
     }
+
     pub fn on_tick(&mut self) {
         for page in self.pages.iter_mut() {
             page.on_tick();
@@ -86,6 +90,7 @@ impl PagesList {
 
 impl StatefulWidget for PagesList {
     type State = tui_widget_list::ListState;
+
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         let items = tui_widget_list::List::new(self.pages);
         StatefulWidget::render(items, area, buf, state)

@@ -1,15 +1,17 @@
-use crate::backend::filter::Languages;
-use crate::backend::{ChapterResponse};
-use crate::global::{CURRENT_LIST_ITEM_STYLE, ERROR_STYLE, INSTRUCTIONS_STYLE};
-use crate::utils::display_dates_since_publication;
-use crate::view::pages::manga::MangaPageEvents;
-use ratatui::{prelude::*, widgets::*};
 use std::path::PathBuf;
+
+use ratatui::prelude::*;
+use ratatui::widgets::*;
 use throbber_widgets_tui::{Throbber, ThrobberState};
 use tokio::sync::mpsc::UnboundedSender;
 use tui_widget_list::PreRender;
 
 use self::text::ToSpan;
+use crate::backend::filter::Languages;
+use crate::backend::ChapterResponse;
+use crate::global::{CURRENT_LIST_ITEM_STYLE, ERROR_STYLE, INSTRUCTIONS_STYLE};
+use crate::utils::display_dates_since_publication;
+use crate::view::pages::manga::MangaPageEvents;
 
 #[derive(Clone, Debug)]
 pub enum ChapterItemState {
@@ -48,42 +50,29 @@ impl Widget for ChapterItem {
             Constraint::Fill(20),
         ]);
 
-        let [is_read_area, is_downloaded_area, title_area, scanlator_area, readable_at_area] =
-            layout.areas(area);
+        let [is_read_area, is_downloaded_area, title_area, scanlator_area, readable_at_area] = layout.areas(area);
 
         let is_read_icon = if self.is_read { "👀" } else { " " };
 
         let is_downloaded_icon = if self.is_downloaded { "📥" } else { " " };
 
-        Line::from(is_read_icon)
-            .style(self.style)
-            .render(is_read_area, buf);
-        Line::from(is_downloaded_icon)
-            .style(self.style)
-            .render(is_downloaded_area, buf);
+        Line::from(is_read_icon).style(self.style).render(is_read_area, buf);
+        Line::from(is_downloaded_icon).style(self.style).render(is_downloaded_area, buf);
 
-        Paragraph::new(Line::from(vec![
-            format!(" Ch. {} ", self.chapter_number).into(),
-            self.title.into(),
-        ]))
-        .wrap(Wrap { trim: true })
-        .style(self.style)
-        .render(title_area, buf);
+        Paragraph::new(Line::from(vec![format!(" Ch. {} ", self.chapter_number).into(), self.title.into()]))
+            .wrap(Wrap { trim: true })
+            .style(self.style)
+            .render(title_area, buf);
 
         match self.download_loading_state.as_ref() {
             Some(progress) => {
                 LineGauge::default()
                     .block(Block::bordered().title("Downloading please wait a moment"))
-                    .filled_style(
-                        Style::default()
-                            .fg(Color::Blue)
-                            .bg(Color::Black)
-                            .add_modifier(Modifier::BOLD),
-                    )
+                    .filled_style(Style::default().fg(Color::Blue).bg(Color::Black).add_modifier(Modifier::BOLD))
                     .line_set(symbols::line::THICK)
                     .ratio(*progress)
                     .render(scanlator_area, buf);
-            }
+            },
             None => match self.state {
                 ChapterItemState::Normal => {
                     Paragraph::new(self.scanlator)
@@ -95,7 +84,7 @@ impl Widget for ChapterItem {
                         .style(self.style)
                         .wrap(Wrap { trim: true })
                         .render(readable_at_area, buf);
-                }
+                },
                 ChapterItemState::DownloadError => {
                     Paragraph::new(
                         "Cannot download this chapter due to an error, please try again"
@@ -111,23 +100,19 @@ impl Widget for ChapterItem {
                         ),
                         buf,
                     );
-                }
+                },
                 ChapterItemState::ReadError => {
-                    Paragraph::new(
-                        "Cannot read this chapter due to an error, please try again"
-                            .to_span()
-                            .style(*ERROR_STYLE),
-                    )
-                    .render(
-                        Rect::new(
-                            scanlator_area.x,
-                            scanlator_area.y,
-                            scanlator_area.width + readable_at_area.width,
-                            scanlator_area.height,
-                        ),
-                        buf,
-                    );
-                }
+                    Paragraph::new("Cannot read this chapter due to an error, please try again".to_span().style(*ERROR_STYLE))
+                        .render(
+                            Rect::new(
+                                scanlator_area.x,
+                                scanlator_area.y,
+                                scanlator_area.width + readable_at_area.width,
+                                scanlator_area.height,
+                            ),
+                            buf,
+                        );
+                },
             },
         }
     }
@@ -139,11 +124,7 @@ impl PreRender for ChapterItem {
             self.style = *CURRENT_LIST_ITEM_STYLE;
         }
 
-        if self.download_loading_state.is_some() {
-            3
-        } else {
-            1
-        }
+        if self.download_loading_state.is_some() { 3 } else { 1 }
     }
 }
 
@@ -197,24 +178,14 @@ impl ChaptersListWidget {
         let today = chrono::offset::Local::now().date_naive();
         for chapter in response.data.iter() {
             let id = chapter.id.clone();
-            let title = chapter
-                .attributes
-                .title
-                .clone()
-                .unwrap_or("No title".to_string());
+            let title = chapter.attributes.title.clone().unwrap_or("No title".to_string());
 
-            let chapter_number = chapter
-                .attributes
-                .chapter
-                .clone()
-                .unwrap_or("0".to_string());
+            let chapter_number = chapter.attributes.chapter.clone().unwrap_or("0".to_string());
 
             let translated_language: Languages =
-                Languages::try_from_iso_code(&chapter.attributes.translated_language)
-                    .unwrap_or(*Languages::get_preferred_lang());
+                Languages::try_from_iso_code(&chapter.attributes.translated_language).unwrap_or(*Languages::get_preferred_lang());
 
-            let parse_date = chrono::DateTime::parse_from_rfc3339(&chapter.attributes.readable_at)
-                .unwrap_or_default();
+            let parse_date = chrono::DateTime::parse_from_rfc3339(&chapter.attributes.readable_at).unwrap_or_default();
 
             let difference = today - parse_date.date_naive();
 
@@ -240,6 +211,7 @@ impl ChaptersListWidget {
 
 impl StatefulWidget for ChaptersListWidget {
     type State = tui_widget_list::ListState;
+
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         let chapters_list = tui_widget_list::List::new(self.chapters);
         StatefulWidget::render(chapters_list, area, buf, state);
@@ -380,19 +352,10 @@ impl<'a> DownloadAllChaptersWidget<'a> {
 }
 
 impl<'a> DownloadAllChaptersWidget<'a> {
-    fn render_download_information(
-        &mut self,
-        area: Rect,
-        buf: &mut Buffer,
-        state: &mut DownloadAllChaptersState,
-    ) {
-        let [information_area, loader_area] =
-            Layout::horizontal([Constraint::Fill(2), Constraint::Fill(1)]).areas(area);
+    fn render_download_information(&mut self, area: Rect, buf: &mut Buffer, state: &mut DownloadAllChaptersState) {
+        let [information_area, loader_area] = Layout::horizontal([Constraint::Fill(2), Constraint::Fill(1)]).areas(area);
 
-        let download_location = format!(
-            "Download location : {}",
-            state.download_location.as_path().display(),
-        );
+        let download_location = format!("Download location : {}", state.download_location.as_path().display(),);
 
         Paragraph::new(Line::from(vec![
             "Downloading all chapters, this will take a while, ".into(),
@@ -423,7 +386,7 @@ impl<'a> StatefulWidget for DownloadAllChaptersWidget<'a> {
         });
 
         match state.phase {
-            DownloadPhase::ProccessNotStarted => {}
+            DownloadPhase::ProccessNotStarted => {},
             DownloadPhase::Asking => {
                 let instructions = vec![
                     "Do you want to download all chapters? Yes: ".into(),
@@ -433,7 +396,7 @@ impl<'a> StatefulWidget for DownloadAllChaptersWidget<'a> {
                 ];
 
                 Paragraph::new(Line::from(instructions)).render(download_information_area, buf);
-            }
+            },
             DownloadPhase::AskAbortProcess => {
                 let instructions = vec![
                     "Are you sure you want to cancel? yes: ".into(),
@@ -443,66 +406,46 @@ impl<'a> StatefulWidget for DownloadAllChaptersWidget<'a> {
                 ];
 
                 Paragraph::new(Line::from(instructions)).render(download_information_area, buf);
-            }
+            },
             DownloadPhase::FetchingChaptersData => {
                 let loader = Throbber::default()
-                    .label(
-                        "fetching manga data after this each chapter will begin to be downloaded",
-                    )
+                    .label("fetching manga data after this each chapter will begin to be downloaded")
                     .style(Style::default().fg(Color::Yellow))
                     .throbber_set(throbber_widgets_tui::BRAILLE_SIX)
                     .use_type(throbber_widgets_tui::WhichUse::Spin);
 
-                StatefulWidget::render(
-                    loader,
-                    download_information_area,
-                    buf,
-                    &mut state.loader_state,
-                );
-            }
+                StatefulWidget::render(loader, download_information_area, buf, &mut state.loader_state);
+            },
             DownloadPhase::ErrorChaptersData => {
                 "Could not get chapters data, press <Spacebar> to try again"
                     .to_span()
                     .style(*ERROR_STYLE)
                     .render(download_information_area, buf);
-            }
+            },
             DownloadPhase::DownloadingChapters => {
                 if state.finished_downloading() {
-                    state
-                        .tx
-                        .send(MangaPageEvents::FinishedDownloadingAllChapters)
-                        .ok();
+                    state.tx.send(MangaPageEvents::FinishedDownloadingAllChapters).ok();
                     return;
                 }
 
                 let [information_area, progress_area] =
-                    Layout::vertical([Constraint::Fill(1), Constraint::Fill(1)])
-                        .areas(download_information_area);
+                    Layout::vertical([Constraint::Fill(1), Constraint::Fill(1)]).areas(download_information_area);
 
                 self.render_download_information(information_area, buf, state);
 
                 let download_progress_title = vec![
-                    format!(
-                        "Total chapters: {}, chapters downloaded : {} ",
-                        state.total_chapters, state.download_progress
-                    )
-                    .into(),
+                    format!("Total chapters: {}, chapters downloaded : {} ", state.total_chapters, state.download_progress).into(),
                     "Cancel download: ".into(),
                     "<Esc>".to_span().style(*INSTRUCTIONS_STYLE),
                 ];
 
                 LineGauge::default()
                     .block(Block::bordered().title(download_progress_title))
-                    .filled_style(
-                        Style::default()
-                            .fg(Color::Blue)
-                            .bg(Color::Black)
-                            .add_modifier(Modifier::BOLD),
-                    )
+                    .filled_style(Style::default().fg(Color::Blue).bg(Color::Black).add_modifier(Modifier::BOLD))
                     .line_set(symbols::line::THICK)
                     .ratio(state.download_progress / state.total_chapters)
                     .render(progress_area, buf);
-            }
+            },
         }
     }
 }
@@ -518,10 +461,7 @@ mod test {
         let (tx, mut rx) = mpsc::unbounded_channel::<MangaPageEvents>();
         let mut download_all_chapters_state = DownloadAllChaptersState::new(tx);
 
-        assert_eq!(
-            DownloadPhase::ProccessNotStarted,
-            download_all_chapters_state.phase
-        );
+        assert_eq!(DownloadPhase::ProccessNotStarted, download_all_chapters_state.phase);
         assert!(!download_all_chapters_state.process_started());
         assert!(!download_all_chapters_state.is_downloading());
 
@@ -534,50 +474,32 @@ mod test {
         // The user cancelled
         download_all_chapters_state.cancel();
 
-        assert_eq!(
-            DownloadPhase::ProccessNotStarted,
-            download_all_chapters_state.phase
-        );
+        assert_eq!(DownloadPhase::ProccessNotStarted, download_all_chapters_state.phase);
 
         download_all_chapters_state.ask_for_confirmation();
 
         // The user confirmed
         download_all_chapters_state.fetch_chapters_data();
 
-        assert_eq!(
-            DownloadPhase::FetchingChaptersData,
-            download_all_chapters_state.phase
-        );
+        assert_eq!(DownloadPhase::FetchingChaptersData, download_all_chapters_state.phase);
 
         download_all_chapters_state.start_download();
 
-        assert_eq!(
-            DownloadPhase::DownloadingChapters,
-            download_all_chapters_state.phase
-        );
+        assert_eq!(DownloadPhase::DownloadingChapters, download_all_chapters_state.phase);
 
         download_all_chapters_state.set_download_error();
 
-        assert_eq!(
-            DownloadPhase::ErrorChaptersData,
-            download_all_chapters_state.phase
-        );
+        assert_eq!(DownloadPhase::ErrorChaptersData, download_all_chapters_state.phase);
 
         download_all_chapters_state.fetch_chapters_data();
 
-        assert_eq!(
-            DownloadPhase::FetchingChaptersData,
-            download_all_chapters_state.phase
-        );
+        assert_eq!(DownloadPhase::FetchingChaptersData, download_all_chapters_state.phase);
 
         download_all_chapters_state.start_download();
 
         download_all_chapters_state.set_total_chapters(3.0);
 
-        assert_eq!(
-            DownloadPhase::DownloadingChapters,
-            download_all_chapters_state.phase
-        );
+        assert_eq!(DownloadPhase::DownloadingChapters, download_all_chapters_state.phase);
         assert_eq!(3.0, download_all_chapters_state.total_chapters);
 
         download_all_chapters_state.set_download_progress();
@@ -587,18 +509,10 @@ mod test {
         let area = Rect::new(0, 0, 50, 50);
         let mut buf = Buffer::empty(area);
 
-        StatefulWidget::render(
-            DownloadAllChaptersWidget::new("some_title"),
-            area,
-            &mut buf,
-            &mut download_all_chapters_state,
-        );
+        StatefulWidget::render(DownloadAllChaptersWidget::new("some_title"), area, &mut buf, &mut download_all_chapters_state);
 
         let download_finished = rx.recv().await.unwrap();
 
-        assert_eq!(
-            MangaPageEvents::FinishedDownloadingAllChapters,
-            download_finished
-        );
+        assert_eq!(MangaPageEvents::FinishedDownloadingAllChapters, download_finished);
     }
 }

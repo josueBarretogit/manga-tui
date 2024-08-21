@@ -1,8 +1,10 @@
+use ratatui::prelude::*;
+use ratatui::widgets::*;
+use state::*;
+
 use super::StatefulWidgetFrame;
 use crate::global::CURRENT_LIST_ITEM_STYLE;
 use crate::utils::{centered_rect, render_search_bar, set_filter_tags_style};
-use ratatui::{prelude::*, widgets::*};
-use state::*;
 
 pub mod state;
 
@@ -19,22 +21,16 @@ impl From<MangaFilters> for Line<'_> {
 
 impl From<FilterListItem> for ListItem<'_> {
     fn from(value: FilterListItem) -> Self {
-        let line = if value.is_selected {
-            Line::from(format!("🟡 {} ", value.name)).fg(Color::Yellow)
-        } else {
-            Line::from(value.name)
-        };
+        let line =
+            if value.is_selected { Line::from(format!("🟡 {} ", value.name)).fg(Color::Yellow) } else { Line::from(value.name) };
         ListItem::new(line)
     }
 }
 
 impl From<ListItemId> for ListItem<'_> {
     fn from(value: ListItemId) -> Self {
-        let line = if value.is_selected {
-            Line::from(format!("🟡 {} ", value.name)).fg(Color::Yellow)
-        } else {
-            Line::from(value.name)
-        };
+        let line =
+            if value.is_selected { Line::from(format!("🟡 {} ", value.name)).fg(Color::Yellow) } else { Line::from(value.name) };
         ListItem::new(line)
     }
 }
@@ -42,9 +38,7 @@ impl From<ListItemId> for ListItem<'_> {
 impl From<TagListItem> for ListItem<'_> {
     fn from(value: TagListItem) -> Self {
         let line = match value.state {
-            TagListItemState::Included => {
-                Line::from(format!(" {} ", value.name).black().on_green())
-            }
+            TagListItemState::Included => Line::from(format!(" {} ", value.name).black().on_green()),
             TagListItemState::Excluded => Line::from(format!(" {} ", value.name).black().on_red()),
             TagListItemState::NotSelected => Line::from(value.name),
         };
@@ -56,12 +50,7 @@ impl From<TagListItem> for ListItem<'_> {
 impl<'a> StatefulWidgetFrame for FilterWidget<'a> {
     type State = FilterState;
 
-    fn render(
-        &mut self,
-        area: ratatui::prelude::Rect,
-        frame: &mut Frame<'_>,
-        state: &mut Self::State,
-    ) {
+    fn render(&mut self, area: ratatui::prelude::Rect, frame: &mut Frame<'_>, state: &mut Self::State) {
         let buf = frame.buffer_mut();
         let popup_area = centered_rect(area, 80, 70);
 
@@ -71,10 +60,9 @@ impl<'a> StatefulWidgetFrame for FilterWidget<'a> {
             block.render(popup_area, buf);
         }
 
-        let [tabs_area, current_filter_area] =
-            Layout::vertical([Constraint::Percentage(20), Constraint::Percentage(80)])
-                .margin(2)
-                .areas(popup_area);
+        let [tabs_area, current_filter_area] = Layout::vertical([Constraint::Percentage(20), Constraint::Percentage(80)])
+            .margin(2)
+            .areas(popup_area);
 
         let tabs: Vec<Line<'_>> = FILTERS
             .iter()
@@ -83,12 +71,8 @@ impl<'a> StatefulWidgetFrame for FilterWidget<'a> {
                     MangaFilters::ContentRating => state.content_rating.num_filters_active(),
                     MangaFilters::SortBy => state.sort_by_state.num_filters_active(),
                     MangaFilters::Languages => state.lang_state.num_filters_active(),
-                    MangaFilters::PublicationStatus => {
-                        state.publication_status.num_filters_active()
-                    }
-                    MangaFilters::MagazineDemographic => {
-                        state.magazine_demographic.num_filters_active()
-                    }
+                    MangaFilters::PublicationStatus => state.publication_status.num_filters_active(),
+                    MangaFilters::MagazineDemographic => state.magazine_demographic.num_filters_active(),
                     MangaFilters::Tags => state.tags_state.num_filters_active(),
                     MangaFilters::Authors => state.author_state.num_filters_active(),
                     MangaFilters::Artists => state.artist_state.num_filters_active(),
@@ -98,10 +82,7 @@ impl<'a> StatefulWidgetFrame for FilterWidget<'a> {
                     filters.to_string().into(),
                     " ".into(),
                     if num_filters != 0 {
-                        Span::raw(format!("{}+", num_filters))
-                            .bold()
-                            .underlined()
-                            .style(Color::Yellow)
+                        Span::raw(format!("{}+", num_filters)).bold().underlined().style(Color::Yellow)
                     } else {
                         "".into()
                     },
@@ -123,7 +104,7 @@ impl<'a> StatefulWidgetFrame for FilterWidget<'a> {
                         buf,
                         &mut state.publication_status.state,
                     );
-                }
+                },
                 MangaFilters::ContentRating => {
                     render_filter_list(
                         state.content_rating.items.clone(),
@@ -131,15 +112,10 @@ impl<'a> StatefulWidgetFrame for FilterWidget<'a> {
                         buf,
                         &mut state.content_rating.state,
                     );
-                }
+                },
                 MangaFilters::SortBy => {
-                    render_filter_list(
-                        state.sort_by_state.items.clone(),
-                        current_filter_area,
-                        buf,
-                        &mut state.sort_by_state.state,
-                    );
-                }
+                    render_filter_list(state.sort_by_state.items.clone(), current_filter_area, buf, &mut state.sort_by_state.state);
+                },
                 MangaFilters::Tags => self.render_tags_list(current_filter_area, frame, state),
                 MangaFilters::MagazineDemographic => {
                     render_filter_list(
@@ -148,24 +124,18 @@ impl<'a> StatefulWidgetFrame for FilterWidget<'a> {
                         buf,
                         &mut state.magazine_demographic.state,
                     );
-                }
+                },
                 MangaFilters::Authors => {
                     let [list_area, input_area] =
-                        Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)])
-                            .areas(current_filter_area);
+                        Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)]).areas(current_filter_area);
 
                     match state.author_state.items.as_mut() {
                         Some(authors) => {
-                            render_filter_list(
-                                authors.clone(),
-                                list_area,
-                                buf,
-                                &mut state.author_state.state,
-                            );
-                        }
+                            render_filter_list(authors.clone(), list_area, buf, &mut state.author_state.state);
+                        },
                         None => {
                             Paragraph::new("Search authors").render(list_area, buf);
-                        }
+                        },
                     }
 
                     let input_help = if state.is_typing {
@@ -177,38 +147,22 @@ impl<'a> StatefulWidgetFrame for FilterWidget<'a> {
                             "to stop typing".into(),
                         ])
                     } else {
-                        Line::from(vec![
-                            "Press".into(),
-                            " <l> ".bold().yellow(),
-                            "to search authors".into(),
-                        ])
+                        Line::from(vec!["Press".into(), " <l> ".bold().yellow(), "to search authors".into()])
                     };
 
-                    render_search_bar(
-                        state.is_typing,
-                        input_help,
-                        &state.author_state.search_bar,
-                        frame,
-                        input_area,
-                    );
-                }
+                    render_search_bar(state.is_typing, input_help, &state.author_state.search_bar, frame, input_area);
+                },
                 MangaFilters::Artists => {
                     let [list_area, input_area] =
-                        Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)])
-                            .areas(current_filter_area);
+                        Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)]).areas(current_filter_area);
 
                     match state.artist_state.items.as_mut() {
                         Some(authors) => {
-                            render_filter_list(
-                                authors.clone(),
-                                list_area,
-                                buf,
-                                &mut state.artist_state.state,
-                            );
-                        }
+                            render_filter_list(authors.clone(), list_area, buf, &mut state.artist_state.state);
+                        },
                         None => {
                             Paragraph::new("Search artist").render(list_area, buf);
-                        }
+                        },
                     }
 
                     let input_help = if state.is_typing {
@@ -220,29 +174,14 @@ impl<'a> StatefulWidgetFrame for FilterWidget<'a> {
                             "to stop typing".into(),
                         ])
                     } else {
-                        Line::from(vec![
-                            "Press".into(),
-                            " <l> ".bold().yellow(),
-                            "to search artists".into(),
-                        ])
+                        Line::from(vec!["Press".into(), " <l> ".bold().yellow(), "to search artists".into()])
                     };
 
-                    render_search_bar(
-                        state.is_typing,
-                        input_help,
-                        &state.artist_state.search_bar,
-                        frame,
-                        input_area,
-                    );
-                }
+                    render_search_bar(state.is_typing, input_help, &state.artist_state.search_bar, frame, input_area);
+                },
                 MangaFilters::Languages => {
-                    render_filter_list(
-                        state.lang_state.items.clone(),
-                        current_filter_area,
-                        buf,
-                        &mut state.lang_state.state,
-                    );
-                }
+                    render_filter_list(state.lang_state.items.clone(), current_filter_area, buf, &mut state.lang_state.state);
+                },
             }
         }
     }
@@ -263,11 +202,9 @@ impl<'a> FilterWidget<'a> {
 
     fn render_tags_list(&mut self, area: Rect, frame: &mut Frame<'_>, state: &mut FilterState) {
         let buf = frame.buffer_mut();
-        let [list_area, input_area] =
-            Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)]).areas(area);
+        let [list_area, input_area] = Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)]).areas(area);
 
-        let [input_area, current_tags_area] =
-            Layout::vertical([Constraint::Fill(1), Constraint::Fill(1)]).areas(input_area);
+        let [input_area, current_tags_area] = Layout::vertical([Constraint::Fill(1), Constraint::Fill(1)]).areas(input_area);
 
         if let Some(tags) = state.tags_state.tags.as_ref().cloned() {
             let tags_filtered: Vec<Span<'_>> = tags
@@ -287,11 +224,7 @@ impl<'a> FilterWidget<'a> {
                 let filtered_tags: Vec<TagListItem> = tags
                     .iter()
                     .filter_map(|tag| {
-                        if tag
-                            .name
-                            .to_lowercase()
-                            .contains(&state.tags_state.filter_input.value().to_lowercase())
-                        {
+                        if tag.name.to_lowercase().contains(&state.tags_state.filter_input.value().to_lowercase()) {
                             return Some(tag.clone());
                         }
                         None
@@ -302,26 +235,12 @@ impl<'a> FilterWidget<'a> {
             }
 
             let input_help = if state.is_typing {
-                Line::from(vec![
-                    "Press ".into(),
-                    " <esc> ".bold().yellow(),
-                    "to stop typing".into(),
-                ])
+                Line::from(vec!["Press ".into(), " <esc> ".bold().yellow(), "to stop typing".into()])
             } else {
-                Line::from(vec![
-                    "Press".into(),
-                    " <l> ".bold().yellow(),
-                    "to filter tags".into(),
-                ])
+                Line::from(vec!["Press".into(), " <l> ".bold().yellow(), "to filter tags".into()])
             };
 
-            render_search_bar(
-                state.is_typing,
-                input_help,
-                &state.tags_state.filter_input,
-                frame,
-                input_area,
-            );
+            render_search_bar(state.is_typing, input_help, &state.tags_state.filter_input, frame, input_area);
         }
     }
 }

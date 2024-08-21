@@ -23,6 +23,9 @@ jobs:
         with:
           rust-version: stable
 
+      - name: check-fmt
+        run: cargo fmt --check
+
       - name: check 
         run: cargo check --locked
 
@@ -31,7 +34,6 @@ jobs:
 
       - name: test
         run: cargo test -- --test-threads=1
-
 
       - name: clippy
         run: cargo clippy -- -D warnings

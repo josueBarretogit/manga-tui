@@ -1,12 +1,3 @@
-use self::feed::Feed;
-use self::home::Home;
-use self::manga::MangaPage;
-use self::reader::MangaReader;
-use self::search::{InputMode, SearchPage};
-use crate::backend::tui::{Action, Events};
-use crate::backend::ChapterPagesResponse;
-use crate::global::INSTRUCTIONS_STYLE;
-use crate::view::pages::*;
 use ::crossterm::event::KeyCode;
 use crossterm::event::{KeyEvent, KeyModifiers};
 use ratatui::buffer::Buffer;
@@ -15,8 +6,17 @@ use ratatui::widgets::{Block, Borders, Tabs, Widget};
 use ratatui::Frame;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
+use self::feed::Feed;
+use self::home::Home;
+use self::manga::MangaPage;
+use self::reader::MangaReader;
+use self::search::{InputMode, SearchPage};
 use super::widgets::search::MangaItem;
 use super::widgets::Component;
+use crate::backend::tui::{Action, Events};
+use crate::backend::ChapterPagesResponse;
+use crate::global::INSTRUCTIONS_STYLE;
+use crate::view::pages::*;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
 pub enum AppState {
@@ -40,12 +40,12 @@ pub struct App {
 
 impl Component for App {
     type Actions = Action;
+
     fn render(&mut self, area: Rect, frame: &mut Frame<'_>) {
         if self.manga_reader_page.is_some() && self.current_tab == SelectedPage::ReaderTab {
             self.manga_reader_page.as_mut().unwrap().render(area, frame);
         } else {
-            let main_layout =
-                Layout::vertical([Constraint::Percentage(6), Constraint::Percentage(94)]);
+            let main_layout = Layout::vertical([Constraint::Percentage(6), Constraint::Percentage(94)]);
 
             let [top_tabs_area, page_area] = main_layout.areas(area);
 
@@ -62,19 +62,19 @@ impl Component for App {
             Events::ReadChapter(chapter_response) => self.go_to_read_chapter(chapter_response),
             Events::GoSearchPage => {
                 self.go_search_page();
-            }
+            },
             Events::GoToHome => self.go_to_home(),
             Events::GoFeedPage => self.go_feed_page(),
 
             Events::GoSearchMangasAuthor(author) => {
                 self.go_search_page();
                 self.search_page.search_mangas_of_author(author);
-            }
+            },
             Events::GoSearchMangasArtist(artist) => {
                 self.go_search_page();
                 self.search_page.search_mangas_of_artist(artist);
-            }
-            _ => {}
+            },
+            _ => {},
         }
     }
 
@@ -82,9 +82,10 @@ impl Component for App {
         match action {
             Action::Quit => {
                 self.state = AppState::Done;
-            }
+            },
         }
     }
+
     fn clean_up(&mut self) {}
 }
 
@@ -122,7 +123,7 @@ impl App {
             SelectedPage::MangaTab => {
                 titles.push(" 📖 Manga page");
                 3
-            }
+            },
             _ => 0,
         };
 
@@ -142,7 +143,7 @@ impl App {
             SelectedPage::Home => self.render_home_page(area, frame),
             SelectedPage::Feed => self.render_feed_page(area, frame),
             // Reader tab should be on full screen
-            SelectedPage::ReaderTab => {}
+            SelectedPage::ReaderTab => {},
         }
     }
 
@@ -165,47 +166,38 @@ impl App {
     }
 
     fn handle_key_events(&mut self, key_event: KeyEvent) {
-        if self
-            .manga_page
-            .as_ref()
-            .is_some_and(|page| page.is_downloading_all_chapters())
-        {
+        if self.manga_page.as_ref().is_some_and(|page| page.is_downloading_all_chapters()) {
             return;
         }
 
-        if self.search_page.input_mode != InputMode::Typing
-            && !self.search_page.is_typing_filter()
-            && !self.feed_page.is_typing()
-        {
+        if self.search_page.input_mode != InputMode::Typing && !self.search_page.is_typing_filter() && !self.feed_page.is_typing() {
             match key_event.code {
                 KeyCode::Char('c') if key_event.modifiers == KeyModifiers::CONTROL => {
                     self.global_action_tx.send(Action::Quit).ok();
-                }
+                },
                 KeyCode::Char('u') | KeyCode::F(1) => {
                     if self.current_tab != SelectedPage::ReaderTab {
                         self.global_event_tx.send(Events::GoToHome).ok();
                     }
-                }
+                },
                 KeyCode::Char('i') | KeyCode::F(2) => {
                     if self.current_tab != SelectedPage::ReaderTab {
                         self.global_event_tx.send(Events::GoSearchPage).ok();
                     }
-                }
+                },
                 KeyCode::Char('o') | KeyCode::F(3) => {
                     if self.current_tab != SelectedPage::ReaderTab {
                         self.global_event_tx.send(Events::GoFeedPage).ok();
                     }
-                }
+                },
                 KeyCode::Backspace => {
-                    if self.current_tab == SelectedPage::ReaderTab
-                        && self.manga_reader_page.is_some()
-                    {
+                    if self.current_tab == SelectedPage::ReaderTab && self.manga_reader_page.is_some() {
                         self.manga_reader_page.as_mut().unwrap().clean_up();
                         self.current_tab = SelectedPage::MangaTab;
                     }
-                }
+                },
 
-                _ => {}
+                _ => {},
             }
         }
     }
@@ -228,11 +220,7 @@ impl App {
         self.feed_page.clean_up();
 
         self.current_tab = SelectedPage::MangaTab;
-        self.manga_page = Some(MangaPage::new(
-            manga.manga,
-            manga.image_state,
-            self.global_event_tx.clone(),
-        ));
+        self.manga_page = Some(MangaPage::new(manga.manga, manga.image_state, self.global_event_tx.clone()));
     }
 
     fn go_to_read_chapter(&mut self, chapter_response: ChapterPagesResponse) {

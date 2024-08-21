@@ -1,14 +1,14 @@
-use manga_tui::exists;
-use once_cell::sync::Lazy;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::{create_dir, create_dir_all, File};
 use std::path::{Path, PathBuf};
+
+use manga_tui::exists;
+use once_cell::sync::Lazy;
+use serde::{Deserialize, Serialize};
 use strum::{Display, EnumIter, IntoEnumIterator};
 
-use crate::config::{MangaTuiConfig, CONFIG};
-
 use self::error_log::ERROR_LOGS_FILE;
+use crate::config::{MangaTuiConfig, CONFIG};
 
 pub mod database;
 pub mod download;
@@ -46,11 +46,9 @@ impl AppDirectories {
 }
 
 pub static APP_DATA_DIR: Lazy<Option<PathBuf>> = Lazy::new(|| {
-    directories::ProjectDirs::from("", "", "manga-tui").map(|dirs| {
-        match std::env::var("MANGA_TUI_DATA_DIR").ok() {
-            Some(data_dir) => PathBuf::from(data_dir),
-            None => dirs.data_dir().to_path_buf(),
-        }
+    directories::ProjectDirs::from("", "", "manga-tui").map(|dirs| match std::env::var("MANGA_TUI_DATA_DIR").ok() {
+        Some(data_dir) => PathBuf::from(data_dir),
+        None => dirs.data_dir().to_path_buf(),
     })
 });
 
@@ -63,27 +61,20 @@ pub fn build_data_dir() -> Result<(), std::io::Error> {
             }
             AppDirectories::build_if_not_exists(dir)?;
 
-            if !exists!(&dir
-                .join(AppDirectories::ErrorLogs.to_string())
-                .join(ERROR_LOGS_FILE))
-            {
-                File::create(
-                    dir.join(AppDirectories::ErrorLogs.to_string())
-                        .join(ERROR_LOGS_FILE),
-                )?;
+            if !exists!(&dir.join(AppDirectories::ErrorLogs.to_string()).join(ERROR_LOGS_FILE)) {
+                File::create(dir.join(AppDirectories::ErrorLogs.to_string()).join(ERROR_LOGS_FILE))?;
             }
 
             MangaTuiConfig::write_config(dir)?;
 
             let config_contents = MangaTuiConfig::read_config(dir)?;
 
-            let config_contents: MangaTuiConfig =
-                toml::from_str(&config_contents).unwrap_or_default();
+            let config_contents: MangaTuiConfig = toml::from_str(&config_contents).unwrap_or_default();
 
             CONFIG.set(config_contents).unwrap();
 
             Ok(())
-        }
+        },
         None => Err(std::io::Error::other("data dir could not be found")),
     }
 }

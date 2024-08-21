@@ -1,7 +1,8 @@
-use crate::backend::tui::Events;
 use crossterm::event::KeyCode;
 use ratatui::Frame;
 use ratatui_image::protocol::StatefulProtocol;
+
+use crate::backend::tui::Events;
 
 pub mod feed;
 pub mod filter_widget;
@@ -23,12 +24,7 @@ pub trait Component {
 
 pub trait StatefulWidgetFrame {
     type State;
-    fn render(
-        &mut self,
-        area: ratatui::prelude::Rect,
-        frame: &mut Frame<'_>,
-        state: &mut Self::State,
-    );
+    fn render(&mut self, area: ratatui::prelude::Rect, frame: &mut Frame<'_>, state: &mut Self::State);
 }
 
 pub trait ImageHandler: Send + 'static {

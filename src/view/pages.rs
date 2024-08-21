@@ -6,9 +6,7 @@ pub mod manga;
 pub mod reader;
 pub mod search;
 
-#[derive(
-    Clone, Copy, Default, FromRepr, Display, EnumIter, EnumCount, PartialEq, Eq, PartialOrd, Ord,
-)]
+#[derive(Clone, Copy, Default, FromRepr, Display, EnumIter, EnumCount, PartialEq, Eq, PartialOrd, Ord)]
 pub enum SelectedPage {
     ReaderTab,
     MangaTab,

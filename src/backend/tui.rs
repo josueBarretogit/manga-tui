@@ -1,22 +1,21 @@
+use std::error::Error;
+use std::time::Duration;
+
 use crossterm::event::{DisableMouseCapture, EnableMouseCapture, KeyEvent, MouseEvent};
 use crossterm::execute;
-use crossterm::terminal::{
-    disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
-};
+use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
 use futures::{FutureExt, StreamExt};
 use ratatui::backend::Backend;
 use ratatui::prelude::*;
-use std::error::Error;
-use std::time::Duration;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::task::JoinHandle;
+
+use super::ChapterPagesResponse;
 use crate::common::{Artist, Author};
 use crate::view::app::{App, AppState};
 use crate::view::pages::SelectedPage;
 use crate::view::widgets::search::MangaItem;
 use crate::view::widgets::Component;
-
-use super::ChapterPagesResponse;
 
 pub enum Action {
     Quit,
@@ -70,19 +69,19 @@ pub async fn run_app(backend: impl Backend) -> Result<(), Box<dyn Error>> {
             match app.current_tab {
                 SelectedPage::Search => {
                     app.search_page.handle_events(event);
-                }
+                },
                 SelectedPage::MangaTab => {
                     app.manga_page.as_mut().unwrap().handle_events(event);
-                }
+                },
                 SelectedPage::ReaderTab => {
                     app.manga_reader_page.as_mut().unwrap().handle_events(event);
-                }
+                },
                 SelectedPage::Home => {
                     app.home_page.handle_events(event);
-                }
+                },
                 SelectedPage::Feed => {
                     app.feed_page.handle_events(event);
-                }
+                },
             };
         }
 
@@ -95,31 +94,31 @@ pub async fn run_app(backend: impl Backend) -> Result<(), Box<dyn Error>> {
                 if let Ok(search_page_action) = app.search_page.local_action_rx.try_recv() {
                     app.search_page.update(search_page_action);
                 }
-            }
+            },
             SelectedPage::MangaTab => {
                 if let Some(manga_page) = app.manga_page.as_mut() {
                     if let Ok(action) = manga_page.local_action_rx.try_recv() {
                         manga_page.update(action);
                     }
                 }
-            }
+            },
             SelectedPage::ReaderTab => {
                 if let Some(reader_page) = app.manga_reader_page.as_mut() {
                     if let Ok(reader_action) = reader_page.local_action_rx.try_recv() {
                         reader_page.update(reader_action);
                     }
                 }
-            }
+            },
             SelectedPage::Home => {
                 if let Ok(home_action) = app.home_page.local_action_rx.try_recv() {
                     app.home_page.update(home_action);
                 }
-            }
+            },
             SelectedPage::Feed => {
                 if let Ok(feed_event) = app.feed_page.local_action_rx.try_recv() {
                     app.feed_page.update(feed_event);
                 }
-            }
+            },
         };
     }
 
