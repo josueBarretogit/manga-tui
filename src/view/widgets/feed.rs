@@ -1,9 +1,8 @@
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Margin, Rect};
 use ratatui::style::{Color, Style, Stylize};
-use ratatui::text::{Line};
+use ratatui::text::Line;
 use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph, StatefulWidget, StatefulWidgetRef, Widget, Wrap};
-
 use tui_widget_list::PreRender;
 
 use crate::backend::filter::Languages;

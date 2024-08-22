@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Margin, Rect};
 use ratatui::style::{Color, Modifier, Style};
@@ -8,6 +9,7 @@ use ratatui::widgets::{Block, LineGauge, Paragraph, StatefulWidget, Widget, Wrap
 use throbber_widgets_tui::{Throbber, ThrobberState};
 use tokio::sync::mpsc::UnboundedSender;
 use tui_widget_list::PreRender;
+
 use crate::backend::filter::Languages;
 use crate::backend::ChapterResponse;
 use crate::global::{CURRENT_LIST_ITEM_STYLE, ERROR_STYLE, INSTRUCTIONS_STYLE};

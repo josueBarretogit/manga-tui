@@ -1,4 +1,5 @@
 use std::io::Cursor;
+
 use image::io::Reader;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Style, Stylize};
