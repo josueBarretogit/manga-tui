@@ -1,5 +1,7 @@
-use ratatui::prelude::*;
-use ratatui::widgets::*;
+use ratatui::buffer::Buffer;
+use ratatui::layout::{Constraint, Layout, Rect};
+use ratatui::style::{Color, Style};
+use ratatui::widgets::{Block, Paragraph, StatefulWidget, Widget, Wrap};
 use throbber_widgets_tui::{Throbber, ThrobberState};
 use tui_widget_list::PreRender;
 

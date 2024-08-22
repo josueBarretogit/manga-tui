@@ -1,13 +1,15 @@
 use crossterm::event::KeyCode;
 use image::io::Reader;
 use image::GenericImageView;
-use ratatui::prelude::*;
-use ratatui::widgets::*;
+use ratatui::buffer::Buffer;
+use ratatui::layout::{Constraint, Layout, Margin, Rect};
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Block, Paragraph, StatefulWidget, Widget};
+use ratatui::Frame;
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::{Resize, StatefulImage};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
-
 use crate::backend::error_log::{write_to_error_log, ErrorType};
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
@@ -75,7 +77,7 @@ pub struct MangaReader {
 impl Component for MangaReader {
     type Actions = MangaReaderActions;
 
-    fn render(&mut self, area: ratatui::prelude::Rect, frame: &mut Frame<'_>) {
+    fn render(&mut self, area: Rect, frame: &mut Frame<'_>) {
         let buf = frame.buffer_mut();
 
         let layout = Layout::horizontal([Constraint::Fill(1), Constraint::Fill(self.current_page_size), Constraint::Fill(1)]);

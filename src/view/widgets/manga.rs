@@ -1,12 +1,13 @@
 use std::path::PathBuf;
-
-use ratatui::prelude::*;
-use ratatui::widgets::*;
+use ratatui::buffer::Buffer;
+use ratatui::layout::{Constraint, Layout, Margin, Rect};
+use ratatui::style::{Color, Modifier, Style};
+use ratatui::symbols::line::THICK;
+use ratatui::text::{Line, ToSpan};
+use ratatui::widgets::{Block, LineGauge, Paragraph, StatefulWidget, Widget, Wrap};
 use throbber_widgets_tui::{Throbber, ThrobberState};
 use tokio::sync::mpsc::UnboundedSender;
 use tui_widget_list::PreRender;
-
-use self::text::ToSpan;
 use crate::backend::filter::Languages;
 use crate::backend::ChapterResponse;
 use crate::global::{CURRENT_LIST_ITEM_STYLE, ERROR_STYLE, INSTRUCTIONS_STYLE};
@@ -69,7 +70,7 @@ impl Widget for ChapterItem {
                 LineGauge::default()
                     .block(Block::bordered().title("Downloading please wait a moment"))
                     .filled_style(Style::default().fg(Color::Blue).bg(Color::Black).add_modifier(Modifier::BOLD))
-                    .line_set(symbols::line::THICK)
+                    .line_set(THICK)
                     .ratio(*progress)
                     .render(scanlator_area, buf);
             },
@@ -442,7 +443,7 @@ impl<'a> StatefulWidget for DownloadAllChaptersWidget<'a> {
                 LineGauge::default()
                     .block(Block::bordered().title(download_progress_title))
                     .filled_style(Style::default().fg(Color::Blue).bg(Color::Black).add_modifier(Modifier::BOLD))
-                    .line_set(symbols::line::THICK)
+                    .line_set(THICK)
                     .ratio(state.download_progress / state.total_chapters)
                     .render(progress_area, buf);
             },

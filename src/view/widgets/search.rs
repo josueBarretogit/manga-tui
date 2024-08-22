@@ -1,7 +1,11 @@
-use ratatui::prelude::*;
-use ratatui::widgets::*;
+use ratatui::buffer::Buffer;
+use ratatui::layout::{Constraint, Layout, Margin, Rect};
+use ratatui::style::Style;
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Block, Paragraph, StatefulWidget, StatefulWidgetRef, Widget, Wrap};
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::{Resize, StatefulImage};
+
 use throbber_widgets_tui::{Throbber, ThrobberState};
 use tui_widget_list::PreRender;
 
@@ -75,7 +79,7 @@ impl<'a> MangaPreview<'a> {
     pub fn render_description_area(self, area: Rect, buf: &mut Buffer) {
         Block::bordered().title(self.title).render(area, buf);
 
-        let inner = area.inner(layout::Margin {
+        let inner = area.inner(Margin {
             horizontal: 1,
             vertical: 2,
         });
@@ -102,7 +106,7 @@ impl<'a> MangaPreview<'a> {
 impl<'a> StatefulWidget for MangaPreview<'a> {
     type State = Option<Box<dyn StatefulProtocol>>;
 
-    fn render(mut self, area: ratatui::prelude::Rect, buf: &mut Buffer, state: &mut Self::State) {
+    fn render(mut self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         let [cover_details_area, description_area] =
             Layout::vertical([Constraint::Percentage(40), Constraint::Percentage(60)]).areas(area);
 
@@ -119,7 +123,7 @@ pub struct MangaItem {
 }
 
 impl Widget for MangaItem {
-    fn render(self, area: ratatui::prelude::Rect, buf: &mut Buffer)
+    fn render(self, area: Rect, buf: &mut Buffer)
     where
         Self: Sized,
     {
@@ -177,7 +181,7 @@ impl ListMangasFoundWidget {
 impl StatefulWidgetRef for ListMangasFoundWidget {
     type State = tui_widget_list::ListState;
 
-    fn render_ref(&self, area: ratatui::prelude::Rect, buf: &mut Buffer, state: &mut Self::State) {
+    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         let list = tui_widget_list::List::new(self.mangas.clone());
         StatefulWidget::render(list, area, buf, state);
     }

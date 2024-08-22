@@ -1,17 +1,18 @@
 use std::env;
 use std::io::Cursor;
-
 use crossterm::event::{KeyCode, KeyEvent};
 use image::io::Reader;
 use image::DynamicImage;
-use ratatui::prelude::*;
-use ratatui::widgets::*;
+use ratatui::buffer::Buffer;
+use ratatui::layout::{Constraint, Layout, Margin, Rect};
+use ratatui::style::Stylize;
+use ratatui::text::{Line, Span, ToSpan};
+use ratatui::widgets::{Block, List, StatefulWidget, Widget};
+use ratatui::Frame;
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::{Resize, StatefulImage};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
-
-use self::text::ToSpan;
 use crate::backend::error_log::{write_to_error_log, ErrorType};
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
@@ -78,7 +79,7 @@ pub struct Home {
 impl Component for Home {
     type Actions = HomeActions;
 
-    fn render(&mut self, area: ratatui::prelude::Rect, frame: &mut Frame<'_>) {
+    fn render(&mut self, area: Rect, frame: &mut Frame<'_>) {
         let layout = Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)]).margin(1);
         let buf = frame.buffer_mut();
 

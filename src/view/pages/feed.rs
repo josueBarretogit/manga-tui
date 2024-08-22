@@ -1,16 +1,17 @@
 use std::io::Cursor;
-
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent, MouseEventKind};
 use image::io::Reader;
-use ratatui::prelude::*;
-use ratatui::widgets::*;
+use ratatui::buffer::Buffer;
+use ratatui::layout::{Constraint, Layout, Margin, Rect};
+use ratatui::style::{Color, Style};
+use ratatui::text::{Line, Span, ToSpan};
+use ratatui::widgets::{Block, Paragraph, StatefulWidget, Tabs, Widget};
+use ratatui::Frame;
 use throbber_widgets_tui::{Throbber, ThrobberState};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
-
-use self::text::ToSpan;
 use crate::backend::database::{get_history, MangaHistoryResponse, MangaHistoryType};
 use crate::backend::error_log::{write_to_error_log, ErrorType};
 use crate::backend::fetch::MangadexClient;
@@ -435,7 +436,7 @@ impl Feed {
 impl Component for Feed {
     type Actions = FeedActions;
 
-    fn render(&mut self, area: ratatui::prelude::Rect, frame: &mut Frame<'_>) {
+    fn render(&mut self, area: Rect, frame: &mut Frame<'_>) {
         let layout = Layout::vertical([Constraint::Percentage(20), Constraint::Percentage(80)]);
 
         let [tabs_area, history_area] = layout.areas(area);

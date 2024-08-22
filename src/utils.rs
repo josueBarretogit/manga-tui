@@ -1,8 +1,10 @@
 use std::io::Cursor;
-
 use image::io::Reader;
-use ratatui::prelude::*;
-use ratatui::widgets::*;
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use ratatui::style::{Color, Style, Stylize};
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Block, Paragraph, Widget};
+use ratatui::Frame;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::task::JoinSet;
 use tui_input::Input;

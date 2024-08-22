@@ -1,4 +1,5 @@
 use crossterm::event::KeyCode;
+use ratatui::layout::Rect;
 use ratatui::Frame;
 use ratatui_image::protocol::StatefulProtocol;
 
@@ -14,7 +15,7 @@ pub mod search;
 pub trait Component {
     type Actions;
     ///Handles the logic for drawing to the screen
-    fn render(&mut self, area: ratatui::prelude::Rect, frame: &mut Frame<'_>);
+    fn render(&mut self, area: Rect, frame: &mut Frame<'_>);
     fn handle_events(&mut self, events: Events);
     fn update(&mut self, action: Self::Actions);
 
@@ -24,7 +25,7 @@ pub trait Component {
 
 pub trait StatefulWidgetFrame {
     type State;
-    fn render(&mut self, area: ratatui::prelude::Rect, frame: &mut Frame<'_>, state: &mut Self::State);
+    fn render(&mut self, area: Rect, frame: &mut Frame<'_>, state: &mut Self::State);
 }
 
 pub trait ImageHandler: Send + 'static {

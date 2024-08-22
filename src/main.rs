@@ -1,13 +1,11 @@
 #![forbid(unsafe_code)]
 #![allow(dead_code)]
 use std::time::Duration;
-
 use clap::Parser;
 use once_cell::sync::Lazy;
 use ratatui::backend::CrosstermBackend;
 use ratatui_image::picker::{Picker, ProtocolType};
 use reqwest::{Client, StatusCode};
-
 use self::backend::error_log::init_error_hooks;
 use self::backend::fetch::{MangadexClient, MANGADEX_CLIENT_INSTANCE};
 use self::backend::filter::Languages;

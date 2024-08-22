@@ -1,9 +1,11 @@
-use ratatui::prelude::*;
-use ratatui::widgets::*;
+use ratatui::buffer::Buffer;
+use ratatui::layout::{Constraint, Layout, Margin, Rect};
+use ratatui::style::{Color, Style};
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Block, Paragraph, StatefulWidget, Widget, Wrap};
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::{Resize, StatefulImage};
 use throbber_widgets_tui::{Throbber, ThrobberState};
-
 use crate::backend::{Data, SearchMangaResponse};
 use crate::common::Manga;
 use crate::utils::{from_manga_response, set_status_style, set_tags_style};
@@ -34,8 +36,8 @@ impl CarrouselItem {
     }
 
     fn render_cover(&mut self, area: Rect, buf: &mut Buffer) {
-        match self.cover_state {
-            Some(ref mut image_state) => {
+        match self.cover_state.as_mut() {
+            Some(image_state) => {
                 let cover = StatefulImage::new(None).resize(Resize::Fit(None));
 
                 StatefulWidget::render(cover, area, buf, image_state)

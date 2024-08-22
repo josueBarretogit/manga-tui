@@ -1,5 +1,9 @@
-use ratatui::prelude::*;
-use ratatui::widgets::*;
+use ratatui::buffer::Buffer;
+use ratatui::layout::{Constraint, Layout, Margin, Rect};
+use ratatui::style::{Color, Style, Stylize};
+use ratatui::text::{Line};
+use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph, StatefulWidget, StatefulWidgetRef, Widget, Wrap};
+
 use tui_widget_list::PreRender;
 
 use crate::backend::filter::Languages;
@@ -161,7 +165,7 @@ impl HistoryWidget {
 impl StatefulWidget for HistoryWidget {
     type State = tui_widget_list::ListState;
 
-    fn render(mut self, area: ratatui::prelude::Rect, buf: &mut ratatui::prelude::Buffer, state: &mut Self::State) {
+    fn render(mut self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         let layout = Layout::vertical([Constraint::Percentage(10), Constraint::Percentage(90)]);
         let [total_results_area, list_area] = layout.areas(area);
 
