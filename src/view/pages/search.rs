@@ -1,6 +1,9 @@
 use crossterm::event::{self, KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
-use ratatui::prelude::*;
-use ratatui::widgets::*;
+use ratatui::layout::{Constraint, Direction, Layout, Margin, Rect};
+use ratatui::style::{Color, Style, Stylize};
+use ratatui::text::{Line, Span, ToSpan};
+use ratatui::widgets::{Block, Paragraph, StatefulWidget, StatefulWidgetRef, Widget, Wrap};
+use ratatui::Frame;
 use ratatui_image::protocol::StatefulProtocol;
 use throbber_widgets_tui::{Throbber, ThrobberState};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
@@ -9,7 +12,6 @@ use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
 use tui_widget_list::ListState;
 
-use self::text::ToSpan;
 use crate::backend::database::{save_plan_to_read, MangaPlanToReadSave};
 use crate::backend::error_log::{write_to_error_log, ErrorType};
 use crate::backend::fetch::MangadexClient;
@@ -582,6 +584,8 @@ impl SearchPage {
 
 #[cfg(test)]
 mod test {
+    use ratatui::buffer::Buffer;
+
     use super::*;
     use crate::view::widgets::press_key;
 

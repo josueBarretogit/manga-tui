@@ -1,5 +1,9 @@
-use ratatui::prelude::*;
-use ratatui::widgets::*;
+use ratatui::buffer::Buffer;
+use ratatui::layout::{Constraint, Layout, Rect};
+use ratatui::style::{Color, Style, Stylize};
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Block, Clear, HighlightSpacing, List, ListItem, ListState, Paragraph, StatefulWidget, Tabs, Widget, Wrap};
+use ratatui::Frame;
 use state::*;
 
 use super::StatefulWidgetFrame;
@@ -50,7 +54,7 @@ impl From<TagListItem> for ListItem<'_> {
 impl<'a> StatefulWidgetFrame for FilterWidget<'a> {
     type State = FilterState;
 
-    fn render(&mut self, area: ratatui::prelude::Rect, frame: &mut Frame<'_>, state: &mut Self::State) {
+    fn render(&mut self, area: Rect, frame: &mut Frame<'_>, state: &mut Self::State) {
         let buf = frame.buffer_mut();
         let popup_area = centered_rect(area, 80, 70);
 

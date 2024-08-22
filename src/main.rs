@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 #![allow(dead_code)]
+#![allow(deprecated)]
 use std::time::Duration;
 
 use clap::Parser;

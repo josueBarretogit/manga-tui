@@ -1,13 +1,16 @@
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent, MouseEventKind};
-use ratatui::prelude::*;
-use ratatui::widgets::*;
+use ratatui::buffer::Buffer;
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use ratatui::style::{Style, Stylize};
+use ratatui::text::{Line, Span, ToSpan};
+use ratatui::widgets::{Block, Clear, List, ListState, Paragraph, StatefulWidget, Widget, Wrap};
+use ratatui::Frame;
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::{Resize, StatefulImage};
 use strum::Display;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
-use self::text::ToSpan;
 use crate::backend::database::{
     get_chapters_history_status, save_history, set_chapter_downloaded, MangaReadingHistorySave, SetChapterDownloaded,
 };
@@ -915,7 +918,7 @@ impl MangaPage {
 impl Component for MangaPage {
     type Actions = MangaPageActions;
 
-    fn render(&mut self, area: ratatui::prelude::Rect, frame: &mut ratatui::Frame<'_>) {
+    fn render(&mut self, area: Rect, frame: &mut Frame<'_>) {
         let layout = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Percentage(15), Constraint::Percentage(85)]);

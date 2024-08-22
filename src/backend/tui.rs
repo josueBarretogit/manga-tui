@@ -6,7 +6,7 @@ use crossterm::execute;
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
 use futures::{FutureExt, StreamExt};
 use ratatui::backend::Backend;
-use ratatui::prelude::*;
+use ratatui::Terminal;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::task::JoinHandle;
 
