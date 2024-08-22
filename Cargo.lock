@@ -459,19 +459,6 @@ checksum = "0b6a852b24ab71dffc585bcb46eaf7959d175cb865a7152e35b348d1b2960422"
 
 [[package]]
 name = "compact_str"
-version = "0.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f86b9c4c00838774a6d902ef931eff7470720c51d90c2e32cfe15dc304737b3f"
-dependencies = [
- "castaway",
- "cfg-if",
- "itoa",
- "ryu",
- "static_assertions",
-]
-
-[[package]]
-name = "compact_str"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6050c3a16ddab2e412160b31f2c871015704239bca62f72f6e5f0be631d3f644"
@@ -1588,7 +1575,7 @@ dependencies = [
  "image",
  "once_cell",
  "open",
- "ratatui 0.28.0",
+ "ratatui",
  "ratatui-image",
  "reqwest",
  "rusqlite",
@@ -2126,33 +2113,13 @@ dependencies = [
 
 [[package]]
 name = "ratatui"
-version = "0.27.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d16546c5b5962abf8ce6e2881e722b4e0ae3b6f1a08a26ae3573c55853ca68d3"
-dependencies = [
- "bitflags 2.5.0",
- "cassowary",
- "compact_str 0.7.1",
- "itertools 0.13.0",
- "lru",
- "paste",
- "stability",
- "strum",
- "strum_macros",
- "unicode-segmentation",
- "unicode-truncate",
- "unicode-width",
-]
-
-[[package]]
-name = "ratatui"
 version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5ba6a365afbe5615999275bea2446b970b10a41102500e27ce7678d50d978303"
 dependencies = [
  "bitflags 2.5.0",
  "cassowary",
- "compact_str 0.8.0",
+ "compact_str",
  "crossterm",
  "instability",
  "itertools 0.13.0",
@@ -2178,7 +2145,7 @@ dependencies = [
  "icy_sixel",
  "image",
  "rand",
- "ratatui 0.27.0",
+ "ratatui",
  "rustix",
 ]
 
@@ -2580,16 +2547,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "stability"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ff9eaf853dec4c8802325d8b6d3dffa86cc707fd7a1a4cdbf416e13b061787a"
-dependencies = [
- "quote",
- "syn",
-]
-
-[[package]]
 name = "stable_deref_trait"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2752,7 +2709,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fad9e055cadd9da8b4a67662b962e3e67e96af491ae9cec7e88aaff92e7c3666"
 dependencies = [
  "rand",
- "ratatui 0.28.0",
+ "ratatui",
 ]
 
 [[package]]
@@ -2964,7 +2921,7 @@ version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68699e8bb4ca025ab41fcc602d3d53a5714a56b0cf2d6e93c98aaf4231e3d937"
 dependencies = [
- "ratatui 0.28.0",
+ "ratatui",
  "unicode-width",
 ]
 
@@ -2974,7 +2931,7 @@ version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "884b5d63dd439c721ec28ae1a19cbc9cb9dc151bd2d00940e94ba4dc728a236e"
 dependencies = [
- "ratatui 0.28.0",
+ "ratatui",
 ]
 
 [[package]]
