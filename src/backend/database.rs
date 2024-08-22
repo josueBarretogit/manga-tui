@@ -1,10 +1,12 @@
-use super::{AppDirectories, APP_DATA_DIR};
+use std::sync::Mutex;
+
 use chrono::Utc;
 use manga_tui::build_check_exists_function;
 use once_cell::sync::Lazy;
 use rusqlite::{params, Connection};
-use std::sync::Mutex;
 use strum::Display;
+
+use super::{AppDirectories, APP_DATA_DIR};
 
 // Todo! document database schema
 
@@ -31,17 +33,11 @@ pub static DBCONN: Lazy<Mutex<Option<Connection>>> = Lazy::new(|| {
     )
     .unwrap();
 
-
-    let already_has_data: i32 = conn
-        .query_row("SELECT COUNT(*) from app_version", [], |row| row.get(0))
-        .unwrap();
+    let already_has_data: i32 = conn.query_row("SELECT COUNT(*) from app_version", [], |row| row.get(0)).unwrap();
 
     if already_has_data == 0 {
-        conn.execute(
-            "INSERT INTO app_version(version) VALUES (?1) ",
-            [env!("CARGO_PKG_VERSION")],
-        )
-        .unwrap();
+        conn.execute("INSERT INTO app_version(version) VALUES (?1) ", [env!("CARGO_PKG_VERSION")])
+            .unwrap();
     }
 
     conn.execute(
@@ -92,22 +88,14 @@ pub static DBCONN: Lazy<Mutex<Option<Connection>>> = Lazy::new(|| {
     )
     .unwrap();
 
-    let already_has_data: i32 = conn
-        .query_row("SELECT COUNT(*) from history_types", [], |row| row.get(0))
-        .unwrap();
+    let already_has_data: i32 = conn.query_row("SELECT COUNT(*) from history_types", [], |row| row.get(0)).unwrap();
 
     if already_has_data < 2 {
-        conn.execute(
-            "INSERT INTO history_types(name) VALUES (?1) ",
-            [MangaHistoryType::ReadingHistory.to_string()],
-        )
-        .unwrap();
+        conn.execute("INSERT INTO history_types(name) VALUES (?1) ", [MangaHistoryType::ReadingHistory.to_string()])
+            .unwrap();
 
-        conn.execute(
-            "INSERT INTO history_types(name) VALUES (?1) ",
-            [MangaHistoryType::PlanToRead.to_string()],
-        )
-        .unwrap();
+        conn.execute("INSERT INTO history_types(name) VALUES (?1) ", [MangaHistoryType::PlanToRead.to_string()])
+            .unwrap();
     }
 
     Mutex::new(Some(conn))
@@ -140,11 +128,7 @@ pub struct MangaInsert<'a> {
 fn insert_manga(manga_to_insert: MangaInsert<'_>, conn: &Connection) -> rusqlite::Result<()> {
     conn.execute(
         "INSERT INTO mangas(id, title, img_url) VALUES (?1, ?2, ?3)",
-        (
-            manga_to_insert.id,
-            manga_to_insert.title,
-            manga_to_insert.img_url,
-        ),
+        (manga_to_insert.id, manga_to_insert.title, manga_to_insert.img_url),
     )?;
     Ok(())
 }
@@ -165,10 +149,7 @@ fn insert_chapter(chap: ChapterInsert<'_>, conn: &Connection) -> rusqlite::Resul
     Ok(())
 }
 
-fn update_or_insert_manga_most_recent_read(
-    manga_id: &str,
-    conn: &Connection,
-) -> rusqlite::Result<()> {
+fn update_or_insert_manga_most_recent_read(manga_id: &str, conn: &Connection) -> rusqlite::Result<()> {
     let history_type: i32 = conn.query_row(
         "SELECT id FROM history_types where name = ?1",
         params![MangaHistoryType::ReadingHistory.to_string()],
@@ -176,17 +157,11 @@ fn update_or_insert_manga_most_recent_read(
     )?;
 
     if !manga_is_reading(manga_id, conn)? {
-        conn.execute(
-            "INSERT INTO manga_history_union VALUES (?1, ?2)",
-            (manga_id, history_type),
-        )?;
+        conn.execute("INSERT INTO manga_history_union VALUES (?1, ?2)", (manga_id, history_type))?;
         Ok(())
     } else {
         let now = Utc::now().naive_utc();
-        conn.execute(
-            "UPDATE mangas SET last_read = ?1 WHERE id = ?2",
-            params![now.to_string(), manga_id],
-        )?;
+        conn.execute("UPDATE mangas SET last_read = ?1 WHERE id = ?2", params![now.to_string(), manga_id])?;
         Ok(())
     }
 }
@@ -231,16 +206,10 @@ pub fn save_history(manga_read: MangaReadingHistorySave<'_>) -> rusqlite::Result
         )?;
 
         if !manga_is_reading(manga_read.id, conn)? {
-            conn.execute(
-                "INSERT INTO manga_history_union VALUES (?1, ?2)",
-                (manga_read.id, history_type),
-            )?;
+            conn.execute("INSERT INTO manga_history_union VALUES (?1, ?2)", (manga_read.id, history_type))?;
         } else {
             let now = Utc::now().naive_utc();
-            conn.execute(
-                "UPDATE mangas SET last_read = ?1 WHERE id = ?2",
-                params![now.to_string(), manga_read.id],
-            )?;
+            conn.execute("UPDATE mangas SET last_read = ?1 WHERE id = ?2", params![now.to_string(), manga_read.id])?;
         }
         return Ok(());
     }
@@ -254,10 +223,7 @@ pub fn save_history(manga_read: MangaReadingHistorySave<'_>) -> rusqlite::Result
         conn,
     )?;
 
-    conn.execute(
-        "INSERT INTO manga_history_union VALUES (?1, ?2)",
-        (manga_read.id, history_type),
-    )?;
+    conn.execute("INSERT INTO manga_history_union VALUES (?1, ?2)", (manga_read.id, history_type))?;
 
     insert_chapter(
         ChapterInsert {
@@ -316,20 +282,13 @@ pub struct MangaHistoryResponse {
     pub total_items: u32,
 }
 /// This is used in the `feed` page to retrieve the mangas the user is currently reading
-pub fn get_history(
-    hist_type: MangaHistoryType,
-    page: u32,
-    search: &str,
-) -> rusqlite::Result<MangaHistoryResponse> {
+pub fn get_history(hist_type: MangaHistoryType, page: u32, search: &str) -> rusqlite::Result<MangaHistoryResponse> {
     let offset = (page - 1) * 5;
     let binding = DBCONN.lock().unwrap();
     let conn = binding.as_ref().unwrap();
 
-    let history_type_id: i32 = conn.query_row(
-        "SELECT id from history_types WHERE name = ?1",
-        params![hist_type.to_string()],
-        |row| row.get(0),
-    )?;
+    let history_type_id: i32 =
+        conn.query_row("SELECT id from history_types WHERE name = ?1", params![hist_type.to_string()], |row| row.get(0))?;
 
     let total_mangas: u32 = conn.query_row(
         "
@@ -385,16 +344,14 @@ pub fn get_history(
             params![history_type_id, search.trim().to_lowercase()],
             |row| row.get(0),
         )?;
-        let iter_mangas = get_statement_with_search_term.query_map(
-            params![history_type_id, search.trim().to_lowercase(), offset],
-            |row| {
+        let iter_mangas =
+            get_statement_with_search_term.query_map(params![history_type_id, search.trim().to_lowercase(), offset], |row| {
                 Ok(MangaHistory {
                     id: row.get(0)?,
                     title: row.get(1)?,
                     // img_url: row.get(2)?,
                 })
-            },
-        )?;
+            })?;
 
         for manga in iter_mangas {
             manga_history.push(manga?);
@@ -418,11 +375,10 @@ pub fn save_plan_to_read(manga: MangaPlanToReadSave<'_>) -> rusqlite::Result<()>
     let binding = DBCONN.lock().unwrap();
     let conn = binding.as_ref().unwrap();
 
-    let history_type: i32 = conn.query_row(
-        "SELECT id FROM history_types where name = ?1",
-        params![MangaHistoryType::PlanToRead.to_string()],
-        |row| row.get(0),
-    )?;
+    let history_type: i32 =
+        conn.query_row("SELECT id FROM history_types where name = ?1", params![MangaHistoryType::PlanToRead.to_string()], |row| {
+            row.get(0)
+        })?;
 
     let is_already_plan_to_read: bool = conn.query_row(
         "SELECT EXISTS(SELECT * FROM manga_history_union WHERE manga_id = ?1 AND type_id = ?2)",
@@ -432,10 +388,7 @@ pub fn save_plan_to_read(manga: MangaPlanToReadSave<'_>) -> rusqlite::Result<()>
 
     if !is_already_plan_to_read {
         if check_manga_already_exists(manga.id, conn)? {
-            conn.execute(
-                "INSERT INTO manga_history_union VALUES (?1, ?2)",
-                (manga.id, history_type),
-            )?;
+            conn.execute("INSERT INTO manga_history_union VALUES (?1, ?2)", (manga.id, history_type))?;
             return Ok(());
         }
 
@@ -448,10 +401,7 @@ pub fn save_plan_to_read(manga: MangaPlanToReadSave<'_>) -> rusqlite::Result<()>
             conn,
         )?;
 
-        conn.execute(
-            "INSERT INTO manga_history_union VALUES (?1, ?2)",
-            (manga.id, history_type),
-        )?;
+        conn.execute("INSERT INTO manga_history_union VALUES (?1, ?2)", (manga.id, history_type))?;
 
         return Ok(());
     }
@@ -478,14 +428,9 @@ pub fn set_chapter_downloaded(chapter: SetChapterDownloaded<'_>) -> rusqlite::Re
         |row| row.get(0),
     )?;
 
-    if check_chapter_exists(chapter.id, conn)?
-        && check_manga_already_exists(chapter.manga_id, conn)?
-    {
+    if check_chapter_exists(chapter.id, conn)? && check_manga_already_exists(chapter.manga_id, conn)? {
         update_or_insert_manga_most_recent_read(chapter.manga_id, conn)?;
-        conn.execute(
-            "UPDATE chapters SET is_downloaded = ?1, is_read = ?2 WHERE id = ?3",
-            params![true, true, chapter.id],
-        )?;
+        conn.execute("UPDATE chapters SET is_downloaded = ?1, is_read = ?2 WHERE id = ?3", params![true, true, chapter.id])?;
         Ok(())
     } else if !check_manga_already_exists(chapter.manga_id, conn)? {
         insert_manga(
@@ -508,10 +453,7 @@ pub fn set_chapter_downloaded(chapter: SetChapterDownloaded<'_>) -> rusqlite::Re
             conn,
         )?;
 
-        conn.execute(
-            "INSERT INTO manga_history_union VALUES (?1, ?2)",
-            (chapter.manga_id, history_type),
-        )?;
+        conn.execute("INSERT INTO manga_history_union VALUES (?1, ?2)", (chapter.manga_id, history_type))?;
 
         Ok(())
     } else {

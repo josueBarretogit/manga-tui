@@ -1,9 +1,11 @@
+use ratatui::prelude::*;
+use ratatui::widgets::*;
+use tui_widget_list::PreRender;
+
 use crate::backend::filter::Languages;
 use crate::backend::ChapterResponse;
 use crate::global::CURRENT_LIST_ITEM_STYLE;
 use crate::utils::display_dates_since_publication;
-use ratatui::{prelude::*, widgets::*};
-use tui_widget_list::PreRender;
 
 pub enum FeedTabs {
     History,
@@ -106,8 +108,7 @@ impl HistoryWidget {
     }
 
     pub fn next_page(&mut self) {
-        if self.page as f64 != (self.total_results as f64 / 5_f64).ceil() && !self.mangas.is_empty()
-        {
+        if self.page as f64 != (self.total_results as f64 / 5_f64).ceil() && !self.mangas.is_empty() {
             self.page += 1
         }
     }
@@ -122,17 +123,14 @@ impl HistoryWidget {
         if let Some(manga) = self.mangas.iter_mut().find(|manga| manga.id == manga_id) {
             for chapter in response.data {
                 let today = chrono::offset::Local::now().date_naive();
-                let parse_date =
-                    chrono::DateTime::parse_from_rfc3339(&chapter.attributes.readable_at)
-                        .unwrap_or_default();
+                let parse_date = chrono::DateTime::parse_from_rfc3339(&chapter.attributes.readable_at).unwrap_or_default();
 
                 let difference = today - parse_date.date_naive();
 
                 let num_days = difference.num_days();
 
-                let translated_language =
-                    Languages::try_from_iso_code(&chapter.attributes.translated_language)
-                        .unwrap_or(*Languages::get_preferred_lang());
+                let translated_language = Languages::try_from_iso_code(&chapter.attributes.translated_language)
+                    .unwrap_or(*Languages::get_preferred_lang());
 
                 let recent_chapter = RecentChapters {
                     title: chapter.attributes.title.unwrap_or("No title ".to_string()),
@@ -162,12 +160,8 @@ impl HistoryWidget {
 
 impl StatefulWidget for HistoryWidget {
     type State = tui_widget_list::ListState;
-    fn render(
-        mut self,
-        area: ratatui::prelude::Rect,
-        buf: &mut ratatui::prelude::Buffer,
-        state: &mut Self::State,
-    ) {
+
+    fn render(mut self, area: ratatui::prelude::Rect, buf: &mut ratatui::prelude::Buffer, state: &mut Self::State) {
         let layout = Layout::vertical([Constraint::Percentage(10), Constraint::Percentage(90)]);
         let [total_results_area, list_area] = layout.areas(area);
 

@@ -1,18 +1,19 @@
-use crate::backend::authors::AuthorsResponse;
-use crate::backend::fetch::MangadexClient;
-use crate::backend::filter::{
-    Artist, Author, ContentRating, Filters, Languages, MagazineDemographic, PublicationStatus,
-    SortBy, TagData,
-};
-use crate::backend::tags::TagsResponse;
-use crate::backend::tui::Events;
+use std::marker::PhantomData;
+
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::widgets::*;
-use std::marker::PhantomData;
 use strum::{Display, IntoEnumIterator};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
+
+use crate::backend::authors::AuthorsResponse;
+use crate::backend::fetch::MangadexClient;
+use crate::backend::filter::{
+    Artist, Author, ContentRating, Filters, Languages, MagazineDemographic, PublicationStatus, SortBy, TagData,
+};
+use crate::backend::tags::TagsResponse;
+use crate::backend::tui::Events;
 
 pub enum FilterEvents {
     LoadAuthors(Option<AuthorsResponse>),
@@ -88,11 +89,7 @@ impl<T> FilterList<T> {
     }
 
     pub fn scroll_down(&mut self) {
-        if self
-            .state
-            .selected()
-            .is_some_and(|index| index == self.items.len() - 1)
-        {
+        if self.state.selected().is_some_and(|index| index == self.items.len() - 1) {
             self.state.select_first();
         } else {
             self.state.select_next()
@@ -198,12 +195,10 @@ impl FilterList<SortByState> {
 
 impl Default for FilterList<LanguageState> {
     fn default() -> Self {
-        let items = Languages::iter()
-            .filter(|lang| *lang != Languages::Unkown)
-            .map(|lang| FilterListItem {
-                name: format!("{} {}", lang.as_emoji(), lang.as_human_readable()),
-                is_selected: lang == *Languages::get_preferred_lang(),
-            });
+        let items = Languages::iter().filter(|lang| *lang != Languages::Unkown).map(|lang| FilterListItem {
+            name: format!("{} {}", lang.as_emoji(), lang.as_human_readable()),
+            is_selected: lang == *Languages::get_preferred_lang(),
+        });
 
         Self {
             items: items.collect(),
@@ -304,10 +299,10 @@ impl<T> FilterListDynamic<T> {
                 } else {
                     self.set_users_found(user);
                 }
-            }
+            },
             None => {
                 self.set_users_not_found();
-            }
+            },
         }
     }
 }
@@ -332,10 +327,10 @@ impl TagListItem {
         match self.state {
             TagListItemState::NotSelected | TagListItemState::Excluded => {
                 self.state = TagListItemState::Included;
-            }
+            },
             TagListItemState::Included => {
                 self.state = TagListItemState::NotSelected;
-            }
+            },
         }
     }
 
@@ -343,10 +338,10 @@ impl TagListItem {
         match self.state {
             TagListItemState::NotSelected | TagListItemState::Included => {
                 self.state = TagListItemState::Excluded;
-            }
+            },
             TagListItemState::Excluded => {
                 self.state = TagListItemState::NotSelected;
-            }
+            },
         }
     }
 }
@@ -363,10 +358,7 @@ impl TagsState {
         match self.tags.as_ref() {
             Some(tags) => tags
                 .iter()
-                .filter(|tag| {
-                    tag.state == TagListItemState::Included
-                        || tag.state == TagListItemState::Excluded
-                })
+                .filter(|tag| tag.state == TagListItemState::Included || tag.state == TagListItemState::Excluded)
                 .count(),
             None => 0,
         }
@@ -392,11 +384,7 @@ impl TagsState {
             .as_mut()
             .unwrap()
             .iter_mut()
-            .filter(|tag| {
-                tag.name
-                    .to_lowercase()
-                    .contains(&self.filter_input.value().to_lowercase())
-            })
+            .filter(|tag| tag.name.to_lowercase().contains(&self.filter_input.value().to_lowercase()))
             .collect()
     }
 
@@ -534,7 +522,7 @@ impl FilterState {
         match events {
             Events::Key(key_event) => self.handle_key_events(key_event),
             Events::Tick => self.tick(),
-            _ => {}
+            _ => {},
         }
     }
 
@@ -559,10 +547,10 @@ impl FilterState {
                     if *FILTERS.get(self.id_filter).unwrap() == MangaFilters::Tags {
                         self.exclude_tag_selected();
                     }
-                }
+                },
                 KeyCode::Char('r') => self.reset(),
                 KeyCode::Char('l') | KeyCode::Right => self.toggle_focus_input(),
-                _ => {}
+                _ => {},
             }
         }
     }
@@ -571,21 +559,15 @@ impl FilterState {
         if let Some(filter) = FILTERS.get(self.id_filter) {
             match filter {
                 MangaFilters::Tags => {
-                    self.tags_state
-                        .filter_input
-                        .handle_event(&crossterm::event::Event::Key(key_event));
-                }
+                    self.tags_state.filter_input.handle_event(&crossterm::event::Event::Key(key_event));
+                },
                 MangaFilters::Authors => {
-                    self.author_state
-                        .search_bar
-                        .handle_event(&crossterm::event::Event::Key(key_event));
-                }
+                    self.author_state.search_bar.handle_event(&crossterm::event::Event::Key(key_event));
+                },
                 MangaFilters::Artists => {
-                    self.artist_state
-                        .search_bar
-                        .handle_event(&crossterm::event::Event::Key(key_event));
-                }
-                _ => {}
+                    self.artist_state.search_bar.handle_event(&crossterm::event::Event::Key(key_event));
+                },
+                _ => {},
             }
         }
     }
@@ -594,8 +576,8 @@ impl FilterState {
         match FILTERS.get(self.id_filter).unwrap() {
             MangaFilters::Tags | MangaFilters::Authors | MangaFilters::Artists => {
                 self.is_typing = !self.is_typing;
-            }
-            _ => {}
+            },
+            _ => {},
         }
     }
 
@@ -620,34 +602,34 @@ impl FilterState {
             match filter {
                 MangaFilters::ContentRating => {
                     self.content_rating.scroll_down();
-                }
+                },
                 MangaFilters::SortBy => {
                     self.sort_by_state.scroll_down();
-                }
+                },
                 MangaFilters::Tags => {
                     if self.tags_state.tags.is_some() {
                         self.tags_state.state.select_next();
                     }
-                }
+                },
                 MangaFilters::MagazineDemographic => {
                     self.magazine_demographic.scroll_down();
-                }
+                },
                 MangaFilters::Authors => {
                     if self.author_state.items.is_some() {
                         self.author_state.state.select_next();
                     }
-                }
+                },
                 MangaFilters::Artists => {
                     if self.artist_state.items.is_some() {
                         self.artist_state.state.select_next();
                     }
-                }
+                },
                 MangaFilters::Languages => {
                     self.lang_state.scroll_down();
-                }
+                },
                 MangaFilters::PublicationStatus => {
                     self.publication_status.scroll_down();
-                }
+                },
             }
         }
     }
@@ -657,35 +639,35 @@ impl FilterState {
             match filter {
                 MangaFilters::ContentRating => {
                     self.content_rating.scroll_up();
-                }
+                },
                 MangaFilters::SortBy => {
                     self.sort_by_state.scroll_up();
-                }
+                },
                 MangaFilters::Tags => {
                     if self.tags_state.tags.is_some() {
                         self.tags_state.state.select_previous();
                     }
-                }
+                },
                 MangaFilters::MagazineDemographic => {
                     self.magazine_demographic.scroll_up();
-                }
+                },
                 MangaFilters::Authors => {
                     if self.author_state.items.is_some() {
                         self.author_state.state.select_previous();
                     }
-                }
+                },
                 MangaFilters::Artists => {
                     if self.artist_state.items.is_some() {
                         self.artist_state.state.select_previous();
                     }
-                }
+                },
 
                 MangaFilters::Languages => {
                     self.lang_state.scroll_up();
-                }
+                },
                 MangaFilters::PublicationStatus => {
                     self.publication_status.scroll_up();
-                }
+                },
             }
         }
     }
@@ -696,35 +678,35 @@ impl FilterState {
                 MangaFilters::ContentRating => {
                     self.content_rating.toggle();
                     self.set_content_rating();
-                }
+                },
                 MangaFilters::SortBy => {
                     self.sort_by_state.toggle_sort_by();
                     self.set_sort_by();
-                }
+                },
                 MangaFilters::Tags => {
                     self.include_tag_selected();
-                }
+                },
                 MangaFilters::MagazineDemographic => {
                     self.magazine_demographic.toggle();
                     self.set_magazine_demographic();
-                }
+                },
                 MangaFilters::Authors => {
                     self.author_state.toggle();
                     self.set_authors();
-                }
+                },
                 MangaFilters::Artists => {
                     self.artist_state.toggle();
                     self.set_artists();
-                }
+                },
 
                 MangaFilters::Languages => {
                     self.lang_state.toggle();
                     self.set_languages();
-                }
+                },
                 MangaFilters::PublicationStatus => {
                     self.publication_status.toggle();
                     self.set_publication_status();
-                }
+                },
             }
         }
     }
@@ -785,11 +767,7 @@ impl FilterState {
     }
 
     fn set_sort_by(&mut self) {
-        let sort_by_selected = self
-            .sort_by_state
-            .items
-            .iter()
-            .find(|item| item.is_selected);
+        let sort_by_selected = self.sort_by_state.items.iter().find(|item| item.is_selected);
 
         if let Some(sort_by) = sort_by_selected {
             self.filters.set_sort_by(sort_by.name.as_str().into());
@@ -904,10 +882,9 @@ impl FilterState {
 #[cfg(test)]
 mod test {
 
+    use super::*;
     use crate::backend::authors::Data;
     use crate::backend::tags::TagsData;
-
-    use super::*;
 
     #[test]
     fn filter_list_works() {
@@ -951,11 +928,8 @@ mod test {
                 .into()
         );
 
-        let language_items: Vec<Languages> = filter_list
-            .items
-            .into_iter()
-            .map(|filter_list_item| filter_list_item.into())
-            .collect();
+        let language_items: Vec<Languages> =
+            filter_list.items.into_iter().map(|filter_list_item| filter_list_item.into()).collect();
 
         assert!(!language_items.iter().any(|lang| *lang == Languages::Unkown));
     }
@@ -994,10 +968,7 @@ mod test {
 
         filter_list.toggle();
 
-        assert!(filter_list
-            .items
-            .as_ref()
-            .is_some_and(|items| items.iter().any(|item| item.is_selected)));
+        assert!(filter_list.items.as_ref().is_some_and(|items| items.iter().any(|item| item.is_selected)));
 
         filter_list.load_users(Some(AuthorsResponse::default()));
 
@@ -1015,15 +986,21 @@ mod test {
 
         tag_state.include_tag();
 
-        assert!(tag_state.tags.as_ref().is_some_and(|tags| tags
-            .iter()
-            .any(|tag| tag.state == TagListItemState::Included)));
+        assert!(
+            tag_state
+                .tags
+                .as_ref()
+                .is_some_and(|tags| tags.iter().any(|tag| tag.state == TagListItemState::Included))
+        );
 
         tag_state.exclude_tag();
 
-        assert!(tag_state.tags.as_ref().is_some_and(|tags| tags
-            .iter()
-            .any(|tag| tag.state == TagListItemState::Excluded)));
+        assert!(
+            tag_state
+                .tags
+                .as_ref()
+                .is_some_and(|tags| tags.iter().any(|tag| tag.state == TagListItemState::Excluded))
+        );
     }
 
     // simulate what the user can do
@@ -1081,11 +1058,7 @@ mod test {
 
         assert!(filter_state.magazine_demographic.state.selected().is_some());
 
-        assert!(filter_state
-            .magazine_demographic
-            .items
-            .iter()
-            .any(|item| item.is_selected));
+        assert!(filter_state.magazine_demographic.items.iter().any(|item| item.is_selected));
 
         // Go to tags
         previous_tab(&mut filter_state);
@@ -1093,13 +1066,13 @@ mod test {
         scroll_down(&mut filter_state);
         press_s(&mut filter_state);
 
-        assert!(filter_state
-            .tags_state
-            .tags
-            .as_ref()
-            .is_some_and(|tags| tags
-                .iter()
-                .any(|tag| tag.state == TagListItemState::Included)));
+        assert!(
+            filter_state
+                .tags_state
+                .tags
+                .as_ref()
+                .is_some_and(|tags| tags.iter().any(|tag| tag.state == TagListItemState::Included))
+        );
 
         assert!(!filter_state.filters.tags.is_empty());
 
@@ -1109,11 +1082,7 @@ mod test {
         press_s(&mut filter_state);
 
         assert!(filter_state.publication_status.state.selected().is_some());
-        assert!(filter_state
-            .publication_status
-            .items
-            .iter()
-            .any(|item| item.is_selected));
+        assert!(filter_state.publication_status.items.iter().any(|item| item.is_selected));
 
         // Go to tags
         next_tab(&mut filter_state);

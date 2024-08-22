@@ -1,3 +1,12 @@
+use std::io::Cursor;
+
+use image::io::Reader;
+use ratatui::prelude::*;
+use ratatui::widgets::*;
+use tokio::sync::mpsc::UnboundedSender;
+use tokio::task::JoinSet;
+use tui_input::Input;
+
 use crate::backend::error_log::write_to_error_log;
 use crate::backend::fetch::MangadexClient;
 use crate::backend::filter::Languages;
@@ -6,19 +15,11 @@ use crate::common::{Artist, Author, Manga};
 use crate::view::widgets::filter_widget::state::{TagListItem, TagListItemState};
 use crate::view::widgets::ImageHandler;
 use crate::PICKER;
-use image::io::Reader;
-use ratatui::{prelude::*, widgets::*};
-use std::io::Cursor;
-use tokio::sync::mpsc::UnboundedSender;
-use tokio::task::JoinSet;
-use tui_input::Input;
 
 pub fn set_tags_style(tag: &str) -> Span<'_> {
     match tag.to_lowercase().as_str() {
         "suggestive" => format!("  {tag}  ").black().bg(Color::Yellow),
-        "gore" | "sexual violence" | "pornographic" | "erotica" => {
-            format!("  {tag}  ").black().bg(Color::Red)
-        }
+        "gore" | "sexual violence" | "pornographic" | "erotica" => format!("  {tag}  ").black().bg(Color::Red),
         "doujinshi" => format!("  {tag}  ").bg(Color::Blue),
         _ => format!("{tag}  ").into(),
     }
@@ -49,15 +50,11 @@ pub fn search_manga_cover<IM: ImageHandler>(
     tx: UnboundedSender<IM>,
 ) {
     join_set.spawn(async move {
-        let response = MangadexClient::global()
-            .get_cover_for_manga_lower_quality(&manga_id, &file_name)
-            .await;
+        let response = MangadexClient::global().get_cover_for_manga_lower_quality(&manga_id, &file_name).await;
 
         match response {
             Ok(bytes) => {
-                let dyn_img = Reader::new(Cursor::new(bytes))
-                    .with_guessed_format()
-                    .unwrap();
+                let dyn_img = Reader::new(Cursor::new(bytes)).with_guessed_format().unwrap();
 
                 let maybe_decoded = dyn_img.decode();
 
@@ -65,11 +62,11 @@ pub fn search_manga_cover<IM: ImageHandler>(
                     let protocol = PICKER.unwrap().new_resize_protocol(decoded);
                     tx.send(IM::load(protocol, manga_id)).ok();
                 }
-            }
+            },
             Err(e) => {
                 write_to_error_log(crate::backend::error_log::ErrorType::FromError(Box::new(e)));
                 tx.send(IM::not_found(manga_id)).ok();
-            }
+            },
         }
     });
 }
@@ -82,13 +79,11 @@ pub fn from_manga_response(value: Data) -> Manga {
         value.attributes.title.ja_ro.unwrap_or(
             value.attributes.title.ja.unwrap_or(
                 value.attributes.title.jp.unwrap_or(
-                    value.attributes.title.zh.unwrap_or(
-                        value
-                            .attributes
-                            .title
-                            .ko
-                            .unwrap_or(value.attributes.title.ko_ro.unwrap_or_default()),
-                    ),
+                    value
+                        .attributes
+                        .title
+                        .zh
+                        .unwrap_or(value.attributes.title.ko.unwrap_or(value.attributes.title.ko_ro.unwrap_or_default())),
                 ),
             ),
         ),
@@ -101,12 +96,7 @@ pub fn from_manga_response(value: Data) -> Manga {
 
     let content_rating = value.attributes.content_rating;
 
-    let tags: Vec<String> = value
-        .attributes
-        .tags
-        .iter()
-        .map(|tag| tag.attributes.name.en.to_string())
-        .collect();
+    let tags: Vec<String> = value.attributes.tags.iter().map(|tag| tag.attributes.name.en.to_string()).collect();
 
     let mut img_url: Option<String> = Option::default();
     let mut author = Author::default();
@@ -120,15 +110,15 @@ pub fn from_manga_response(value: Data) -> Manga {
                         id: rel.id.to_string(),
                         name: attributes.name.as_ref().cloned().unwrap_or_default(),
                     };
-                }
+                },
                 "artist" => {
                     artist = Artist {
                         id: rel.id.to_string(),
                         name: attributes.name.as_ref().cloned().unwrap_or_default(),
                     }
-                }
+                },
                 "cover_art" => img_url = Some(attributes.file_name.as_ref().unwrap().to_string()),
-                _ => {}
+                _ => {},
             }
         }
     }
@@ -195,21 +185,10 @@ pub fn centered_rect(r: Rect, percent_x: u16, percent_y: u16) -> Rect {
         .split(popup_layout[1])[1]
 }
 
-pub fn render_search_bar(
-    is_typing: bool,
-    input_help: Line<'_>,
-    input: &Input,
-    frame: &mut Frame<'_>,
-    area: Rect,
-) {
-    let style = if is_typing {
-        Style::default().fg(Color::Yellow)
-    } else {
-        Style::default()
-    };
+pub fn render_search_bar(is_typing: bool, input_help: Line<'_>, input: &Input, frame: &mut Frame<'_>, area: Rect) {
+    let style = if is_typing { Style::default().fg(Color::Yellow) } else { Style::default() };
 
-    let input_bar = Paragraph::new(input.value())
-        .block(Block::bordered().title(input_help).border_style(style));
+    let input_bar = Paragraph::new(input.value()).block(Block::bordered().title(input_help).border_style(style));
 
     input_bar.render(area, frame.buffer_mut());
 
@@ -218,11 +197,8 @@ pub fn render_search_bar(
     let scroll = input.visual_scroll(width as usize);
 
     match is_typing {
-        true => frame.set_cursor(
-            area.x + ((input.visual_cursor()).max(scroll) - scroll) as u16 + 1,
-            area.y + 1,
-        ),
-        false => {}
+        true => frame.set_cursor(area.x + ((input.visual_cursor()).max(scroll) - scroll) as u16 + 1, area.y + 1),
+        false => {},
     }
 }
 
@@ -230,10 +206,7 @@ pub fn render_search_bar(
 pub fn to_filename(title: &str) -> String {
     let invalid_chars = ['\\', '/', ':', '*', '?', '"', '<', '>', '|'];
 
-    let sanitized_title: String = title
-        .chars()
-        .map(|c| if invalid_chars.contains(&c) { '_' } else { c })
-        .collect();
+    let sanitized_title: String = title.chars().map(|c| if invalid_chars.contains(&c) { '_' } else { c }).collect();
 
     sanitized_title
 }

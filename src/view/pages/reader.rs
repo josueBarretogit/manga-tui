@@ -1,3 +1,13 @@
+use crossterm::event::KeyCode;
+use image::io::Reader;
+use image::GenericImageView;
+use ratatui::prelude::*;
+use ratatui::widgets::*;
+use ratatui_image::protocol::StatefulProtocol;
+use ratatui_image::{Resize, StatefulImage};
+use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use tokio::task::JoinSet;
+
 use crate::backend::error_log::{write_to_error_log, ErrorType};
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
@@ -6,14 +16,6 @@ use crate::global::INSTRUCTIONS_STYLE;
 use crate::view::widgets::reader::{PageItemState, PagesItem, PagesList};
 use crate::view::widgets::Component;
 use crate::PICKER;
-use crossterm::event::KeyCode;
-use image::io::Reader;
-use image::GenericImageView;
-use ratatui::{prelude::*, widgets::*};
-use ratatui_image::protocol::StatefulProtocol;
-use ratatui_image::{Resize, StatefulImage};
-use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
-use tokio::task::JoinSet;
 
 pub enum MangaReaderActions {
     NextPage,
@@ -72,30 +74,21 @@ pub struct MangaReader {
 
 impl Component for MangaReader {
     type Actions = MangaReaderActions;
+
     fn render(&mut self, area: ratatui::prelude::Rect, frame: &mut Frame<'_>) {
         let buf = frame.buffer_mut();
 
-        let layout = Layout::horizontal([
-            Constraint::Fill(1),
-            Constraint::Fill(self.current_page_size),
-            Constraint::Fill(1),
-        ]);
+        let layout = Layout::horizontal([Constraint::Fill(1), Constraint::Fill(self.current_page_size), Constraint::Fill(1)]);
 
         let [left, center, right] = layout.areas(area);
 
         Block::bordered().render(left, buf);
         self.render_page_list(left, buf);
 
-        Paragraph::new(Line::from(vec![
-            "Go back: ".into(),
-            Span::raw("<Backspace>").style(*INSTRUCTIONS_STYLE),
-        ]))
-        .render(right, buf);
+        Paragraph::new(Line::from(vec!["Go back: ".into(), Span::raw("<Backspace>").style(*INSTRUCTIONS_STYLE)]))
+            .render(right, buf);
 
-        match self
-            .pages
-            .get_mut(self.page_list_state.selected.unwrap_or(0))
-        {
+        match self.pages.get_mut(self.page_list_state.selected.unwrap_or(0)) {
             Some(page) => match page.image_state.as_mut() {
                 Some(img_state) => {
                     let (width, height) = page.dimensions.unwrap();
@@ -108,16 +101,12 @@ impl Component for MangaReader {
                     }
                     let image = StatefulImage::new(None).resize(Resize::Fit(None));
                     StatefulWidget::render(image, center, buf, img_state);
-                }
+                },
                 None => {
-                    Block::bordered()
-                        .title("Loading page")
-                        .render(center, frame.buffer_mut());
-                }
+                    Block::bordered().title("Loading page").render(center, frame.buffer_mut());
+                },
             },
-            None => Block::bordered()
-                .title("Loading page")
-                .render(center, frame.buffer_mut()),
+            None => Block::bordered().title("Loading page").render(center, frame.buffer_mut()),
         };
     }
 
@@ -133,28 +122,24 @@ impl Component for MangaReader {
             Events::Key(key_event) => match key_event.code {
                 KeyCode::Down | KeyCode::Char('j') => {
                     self.local_action_tx.send(MangaReaderActions::NextPage).ok();
-                }
+                },
                 KeyCode::Up | KeyCode::Char('k') => {
-                    self.local_action_tx
-                        .send(MangaReaderActions::PreviousPage)
-                        .ok();
-                }
+                    self.local_action_tx.send(MangaReaderActions::PreviousPage).ok();
+                },
 
-                _ => {}
+                _ => {},
             },
             Events::Mouse(mouse_event) => match mouse_event.kind {
                 crossterm::event::MouseEventKind::ScrollUp => {
-                    self.local_action_tx
-                        .send(MangaReaderActions::PreviousPage)
-                        .ok();
-                }
+                    self.local_action_tx.send(MangaReaderActions::PreviousPage).ok();
+                },
                 crossterm::event::MouseEventKind::ScrollDown => {
                     self.local_action_tx.send(MangaReaderActions::NextPage).ok();
-                }
-                _ => {}
+                },
+                _ => {},
             },
             Events::Tick => self.tick(),
-            _ => {}
+            _ => {},
         }
     }
 
@@ -219,12 +204,7 @@ impl MangaReader {
             horizontal: 1,
             vertical: 1,
         });
-        StatefulWidget::render(
-            self.pages_list.clone(),
-            inner_area,
-            buf,
-            &mut self.page_list_state,
-        );
+        StatefulWidget::render(self.pages_list.clone(), inner_area, buf, &mut self.page_list_state);
     }
 
     fn load_page(&mut self, maybe_data: Option<PageData>) {
@@ -233,16 +213,16 @@ impl MangaReader {
                 Some(page) => {
                     page.image_state = Some(data.protocol);
                     page.dimensions = Some(data.dimensions);
-                }
+                },
                 None => {
                     // Todo! indicate that the page couldnot be loaded
-                }
+                },
             };
             match self.pages_list.pages.get_mut(data.index) {
                 Some(page_item) => page_item.state = PageItemState::FinishedLoad,
                 None => {
                     // Todo! indicate with an x that some page didnt load
-                }
+                },
             }
         }
     }
@@ -255,23 +235,17 @@ impl MangaReader {
                     let mut pages_list: Vec<PagesItem> = vec![];
                     for (index, page) in self.pages.iter().enumerate() {
                         let file_name = page.url.clone();
-                        let endpoint =
-                            format!("{}/{}/{}", self.base_url, page.page_type, self.chapter_id);
+                        let endpoint = format!("{}/{}/{}", self.base_url, page.page_type, self.chapter_id);
                         let tx = self.local_event_tx.clone();
                         pages_list.push(PagesItem::new(index));
                         self.image_tasks.spawn(async move {
-                            let image_response = MangadexClient::global()
-                                .get_chapter_page(&endpoint, &file_name)
-                                .await;
+                            let image_response = MangadexClient::global().get_chapter_page(&endpoint, &file_name).await;
                             match image_response {
                                 Ok(bytes) => {
-                                    let dyn_img = Reader::new(std::io::Cursor::new(bytes))
-                                        .with_guessed_format();
+                                    let dyn_img = Reader::new(std::io::Cursor::new(bytes)).with_guessed_format();
 
                                     if let Err(err) = dyn_img {
-                                        return write_to_error_log(ErrorType::FromError(Box::new(
-                                            err,
-                                        )));
+                                        return write_to_error_log(ErrorType::FromError(Box::new(err)));
                                     }
 
                                     let maybe_decoded = dyn_img.unwrap().decode();
@@ -284,15 +258,15 @@ impl MangaReader {
                                         };
                                         tx.send(MangaReaderEvents::LoadPage(Some(page_data))).ok();
                                     }
-                                }
+                                },
                                 Err(e) => {
                                     write_to_error_log(ErrorType::FromError(Box::new(e)));
-                                }
+                                },
                             };
                         });
                     }
                     self.pages_list = PagesList::new(pages_list);
-                }
+                },
                 MangaReaderEvents::LoadPage(maybe_data) => self.load_page(maybe_data),
             }
         }

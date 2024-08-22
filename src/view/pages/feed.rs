@@ -1,3 +1,16 @@
+use std::io::Cursor;
+
+use crossterm::event::{KeyCode, KeyEvent, MouseEvent, MouseEventKind};
+use image::io::Reader;
+use ratatui::prelude::*;
+use ratatui::widgets::*;
+use throbber_widgets_tui::{Throbber, ThrobberState};
+use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use tokio::task::JoinSet;
+use tui_input::backend::crossterm::EventHandler;
+use tui_input::Input;
+
+use self::text::ToSpan;
 use crate::backend::database::{get_history, MangaHistoryResponse, MangaHistoryType};
 use crate::backend::error_log::{write_to_error_log, ErrorType};
 use crate::backend::fetch::MangadexClient;
@@ -9,17 +22,6 @@ use crate::view::widgets::feed::{FeedTabs, HistoryWidget, MangasRead};
 use crate::view::widgets::search::MangaItem;
 use crate::view::widgets::Component;
 use crate::PICKER;
-use crossterm::event::{KeyCode, KeyEvent, MouseEvent, MouseEventKind};
-use image::io::Reader;
-use ratatui::{prelude::*, widgets::*};
-use std::io::Cursor;
-use throbber_widgets_tui::{Throbber, ThrobberState};
-use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
-use tokio::task::JoinSet;
-use tui_input::backend::crossterm::EventHandler;
-use tui_input::Input;
-
-use self::text::ToSpan;
 
 #[derive(Eq, PartialEq)]
 pub enum FeedState {
@@ -93,33 +95,33 @@ impl Feed {
         match self.history.as_mut() {
             Some(history) => {
                 if history.mangas.is_empty() {
-                    Paragraph::new("It seems you have no mangas stored here, try reading some")
-                        .render(area, buf);
+                    Paragraph::new("It seems you have no mangas stored here, try reading some").render(area, buf);
                 } else {
                     StatefulWidget::render(history.clone(), area, buf, &mut history.state);
                 }
-            }
+            },
             None => {
                 if self.state == FeedState::ErrorSearchingHistory {
-                    Paragraph::new("Cannot get your reading history due to some issues, please check error logs".to_span().style(*ERROR_STYLE)).render(area, buf);
+                    Paragraph::new(
+                        "Cannot get your reading history due to some issues, please check error logs"
+                            .to_span()
+                            .style(*ERROR_STYLE),
+                    )
+                    .render(area, buf);
                 }
-            }
+            },
         }
     }
 
     fn render_tabs_and_search_bar(&mut self, area: Rect, frame: &mut Frame) {
-        let [tabs_area, search_bar_area] =
-            Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)]).areas(area);
+        let [tabs_area, search_bar_area] = Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)]).areas(area);
 
         let selected_tab = match self.tabs {
             FeedTabs::History => 0,
             FeedTabs::PlantToRead => 1,
         };
 
-        let tabs_instructions = Line::from(vec![
-            "Switch tab: ".into(),
-            Span::raw("<tab>").style(*INSTRUCTIONS_STYLE),
-        ]);
+        let tabs_instructions = Line::from(vec!["Switch tab: ".into(), Span::raw("<tab>").style(*INSTRUCTIONS_STYLE)]);
 
         Tabs::new(vec!["Reading history", "Plan to Read"])
             .select(selected_tab)
@@ -128,26 +130,12 @@ impl Feed {
             .render(tabs_area, frame.buffer_mut());
 
         let input_help: Vec<Span<'_>> = if self.is_typing {
-            vec![
-                "Press ".into(),
-                Span::raw("<Enter>").style(*INSTRUCTIONS_STYLE),
-                " to search".into(),
-            ]
+            vec!["Press ".into(), Span::raw("<Enter>").style(*INSTRUCTIONS_STYLE), " to search".into()]
         } else {
-            vec![
-                "Press ".into(),
-                Span::raw("<s>").style(*INSTRUCTIONS_STYLE),
-                " to filter mangas".into(),
-            ]
+            vec!["Press ".into(), Span::raw("<s>").style(*INSTRUCTIONS_STYLE), " to filter mangas".into()]
         };
 
-        render_search_bar(
-            self.is_typing,
-            input_help.into(),
-            &self.search_bar,
-            frame,
-            search_bar_area,
-        );
+        render_search_bar(self.is_typing, input_help.into(), &self.search_bar, frame, search_bar_area);
     }
 
     fn render_searching_status(&mut self, area: Rect, buf: &mut Buffer) {
@@ -179,8 +167,7 @@ impl Feed {
     }
 
     fn render_top_area(&mut self, area: Rect, frame: &mut Frame) {
-        let [tabs_and_search_bar_area, searching_area] =
-            Layout::vertical([Constraint::Fill(1), Constraint::Fill(1)]).areas(area);
+        let [tabs_and_search_bar_area, searching_area] = Layout::vertical([Constraint::Fill(1), Constraint::Fill(1)]).areas(area);
 
         self.render_tabs_and_search_bar(tabs_and_search_bar_area, frame);
 
@@ -196,42 +183,39 @@ impl Feed {
             match key_event.code {
                 KeyCode::Enter => {
                     self.local_event_tx.send(FeedEvents::SearchHistory).ok();
-                }
+                },
                 KeyCode::Esc => {
                     self.local_action_tx.send(FeedActions::ToggleSearchBar).ok();
-                }
+                },
                 _ => {
-                    self.search_bar
-                        .handle_event(&crossterm::event::Event::Key(key_event));
-                }
+                    self.search_bar.handle_event(&crossterm::event::Event::Key(key_event));
+                },
             };
         } else {
             match key_event.code {
                 KeyCode::Tab => {
                     self.local_action_tx.send(FeedActions::ChangeTab).ok();
-                }
+                },
                 KeyCode::Char('j') | KeyCode::Down => {
-                    self.local_action_tx
-                        .send(FeedActions::ScrollHistoryDown)
-                        .ok();
-                }
+                    self.local_action_tx.send(FeedActions::ScrollHistoryDown).ok();
+                },
                 KeyCode::Char('k') | KeyCode::Up => {
                     self.local_action_tx.send(FeedActions::ScrollHistoryUp).ok();
-                }
+                },
                 KeyCode::Char('w') => {
                     self.local_action_tx.send(FeedActions::NextPage).ok();
-                }
+                },
 
                 KeyCode::Char('b') => {
                     self.local_action_tx.send(FeedActions::PreviousPage).ok();
-                }
+                },
                 KeyCode::Char('r') => {
                     self.local_action_tx.send(FeedActions::GoToMangaPage).ok();
-                }
+                },
                 KeyCode::Char('s') => {
                     self.local_action_tx.send(FeedActions::ToggleSearchBar).ok();
-                }
-                _ => {}
+                },
+                _ => {},
             }
         }
     }
@@ -249,7 +233,7 @@ impl Feed {
                 FeedEvents::SearchRecentChapters => self.search_latest_chapters(),
                 FeedEvents::LoadRecentChapters(manga_id, maybe_chapters) => {
                     self.load_recent_chapters(manga_id, maybe_chapters);
-                }
+                },
             }
         }
     }
@@ -268,18 +252,15 @@ impl Feed {
                 let manga_id = manga.id;
                 let tx = self.local_event_tx.clone();
                 self.tasks.spawn(async move {
-                    let latest_chapter_response = MangadexClient::global()
-                        .get_latest_chapters(&manga_id)
-                        .await;
+                    let latest_chapter_response = MangadexClient::global().get_latest_chapters(&manga_id).await;
                     match latest_chapter_response {
                         Ok(chapters) => {
-                            tx.send(FeedEvents::LoadRecentChapters(manga_id, Some(chapters)))
-                                .ok();
-                        }
+                            tx.send(FeedEvents::LoadRecentChapters(manga_id, Some(chapters))).ok();
+                        },
                         Err(e) => {
                             write_to_error_log(ErrorType::FromError(Box::new(e)));
                             tx.send(FeedEvents::LoadRecentChapters(manga_id, None)).ok();
-                        }
+                        },
                     }
                 });
             }
@@ -313,11 +294,11 @@ impl Feed {
             match maybe_reading_history {
                 Ok(history) => {
                     tx.send(FeedEvents::LoadHistory(Some(history))).ok();
-                }
+                },
                 Err(e) => {
                     write_to_error_log(ErrorType::FromError(Box::new(e)));
                     tx.send(FeedEvents::LoadHistory(None)).ok();
-                }
+                },
             }
         });
     }
@@ -355,14 +336,12 @@ impl Feed {
                     state: tui_widget_list::ListState::default(),
                 });
                 self.state = FeedState::DisplayingHistory;
-                self.local_event_tx
-                    .send(FeedEvents::SearchRecentChapters)
-                    .ok();
-            }
+                self.local_event_tx.send(FeedEvents::SearchRecentChapters).ok();
+            },
             None => {
                 self.state = FeedState::ErrorSearchingHistory;
                 self.history = None;
-            }
+            },
         }
     }
 
@@ -402,46 +381,34 @@ impl Feed {
 
                             if PICKER.is_some() {
                                 let cover = MangadexClient::global()
-                                    .get_cover_for_manga(
-                                        &manga_id,
-                                        manga_found.img_url.clone().unwrap_or_default().as_str(),
-                                    )
+                                    .get_cover_for_manga(&manga_id, manga_found.img_url.clone().unwrap_or_default().as_str())
                                     .await;
 
                                 loca_tx.send(FeedEvents::SearchingFinalized).ok();
 
                                 match cover {
                                     Ok(bytes) => {
-                                        let dyn_img = Reader::new(Cursor::new(bytes))
-                                            .with_guessed_format()
-                                            .unwrap();
+                                        let dyn_img = Reader::new(Cursor::new(bytes)).with_guessed_format().unwrap();
 
                                         let maybe_decoded = dyn_img.decode();
                                         tx.send(Events::GoToMangaPage(MangaItem::new(
                                             manga_found,
-                                            maybe_decoded.ok().map(|decoded| {
-                                                PICKER.unwrap().new_resize_protocol(decoded)
-                                            }),
+                                            maybe_decoded.ok().map(|decoded| PICKER.unwrap().new_resize_protocol(decoded)),
                                         )))
                                         .ok();
-                                    }
+                                    },
                                     Err(_) => {
-                                        tx.send(Events::GoToMangaPage(MangaItem::new(
-                                            manga_found,
-                                            None,
-                                        )))
-                                        .ok();
-                                    }
+                                        tx.send(Events::GoToMangaPage(MangaItem::new(manga_found, None))).ok();
+                                    },
                                 }
                             } else {
-                                tx.send(Events::GoToMangaPage(MangaItem::new(manga_found, None)))
-                                    .ok();
+                                tx.send(Events::GoToMangaPage(MangaItem::new(manga_found, None))).ok();
                             }
-                        }
+                        },
                         Err(e) => {
                             write_to_error_log(ErrorType::FromError(Box::new(e)));
                             loca_tx.send(FeedEvents::ErrorSearchingMangaData).ok();
-                        }
+                        },
                     }
                 });
             }
@@ -456,19 +423,18 @@ impl Feed {
         match mouse_event.kind {
             MouseEventKind::ScrollUp => {
                 self.local_action_tx.send(FeedActions::ScrollHistoryUp).ok();
-            }
+            },
             MouseEventKind::ScrollDown => {
-                self.local_action_tx
-                    .send(FeedActions::ScrollHistoryDown)
-                    .ok();
-            }
-            _ => {}
+                self.local_action_tx.send(FeedActions::ScrollHistoryDown).ok();
+            },
+            _ => {},
         }
     }
 }
 
 impl Component for Feed {
     type Actions = FeedActions;
+
     fn render(&mut self, area: ratatui::prelude::Rect, frame: &mut Frame<'_>) {
         let layout = Layout::vertical([Constraint::Percentage(20), Constraint::Percentage(80)]);
 
@@ -494,7 +460,7 @@ impl Component for Feed {
                     }
                     self.change_tab();
                     self.search_history();
-                }
+                },
             }
         }
     }
@@ -509,10 +475,10 @@ impl Component for Feed {
         match events {
             Events::Key(key_event) => {
                 self.handle_key_events(key_event);
-            }
+            },
             Events::Mouse(mouse_event) => self.handle_mouse_event(mouse_event),
             Events::Tick => self.tick(),
-            _ => {}
+            _ => {},
         }
     }
 }

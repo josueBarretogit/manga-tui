@@ -1,32 +1,8 @@
-use crate::backend::database::save_plan_to_read;
-use crate::backend::database::MangaPlanToReadSave;
-use crate::backend::error_log::write_to_error_log;
-use crate::backend::error_log::ErrorType;
-use crate::backend::fetch::MangadexClient;
-use crate::backend::tui::Events;
-use crate::backend::SearchMangaResponse;
-use crate::common::Artist;
-use crate::common::Author;
-use crate::global::ERROR_STYLE;
-use crate::global::INSTRUCTIONS_STYLE;
-use crate::utils::render_search_bar;
-use crate::utils::search_manga_cover;
-use crate::view::widgets::filter_widget::state::FilterState;
-use crate::view::widgets::filter_widget::FilterWidget;
-use crate::view::widgets::search::*;
-use crate::view::widgets::Component;
-use crate::view::widgets::ImageHandler;
-use crate::view::widgets::StatefulWidgetFrame;
-use crate::PICKER;
-use crossterm::event::KeyEvent;
-use crossterm::event::MouseButton;
-use crossterm::event::MouseEvent;
-use crossterm::event::MouseEventKind;
-use crossterm::event::{self, KeyCode};
-use ratatui::{prelude::*, widgets::*};
+use crossterm::event::{self, KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
+use ratatui::prelude::*;
+use ratatui::widgets::*;
 use ratatui_image::protocol::StatefulProtocol;
-use throbber_widgets_tui::Throbber;
-use throbber_widgets_tui::ThrobberState;
+use throbber_widgets_tui::{Throbber, ThrobberState};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 use tui_input::backend::crossterm::EventHandler;
@@ -34,6 +10,19 @@ use tui_input::Input;
 use tui_widget_list::ListState;
 
 use self::text::ToSpan;
+use crate::backend::database::{save_plan_to_read, MangaPlanToReadSave};
+use crate::backend::error_log::{write_to_error_log, ErrorType};
+use crate::backend::fetch::MangadexClient;
+use crate::backend::tui::Events;
+use crate::backend::SearchMangaResponse;
+use crate::common::{Artist, Author};
+use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
+use crate::utils::{render_search_bar, search_manga_cover};
+use crate::view::widgets::filter_widget::state::FilterState;
+use crate::view::widgets::filter_widget::FilterWidget;
+use crate::view::widgets::search::*;
+use crate::view::widgets::{Component, ImageHandler, StatefulWidgetFrame};
+use crate::PICKER;
 
 /// Determine wheter or not mangas are being searched
 /// if so then this should not make a request until the most recent one finishes
@@ -58,6 +47,7 @@ impl ImageHandler for SearchPageEvents {
     fn load(image: Box<dyn StatefulProtocol>, id: String) -> Self {
         Self::LoadCover(Some(image), id)
     }
+
     fn not_found(id: String) -> Self {
         Self::LoadCover(None, id)
     }
@@ -114,6 +104,7 @@ struct MangasFoundList {
 
 impl Component for SearchPage {
     type Actions = SearchPageActions;
+
     fn render(&mut self, area: Rect, frame: &mut Frame<'_>) {
         let search_page_layout = Layout::default()
             .direction(Direction::Vertical)
@@ -134,7 +125,7 @@ impl Component for SearchPage {
             SearchPageActions::Search => {
                 self.mangas_found_list.page = 1;
                 self.search_mangas();
-            }
+            },
             SearchPageActions::ScrollUp => self.scroll_up(),
             SearchPageActions::ScrollDown => self.scroll_down(),
             SearchPageActions::NextPage => self.search_next_page(),
@@ -142,14 +133,13 @@ impl Component for SearchPage {
             SearchPageActions::GoToMangaPage => {
                 let manga_selected = self.get_current_manga_selected();
                 if let Some(manga) = manga_selected {
-                    self.global_event_tx
-                        .send(Events::GoToMangaPage(manga.clone()))
-                        .ok();
+                    self.global_event_tx.send(Events::GoToMangaPage(manga.clone())).ok();
                 }
-            }
+            },
             SearchPageActions::PlanToRead => self.plan_to_read(),
         }
     }
+
     fn handle_events(&mut self, events: Events) {
         if self.filter_state.is_open {
             self.filter_state.handle_events(events);
@@ -157,13 +147,14 @@ impl Component for SearchPage {
             match events {
                 Events::Key(key_event) => {
                     self.handle_key_events(key_event);
-                }
+                },
                 Events::Mouse(mouse_event) => self.handle_mouse_events(mouse_event),
                 Events::Tick => self.tick(),
-                _ => {}
+                _ => {},
             }
         }
     }
+
     fn clean_up(&mut self) {
         self.abort_tasks();
         self.state = PageState::default();
@@ -199,8 +190,7 @@ impl SearchPage {
     }
 
     fn render_input_area(&self, area: Rect, frame: &mut Frame<'_>) {
-        let [input_area, information_area] =
-            Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)]).areas(area);
+        let [input_area, information_area] = Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)]).areas(area);
 
         let input_help = match self.input_mode {
             InputMode::Idle => Line::from(vec![
@@ -219,41 +209,30 @@ impl SearchPage {
             ]),
         };
 
-        render_search_bar(
-            self.input_mode == InputMode::Typing,
-            input_help,
-            &self.search_bar,
-            frame,
-            input_area,
-        );
+        render_search_bar(self.input_mode == InputMode::Typing, input_help, &self.search_bar, frame, input_area);
 
         if let Some(name) = self.manga_added_to_plan_to_read.as_ref() {
-            Paragraph::new(
-                format!("Added: {} to plan to read 📖", name)
-                    .to_span()
-                    .underlined(),
-            )
-            .wrap(Wrap { trim: true })
-            .render(
-                information_area.inner(Margin {
-                    horizontal: 1,
-                    vertical: 1,
-                }),
-                frame.buffer_mut(),
-            );
+            Paragraph::new(format!("Added: {} to plan to read 📖", name).to_span().underlined())
+                .wrap(Wrap { trim: true })
+                .render(
+                    information_area.inner(Margin {
+                        horizontal: 1,
+                        vertical: 1,
+                    }),
+                    frame.buffer_mut(),
+                );
         }
     }
 
     fn render_manga_found_area(&mut self, area: Rect, frame: &mut Frame<'_>) {
         let buf = frame.buffer_mut();
         let [manga_list_area, preview_area] =
-            Layout::horizontal([Constraint::Percentage(40), Constraint::Percentage(60)])
-                .areas(area);
+            Layout::horizontal([Constraint::Percentage(40), Constraint::Percentage(60)]).areas(area);
 
         match self.state {
             PageState::Normal => {
                 Block::bordered().render(area, buf);
-            }
+            },
             PageState::SearchingMangas => {
                 let loader = Throbber::default()
                     .label("Searching mangas")
@@ -262,21 +241,15 @@ impl SearchPage {
                     .use_type(throbber_widgets_tui::WhichUse::Spin);
 
                 StatefulWidget::render(loader, area, buf, &mut self.loader_state);
-            }
+            },
             PageState::NotFound => {
-                Block::bordered()
-                    .title("No mangas were found")
-                    .render(area, buf);
-            }
+                Block::bordered().title("No mangas were found").render(area, buf);
+            },
             PageState::ErrorOcurred => {
                 Block::bordered()
-                    .title(
-                        "An error ocurred when searching mangas, please try again"
-                            .to_span()
-                            .style(*ERROR_STYLE),
-                    )
+                    .title("An error ocurred when searching mangas, please try again".to_span().style(*ERROR_STYLE))
                     .render(area, buf);
-            }
+            },
             PageState::DisplayingMangasFound => {
                 let total_pages = self.mangas_found_list.total_result as f64 / 10_f64;
 
@@ -339,7 +312,7 @@ impl SearchPage {
                         )
                     }
                 }
-            }
+            },
         }
         if self.filter_state.is_open {
             self.render_filters(area, frame);
@@ -400,7 +373,7 @@ impl SearchPage {
             match plan_to_read_operation {
                 Ok(()) => {
                     self.manga_added_to_plan_to_read = Some(item.manga.title.clone());
-                }
+                },
                 Err(e) => write_to_error_log(ErrorType::FromError(Box::new(e))),
             }
         }
@@ -414,59 +387,45 @@ impl SearchPage {
         match self.input_mode {
             InputMode::Idle => match key_event.code {
                 KeyCode::Char('s') => {
-                    self.local_action_tx
-                        .send(SearchPageActions::StartTyping)
-                        .ok();
-                }
+                    self.local_action_tx.send(SearchPageActions::StartTyping).ok();
+                },
                 KeyCode::Char('j') | KeyCode::Down => {
-                    self.local_action_tx
-                        .send(SearchPageActions::ScrollDown)
-                        .ok();
-                }
+                    self.local_action_tx.send(SearchPageActions::ScrollDown).ok();
+                },
 
                 KeyCode::Char('k') | KeyCode::Up => {
                     self.local_action_tx.send(SearchPageActions::ScrollUp).ok();
-                }
+                },
                 KeyCode::Char('w') => {
                     self.local_action_tx.send(SearchPageActions::NextPage).ok();
-                }
+                },
                 KeyCode::Char('p') => {
-                    self.local_action_tx
-                        .send(SearchPageActions::PlanToRead)
-                        .ok();
-                }
+                    self.local_action_tx.send(SearchPageActions::PlanToRead).ok();
+                },
                 KeyCode::Char('b') => {
-                    self.local_action_tx
-                        .send(SearchPageActions::PreviousPage)
-                        .ok();
-                }
+                    self.local_action_tx.send(SearchPageActions::PreviousPage).ok();
+                },
                 KeyCode::Char('f') => {
-                    self.local_action_tx
-                        .send(SearchPageActions::ToggleFilters)
-                        .ok();
-                }
+                    self.local_action_tx.send(SearchPageActions::ToggleFilters).ok();
+                },
                 KeyCode::Char('r') | KeyCode::Enter => {
-                    self.local_action_tx
-                        .send(SearchPageActions::GoToMangaPage)
-                        .ok();
-                }
+                    self.local_action_tx.send(SearchPageActions::GoToMangaPage).ok();
+                },
 
-                _ => {}
+                _ => {},
             },
             InputMode::Typing => match key_event.code {
                 KeyCode::Enter => {
                     if self.state != PageState::SearchingMangas {
                         self.local_action_tx.send(SearchPageActions::Search).ok();
                     }
-                }
+                },
                 KeyCode::Esc => {
-                    self.local_action_tx
-                        .send(SearchPageActions::StopTyping)
-                        .ok();
-                }
+                    self.local_action_tx.send(SearchPageActions::StopTyping).ok();
+                },
                 _ => {
                     self.search_bar.handle_event(&event::Event::Key(key_event));
-                }
+                },
             },
         }
     }
@@ -474,23 +433,20 @@ impl SearchPage {
     fn handle_mouse_events(&mut self, mouse_event: MouseEvent) {
         match mouse_event.kind {
             MouseEventKind::ScrollDown => {
-                self.local_action_tx
-                    .send(SearchPageActions::ScrollDown)
-                    .ok();
-            }
+                self.local_action_tx.send(SearchPageActions::ScrollDown).ok();
+            },
             MouseEventKind::ScrollUp => {
                 self.local_action_tx.send(SearchPageActions::ScrollUp).ok();
-            }
+            },
             MouseEventKind::Down(button) => {
                 if button == MouseButton::Left {
-                    self.local_action_tx
-                        .send(SearchPageActions::GoToMangaPage)
-                        .ok();
+                    self.local_action_tx.send(SearchPageActions::GoToMangaPage).ok();
                 }
-            }
-            _ => {}
+            },
+            _ => {},
         }
     }
+
     pub fn is_typing_filter(&mut self) -> bool {
         self.filter_state.is_typing
     }
@@ -509,19 +465,16 @@ impl SearchPage {
         let filters = self.filter_state.filters.clone();
 
         self.tasks.spawn(async move {
-            let search_response = MangadexClient::global()
-                .search_mangas(&manga_to_search, page, filters)
-                .await;
+            let search_response = MangadexClient::global().search_mangas(&manga_to_search, page, filters).await;
 
             match search_response {
                 Ok(mangas_found) => {
-                    tx.send(SearchPageEvents::LoadMangasFound(Some(mangas_found)))
-                        .ok();
-                }
+                    tx.send(SearchPageEvents::LoadMangasFound(Some(mangas_found))).ok();
+                },
                 Err(e) => {
                     write_to_error_log(ErrorType::FromError(Box::new(e)));
                     tx.send(SearchPageEvents::LoadMangasFound(None)).ok();
-                }
+                },
             }
         });
     }
@@ -572,15 +525,13 @@ impl SearchPage {
                 self.mangas_found_list.total_result = response.total;
                 self.state = PageState::DisplayingMangasFound;
                 if PICKER.is_some() {
-                    self.local_event_tx
-                        .send(SearchPageEvents::SearchCovers)
-                        .ok();
+                    self.local_event_tx.send(SearchPageEvents::SearchCovers).ok();
                 }
-            }
+            },
             None => {
                 self.state = PageState::ErrorOcurred;
                 self.mangas_found_list.total_result = 0;
-            }
+            },
         }
     }
 
@@ -593,10 +544,10 @@ impl SearchPage {
                 Some(file_name) => {
                     let file_name = file_name.clone();
                     search_manga_cover(file_name, manga_id, &mut self.tasks, tx);
-                }
+                },
                 None => {
                     tx.send(SearchPageEvents::LoadCover(None, manga_id)).ok();
-                }
+                },
             };
         }
     }
@@ -622,10 +573,8 @@ impl SearchPage {
                 SearchPageEvents::LoadMangasFound(response) => self.load_mangas_found(response),
                 SearchPageEvents::SearchCovers => {
                     self.search_covers();
-                }
-                SearchPageEvents::LoadCover(maybe_image, manga_id) => {
-                    self.load_cover(maybe_image, manga_id)
-                }
+                },
+                SearchPageEvents::LoadCover(maybe_image, manga_id) => self.load_cover(maybe_image, manga_id),
             }
         }
     }
@@ -633,9 +582,8 @@ impl SearchPage {
 
 #[cfg(test)]
 mod test {
-    use crate::view::widgets::press_key;
-
     use super::*;
+    use crate::view::widgets::press_key;
 
     #[tokio::test]
     async fn search_page_key_events() {
@@ -671,8 +619,7 @@ mod test {
 
         // Assuming a search was made and some mangas were found
         search_page.state = PageState::DisplayingMangasFound;
-        search_page.mangas_found_list.widget.mangas =
-            vec![MangaItem::default(), MangaItem::default()];
+        search_page.mangas_found_list.widget.mangas = vec![MangaItem::default(), MangaItem::default()];
         search_page.mangas_found_list.total_result = 20;
         search_page.mangas_found_list.page = 1;
 
