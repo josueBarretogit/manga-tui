@@ -1,7 +1,7 @@
 use crossterm::event::KeyCode;
+use image::DynamicImage;
 use ratatui::layout::Rect;
 use ratatui::Frame;
-use ratatui_image::protocol::StatefulProtocol;
 
 use crate::backend::tui::Events;
 
@@ -29,7 +29,7 @@ pub trait StatefulWidgetFrame {
 }
 
 pub trait ImageHandler: Send + 'static {
-    fn load(image: Box<dyn StatefulProtocol>, id: String) -> Self;
+    fn load(image: DynamicImage, id: String) -> Self;
     fn not_found(id: String) -> Self;
 }
 

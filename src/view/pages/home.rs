@@ -10,6 +10,7 @@ use ratatui::style::Stylize;
 use ratatui::text::{Line, Span, ToSpan};
 use ratatui::widgets::{Block, List, StatefulWidget, Widget};
 use ratatui::Frame;
+use ratatui_image::picker::Picker;
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::{Resize, StatefulImage};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
@@ -24,7 +25,6 @@ use crate::utils::search_manga_cover;
 use crate::view::widgets::home::{CarrouselItem, CarrouselState, PopularMangaCarrousel, RecentlyAddedCarrousel};
 use crate::view::widgets::search::MangaItem;
 use crate::view::widgets::{Component, ImageHandler};
-use crate::PICKER;
 
 #[derive(PartialEq, Eq)]
 pub enum HomeState {
@@ -37,15 +37,15 @@ pub enum HomeEvents {
     SearchRecentlyAddedMangas,
     SearchRecentlyCover,
     SearchSupportImage,
-    LoadSupportImage(Option<DynamicImage>),
+    LoadSupportImage(DynamicImage),
     LoadPopularMangas(Option<SearchMangaResponse>),
     LoadRecentlyAddedMangas(Option<SearchMangaResponse>),
-    LoadCover(Option<Box<dyn StatefulProtocol>>, String),
-    LoadRecentlyAddedMangasCover(Option<Box<dyn StatefulProtocol>>, String),
+    LoadCover(Option<DynamicImage>, String),
+    LoadRecentlyAddedMangasCover(Option<DynamicImage>, String),
 }
 
 impl ImageHandler for HomeEvents {
-    fn load(image: Box<dyn StatefulProtocol>, id: String) -> Self {
+    fn load(image: DynamicImage, id: String) -> Self {
         Self::LoadRecentlyAddedMangasCover(Some(image), id)
     }
 
@@ -75,6 +75,7 @@ pub struct Home {
     pub local_event_tx: UnboundedSender<HomeEvents>,
     pub local_event_rx: UnboundedReceiver<HomeEvents>,
     pub support_image: Option<Box<dyn StatefulProtocol>>,
+    picker: Option<Picker>,
     tasks: JoinSet<()>,
 }
 
@@ -131,7 +132,7 @@ impl Component for Home {
 }
 
 impl Home {
-    pub fn new(tx: UnboundedSender<Events>) -> Self {
+    pub fn new(tx: UnboundedSender<Events>, picker: Option<Picker>) -> Self {
         let (local_action_tx, local_action_rx) = mpsc::unbounded_channel::<HomeActions>();
         let (local_event_tx, local_event_rx) = mpsc::unbounded_channel::<HomeEvents>();
 
@@ -145,6 +146,7 @@ impl Home {
             local_action_tx,
             local_action_rx,
             support_image: None,
+            picker,
             tasks: JoinSet::new(),
         }
     }
@@ -203,9 +205,29 @@ impl Home {
         self.local_event_tx.send(HomeEvents::SearchPopularNewMangas).ok();
 
         self.local_event_tx.send(HomeEvents::SearchRecentlyAddedMangas).ok();
-        if PICKER.is_some() {
+        if self.picker.is_some() {
             self.local_event_tx.send(HomeEvents::SearchSupportImage).ok();
         }
+    }
+
+    fn search_support_image(&mut self) {
+        let tx = self.local_event_tx.clone();
+        self.tasks.spawn(async move {
+            let response = MangadexClient::global().get_mangadex_image_support().await;
+            if let Ok(bytes) = response {
+                let dyn_img = Reader::new(Cursor::new(bytes)).with_guessed_format().unwrap();
+
+                let maybe_decoded = dyn_img.decode();
+                if let Ok(image) = maybe_decoded {
+                    tx.send(HomeEvents::LoadSupportImage(image)).ok();
+                }
+            }
+        });
+    }
+
+    fn load_support_image(&mut self, img: DynamicImage) {
+        let protocol = self.picker.as_mut().unwrap().new_resize_protocol(img);
+        self.support_image = Some(protocol);
     }
 
     pub fn tick(&mut self) {
@@ -231,36 +253,8 @@ impl Home {
                 HomeEvents::LoadRecentlyAddedMangasCover(maybe_image, id) => {
                     self.load_recently_added_mangas_cover(maybe_image, id);
                 },
-                HomeEvents::SearchSupportImage => {
-                    let tx = self.local_event_tx.clone();
-                    self.tasks.spawn(async move {
-                        let response = MangadexClient::global().get_mangadex_image_support().await;
-                        match response {
-                            Ok(bytes) => {
-                                let dyn_img = Reader::new(Cursor::new(bytes)).with_guessed_format().unwrap();
-
-                                let maybe_decoded = dyn_img.decode();
-                                match maybe_decoded {
-                                    Ok(image) => {
-                                        tx.send(HomeEvents::LoadSupportImage(Some(image))).ok();
-                                    },
-                                    Err(_) => {
-                                        tx.send(HomeEvents::LoadSupportImage(None)).ok();
-                                    },
-                                };
-                            },
-                            Err(_) => {
-                                tx.send(HomeEvents::LoadSupportImage(None)).ok();
-                            },
-                        }
-                    });
-                },
-                HomeEvents::LoadSupportImage(maybe_image) => {
-                    if let Some(image) = maybe_image {
-                        let protocol = PICKER.unwrap().new_resize_protocol(image);
-                        self.support_image = Some(protocol);
-                    }
-                },
+                HomeEvents::SearchSupportImage => self.search_support_image(),
+                HomeEvents::LoadSupportImage(image) => self.load_support_image(image),
             }
         }
     }
@@ -270,7 +264,7 @@ impl Home {
             Some(response) => {
                 self.carrousel_popular_mangas = PopularMangaCarrousel::from_response(response);
 
-                if PICKER.is_some() {
+                if self.picker.is_some() {
                     self.local_event_tx.send(HomeEvents::SearchPopularMangasCover).ok();
                 }
             },
@@ -280,7 +274,7 @@ impl Home {
         }
     }
 
-    fn load_popular_manga_cover(&mut self, maybe_cover: Option<Box<dyn StatefulProtocol>>, id: String) {
+    fn load_popular_manga_cover(&mut self, maybe_cover: Option<DynamicImage>, id: String) {
         if let Some(cover) = maybe_cover {
             if let Some(popular_manga) = self
                 .carrousel_popular_mangas
@@ -288,7 +282,8 @@ impl Home {
                 .iter_mut()
                 .find(|manga_item| manga_item.manga.id == id)
             {
-                popular_manga.cover_state = Some(cover);
+                let protocol = self.picker.as_mut().unwrap().new_resize_protocol(cover);
+                popular_manga.cover_state = Some(protocol);
             }
         }
     }
@@ -322,15 +317,13 @@ impl Home {
                     let file_name = file_name.clone();
                     self.tasks.spawn(async move {
                         let response = MangadexClient::global().get_cover_for_manga(&manga_id, &file_name).await;
-
                         if let Ok(bytes) = response {
                             let dyn_img = Reader::new(Cursor::new(bytes)).with_guessed_format().unwrap();
 
                             let maybe_decoded = dyn_img.decode();
 
                             if let Ok(decoded) = maybe_decoded {
-                                let protocol = PICKER.unwrap().new_resize_protocol(decoded);
-                                tx.send(HomeEvents::LoadCover(Some(protocol), manga_id)).ok();
+                                tx.send(HomeEvents::LoadCover(Some(decoded), manga_id)).ok();
                             }
                         }
                     });
@@ -362,7 +355,7 @@ impl Home {
         match maybe_response {
             Some(response) => {
                 self.carrousel_recently_added = RecentlyAddedCarrousel::from_response(response);
-                if PICKER.is_some() {
+                if self.picker.is_some() {
                     self.local_event_tx.send(HomeEvents::SearchRecentlyCover).ok();
                 }
             },
@@ -389,7 +382,7 @@ impl Home {
         }
     }
 
-    fn load_recently_added_mangas_cover(&mut self, maybe_cover: Option<Box<dyn StatefulProtocol>>, id: String) {
+    fn load_recently_added_mangas_cover(&mut self, maybe_cover: Option<DynamicImage>, id: String) {
         if let Some(cover) = maybe_cover {
             if let Some(recently_added_manga) = self
                 .carrousel_recently_added
@@ -397,7 +390,8 @@ impl Home {
                 .iter_mut()
                 .find(|manga_item| manga_item.manga.id == id)
             {
-                recently_added_manga.cover_state = Some(cover);
+                let protocol = self.picker.as_mut().unwrap().new_resize_protocol(cover);
+                recently_added_manga.cover_state = Some(protocol);
             }
         }
     }

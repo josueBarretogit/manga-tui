@@ -1,10 +1,11 @@
 use crossterm::event::{self, KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
+use image::DynamicImage;
 use ratatui::layout::{Constraint, Direction, Layout, Margin, Rect};
 use ratatui::style::{Color, Style, Stylize};
 use ratatui::text::{Line, Span, ToSpan};
 use ratatui::widgets::{Block, Paragraph, StatefulWidget, StatefulWidgetRef, Widget, Wrap};
 use ratatui::Frame;
-use ratatui_image::protocol::StatefulProtocol;
+use ratatui_image::picker::Picker;
 use throbber_widgets_tui::{Throbber, ThrobberState};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
@@ -24,7 +25,6 @@ use crate::view::widgets::filter_widget::state::FilterState;
 use crate::view::widgets::filter_widget::FilterWidget;
 use crate::view::widgets::search::*;
 use crate::view::widgets::{Component, ImageHandler, StatefulWidgetFrame};
-use crate::PICKER;
 
 /// Determine wheter or not mangas are being searched
 /// if so then this should not make a request until the most recent one finishes
@@ -41,12 +41,12 @@ enum PageState {
 /// These happens in the background
 pub enum SearchPageEvents {
     SearchCovers,
-    LoadCover(Option<Box<dyn StatefulProtocol>>, String),
+    LoadCover(Option<DynamicImage>, String),
     LoadMangasFound(Option<SearchMangaResponse>),
 }
 
 impl ImageHandler for SearchPageEvents {
-    fn load(image: Box<dyn StatefulProtocol>, id: String) -> Self {
+    fn load(image: DynamicImage, id: String) -> Self {
         Self::LoadCover(Some(image), id)
     }
 
@@ -92,6 +92,7 @@ pub struct SearchPage {
     mangas_found_list: MangasFoundList,
     filter_state: FilterState,
     manga_added_to_plan_to_read: Option<String>,
+    picker: Option<Picker>,
     tasks: JoinSet<()>,
 }
 
@@ -170,7 +171,7 @@ impl Component for SearchPage {
 }
 
 impl SearchPage {
-    pub fn init(event_tx: UnboundedSender<Events>) -> Self {
+    pub fn init(event_tx: UnboundedSender<Events>, picker: Option<Picker>) -> Self {
         let (action_tx, action_rx) = mpsc::unbounded_channel::<SearchPageActions>();
         let (local_event_tx, local_event) = mpsc::unbounded_channel::<SearchPageEvents>();
 
@@ -188,6 +189,7 @@ impl SearchPage {
             filter_state: FilterState::new(),
             loader_state: ThrobberState::default(),
             manga_added_to_plan_to_read: None,
+            picker,
         }
     }
 
@@ -526,7 +528,7 @@ impl SearchPage {
                 self.mangas_found_list.widget = ListMangasFoundWidget::from_response(response.data);
                 self.mangas_found_list.total_result = response.total;
                 self.state = PageState::DisplayingMangasFound;
-                if PICKER.is_some() {
+                if self.picker.is_some() {
                     self.local_event_tx.send(SearchPageEvents::SearchCovers).ok();
                 }
             },
@@ -554,7 +556,7 @@ impl SearchPage {
         }
     }
 
-    fn load_cover(&mut self, maybe_cover: Option<Box<dyn StatefulProtocol>>, manga_id: String) {
+    fn load_cover(&mut self, maybe_cover: Option<DynamicImage>, manga_id: String) {
         if let Some(image) = maybe_cover {
             if let Some(manga) = self
                 .mangas_found_list
@@ -563,7 +565,8 @@ impl SearchPage {
                 .iter_mut()
                 .find(|manga_item| manga_item.manga.id == manga_id)
             {
-                manga.image_state = Some(image);
+                let protocol = self.picker.as_mut().unwrap().new_resize_protocol(image);
+                manga.image_state = Some(protocol);
             }
         }
     }
@@ -592,7 +595,7 @@ mod test {
     #[tokio::test]
     async fn search_page_key_events() {
         let (tx, _) = mpsc::unbounded_channel::<Events>();
-        let mut search_page = SearchPage::init(tx);
+        let mut search_page = SearchPage::init(tx, None);
 
         assert!(search_page.state == PageState::Normal);
         assert!(!search_page.filter_state.is_open);

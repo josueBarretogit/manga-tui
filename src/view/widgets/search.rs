@@ -12,7 +12,6 @@ use crate::backend::Data;
 use crate::common::Manga;
 use crate::global::CURRENT_LIST_ITEM_STYLE;
 use crate::utils::{from_manga_response, set_status_style, set_tags_style};
-use crate::PICKER;
 
 pub struct MangaPreview<'a> {
     title: &'a str,
@@ -48,31 +47,29 @@ impl<'a> MangaPreview<'a> {
 
         self.render_details(details_area, buf);
 
-        if PICKER.is_some() {
-            match state {
-                Some(image_state) => {
-                    let cover = StatefulImage::new(None).resize(Resize::Fit(None));
-                    StatefulWidget::render(cover, cover_area, buf, image_state)
-                },
-                None => {
-                    Block::bordered().render(cover_area, buf);
-                    let loader = Throbber::default()
-                        .label("Loading cover")
-                        .throbber_set(throbber_widgets_tui::BRAILLE_SIX)
-                        .use_type(throbber_widgets_tui::WhichUse::Spin);
+        match state {
+            Some(image_state) => {
+                let cover = StatefulImage::new(None).resize(Resize::Fit(None));
+                StatefulWidget::render(cover, cover_area, buf, image_state)
+            },
+            None => {
+                Block::bordered().render(cover_area, buf);
+                let loader = Throbber::default()
+                    .label("Loading cover")
+                    .throbber_set(throbber_widgets_tui::BRAILLE_SIX)
+                    .use_type(throbber_widgets_tui::WhichUse::Spin);
 
-                    StatefulWidget::render(
-                        loader,
-                        cover_area.inner(Margin {
-                            horizontal: 2,
-                            vertical: 2,
-                        }),
-                        buf,
-                        &mut self.loader_state,
-                    );
-                },
-            };
-        }
+                StatefulWidget::render(
+                    loader,
+                    cover_area.inner(Margin {
+                        horizontal: 2,
+                        vertical: 2,
+                    }),
+                    buf,
+                    &mut self.loader_state,
+                );
+            },
+        };
     }
 
     pub fn render_description_area(self, area: Rect, buf: &mut Buffer) {

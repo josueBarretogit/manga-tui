@@ -1,16 +1,17 @@
+use std::collections::HashMap;
+
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Margin, Rect};
 use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Paragraph, StatefulWidget, Widget, Wrap};
-use ratatui_image::protocol::StatefulProtocol;
+use ratatui_image::protocol::{Protocol, StatefulProtocol};
 use ratatui_image::{Resize, StatefulImage};
 use throbber_widgets_tui::{Throbber, ThrobberState};
 
 use crate::backend::{Data, SearchMangaResponse};
 use crate::common::Manga;
 use crate::utils::{from_manga_response, set_status_style, set_tags_style};
-use crate::PICKER;
 
 #[derive(Clone, Default, PartialEq, Eq)]
 pub enum CarrouselState {
@@ -89,21 +90,21 @@ impl CarrouselItem {
     }
 
     pub fn render_recently_added(&mut self, area: Rect, buf: &mut Buffer) {
-        if PICKER.is_some() {
-            let layout = Layout::vertical([Constraint::Percentage(80), Constraint::Percentage(20)]);
-            let [cover_area, title_area] = layout.areas(area);
-            self.render_cover(cover_area, buf);
+        let layout = Layout::vertical([Constraint::Percentage(80), Constraint::Percentage(20)]);
+        let [cover_area, title_area] = layout.areas(area);
+        self.render_cover(cover_area, buf);
 
-            Paragraph::new(self.manga.title.clone()).wrap(Wrap { trim: true }).render(title_area, buf);
-        } else {
-            let [title_area, description_area] =
-                Layout::vertical([Constraint::Percentage(30), Constraint::Percentage(70)]).areas(area);
-            Paragraph::new(self.manga.title.clone()).wrap(Wrap { trim: true }).render(title_area, buf);
-
-            Paragraph::new(self.manga.description.clone())
-                .wrap(Wrap { trim: true })
-                .render(description_area, buf);
-        }
+        Paragraph::new(self.manga.title.clone()).wrap(Wrap { trim: true }).render(title_area, buf);
+        // if PICKER.is_some() {
+        // } else {
+        //     let [title_area, description_area] =
+        //         Layout::vertical([Constraint::Percentage(30), Constraint::Percentage(70)]).areas(area);
+        //     Paragraph::new(self.manga.title.clone()).wrap(Wrap { trim: true }).render(title_area, buf);
+        //
+        //     Paragraph::new(self.manga.description.clone())
+        //         .wrap(Wrap { trim: true })
+        //         .render(description_area, buf);
+        // }
     }
 }
 
@@ -117,9 +118,7 @@ impl Widget for CarrouselItem {
 
         let [cover_area, details_area] = layout.areas(area);
 
-        if PICKER.is_some() {
-            self.render_cover(cover_area, buf);
-        }
+        self.render_cover(cover_area, buf);
         self.render_details(details_area, buf);
     }
 }
@@ -202,6 +201,11 @@ pub struct RecentlyAddedCarrousel {
     pub selected_item_index: usize,
     pub amount_items_per_page: usize,
     pub state: CarrouselState,
+}
+
+pub struct RecentlyAddedCarrouselState {
+    currently_select: usize,
+    image_state: HashMap<String, Box<dyn Protocol>>,
 }
 
 impl StatefulWidget for RecentlyAddedCarrousel {

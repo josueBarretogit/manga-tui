@@ -1,11 +1,12 @@
 use crossterm::event::KeyCode;
 use image::io::Reader;
-use image::GenericImageView;
+use image::{DynamicImage, GenericImageView};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Margin, Rect};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Paragraph, StatefulWidget, Widget};
 use ratatui::Frame;
+use ratatui_image::picker::Picker;
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::{Resize, StatefulImage};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
@@ -18,7 +19,6 @@ use crate::common::PageType;
 use crate::global::INSTRUCTIONS_STYLE;
 use crate::view::widgets::reader::{PageItemState, PagesItem, PagesList};
 use crate::view::widgets::Component;
-use crate::PICKER;
 
 pub enum MangaReaderActions {
     NextPage,
@@ -30,7 +30,7 @@ pub enum State {
 }
 
 pub struct PageData {
-    pub protocol: Box<dyn StatefulProtocol>,
+    pub img: DynamicImage,
     pub index: usize,
     pub dimensions: (u32, u32),
 }
@@ -68,6 +68,7 @@ pub struct MangaReader {
     _state: State,
     /// Handle fetching the images
     image_tasks: JoinSet<()>,
+    picker: Picker,
     pub _global_event_tx: UnboundedSender<Events>,
     pub local_action_tx: UnboundedSender<MangaReaderActions>,
     pub local_action_rx: UnboundedReceiver<MangaReaderActions>,
@@ -160,6 +161,7 @@ impl MangaReader {
         base_url: String,
         url_imgs: Vec<String>,
         url_imgs_high_quality: Vec<String>,
+        picker: Picker,
     ) -> Self {
         let set: JoinSet<()> = JoinSet::new();
         let (local_action_tx, local_action_rx) = mpsc::unbounded_channel::<MangaReaderActions>();
@@ -191,6 +193,7 @@ impl MangaReader {
             _state: State::SearchingPages,
             current_page_size: 2,
             pages_list: PagesList::default(),
+            picker,
         }
     }
 
@@ -214,7 +217,8 @@ impl MangaReader {
         if let Some(data) = maybe_data {
             match self.pages.get_mut(data.index) {
                 Some(page) => {
-                    page.image_state = Some(data.protocol);
+                    let protocol = self.picker.new_resize_protocol(data.img);
+                    page.image_state = Some(protocol);
                     page.dimensions = Some(data.dimensions);
                 },
                 None => {
@@ -256,7 +260,7 @@ impl MangaReader {
                                     if let Ok(decoded) = maybe_decoded {
                                         let page_data = PageData {
                                             dimensions: decoded.dimensions(),
-                                            protocol: PICKER.unwrap().new_resize_protocol(decoded),
+                                            img: decoded,
                                             index,
                                         };
                                         tx.send(MangaReaderEvents::LoadPage(Some(page_data))).ok();

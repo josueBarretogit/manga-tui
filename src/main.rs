@@ -4,9 +4,7 @@
 use std::time::Duration;
 
 use clap::Parser;
-use once_cell::sync::Lazy;
 use ratatui::backend::CrosstermBackend;
-use ratatui_image::picker::{Picker, ProtocolType};
 use reqwest::{Client, StatusCode};
 
 use self::backend::error_log::init_error_hooks;
@@ -24,31 +22,6 @@ mod config;
 mod global;
 mod utils;
 mod view;
-
-#[cfg(unix)]
-pub static PICKER: Lazy<Option<Picker>> = Lazy::new(|| {
-    Picker::from_termios()
-        .ok()
-        .map(|mut picker| {
-            picker.guess_protocol();
-            picker
-        })
-        .filter(|picker| picker.protocol_type != ProtocolType::Halfblocks)
-});
-
-#[cfg(target_os = "windows")]
-pub static PICKER: Lazy<Option<Picker>> = Lazy::new(|| {
-    // Todo! figure out how to get the size of the terminal on windows
-    // I think with the winapi it is possible
-    let mut picker = Picker::new((10, 17));
-
-    let protocol = picker.guess_protocol();
-
-    if protocol == ProtocolType::Halfblocks {
-        return None;
-    }
-    Some(picker)
-});
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 7)]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

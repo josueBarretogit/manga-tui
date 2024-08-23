@@ -10,14 +10,12 @@ use tokio::sync::mpsc::UnboundedSender;
 use tokio::task::JoinSet;
 use tui_input::Input;
 
-use crate::backend::error_log::write_to_error_log;
 use crate::backend::fetch::MangadexClient;
 use crate::backend::filter::Languages;
 use crate::backend::Data;
 use crate::common::{Artist, Author, Manga};
 use crate::view::widgets::filter_widget::state::{TagListItem, TagListItemState};
 use crate::view::widgets::ImageHandler;
-use crate::PICKER;
 
 pub fn set_tags_style(tag: &str) -> Span<'_> {
     match tag.to_lowercase().as_str() {
@@ -54,7 +52,6 @@ pub fn search_manga_cover<IM: ImageHandler>(
 ) {
     join_set.spawn(async move {
         let response = MangadexClient::global().get_cover_for_manga_lower_quality(&manga_id, &file_name).await;
-
         match response {
             Ok(bytes) => {
                 let dyn_img = Reader::new(Cursor::new(bytes)).with_guessed_format().unwrap();
@@ -62,12 +59,11 @@ pub fn search_manga_cover<IM: ImageHandler>(
                 let maybe_decoded = dyn_img.decode();
 
                 if let Ok(decoded) = maybe_decoded {
-                    let protocol = PICKER.unwrap().new_resize_protocol(decoded);
-                    tx.send(IM::load(protocol, manga_id)).ok();
+                    tx.send(IM::load(decoded, manga_id)).ok();
                 }
             },
-            Err(e) => {
-                write_to_error_log(crate::backend::error_log::ErrorType::FromError(Box::new(e)));
+            Err(_e) => {
+                // write_to_error_log(crate::backend::error_log::ErrorType::FromError(Box::new(e)));
                 tx.send(IM::not_found(manga_id)).ok();
             },
         }

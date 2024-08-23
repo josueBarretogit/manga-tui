@@ -5,6 +5,7 @@ use ratatui::style::{Style, Stylize};
 use ratatui::text::{Line, Span, ToSpan};
 use ratatui::widgets::{Block, Clear, List, ListState, Paragraph, StatefulWidget, Widget, Wrap};
 use ratatui::Frame;
+use ratatui_image::picker::Picker;
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::{Resize, StatefulImage};
 use strum::Display;
@@ -29,7 +30,6 @@ use crate::view::widgets::manga::{
     ChapterItem, ChaptersListWidget, DownloadAllChaptersState, DownloadAllChaptersWidget, DownloadPhase,
 };
 use crate::view::widgets::Component;
-use crate::PICKER;
 
 #[derive(PartialEq, Eq, Debug)]
 pub enum PageState {
@@ -65,6 +65,7 @@ pub enum MangaPageActions {
 #[derive(Debug, PartialEq)]
 pub enum MangaPageEvents {
     SearchChapters,
+    SearchCover,
     FethStatistics,
     CheckChapterStatus,
     ChapterFinishedDownloading(String),
@@ -116,6 +117,7 @@ pub struct MangaPage {
     state: PageState,
     statistics: Option<MangaStatistics>,
     tasks: JoinSet<()>,
+    picker: Option<Picker>,
     available_languages_state: ListState,
     is_list_languages_open: bool,
     download_all_chapters_state: DownloadAllChaptersState,
@@ -141,7 +143,7 @@ struct ChaptersData {
 }
 
 impl MangaPage {
-    pub fn new(manga: Manga, image_state: Option<Box<dyn StatefulProtocol>>, global_event_tx: UnboundedSender<Events>) -> Self {
+    pub fn new(manga: Manga, global_event_tx: UnboundedSender<Events>, picker: Option<Picker>) -> Self {
         let (local_action_tx, local_action_rx) = mpsc::unbounded_channel::<MangaPageActions>();
         let (local_event_tx, local_event_rx) = mpsc::unbounded_channel::<MangaPageEvents>();
 
@@ -156,7 +158,8 @@ impl MangaPage {
 
         Self {
             manga,
-            image_state,
+            image_state: None,
+            picker,
             global_event_tx,
             local_action_tx,
             local_action_rx,
@@ -267,7 +270,7 @@ impl MangaPage {
                     Span::raw(" <a> ").style(*INSTRUCTIONS_STYLE),
                 ];
 
-                if PICKER.is_some() {
+                if self.picker.is_some() {
                     chapter_instructions.push(" Read chapter ".into());
                     chapter_instructions.push(Span::raw(" <r> ").style(*INSTRUCTIONS_STYLE));
                 }
@@ -505,7 +508,7 @@ impl MangaPage {
     }
 
     fn read_chapter(&mut self) {
-        if PICKER.is_none() {
+        if self.picker.is_none() {
             return;
         }
         self.state = PageState::SearchingChapterData;
@@ -871,6 +874,7 @@ impl MangaPage {
         }
         if let Ok(background_event) = self.local_event_rx.try_recv() {
             match background_event {
+                MangaPageEvents::SearchCover => todo!(),
                 MangaPageEvents::FinishedDownloadingAllChapters => self.finish_download_all_chapters(),
                 MangaPageEvents::DownloadAllChaptersError => self.set_download_all_chapters_error(),
                 MangaPageEvents::StartDownloadProgress(total_chapters) => self.start_download_all_chapters(total_chapters),
@@ -986,7 +990,7 @@ mod test {
     fn get_manga_page() -> MangaPage {
         let manga = Manga::default();
         let (tx, _) = mpsc::unbounded_channel::<Events>();
-        MangaPage::new(manga, None, tx)
+        MangaPage::new(manga, tx, None)
     }
 
     fn get_chapters_response() -> ChapterResponse {
