@@ -518,9 +518,6 @@ impl MangaPage {
     }
 
     fn read_chapter(&mut self) {
-        if self.picker.is_none() {
-            return;
-        }
         self.state = PageState::SearchingChapterData;
         match self.get_current_selected_chapter_mut() {
             Some(chapter_selected) => {
@@ -855,6 +852,9 @@ impl MangaPage {
     }
 
     fn search_cover(&mut self) {
+        if self.picker.is_none() {
+            return;
+        }
         let tx = self.local_event_tx.clone();
         let manga_id = self.manga.id.clone();
         let file_name = self.manga.img_url.as_ref().cloned().unwrap_or_default();
@@ -989,6 +989,9 @@ impl Component for MangaPage {
             },
             MangaPageActions::ReadChapter => {
                 if self.state != PageState::SearchingChapterData {
+                    if self.picker.is_none() {
+                        return;
+                    }
                     self.read_chapter();
                 }
             },

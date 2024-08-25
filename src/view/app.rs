@@ -37,6 +37,9 @@ pub struct App {
     pub search_page: SearchPage,
     pub home_page: Home,
     pub feed_page: Feed,
+    // The picker is what decides how big a image needs to be rendered depending on the user's
+    // terminal font size and the graphics it supports
+    // if the terminal doesn't support any graphics protocol the picker is `None`
     picker: Option<Picker>,
 }
 
@@ -98,13 +101,7 @@ impl App {
 
         global_event_tx.send(Events::GoToHome).ok();
 
-        let picker = Picker::from_termios()
-            .ok()
-            .map(|mut picker| {
-                picker.guess_protocol();
-                picker
-            })
-            .filter(|picker| picker.protocol_type != ProtocolType::Halfblocks);
+        let picker = get_picker();
 
         App {
             picker,
@@ -271,4 +268,29 @@ impl App {
         self.feed_page.init_search();
         self.current_tab = SelectedPage::Feed;
     }
+}
+
+#[cfg(unix)]
+fn get_picker() -> Option<Picker> {
+    Picker::from_termios()
+        .ok()
+        .map(|mut picker| {
+            picker.guess_protocol();
+            picker
+        })
+        .filter(|picker| picker.protocol_type != ProtocolType::Halfblocks)
+}
+
+#[cfg(target_os = "windows")]
+fn get_picker() -> Option<Picker> {
+    // Todo! figure out how to get the size of the terminal on windows
+    // I think with the winapi it is possible
+    let mut picker = Picker::new((10, 17));
+
+    let protocol = picker.guess_protocol();
+
+    if protocol == ProtocolType::Halfblocks {
+        return None;
+    }
+    Some(picker)
 }

@@ -1,3 +1,6 @@
+use std::thread::sleep;
+use std::time::Duration;
+
 use crossterm::event::{self, KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 use image::DynamicImage;
 use ratatui::layout::{Constraint, Direction, Layout, Margin, Rect};
@@ -162,6 +165,7 @@ impl Component for SearchPage {
 
     fn clean_up(&mut self) {
         self.abort_tasks();
+        self.manga_cover_state = ImageState::default();
         self.state = PageState::default();
         self.manga_added_to_plan_to_read = None;
         self.input_mode = InputMode::Idle;
@@ -314,6 +318,7 @@ impl SearchPage {
                                 &manga_selected.manga.tags,
                                 &manga_selected.manga.content_rating,
                                 &manga_selected.manga.status,
+                                self.picker.is_some(),
                                 loader_state,
                             ),
                             preview_area,
@@ -534,9 +539,7 @@ impl SearchPage {
                 self.mangas_found_list.widget = ListMangasFoundWidget::from_response(response.data);
                 self.mangas_found_list.total_result = response.total;
                 self.state = PageState::DisplayingMangasFound;
-                if self.picker.is_some() {
-                    self.local_event_tx.send(SearchPageEvents::SearchCovers).ok();
-                }
+                self.local_event_tx.send(SearchPageEvents::SearchCovers).ok();
             },
             None => {
                 self.state = PageState::ErrorOcurred;
@@ -565,7 +568,7 @@ impl SearchPage {
     fn load_cover(&mut self, maybe_cover: Option<DynamicImage>, manga_id: String) {
         if let Some(cover) = maybe_cover {
             if let Some(picker) = self.picker.as_mut() {
-                if let Ok(protocol) = picker.new_protocol(cover, self.manga_cover_state.get_cover_area(), Resize::Fit(None)) {
+                if let Ok(protocol) = picker.new_protocol(cover, self.manga_cover_state.get_img_area(), Resize::Fit(None)) {
                     self.manga_cover_state.insert_manga(protocol, manga_id);
                 }
             }
@@ -578,7 +581,11 @@ impl SearchPage {
             match event {
                 SearchPageEvents::LoadMangasFound(response) => self.load_mangas_found(response),
                 SearchPageEvents::SearchCovers => {
-                    self.search_covers();
+                    if self.picker.is_some() {
+                        // wait a bit so that `img_area` is set to the area for covers
+                        sleep(Duration::from_millis(500));
+                        self.search_covers();
+                    }
                 },
                 SearchPageEvents::LoadCover(maybe_image, manga_id) => self.load_cover(maybe_image, manga_id),
             }

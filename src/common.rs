@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+
 use ratatui::layout::Rect;
 use ratatui_image::protocol::Protocol;
 use strum::{Display, EnumIter};
@@ -58,9 +59,9 @@ impl PageType {
     }
 }
 
-
 #[derive(Default)]
 pub struct ImageState {
+    /// save the image loaded for a manga, it will be retrieved by it's id
     image_state: HashMap<String, Box<dyn Protocol>>,
     img_area: Rect,
 }
@@ -70,19 +71,17 @@ impl ImageState {
         self.image_state.insert(id_manga, fixed_protocol);
     }
 
-    pub fn clean_up(&mut self) {
-        self.image_state = HashMap::new();
-    }
-
-    pub fn get_cover_area(&self) -> Rect {
+    pub fn get_img_area(&self) -> Rect {
         self.img_area
     }
 
+    /// After a manga is rendered it will be know what area the covers fits into
     pub fn set_area(&mut self, area: Rect) {
         self.img_area = area;
     }
 
-    pub fn get_image_state(&mut self, id : &str) -> Option<&mut Box<dyn Protocol>> {
+    /// get the image cover state given the manga id
+    pub fn get_image_state(&mut self, id: &str) -> Option<&mut Box<dyn Protocol>> {
         self.image_state.get_mut(id)
     }
 }

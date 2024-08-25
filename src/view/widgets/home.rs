@@ -1,4 +1,3 @@
-
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Margin, Rect};
 use ratatui::style::{Color, Style};
@@ -192,20 +191,32 @@ impl StatefulWidget for RecentlyAddedCarrousel {
         .margin(1)
         .split(area);
 
+        let manga_constraints = if self.can_display_images {
+            [Constraint::Percentage(80), Constraint::Percentage(20)]
+        } else {
+            [Constraint::Percentage(30), Constraint::Percentage(70)]
+        };
+
         match self.state {
             CarrouselState::Displaying => {
                 for (index, area_manga) in layout.iter().enumerate() {
-                    let inner = area_manga.inner(Margin {
+                    let margin = area_manga.inner(Margin {
                         horizontal: 1,
                         vertical: 1,
                     });
-                    let [cover_area, title_area] =
-                        Layout::vertical([Constraint::Percentage(80), Constraint::Percentage(20)]).areas(inner);
+
+                    let [top, bottom] = Layout::vertical(manga_constraints).areas(margin);
+
                     if let Some(item) = self.items.get_mut(index) {
                         if self.can_display_images {
-                            item.render_cover(cover_area, buf, state);
+                            item.render_cover(top, buf, state);
+                            Paragraph::new(item.manga.title.clone()).render(bottom, buf);
+                        } else {
+                            Paragraph::new(item.manga.title.clone()).wrap(Wrap { trim: true }).render(top, buf);
+                            Paragraph::new(item.manga.description.clone())
+                                .wrap(Wrap { trim: true })
+                                .render(bottom, buf);
                         }
-                        Paragraph::new(item.manga.title.clone()).render(title_area, buf);
                     }
 
                     if self.selected_item_index == index {
@@ -217,12 +228,15 @@ impl StatefulWidget for RecentlyAddedCarrousel {
             },
             CarrouselState::Searching => {
                 Block::bordered().title("Searching recent mangas").render(area, buf);
-                let inner = layout[0].inner(Margin {
-                    horizontal: 1,
-                    vertical: 1,
-                });
-                let [a, _b] = Layout::vertical([Constraint::Percentage(80), Constraint::Percentage(20)]).areas(inner);
-                state.set_area(a);
+                if self.can_display_images {
+                    let margin = layout[0].inner(Margin {
+                        horizontal: 1,
+                        vertical: 1,
+                    });
+
+                    let [cover_area, _b] = Layout::vertical(manga_constraints).areas(margin);
+                    state.set_area(cover_area);
+                }
             },
             CarrouselState::NotFound => {
                 Block::bordered().title("Could not get recent mangas").render(area, buf);
@@ -231,19 +245,17 @@ impl StatefulWidget for RecentlyAddedCarrousel {
     }
 }
 
-impl Default for RecentlyAddedCarrousel {
-    fn default() -> Self {
+impl RecentlyAddedCarrousel {
+    pub fn new(can_display_images: bool) -> Self {
         Self {
-            can_display_images: false,
+            can_display_images,
             items: vec![],
             selected_item_index: 0,
             amount_items_per_page: 5,
             state: CarrouselState::default(),
         }
     }
-}
 
-impl RecentlyAddedCarrousel {
     pub fn select_next(&mut self) {
         if self.state == CarrouselState::Displaying && self.selected_item_index + 1 < self.amount_items_per_page {
             self.selected_item_index += 1;

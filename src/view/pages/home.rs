@@ -1,5 +1,6 @@
 use std::env;
 use std::io::Cursor;
+use std::time::Duration;
 
 use crossterm::event::{KeyCode, KeyEvent};
 use image::io::Reader;
@@ -122,6 +123,8 @@ impl Component for Home {
         self.carrousel_recently_added.items = vec![];
         self.support_image = None;
         self.state = HomeState::Unused;
+        self.recently_added_manga_state = ImageState::default();
+        self.popular_manga_carrousel_state = ImageState::default();
     }
 
     fn handle_events(&mut self, events: Events) {
@@ -140,7 +143,7 @@ impl Home {
 
         Self {
             carrousel_popular_mangas: PopularMangaCarrousel::default(),
-            carrousel_recently_added: RecentlyAddedCarrousel::default(),
+            carrousel_recently_added: RecentlyAddedCarrousel::new(picker.is_some()),
             state: HomeState::Unused,
             global_event_tx: tx,
             local_event_tx,
@@ -203,7 +206,9 @@ impl Home {
         self.local_event_tx.send(HomeEvents::SearchPopularNewMangas).ok();
 
         self.local_event_tx.send(HomeEvents::SearchRecentlyAddedMangas).ok();
-        self.local_event_tx.send(HomeEvents::SearchSupportImage).ok();
+        if self.picker.is_some() {
+            self.local_event_tx.send(HomeEvents::SearchSupportImage).ok();
+        }
     }
 
     fn search_support_image(&mut self) {
@@ -222,12 +227,11 @@ impl Home {
     }
 
     fn load_support_image(&mut self, img: DynamicImage) {
-        let protocol = self
-            .picker
-            .as_mut()
-            .unwrap()
-            .new_protocol(img, self.image_support_area, Resize::Fit(None));
-        self.support_image = Some(protocol.unwrap());
+        if let Some(picker) = self.picker.as_mut() {
+            if let Ok(protocol) = picker.new_protocol(img, self.image_support_area, Resize::Fit(None)) {
+                self.support_image = Some(protocol);
+            }
+        }
     }
 
     pub fn tick(&mut self) {
@@ -263,8 +267,9 @@ impl Home {
         match maybe_response {
             Some(response) => {
                 self.carrousel_popular_mangas = PopularMangaCarrousel::from_response(response, self.picker.is_some());
-
-                self.local_event_tx.send(HomeEvents::SearchPopularMangasCover).ok();
+                if self.picker.is_some() {
+                    self.local_event_tx.send(HomeEvents::SearchPopularMangasCover).ok();
+                }
             },
             None => {
                 self.carrousel_popular_mangas.state = CarrouselState::NotFound;
@@ -274,19 +279,19 @@ impl Home {
 
     fn load_popular_manga_cover(&mut self, maybe_cover: Option<DynamicImage>, id: String) {
         if let Some(cover) = maybe_cover {
-            let fixed_protocol = self.picker.as_mut().unwrap().new_protocol(
-                cover,
-                self.popular_manga_carrousel_state.get_cover_area(),
-                Resize::Fit(None),
-            );
-            if let Ok(protocol) = fixed_protocol {
-                self.popular_manga_carrousel_state.insert_manga(protocol, id);
+            if let Some(picker) = self.picker.as_mut() {
+                let fixed_protocol =
+                    picker.new_protocol(cover, self.popular_manga_carrousel_state.get_img_area(), Resize::Fit(None));
+                if let Ok(protocol) = fixed_protocol {
+                    self.popular_manga_carrousel_state.insert_manga(protocol, id);
+                }
             }
         }
     }
 
     fn search_popular_mangas(&mut self) {
         let tx = self.local_event_tx.clone();
+        self.carrousel_popular_mangas.state = CarrouselState::Searching;
         self.tasks.spawn(async move {
             let response = MangadexClient::global().get_popular_mangas().await;
             match response {
@@ -306,6 +311,7 @@ impl Home {
     }
 
     fn search_popular_mangas_cover(&mut self) {
+        std::thread::sleep(Duration::from_millis(250));
         for item in self.carrousel_popular_mangas.items.iter() {
             let manga_id = item.manga.id.clone();
             let tx = self.local_event_tx.clone();
@@ -334,6 +340,7 @@ impl Home {
 
     fn search_recently_added_mangas(&mut self) {
         let tx = self.local_event_tx.clone();
+        self.carrousel_recently_added.state = CarrouselState::Searching;
         self.tasks.spawn(async move {
             let response = MangadexClient::global().get_recently_added().await;
             match response {
@@ -352,7 +359,9 @@ impl Home {
         match maybe_response {
             Some(response) => {
                 self.carrousel_recently_added = RecentlyAddedCarrousel::from_response(response, self.picker.is_some());
-                self.local_event_tx.send(HomeEvents::SearchRecentlyCover).ok();
+                if self.picker.is_some() {
+                    self.local_event_tx.send(HomeEvents::SearchRecentlyCover).ok();
+                }
             },
             None => {
                 self.carrousel_recently_added.state = CarrouselState::NotFound;
@@ -361,6 +370,7 @@ impl Home {
     }
 
     fn search_recently_added_mangas_cover(&mut self) {
+        std::thread::sleep(Duration::from_millis(250));
         for item in self.carrousel_recently_added.items.iter() {
             let manga_id = item.manga.id.clone();
             let tx = self.local_event_tx.clone();
@@ -379,8 +389,7 @@ impl Home {
     fn load_recently_added_mangas_cover(&mut self, maybe_cover: Option<DynamicImage>, id: String) {
         if let Some(cover) = maybe_cover {
             if let Some(picker) = self.picker.as_mut() {
-                let fixed_protocol =
-                    picker.new_protocol(cover, self.recently_added_manga_state.get_cover_area(), Resize::Fit(None));
+                let fixed_protocol = picker.new_protocol(cover, self.recently_added_manga_state.get_img_area(), Resize::Fit(None));
 
                 if let Ok(protocol) = fixed_protocol {
                     self.recently_added_manga_state.insert_manga(protocol, id);
