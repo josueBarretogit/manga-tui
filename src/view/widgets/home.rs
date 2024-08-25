@@ -1,16 +1,14 @@
-use std::collections::HashMap;
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Margin, Rect};
 use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Paragraph, StatefulWidget, Widget, Wrap};
-use ratatui_image::protocol::{Protocol, StatefulProtocol};
-use ratatui_image::{Resize, StatefulImage};
+use ratatui_image::Image;
 use throbber_widgets_tui::{Throbber, ThrobberState};
 
 use crate::backend::{Data, SearchMangaResponse};
-use crate::common::Manga;
+use crate::common::{ImageState, Manga};
 use crate::utils::{from_manga_response, set_status_style, set_tags_style};
 
 #[derive(Clone, Default, PartialEq, Eq)]
@@ -24,25 +22,22 @@ pub enum CarrouselState {
 #[derive(Clone)]
 pub struct CarrouselItem {
     pub manga: Manga,
-    pub cover_state: Option<Box<dyn StatefulProtocol>>,
     pub loader_state: ThrobberState,
 }
 
 impl CarrouselItem {
-    fn new(manga: Manga, cover_state: Option<Box<dyn StatefulProtocol>>, loader_state: ThrobberState) -> Self {
+    fn new(manga: Manga, loader_state: ThrobberState) -> Self {
         Self {
             manga,
-            cover_state,
             loader_state,
         }
     }
 
-    fn render_cover(&mut self, area: Rect, buf: &mut Buffer) {
-        match self.cover_state.as_mut() {
+    fn render_cover(&mut self, area: Rect, buf: &mut Buffer, state: &mut ImageState) {
+        match state.get_image_state(&self.manga.id) {
             Some(image_state) => {
-                let cover = StatefulImage::new(None).resize(Resize::Fit(None));
-
-                StatefulWidget::render(cover, area, buf, image_state)
+                let cover = Image::new(image_state.as_ref());
+                Widget::render(cover, area, buf);
             },
             None => {
                 let loader = Throbber::default()
@@ -80,46 +75,11 @@ impl CarrouselItem {
 
     pub fn from_response(value: Data) -> Self {
         let manga = from_manga_response(value);
-        Self::new(manga, None, ThrobberState::default())
+        Self::new(manga, ThrobberState::default())
     }
 
     pub fn tick(&mut self) {
-        if self.cover_state.is_none() {
-            self.loader_state.calc_next();
-        }
-    }
-
-    pub fn render_recently_added(&mut self, area: Rect, buf: &mut Buffer) {
-        let layout = Layout::vertical([Constraint::Percentage(80), Constraint::Percentage(20)]);
-        let [cover_area, title_area] = layout.areas(area);
-        self.render_cover(cover_area, buf);
-
-        Paragraph::new(self.manga.title.clone()).wrap(Wrap { trim: true }).render(title_area, buf);
-        // if PICKER.is_some() {
-        // } else {
-        //     let [title_area, description_area] =
-        //         Layout::vertical([Constraint::Percentage(30), Constraint::Percentage(70)]).areas(area);
-        //     Paragraph::new(self.manga.title.clone()).wrap(Wrap { trim: true }).render(title_area, buf);
-        //
-        //     Paragraph::new(self.manga.description.clone())
-        //         .wrap(Wrap { trim: true })
-        //         .render(description_area, buf);
-        // }
-    }
-}
-
-// This implementation is used for the popular mangas carrousel
-impl Widget for CarrouselItem {
-    fn render(mut self, area: Rect, buf: &mut Buffer)
-    where
-        Self: Sized,
-    {
-        let layout = Layout::horizontal([Constraint::Percentage(30), Constraint::Percentage(70)]);
-
-        let [cover_area, details_area] = layout.areas(area);
-
-        self.render_cover(cover_area, buf);
-        self.render_details(details_area, buf);
+        self.loader_state.calc_next();
     }
 }
 
@@ -128,19 +88,29 @@ pub struct PopularMangaCarrousel {
     pub items: Vec<CarrouselItem>,
     pub current_item_visible_index: usize,
     pub state: CarrouselState,
+    pub img_area: Rect,
+    pub can_display_images: bool,
 }
 
 impl StatefulWidget for PopularMangaCarrousel {
-    type State = usize;
+    type State = ImageState;
 
-    fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+    fn render(mut self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+        let layout = Layout::horizontal([Constraint::Percentage(30), Constraint::Percentage(70)]);
+        let [cover_area, details_area] = layout.areas(area);
         match self.state {
             CarrouselState::Searching => {
                 Block::bordered().render(area, buf);
+                state.set_area(cover_area);
             },
             CarrouselState::Displaying => {
-                match self.items.get(*state) {
-                    Some(item) => item.clone().render(area, buf),
+                match self.items.get_mut(self.current_item_visible_index) {
+                    Some(item) => {
+                        if self.can_display_images {
+                            item.render_cover(cover_area, buf, state);
+                        }
+                        item.render_details(details_area, buf);
+                    },
                     None => Block::bordered().title("Loading").render(area, buf),
                 };
             },
@@ -152,15 +122,19 @@ impl StatefulWidget for PopularMangaCarrousel {
 }
 
 impl PopularMangaCarrousel {
-    pub fn from_response(response: SearchMangaResponse) -> Self {
+    pub fn from_response(response: SearchMangaResponse, can_display_images: bool) -> Self {
         let mut items: Vec<CarrouselItem> = vec![];
 
         for manga in response.data {
             items.push(CarrouselItem::from_response(manga))
         }
 
+        let img_area = Rect::default();
+
         Self {
             items,
+            img_area,
+            can_display_images,
             current_item_visible_index: 0,
             state: CarrouselState::Displaying,
         }
@@ -201,38 +175,40 @@ pub struct RecentlyAddedCarrousel {
     pub selected_item_index: usize,
     pub amount_items_per_page: usize,
     pub state: CarrouselState,
-}
-
-pub struct RecentlyAddedCarrouselState {
-    currently_select: usize,
-    image_state: HashMap<String, Box<dyn Protocol>>,
+    can_display_images: bool,
 }
 
 impl StatefulWidget for RecentlyAddedCarrousel {
-    type State = usize;
+    type State = ImageState;
 
     fn render(mut self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+        let layout = Layout::horizontal([
+            Constraint::Fill(1),
+            Constraint::Fill(1),
+            Constraint::Fill(1),
+            Constraint::Fill(1),
+            Constraint::Fill(1),
+        ])
+        .margin(1)
+        .split(area);
+
         match self.state {
             CarrouselState::Displaying => {
-                let layout = Layout::horizontal([
-                    Constraint::Fill(1),
-                    Constraint::Fill(1),
-                    Constraint::Fill(1),
-                    Constraint::Fill(1),
-                    Constraint::Fill(1),
-                ])
-                .split(area);
-
                 for (index, area_manga) in layout.iter().enumerate() {
                     let inner = area_manga.inner(Margin {
                         horizontal: 1,
                         vertical: 1,
                     });
+                    let [cover_area, title_area] =
+                        Layout::vertical([Constraint::Percentage(80), Constraint::Percentage(20)]).areas(inner);
                     if let Some(item) = self.items.get_mut(index) {
-                        item.render_recently_added(inner, buf);
+                        if self.can_display_images {
+                            item.render_cover(cover_area, buf, state);
+                        }
+                        Paragraph::new(item.manga.title.clone()).render(title_area, buf);
                     }
 
-                    if *state == index {
+                    if self.selected_item_index == index {
                         Block::bordered()
                             .border_style(Style::default().fg(Color::Yellow))
                             .render(*area_manga, buf);
@@ -241,6 +217,12 @@ impl StatefulWidget for RecentlyAddedCarrousel {
             },
             CarrouselState::Searching => {
                 Block::bordered().title("Searching recent mangas").render(area, buf);
+                let inner = layout[0].inner(Margin {
+                    horizontal: 1,
+                    vertical: 1,
+                });
+                let [a, _b] = Layout::vertical([Constraint::Percentage(80), Constraint::Percentage(20)]).areas(inner);
+                state.set_area(a);
             },
             CarrouselState::NotFound => {
                 Block::bordered().title("Could not get recent mangas").render(area, buf);
@@ -252,6 +234,7 @@ impl StatefulWidget for RecentlyAddedCarrousel {
 impl Default for RecentlyAddedCarrousel {
     fn default() -> Self {
         Self {
+            can_display_images: false,
             items: vec![],
             selected_item_index: 0,
             amount_items_per_page: 5,
@@ -281,7 +264,7 @@ impl RecentlyAddedCarrousel {
         self.items.iter_mut().for_each(|item| item.tick());
     }
 
-    pub fn from_response(response: SearchMangaResponse) -> Self {
+    pub fn from_response(response: SearchMangaResponse, can_display_images: bool) -> Self {
         let mut items: Vec<CarrouselItem> = vec![];
 
         for manga in response.data {
@@ -289,6 +272,7 @@ impl RecentlyAddedCarrousel {
         }
 
         Self {
+            can_display_images,
             items,
             selected_item_index: 0,
             amount_items_per_page: 5,

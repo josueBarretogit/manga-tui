@@ -1,3 +1,6 @@
+use std::collections::HashMap;
+use ratatui::layout::Rect;
+use ratatui_image::protocol::Protocol;
 use strum::{Display, EnumIter};
 
 use crate::backend::filter::Languages;
@@ -52,5 +55,34 @@ impl PageType {
             Self::LowQuality => "Low quality",
             Self::HighQuality => "High quality",
         }
+    }
+}
+
+
+#[derive(Default)]
+pub struct ImageState {
+    image_state: HashMap<String, Box<dyn Protocol>>,
+    img_area: Rect,
+}
+
+impl ImageState {
+    pub fn insert_manga(&mut self, fixed_protocol: Box<dyn Protocol>, id_manga: String) {
+        self.image_state.insert(id_manga, fixed_protocol);
+    }
+
+    pub fn clean_up(&mut self) {
+        self.image_state = HashMap::new();
+    }
+
+    pub fn get_cover_area(&self) -> Rect {
+        self.img_area
+    }
+
+    pub fn set_area(&mut self, area: Rect) {
+        self.img_area = area;
+    }
+
+    pub fn get_image_state(&mut self, id : &str) -> Option<&mut Box<dyn Protocol>> {
+        self.image_state.get_mut(id)
     }
 }

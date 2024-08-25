@@ -11,8 +11,8 @@ use ratatui::text::{Line, Span, ToSpan};
 use ratatui::widgets::{Block, List, StatefulWidget, Widget};
 use ratatui::Frame;
 use ratatui_image::picker::Picker;
-use ratatui_image::protocol::StatefulProtocol;
-use ratatui_image::{Resize, StatefulImage};
+use ratatui_image::protocol::Protocol;
+use ratatui_image::{Image, Resize};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
@@ -20,6 +20,7 @@ use crate::backend::error_log::{write_to_error_log, ErrorType};
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
 use crate::backend::SearchMangaResponse;
+use crate::common::ImageState;
 use crate::global::INSTRUCTIONS_STYLE;
 use crate::utils::search_manga_cover;
 use crate::view::widgets::home::{CarrouselItem, CarrouselState, PopularMangaCarrousel, RecentlyAddedCarrousel};
@@ -74,7 +75,10 @@ pub struct Home {
     pub local_action_rx: UnboundedReceiver<HomeActions>,
     pub local_event_tx: UnboundedSender<HomeEvents>,
     pub local_event_rx: UnboundedReceiver<HomeEvents>,
-    pub support_image: Option<Box<dyn StatefulProtocol>>,
+    pub support_image: Option<Box<dyn Protocol>>,
+    image_support_area: Rect,
+    popular_manga_carrousel_state: ImageState,
+    recently_added_manga_state: ImageState,
     picker: Option<Picker>,
     tasks: JoinSet<()>,
 }
@@ -104,9 +108,7 @@ impl Component for Home {
             HomeActions::SelectPreviousRecentlyAddedManga => self.carrousel_recently_added.select_previous(),
             HomeActions::GoToRecentlyAddedMangaPage => {
                 if let Some(item) = self.carrousel_recently_added.get_current_selected_manga() {
-                    self.global_event_tx
-                        .send(Events::GoToMangaPage(MangaItem::new(item.manga.clone(), item.cover_state.clone())))
-                        .ok();
+                    self.global_event_tx.send(Events::GoToMangaPage(MangaItem::new(item.manga.clone()))).ok();
                 }
             },
             HomeActions::SupportProject => self.support_project(),
@@ -146,7 +148,10 @@ impl Home {
             local_action_tx,
             local_action_rx,
             support_image: None,
+            image_support_area: Rect::default(),
             picker,
+            popular_manga_carrousel_state: ImageState::default(),
+            recently_added_manga_state: ImageState::default(),
             tasks: JoinSet::new(),
         }
     }
@@ -177,19 +182,12 @@ impl Home {
             .title_bottom(instructions)
             .render(area, buf);
 
-        StatefulWidget::render(
-            self.carrousel_popular_mangas.clone(),
-            inner,
-            buf,
-            &mut self.carrousel_popular_mangas.current_item_visible_index,
-        );
+        StatefulWidget::render(self.carrousel_popular_mangas.clone(), inner, buf, &mut self.popular_manga_carrousel_state);
     }
 
     pub fn go_to_manga_page_popular(&self) {
         if let Some(item) = self.get_current_popular_manga() {
-            self.global_event_tx
-                .send(Events::GoToMangaPage(MangaItem::new(item.manga.clone(), item.cover_state.clone())))
-                .ok();
+            self.global_event_tx.send(Events::GoToMangaPage(MangaItem::new(item.manga.clone()))).ok();
         }
     }
 
@@ -205,9 +203,7 @@ impl Home {
         self.local_event_tx.send(HomeEvents::SearchPopularNewMangas).ok();
 
         self.local_event_tx.send(HomeEvents::SearchRecentlyAddedMangas).ok();
-        if self.picker.is_some() {
-            self.local_event_tx.send(HomeEvents::SearchSupportImage).ok();
-        }
+        self.local_event_tx.send(HomeEvents::SearchSupportImage).ok();
     }
 
     fn search_support_image(&mut self) {
@@ -226,8 +222,12 @@ impl Home {
     }
 
     fn load_support_image(&mut self, img: DynamicImage) {
-        let protocol = self.picker.as_mut().unwrap().new_resize_protocol(img);
-        self.support_image = Some(protocol);
+        let protocol = self
+            .picker
+            .as_mut()
+            .unwrap()
+            .new_protocol(img, self.image_support_area, Resize::Fit(None));
+        self.support_image = Some(protocol.unwrap());
     }
 
     pub fn tick(&mut self) {
@@ -262,11 +262,9 @@ impl Home {
     fn load_popular_mangas(&mut self, maybe_response: Option<SearchMangaResponse>) {
         match maybe_response {
             Some(response) => {
-                self.carrousel_popular_mangas = PopularMangaCarrousel::from_response(response);
+                self.carrousel_popular_mangas = PopularMangaCarrousel::from_response(response, self.picker.is_some());
 
-                if self.picker.is_some() {
-                    self.local_event_tx.send(HomeEvents::SearchPopularMangasCover).ok();
-                }
+                self.local_event_tx.send(HomeEvents::SearchPopularMangasCover).ok();
             },
             None => {
                 self.carrousel_popular_mangas.state = CarrouselState::NotFound;
@@ -276,14 +274,13 @@ impl Home {
 
     fn load_popular_manga_cover(&mut self, maybe_cover: Option<DynamicImage>, id: String) {
         if let Some(cover) = maybe_cover {
-            if let Some(popular_manga) = self
-                .carrousel_popular_mangas
-                .items
-                .iter_mut()
-                .find(|manga_item| manga_item.manga.id == id)
-            {
-                let protocol = self.picker.as_mut().unwrap().new_resize_protocol(cover);
-                popular_manga.cover_state = Some(protocol);
+            let fixed_protocol = self.picker.as_mut().unwrap().new_protocol(
+                cover,
+                self.popular_manga_carrousel_state.get_cover_area(),
+                Resize::Fit(None),
+            );
+            if let Ok(protocol) = fixed_protocol {
+                self.popular_manga_carrousel_state.insert_manga(protocol, id);
             }
         }
     }
@@ -354,10 +351,8 @@ impl Home {
     fn load_recently_added_mangas(&mut self, maybe_response: Option<SearchMangaResponse>) {
         match maybe_response {
             Some(response) => {
-                self.carrousel_recently_added = RecentlyAddedCarrousel::from_response(response);
-                if self.picker.is_some() {
-                    self.local_event_tx.send(HomeEvents::SearchRecentlyCover).ok();
-                }
+                self.carrousel_recently_added = RecentlyAddedCarrousel::from_response(response, self.picker.is_some());
+                self.local_event_tx.send(HomeEvents::SearchRecentlyCover).ok();
             },
             None => {
                 self.carrousel_recently_added.state = CarrouselState::NotFound;
@@ -372,7 +367,6 @@ impl Home {
             match item.manga.img_url.as_ref() {
                 Some(file_name) => {
                     let file_name = file_name.clone();
-
                     search_manga_cover(file_name, manga_id, &mut self.tasks, tx);
                 },
                 None => {
@@ -384,14 +378,13 @@ impl Home {
 
     fn load_recently_added_mangas_cover(&mut self, maybe_cover: Option<DynamicImage>, id: String) {
         if let Some(cover) = maybe_cover {
-            if let Some(recently_added_manga) = self
-                .carrousel_recently_added
-                .items
-                .iter_mut()
-                .find(|manga_item| manga_item.manga.id == id)
-            {
-                let protocol = self.picker.as_mut().unwrap().new_resize_protocol(cover);
-                recently_added_manga.cover_state = Some(protocol);
+            if let Some(picker) = self.picker.as_mut() {
+                let fixed_protocol =
+                    picker.new_protocol(cover, self.recently_added_manga_state.get_cover_area(), Resize::Fit(None));
+
+                if let Ok(protocol) = fixed_protocol {
+                    self.recently_added_manga_state.insert_manga(protocol, id);
+                }
             }
         }
     }
@@ -427,12 +420,7 @@ impl Home {
 
         Block::bordered().title(instructions).render(recently_added_mangas_area, buf);
 
-        StatefulWidget::render(
-            self.carrousel_recently_added.clone(),
-            inner_area,
-            buf,
-            &mut self.carrousel_recently_added.selected_item_index,
-        );
+        StatefulWidget::render(self.carrousel_recently_added.clone(), inner_area, buf, &mut self.recently_added_manga_state);
     }
 
     fn render_app_information(&mut self, area: Rect, buf: &mut Buffer) {
@@ -442,9 +430,14 @@ impl Home {
             .title(format!("Manga-tui V{}", env!("CARGO_PKG_VERSION")))
             .render(area, buf);
 
-        if let Some(protocol) = self.support_image.as_mut() {
-            let image = StatefulImage::new(None).resize(Resize::Fit(None));
-            StatefulWidget::render(image, layout[0], buf, protocol);
+        match self.support_image.as_ref() {
+            Some(image) => {
+                let image = Image::new(image.as_ref());
+                Widget::render(image, layout[0], buf);
+            },
+            None => {
+                self.image_support_area = layout[0];
+            },
         }
 
         Widget::render(

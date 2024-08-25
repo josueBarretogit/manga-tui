@@ -1,4 +1,8 @@
+use std::io::Cursor;
+
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent, MouseEventKind};
+use image::io::Reader;
+use image::DynamicImage;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Style, Stylize};
@@ -6,8 +10,8 @@ use ratatui::text::{Line, Span, ToSpan};
 use ratatui::widgets::{Block, Clear, List, ListState, Paragraph, StatefulWidget, Widget, Wrap};
 use ratatui::Frame;
 use ratatui_image::picker::Picker;
-use ratatui_image::protocol::StatefulProtocol;
-use ratatui_image::{Resize, StatefulImage};
+use ratatui_image::protocol::Protocol;
+use ratatui_image::{Image, Resize};
 use strum::Display;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
@@ -66,6 +70,7 @@ pub enum MangaPageActions {
 pub enum MangaPageEvents {
     SearchChapters,
     SearchCover,
+    LoadCover(DynamicImage),
     FethStatistics,
     CheckChapterStatus,
     ChapterFinishedDownloading(String),
@@ -105,7 +110,8 @@ impl ChapterOrder {
 
 pub struct MangaPage {
     pub manga: Manga,
-    image_state: Option<Box<dyn StatefulProtocol>>,
+    image_state: Option<Box<dyn Protocol>>,
+    cover_area: Rect,
     global_event_tx: UnboundedSender<Events>,
     local_action_tx: UnboundedSender<MangaPageActions>,
     pub local_action_rx: UnboundedReceiver<MangaPageActions>,
@@ -147,8 +153,10 @@ impl MangaPage {
         let (local_action_tx, local_action_rx) = mpsc::unbounded_channel::<MangaPageActions>();
         let (local_event_tx, local_event_rx) = mpsc::unbounded_channel::<MangaPageEvents>();
 
+        local_event_tx.send(MangaPageEvents::SearchCover).ok();
         local_event_tx.send(MangaPageEvents::SearchChapters).ok();
         local_event_tx.send(MangaPageEvents::FethStatistics).ok();
+        let cover_area = Rect::new(0, 0, 20, 40);
 
         let chapter_language = manga
             .available_languages
@@ -174,6 +182,7 @@ impl MangaPage {
             is_list_languages_open: false,
             download_all_chapters_state: DownloadAllChaptersState::new(local_event_tx),
             chapter_language: chapter_language.unwrap_or(Languages::default()),
+            cover_area,
         }
     }
 
@@ -183,12 +192,13 @@ impl MangaPage {
 
         Paragraph::new(format!(" \n Publication date : \n {}", self.manga.created_at)).render(more_details_area, buf);
 
-        match self.image_state.as_mut() {
+        match self.image_state.as_ref() {
             Some(state) => {
-                let image = StatefulImage::new(None).resize(Resize::Fit(None));
-                StatefulWidget::render(image, cover_area, buf, state);
+                let image = Image::new(state.as_ref());
+                Widget::render(image, cover_area, buf);
             },
             None => {
+                self.cover_area = cover_area;
                 Block::bordered().render(area, buf);
             },
         }
@@ -844,6 +854,27 @@ impl MangaPage {
         self.download_all_chapters_state.set_download_error();
     }
 
+    fn search_cover(&mut self) {
+        let tx = self.local_event_tx.clone();
+        let manga_id = self.manga.id.clone();
+        let file_name = self.manga.img_url.as_ref().cloned().unwrap_or_default();
+        self.tasks.spawn(async move {
+            let cover_image_response = MangadexClient::global().get_cover_for_manga_lower_quality(&manga_id, &file_name).await;
+
+            if let Ok(response) = cover_image_response {
+                let img = Reader::new(Cursor::new(response)).with_guessed_format().unwrap().decode().unwrap();
+                tx.send(MangaPageEvents::LoadCover(img)).ok();
+            }
+        });
+    }
+
+    fn load_cover(&mut self, img: DynamicImage) {
+        let fixed_protocol = self.picker.as_mut().unwrap().new_protocol(img, self.cover_area, Resize::Fit(None));
+        if let Ok(protocol) = fixed_protocol {
+            self.image_state = Some(protocol);
+        }
+    }
+
     fn handle_mouse_events(&mut self, mouse_event: MouseEvent) {
         if self.is_list_languages_open {
             match mouse_event.kind {
@@ -874,7 +905,8 @@ impl MangaPage {
         }
         if let Ok(background_event) = self.local_event_rx.try_recv() {
             match background_event {
-                MangaPageEvents::SearchCover => todo!(),
+                MangaPageEvents::LoadCover(img) => self.load_cover(img),
+                MangaPageEvents::SearchCover => self.search_cover(),
                 MangaPageEvents::FinishedDownloadingAllChapters => self.finish_download_all_chapters(),
                 MangaPageEvents::DownloadAllChaptersError => self.set_download_all_chapters_error(),
                 MangaPageEvents::StartDownloadProgress(total_chapters) => self.start_download_all_chapters(total_chapters),

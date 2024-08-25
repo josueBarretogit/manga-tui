@@ -377,7 +377,7 @@ impl Feed {
                     match response {
                         Ok(manga) => {
                             let manga_found = from_manga_response(manga.data);
-                            tx.send(Events::GoToMangaPage(MangaItem::new(manga_found, None))).ok();
+                            tx.send(Events::GoToMangaPage(MangaItem::new(manga_found))).ok();
                         },
                         Err(e) => {
                             write_to_error_log(ErrorType::FromError(Box::new(e)));

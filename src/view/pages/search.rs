@@ -6,6 +6,7 @@ use ratatui::text::{Line, Span, ToSpan};
 use ratatui::widgets::{Block, Paragraph, StatefulWidget, StatefulWidgetRef, Widget, Wrap};
 use ratatui::Frame;
 use ratatui_image::picker::Picker;
+use ratatui_image::Resize;
 use throbber_widgets_tui::{Throbber, ThrobberState};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
@@ -18,7 +19,7 @@ use crate::backend::error_log::{write_to_error_log, ErrorType};
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
 use crate::backend::SearchMangaResponse;
-use crate::common::{Artist, Author};
+use crate::common::{Artist, Author, ImageState};
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
 use crate::utils::{render_search_bar, search_manga_cover};
 use crate::view::widgets::filter_widget::state::FilterState;
@@ -93,6 +94,7 @@ pub struct SearchPage {
     filter_state: FilterState,
     manga_added_to_plan_to_read: Option<String>,
     picker: Option<Picker>,
+    manga_cover_state: ImageState,
     tasks: JoinSet<()>,
 }
 
@@ -190,6 +192,7 @@ impl SearchPage {
             loader_state: ThrobberState::default(),
             manga_added_to_plan_to_read: None,
             picker,
+            manga_cover_state: ImageState::default(),
         }
     }
 
@@ -299,10 +302,13 @@ impl SearchPage {
                         buf,
                         &mut self.mangas_found_list.state,
                     );
+
                     let loader_state = self.loader_state.clone();
-                    if let Some(manga_selected) = self.get_current_manga_selected_mut() {
+                    if let Some(index) = self.mangas_found_list.state.selected {
+                        let manga_selected = &self.mangas_found_list.widget.mangas[index];
                         StatefulWidget::render(
                             MangaPreview::new(
+                                &manga_selected.manga.id,
                                 &manga_selected.manga.title,
                                 &manga_selected.manga.description,
                                 &manga_selected.manga.tags,
@@ -312,7 +318,7 @@ impl SearchPage {
                             ),
                             preview_area,
                             buf,
-                            &mut manga_selected.image_state,
+                            &mut self.manga_cover_state,
                         )
                     }
                 }
@@ -557,16 +563,11 @@ impl SearchPage {
     }
 
     fn load_cover(&mut self, maybe_cover: Option<DynamicImage>, manga_id: String) {
-        if let Some(image) = maybe_cover {
-            if let Some(manga) = self
-                .mangas_found_list
-                .widget
-                .mangas
-                .iter_mut()
-                .find(|manga_item| manga_item.manga.id == manga_id)
-            {
-                let protocol = self.picker.as_mut().unwrap().new_resize_protocol(image);
-                manga.image_state = Some(protocol);
+        if let Some(cover) = maybe_cover {
+            if let Some(picker) = self.picker.as_mut() {
+                if let Ok(protocol) = picker.new_protocol(cover, self.manga_cover_state.get_cover_area(), Resize::Fit(None)) {
+                    self.manga_cover_state.insert_manga(protocol, manga_id);
+                }
             }
         }
     }
