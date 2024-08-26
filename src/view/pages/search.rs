@@ -1,10 +1,15 @@
+use std::thread::sleep;
+use std::time::Duration;
+
 use crossterm::event::{self, KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
+use image::DynamicImage;
 use ratatui::layout::{Constraint, Direction, Layout, Margin, Rect};
 use ratatui::style::{Color, Style, Stylize};
 use ratatui::text::{Line, Span, ToSpan};
 use ratatui::widgets::{Block, Paragraph, StatefulWidget, StatefulWidgetRef, Widget, Wrap};
 use ratatui::Frame;
-use ratatui_image::protocol::StatefulProtocol;
+use ratatui_image::picker::Picker;
+use ratatui_image::Resize;
 use throbber_widgets_tui::{Throbber, ThrobberState};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
@@ -17,14 +22,13 @@ use crate::backend::error_log::{write_to_error_log, ErrorType};
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
 use crate::backend::SearchMangaResponse;
-use crate::common::{Artist, Author};
+use crate::common::{Artist, Author, ImageState};
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
 use crate::utils::{render_search_bar, search_manga_cover};
 use crate::view::widgets::filter_widget::state::FilterState;
 use crate::view::widgets::filter_widget::FilterWidget;
 use crate::view::widgets::search::*;
 use crate::view::widgets::{Component, ImageHandler, StatefulWidgetFrame};
-use crate::PICKER;
 
 /// Determine wheter or not mangas are being searched
 /// if so then this should not make a request until the most recent one finishes
@@ -41,12 +45,12 @@ enum PageState {
 /// These happens in the background
 pub enum SearchPageEvents {
     SearchCovers,
-    LoadCover(Option<Box<dyn StatefulProtocol>>, String),
+    LoadCover(Option<DynamicImage>, String),
     LoadMangasFound(Option<SearchMangaResponse>),
 }
 
 impl ImageHandler for SearchPageEvents {
-    fn load(image: Box<dyn StatefulProtocol>, id: String) -> Self {
+    fn load(image: DynamicImage, id: String) -> Self {
         Self::LoadCover(Some(image), id)
     }
 
@@ -92,6 +96,8 @@ pub struct SearchPage {
     mangas_found_list: MangasFoundList,
     filter_state: FilterState,
     manga_added_to_plan_to_read: Option<String>,
+    picker: Option<Picker>,
+    manga_cover_state: ImageState,
     tasks: JoinSet<()>,
 }
 
@@ -159,6 +165,7 @@ impl Component for SearchPage {
 
     fn clean_up(&mut self) {
         self.abort_tasks();
+        self.manga_cover_state = ImageState::default();
         self.state = PageState::default();
         self.manga_added_to_plan_to_read = None;
         self.input_mode = InputMode::Idle;
@@ -170,7 +177,7 @@ impl Component for SearchPage {
 }
 
 impl SearchPage {
-    pub fn init(event_tx: UnboundedSender<Events>) -> Self {
+    pub fn init(event_tx: UnboundedSender<Events>, picker: Option<Picker>) -> Self {
         let (action_tx, action_rx) = mpsc::unbounded_channel::<SearchPageActions>();
         let (local_event_tx, local_event) = mpsc::unbounded_channel::<SearchPageEvents>();
 
@@ -188,6 +195,8 @@ impl SearchPage {
             filter_state: FilterState::new(),
             loader_state: ThrobberState::default(),
             manga_added_to_plan_to_read: None,
+            picker,
+            manga_cover_state: ImageState::default(),
         }
     }
 
@@ -297,20 +306,24 @@ impl SearchPage {
                         buf,
                         &mut self.mangas_found_list.state,
                     );
+
                     let loader_state = self.loader_state.clone();
-                    if let Some(manga_selected) = self.get_current_manga_selected_mut() {
+                    if let Some(index) = self.mangas_found_list.state.selected {
+                        let manga_selected = &self.mangas_found_list.widget.mangas[index];
                         StatefulWidget::render(
                             MangaPreview::new(
+                                &manga_selected.manga.id,
                                 &manga_selected.manga.title,
                                 &manga_selected.manga.description,
                                 &manga_selected.manga.tags,
                                 &manga_selected.manga.content_rating,
                                 &manga_selected.manga.status,
+                                self.picker.is_some(),
                                 loader_state,
                             ),
                             preview_area,
                             buf,
-                            &mut manga_selected.image_state,
+                            &mut self.manga_cover_state,
                         )
                     }
                 }
@@ -526,9 +539,7 @@ impl SearchPage {
                 self.mangas_found_list.widget = ListMangasFoundWidget::from_response(response.data);
                 self.mangas_found_list.total_result = response.total;
                 self.state = PageState::DisplayingMangasFound;
-                if PICKER.is_some() {
-                    self.local_event_tx.send(SearchPageEvents::SearchCovers).ok();
-                }
+                self.local_event_tx.send(SearchPageEvents::SearchCovers).ok();
             },
             None => {
                 self.state = PageState::ErrorOcurred;
@@ -554,16 +565,12 @@ impl SearchPage {
         }
     }
 
-    fn load_cover(&mut self, maybe_cover: Option<Box<dyn StatefulProtocol>>, manga_id: String) {
-        if let Some(image) = maybe_cover {
-            if let Some(manga) = self
-                .mangas_found_list
-                .widget
-                .mangas
-                .iter_mut()
-                .find(|manga_item| manga_item.manga.id == manga_id)
-            {
-                manga.image_state = Some(image);
+    fn load_cover(&mut self, maybe_cover: Option<DynamicImage>, manga_id: String) {
+        if let Some(cover) = maybe_cover {
+            if let Some(picker) = self.picker.as_mut() {
+                if let Ok(protocol) = picker.new_protocol(cover, self.manga_cover_state.get_img_area(), Resize::Fit(None)) {
+                    self.manga_cover_state.insert_manga(protocol, manga_id);
+                }
             }
         }
     }
@@ -574,7 +581,11 @@ impl SearchPage {
             match event {
                 SearchPageEvents::LoadMangasFound(response) => self.load_mangas_found(response),
                 SearchPageEvents::SearchCovers => {
-                    self.search_covers();
+                    if self.picker.is_some() {
+                        // wait a bit so that `img_area` is set to the area for covers
+                        sleep(Duration::from_millis(500));
+                        self.search_covers();
+                    }
                 },
                 SearchPageEvents::LoadCover(maybe_image, manga_id) => self.load_cover(maybe_image, manga_id),
             }
@@ -592,7 +603,7 @@ mod test {
     #[tokio::test]
     async fn search_page_key_events() {
         let (tx, _) = mpsc::unbounded_channel::<Events>();
-        let mut search_page = SearchPage::init(tx);
+        let mut search_page = SearchPage::init(tx, None);
 
         assert!(search_page.state == PageState::Normal);
         assert!(!search_page.filter_state.is_open);

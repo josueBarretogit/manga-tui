@@ -1,7 +1,4 @@
-use std::io::Cursor;
-
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent, MouseEventKind};
-use image::io::Reader;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Margin, Rect};
 use ratatui::style::{Color, Style};
@@ -24,7 +21,6 @@ use crate::utils::{from_manga_response, render_search_bar};
 use crate::view::widgets::feed::{FeedTabs, HistoryWidget, MangasRead};
 use crate::view::widgets::search::MangaItem;
 use crate::view::widgets::Component;
-use crate::PICKER;
 
 #[derive(Eq, PartialEq)]
 pub enum FeedState {
@@ -381,32 +377,7 @@ impl Feed {
                     match response {
                         Ok(manga) => {
                             let manga_found = from_manga_response(manga.data);
-
-                            if PICKER.is_some() {
-                                let cover = MangadexClient::global()
-                                    .get_cover_for_manga(&manga_id, manga_found.img_url.clone().unwrap_or_default().as_str())
-                                    .await;
-
-                                loca_tx.send(FeedEvents::SearchingFinalized).ok();
-
-                                match cover {
-                                    Ok(bytes) => {
-                                        let dyn_img = Reader::new(Cursor::new(bytes)).with_guessed_format().unwrap();
-
-                                        let maybe_decoded = dyn_img.decode();
-                                        tx.send(Events::GoToMangaPage(MangaItem::new(
-                                            manga_found,
-                                            maybe_decoded.ok().map(|decoded| PICKER.unwrap().new_resize_protocol(decoded)),
-                                        )))
-                                        .ok();
-                                    },
-                                    Err(_) => {
-                                        tx.send(Events::GoToMangaPage(MangaItem::new(manga_found, None))).ok();
-                                    },
-                                }
-                            } else {
-                                tx.send(Events::GoToMangaPage(MangaItem::new(manga_found, None))).ok();
-                            }
+                            tx.send(Events::GoToMangaPage(MangaItem::new(manga_found))).ok();
                         },
                         Err(e) => {
                             write_to_error_log(ErrorType::FromError(Box::new(e)));

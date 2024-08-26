@@ -3,58 +3,65 @@ use ratatui::layout::{Constraint, Layout, Margin, Rect};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Paragraph, StatefulWidget, StatefulWidgetRef, Widget, Wrap};
-use ratatui_image::protocol::StatefulProtocol;
-use ratatui_image::{Resize, StatefulImage};
+use ratatui_image::Image;
 use throbber_widgets_tui::{Throbber, ThrobberState};
 use tui_widget_list::PreRender;
 
 use crate::backend::Data;
-use crate::common::Manga;
+use crate::common::{ImageState, Manga};
 use crate::global::CURRENT_LIST_ITEM_STYLE;
 use crate::utils::{from_manga_response, set_status_style, set_tags_style};
-use crate::PICKER;
 
 pub struct MangaPreview<'a> {
+    id: &'a str,
     title: &'a str,
     description: &'a str,
     tags: &'a Vec<String>,
     content_rating: &'a str,
     status: &'a str,
+    can_display_images: bool,
     loader_state: ThrobberState,
 }
 
+#[allow(clippy::too_many_arguments)]
 impl<'a> MangaPreview<'a> {
     pub fn new(
+        id: &'a str,
         title: &'a str,
         description: &'a str,
         tags: &'a Vec<String>,
         content_rating: &'a str,
         status: &'a str,
+        can_display_images: bool,
         loader_state: ThrobberState,
     ) -> Self {
         Self {
+            id,
             title,
             description,
             tags,
             content_rating,
             status,
+            can_display_images,
             loader_state,
         }
     }
 
-    pub fn render_cover_and_details_area(&mut self, area: Rect, buf: &mut Buffer, state: &mut Option<Box<dyn StatefulProtocol>>) {
+    pub fn render_cover_and_details_area(&mut self, area: Rect, buf: &mut Buffer, state: &mut ImageState) {
         let layout = Layout::horizontal([Constraint::Percentage(30), Constraint::Percentage(80)]);
+
         let [cover_area, details_area] = layout.areas(area);
 
-        self.render_details(details_area, buf);
+        if self.can_display_images {
+            self.render_details(details_area, buf);
 
-        if PICKER.is_some() {
-            match state {
+            match state.get_image_state(self.id) {
                 Some(image_state) => {
-                    let cover = StatefulImage::new(None).resize(Resize::Fit(None));
-                    StatefulWidget::render(cover, cover_area, buf, image_state)
+                    let cover = Image::new(image_state.as_ref());
+                    Widget::render(cover, cover_area, buf);
                 },
                 None => {
+                    state.set_area(cover_area);
                     Block::bordered().render(cover_area, buf);
                     let loader = Throbber::default()
                         .label("Loading cover")
@@ -72,6 +79,14 @@ impl<'a> MangaPreview<'a> {
                     );
                 },
             };
+        } else {
+            self.render_details(
+                area.inner(Margin {
+                    horizontal: 1,
+                    vertical: 1,
+                }),
+                buf,
+            );
         }
     }
 
@@ -103,7 +118,7 @@ impl<'a> MangaPreview<'a> {
 }
 
 impl<'a> StatefulWidget for MangaPreview<'a> {
-    type State = Option<Box<dyn StatefulProtocol>>;
+    type State = ImageState;
 
     fn render(mut self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         let [cover_details_area, description_area] =
@@ -118,7 +133,6 @@ impl<'a> StatefulWidget for MangaPreview<'a> {
 pub struct MangaItem {
     pub manga: Manga,
     pub style: Style,
-    pub image_state: Option<Box<dyn StatefulProtocol>>,
 }
 
 impl Widget for MangaItem {
@@ -146,15 +160,14 @@ impl PreRender for MangaItem {
 impl From<Data> for MangaItem {
     fn from(value: Data) -> Self {
         let manga = from_manga_response(value);
-        Self::new(manga, None)
+        Self::new(manga)
     }
 }
 
 impl MangaItem {
-    pub fn new(manga: Manga, image_state: Option<Box<dyn StatefulProtocol>>) -> Self {
+    pub fn new(manga: Manga) -> Self {
         Self {
             manga,
-            image_state,
             style: Style::default(),
         }
     }

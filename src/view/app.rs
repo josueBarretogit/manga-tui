@@ -4,6 +4,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::widgets::{Block, Borders, Tabs, Widget};
 use ratatui::Frame;
+use ratatui_image::picker::{Picker, ProtocolType};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
 use self::feed::Feed;
@@ -36,6 +37,10 @@ pub struct App {
     pub search_page: SearchPage,
     pub home_page: Home,
     pub feed_page: Feed,
+    // The picker is what decides how big a image needs to be rendered depending on the user's
+    // terminal font size and the graphics it supports
+    // if the terminal doesn't support any graphics protocol the picker is `None`
+    picker: Option<Picker>,
 }
 
 impl Component for App {
@@ -96,11 +101,14 @@ impl App {
 
         global_event_tx.send(Events::GoToHome).ok();
 
+        let picker = get_picker();
+
         App {
+            picker,
             current_tab: SelectedPage::default(),
-            search_page: SearchPage::init(global_event_tx.clone()),
+            search_page: SearchPage::init(global_event_tx.clone(), picker),
             feed_page: Feed::new(global_event_tx.clone()),
-            home_page: Home::new(global_event_tx.clone()),
+            home_page: Home::new(global_event_tx.clone(), picker),
             manga_page: None,
             manga_reader_page: None,
             global_action_tx,
@@ -220,7 +228,7 @@ impl App {
         self.feed_page.clean_up();
 
         self.current_tab = SelectedPage::MangaTab;
-        self.manga_page = Some(MangaPage::new(manga.manga, manga.image_state, self.global_event_tx.clone()));
+        self.manga_page = Some(MangaPage::new(manga.manga, self.global_event_tx.clone(), self.picker));
     }
 
     fn go_to_read_chapter(&mut self, chapter_response: ChapterPagesResponse) {
@@ -233,6 +241,7 @@ impl App {
             chapter_response.base_url,
             chapter_response.chapter.data_saver,
             chapter_response.chapter.data,
+            self.picker.as_ref().cloned().unwrap(),
         ));
     }
 
@@ -259,4 +268,29 @@ impl App {
         self.feed_page.init_search();
         self.current_tab = SelectedPage::Feed;
     }
+}
+
+#[cfg(unix)]
+fn get_picker() -> Option<Picker> {
+    Picker::from_termios()
+        .ok()
+        .map(|mut picker| {
+            picker.guess_protocol();
+            picker
+        })
+        .filter(|picker| picker.protocol_type != ProtocolType::Halfblocks)
+}
+
+#[cfg(target_os = "windows")]
+fn get_picker() -> Option<Picker> {
+    // Todo! figure out how to get the size of the terminal on windows
+    // I think with the winapi it is possible
+    let mut picker = Picker::new((10, 17));
+
+    let protocol = picker.guess_protocol();
+
+    if protocol == ProtocolType::Halfblocks {
+        return None;
+    }
+    Some(picker)
 }
