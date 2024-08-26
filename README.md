@@ -51,11 +51,11 @@ https://github.com/user-attachments/assets/70f321ff-13d1-4c4b-9c37-604271456ab2
 
  https://github.com/user-attachments/assets/47e88e89-f73c-4575-9645-2abb80ca7d63
 
-- Download manga 
+- Download manga (available formats: cbz, epub and raw images) 
 
 https://github.com/user-attachments/assets/ba785668-7cf1-4367-93f9-6e6e1f72c12c
 
-- Download all chapters of a manga 
+- Download all chapters of a manga (available formats: cbz, epub and raw images) 
 
 https://github.com/user-attachments/assets/26ad493f-633c-41fc-9d09-49b316118923
 
@@ -82,13 +82,9 @@ Download a binary from the [releases page](https://github.com/josueBarretogit/ma
 
 ## Image rendering
 
-Use a terminal that can render images such as Wezterm (Personally I recommend using this one It's the one used in the videos), iTerm2<br />
+Use a terminal that can render images such as Wezterm (Personally I recommend using this one It's the one used in the videos), iTerm2 or Kitty <br />
 
 For more information see : [image-support](https://github.com/benjajaja/ratatui-image?tab=readme-ov-file#compatibility-matrix)
-
-> [!NOTE]
-> There is an issue with kitty terminal, see [#12](https://github.com/josueBarretogit/manga-tui/issues/12)
-
 
 No images will be displayed if the terminal does not have image support (but `manga-tui` will still work as a manga downloader)
 
@@ -119,11 +115,11 @@ On linux it will output something like: `~/.local/share/manga-tui` <br />
 
 On the `manga-tui` directory there will be 4 directories
 - `history`, which contains a sqlite database to store reading history
-- `config`, which contains a TOML file with extra configuration (download format and download quality)
+- `config`, which contains a TOML file where you can define download format and image quality
 - `mangaDownloads`, where manga will be downloaded 
 - `errorLogs`, for storing posible errors / bugs 
 
-If you want to change the location you can set the environment variable `MANGA_TUI_DATA_DIR` to some path pointing to a directory, like: <br />
+If you want to change the location of this directory you can set the environment variable `MANGA_TUI_DATA_DIR` to some path pointing to a directory, like: <br />
 
 ```shell
 export MANGA_TUI_DATA_DIR="/home/user/Desktop/mangas"

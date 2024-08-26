@@ -153,10 +153,10 @@ impl MangaPage {
         let (local_action_tx, local_action_rx) = mpsc::unbounded_channel::<MangaPageActions>();
         let (local_event_tx, local_event_rx) = mpsc::unbounded_channel::<MangaPageEvents>();
 
-        local_event_tx.send(MangaPageEvents::SearchCover).ok();
         local_event_tx.send(MangaPageEvents::SearchChapters).ok();
         local_event_tx.send(MangaPageEvents::FethStatistics).ok();
-        let cover_area = Rect::new(0, 0, 20, 40);
+        local_event_tx.send(MangaPageEvents::SearchCover).ok();
+        let cover_area = Rect::default();
 
         let chapter_language = manga
             .available_languages
