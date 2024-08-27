@@ -76,6 +76,22 @@ You can install `manga-tui` from the [AUR](https://aur.archlinux.org/packages/ma
 paru -S manga-tui
 ```
 
+### Nix
+
+If you have the [Nix package manager](https://nixos.org/), this repo provides a flake that builds the latest git version from source.
+
+Simply run the following:
+
+```sh
+nix run 'github:josueBarretogit/manga-tui'
+```
+
+Or, to install persistently:
+
+```sh
+nix profile install 'github:josueBarretogit/manga-tui'
+```
+
 ## Binary release
 
 Download a binary from the [releases page](https://github.com/josueBarretogit/manga-tui/releases/latest)
