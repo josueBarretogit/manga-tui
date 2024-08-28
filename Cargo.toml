@@ -19,7 +19,6 @@ include = [
 ]
 
 [dependencies]
-anyhow = "1.0.86"
 ratatui = { version = "0.28.0", features = ["all-widgets", "palette", "unstable-widget-ref"] }
 ratatui-image = {  version = "1.0.5", features = ["rustix"]}
 throbber-widgets-tui = "0.7.0"
@@ -45,3 +44,7 @@ clap = { version = "4.4.5", features = ["derive", "cargo"] }
 zip = "2.1.6"
 toml = "0.8.19"
 epub-builder = "0.7.4"
+
+[dev-dependencies]
+mockito = "1.5.0"
+pretty_assertions = "1.4.0"
