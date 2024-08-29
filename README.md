@@ -98,14 +98,13 @@ Download a binary from the [releases page](https://github.com/josueBarretogit/ma
 
 ## Image rendering
 
-Use a terminal that can render images such as Wezterm (Personally I recommend using this one It's the one used in the videos), iTerm2 or Kitty <br />
+Use a terminal that can render images such as [Wezterm](https://wezfurlong.org/wezterm/index.html) (Personally I recommend using this one It's the one used in the videos), [iTerm2](https://iterm2.com/) or [Kitty](https://sw.kovidgoyal.net/kitty/) <br />
+For more information see: [image-support](https://github.com/benjajaja/ratatui-image?tab=readme-ov-file#compatibility-matrix)
 
-> [!NOTE]
-> On windows image display is very buggy, see #26 for more information
+> [!WARNING]
+> On windows image display is very buggy, see [this issue](https://github.com/josueBarretogit/manga-tui/issues/26) for more information
 
-For more information see : [image-support](https://github.com/benjajaja/ratatui-image?tab=readme-ov-file#compatibility-matrix)
-
-No images will be displayed if the terminal does not have image support (but `manga-tui` will still work as a manga downloader)
+No images will be displayed if the terminal does not have image support  (but `manga-tui` will still work as a manga downloader)
 
 ## Usage
 
