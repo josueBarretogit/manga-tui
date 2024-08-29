@@ -1,6 +1,5 @@
 use crossterm::event::KeyCode;
-use image::io::Reader;
-use image::{DynamicImage, GenericImageView};
+use image::DynamicImage;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Margin, Rect};
 use ratatui::text::{Line, Span};
@@ -12,29 +11,32 @@ use ratatui_image::{Resize, StatefulImage};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
-use crate::backend::error_log::{write_to_error_log, ErrorType};
-use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
 use crate::common::PageType;
 use crate::global::INSTRUCTIONS_STYLE;
+use crate::view::tasks::reader::get_manga_panel;
 use crate::view::widgets::reader::{PageItemState, PagesItem, PagesList};
 use crate::view::widgets::Component;
 
+#[derive(Debug, PartialEq, Eq)]
 pub enum MangaReaderActions {
     NextPage,
     PreviousPage,
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub enum State {
     SearchingPages,
 }
 
+#[derive(Debug, PartialEq)]
 pub struct PageData {
     pub img: DynamicImage,
     pub index: usize,
     pub dimensions: (u32, u32),
 }
 
+#[derive(Debug, PartialEq)]
 pub enum MangaReaderEvents {
     FetchPages,
     LoadPage(Option<PageData>),
@@ -235,48 +237,122 @@ impl MangaReader {
         }
     }
 
+    fn fech_pages(&mut self) {
+        let mut pages_list: Vec<PagesItem> = vec![];
+        for (index, page) in self.pages.iter().enumerate() {
+            let file_name = page.url.clone();
+            let endpoint = format!("{}/{}/{}", self.base_url, page.page_type, self.chapter_id);
+            let tx = self.local_event_tx.clone();
+            pages_list.push(PagesItem::new(index));
+
+            self.image_tasks.spawn(get_manga_panel(endpoint, file_name, tx, index));
+        }
+        self.pages_list = PagesList::new(pages_list);
+    }
+
     fn tick(&mut self) {
         self.pages_list.on_tick();
         if let Ok(background_event) = self.local_event_rx.try_recv() {
             match background_event {
-                MangaReaderEvents::FetchPages => {
-                    let mut pages_list: Vec<PagesItem> = vec![];
-                    for (index, page) in self.pages.iter().enumerate() {
-                        let file_name = page.url.clone();
-                        let endpoint = format!("{}/{}/{}", self.base_url, page.page_type, self.chapter_id);
-                        let tx = self.local_event_tx.clone();
-                        pages_list.push(PagesItem::new(index));
-                        self.image_tasks.spawn(async move {
-                            let image_response = MangadexClient::global().get_chapter_page(&endpoint, &file_name).await;
-                            match image_response {
-                                Ok(bytes) => {
-                                    let dyn_img = Reader::new(std::io::Cursor::new(bytes)).with_guessed_format();
-
-                                    if let Err(err) = dyn_img {
-                                        return write_to_error_log(ErrorType::FromError(Box::new(err)));
-                                    }
-
-                                    let maybe_decoded = dyn_img.unwrap().decode();
-
-                                    if let Ok(decoded) = maybe_decoded {
-                                        let page_data = PageData {
-                                            dimensions: decoded.dimensions(),
-                                            img: decoded,
-                                            index,
-                                        };
-                                        tx.send(MangaReaderEvents::LoadPage(Some(page_data))).ok();
-                                    }
-                                },
-                                Err(e) => {
-                                    write_to_error_log(ErrorType::FromError(Box::new(e)));
-                                },
-                            };
-                        });
-                    }
-                    self.pages_list = PagesList::new(pages_list);
-                },
+                MangaReaderEvents::FetchPages => self.fech_pages(),
                 MangaReaderEvents::LoadPage(maybe_data) => self.load_page(maybe_data),
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+
+    use pretty_assertions::assert_eq;
+
+    use super::*;
+    use crate::view::widgets::press_key;
+
+    fn initialize_reader_page() -> MangaReader {
+        let (tx, _) = tokio::sync::mpsc::unbounded_channel::<Events>();
+        let picker = Picker::new((8, 19));
+        let chapter_id = "some_id".to_string();
+        let base_url = "some_base_url".to_string();
+        let url_imgs = vec!["some_page_url1".into(), "some_page_url2".into()];
+        let url_imgs_high_quality = vec!["some_page_url1".into(), "some_page_url2".into()];
+        MangaReader::new(tx, chapter_id, base_url, url_imgs, url_imgs_high_quality, picker)
+    }
+
+    #[tokio::test]
+    async fn trigget_key_events() {
+        let mut reader_page = initialize_reader_page();
+
+        press_key(&mut reader_page, KeyCode::Char('j'));
+        let action = reader_page.local_action_rx.recv().await.unwrap();
+
+        assert_eq!(MangaReaderActions::NextPage, action);
+
+        press_key(&mut reader_page, KeyCode::Char('k'));
+        let action = reader_page.local_action_rx.recv().await.unwrap();
+
+        assert_eq!(MangaReaderActions::PreviousPage, action);
+    }
+
+    #[tokio::test]
+    async fn correct_initialization() {
+        let mut reader_page = initialize_reader_page();
+
+        let fetch_pages_event = reader_page.local_event_rx.recv().await.expect("the event to fetch pages is not sent");
+
+        assert_eq!(MangaReaderEvents::FetchPages, fetch_pages_event);
+        assert!(!reader_page.pages.is_empty());
+    }
+
+    #[test]
+    fn handle_key_events() {
+        let mut reader_page = initialize_reader_page();
+
+        reader_page.pages_list = PagesList::new(vec![PagesItem::new(0), PagesItem::new(1), PagesItem::new(2)]);
+
+        let area = Rect::new(0, 0, 20, 20);
+        let mut buf = Buffer::empty(area);
+
+        reader_page.render_page_list(area, &mut buf);
+
+        let action = MangaReaderActions::NextPage;
+        reader_page.update(action);
+
+        assert_eq!(0, reader_page.page_list_state.selected.expect("no page is selected"));
+
+        let action = MangaReaderActions::NextPage;
+        reader_page.update(action);
+
+        assert_eq!(1, reader_page.page_list_state.selected.expect("no page is selected"));
+
+        let action = MangaReaderActions::PreviousPage;
+        reader_page.update(action);
+
+        assert_eq!(0, reader_page.page_list_state.selected.expect("no page is selected"));
+    }
+
+    #[tokio::test]
+    async fn handle_events() {
+        let mut reader_page = initialize_reader_page();
+        assert!(reader_page.pages_list.pages.is_empty());
+
+        reader_page.tick();
+
+        assert!(!reader_page.pages_list.pages.is_empty());
+
+        reader_page
+            .local_event_tx
+            .send(MangaReaderEvents::LoadPage(Some(PageData {
+                img: DynamicImage::default(),
+                index: 1,
+                dimensions: (10, 20),
+            })))
+            .expect("error sending event");
+
+        reader_page.tick();
+
+        let loaded_page = reader_page.pages.get(1).expect("could not load page");
+
+        assert!(loaded_page.dimensions.is_some_and(|dimensions| dimensions.0 == 10 && dimensions.1 == 20));
     }
 }
