@@ -11,8 +11,12 @@ env:
 
 jobs:
   build_and_test:
-    name: Test manga tui
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    name: Build and test manga tui
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
 
