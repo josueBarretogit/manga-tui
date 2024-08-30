@@ -285,7 +285,8 @@ fn get_picker() -> Option<Picker> {
 fn get_picker() -> Option<Picker> {
     // Todo! figure out how to get the size of the terminal on windows
     // I think with the winapi it is possible
-    let mut picker = Picker::new((10, 17));
+    let size = win_term::get_size_of_the_font().unwrap();
+    let mut picker = Picker::new((size.width as u16, size.height as u16));
 
     let protocol = picker.guess_protocol();
 
