@@ -14,7 +14,9 @@ pub async fn search_chapters_operation(
     use crate::backend::error_log::{write_to_error_log, ErrorType};
     use crate::backend::fetch::MangadexClient;
 
-    let response = MangadexClient::global().get_manga_chapters(manga_id, page, language, chapter_order).await;
+    let response = MangadexClient::global()
+        .get_manga_chapters(&manga_id, page, language, chapter_order)
+        .await;
 
     match response {
         Ok(chapters_response) => {

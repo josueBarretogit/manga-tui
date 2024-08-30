@@ -346,7 +346,7 @@ impl Languages {
     }
 
     pub fn get_preferred_lang() -> &'static Languages {
-        PREFERRED_LANGUAGE.get().expect("an error ocurred when setting preferred language")
+        PREFERRED_LANGUAGE.get_or_init(Self::default)
     }
 
     pub fn as_human_readable(self) -> String {

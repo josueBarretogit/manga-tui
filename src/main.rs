@@ -8,7 +8,7 @@ use ratatui::backend::CrosstermBackend;
 use reqwest::{Client, StatusCode};
 
 use self::backend::error_log::init_error_hooks;
-use self::backend::fetch::{MangadexClient, MANGADEX_CLIENT_INSTANCE};
+use self::backend::fetch::{MangadexClient, API_URL_BASE, COVER_IMG_URL_BASE, MANGADEX_CLIENT_INSTANCE};
 use self::backend::filter::Languages;
 use self::backend::tui::{init, restore, run_app};
 use self::backend::{build_data_dir, APP_DATA_DIR};
@@ -72,8 +72,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::env::consts::ARCH
     );
 
-    let mangadex_client =
-        MangadexClient::new(Client::builder().timeout(Duration::from_secs(10)).user_agent(user_agent).build().unwrap());
+    let client = Client::builder().timeout(Duration::from_secs(10)).user_agent(user_agent).build().unwrap();
+
+    let mangadex_client = MangadexClient::new(
+        client,
+        API_URL_BASE.parse().unwrap(),
+        COVER_IMG_URL_BASE.parse().unwrap(),
+    );
 
     println!("Checking mangadex status...");
 

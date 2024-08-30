@@ -11,6 +11,7 @@ use ratatui_image::{Resize, StatefulImage};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
+use crate::backend::fetch::{MangadexClient, MockApiClient};
 use crate::backend::tui::Events;
 use crate::common::PageType;
 use crate::global::INSTRUCTIONS_STYLE;
@@ -83,6 +84,7 @@ impl Component for MangaReader {
 
     fn render(&mut self, area: Rect, frame: &mut Frame<'_>) {
         let buf = frame.buffer_mut();
+
 
         let layout =
             Layout::horizontal([Constraint::Fill(1), Constraint::Fill(self.current_page_size), Constraint::Fill(1)]).spacing(1);
@@ -239,13 +241,20 @@ impl MangaReader {
 
     fn fech_pages(&mut self) {
         let mut pages_list: Vec<PagesItem> = vec![];
+
+        #[cfg(not(test))]
+        let api_client = MangadexClient::global();
+
+        #[cfg(test)]
+        let api_client = MockApiClient::new();
+
         for (index, page) in self.pages.iter().enumerate() {
             let file_name = page.url.clone();
             let endpoint = format!("{}/{}/{}", self.base_url, page.page_type, self.chapter_id);
             let tx = self.local_event_tx.clone();
             pages_list.push(PagesItem::new(index));
 
-            self.image_tasks.spawn(get_manga_panel(endpoint, file_name, tx, index));
+            self.image_tasks.spawn(get_manga_panel(api_client, endpoint, file_name, tx, index));
         }
         self.pages_list = PagesList::new(pages_list);
     }
@@ -258,12 +267,12 @@ impl MangaReader {
                 MangaReaderEvents::LoadPage(maybe_data) => self.load_page(maybe_data),
             }
         }
+
     }
 }
 
 #[cfg(test)]
 mod test {
-
     use pretty_assertions::assert_eq;
 
     use super::*;
@@ -299,6 +308,8 @@ mod test {
         let mut reader_page = initialize_reader_page();
 
         let fetch_pages_event = reader_page.local_event_rx.recv().await.expect("the event to fetch pages is not sent");
+
+
 
         assert_eq!(MangaReaderEvents::FetchPages, fetch_pages_event);
         assert!(!reader_page.pages.is_empty());
@@ -353,6 +364,6 @@ mod test {
 
         let loaded_page = reader_page.pages.get(1).expect("could not load page");
 
-        assert!(loaded_page.dimensions.is_some_and(|dimensions| dimensions.0 == 10 && dimensions.1 == 20));
+        assert!(loaded_page.dimensions.is_some_and(|dimensions| dimensions == (10, 20)));
     }
 }

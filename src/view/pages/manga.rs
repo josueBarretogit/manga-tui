@@ -1,5 +1,4 @@
 use std::io::Cursor;
-
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent, MouseEventKind};
 use image::io::Reader;
 use image::DynamicImage;

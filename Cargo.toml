@@ -47,4 +47,5 @@ epub-builder = "0.7.4"
 
 [dev-dependencies]
 mockito = "1.5.0"
+httpmock = "0.7.0-rc.1"
 pretty_assertions = "1.4.0"

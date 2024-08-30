@@ -8,7 +8,7 @@ use zip::write::SimpleFileOptions;
 use zip::ZipWriter;
 
 use super::error_log::{write_to_error_log, ErrorType};
-use super::fetch::MangadexClient;
+use super::fetch::{ApiClient, MangadexClient};
 use super::APP_DATA_DIR;
 use crate::view::pages::manga::MangaPageEvents;
 
