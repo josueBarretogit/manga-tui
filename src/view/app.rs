@@ -293,7 +293,7 @@ fn get_picker() -> Option<Picker> {
         fn default() -> Self {
             FontSize {
                 width: 17,
-                height: 38
+                height: 38,
             }
         }
     }
