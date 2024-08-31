@@ -289,6 +289,14 @@ fn get_picker() -> Option<Picker> {
         pub width: u16,
         pub height: u16,
     }
+    impl Default for FontSize {
+        fn default() -> Self {
+            FontSize {
+                width: 17,
+                height: 38
+            }
+        }
+    }
 
     let size: FontSize = match unsafe { GetDpiForWindow(GetConsoleWindow()) } {
         96 => FontSize {
@@ -303,7 +311,7 @@ fn get_picker() -> Option<Picker> {
             width: 14,
             height: 32,
         },
-        _ => unimplemented!("Other DPIs then 96 (100%), 120 (125%) and 144 (150%) are supported as of now"),
+        _ => FontSize::default(),
     };
 
     let mut picker = Picker::new((size.width, size.height));
