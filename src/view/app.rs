@@ -280,13 +280,33 @@ fn get_picker() -> Option<Picker> {
         })
         .filter(|picker| picker.protocol_type != ProtocolType::Halfblocks)
 }
-
 #[cfg(target_os = "windows")]
 fn get_picker() -> Option<Picker> {
-    // Todo! figure out how to get the size of the terminal on windows
-    // I think with the winapi it is possible
-    let size = win_term::get_size_of_the_font().unwrap();
-    let mut picker = Picker::new((size.width as u16, size.height as u16));
+    use windows_sys::Win32::System::Console::GetConsoleWindow;
+    use windows_sys::Win32::UI::HiDpi::GetDpiForWindow;
+
+    struct FontSize {
+        pub width: u16,
+        pub height: u16,
+    }
+
+    let size: FontSize = match unsafe { GetDpiForWindow(GetConsoleWindow()) } {
+        96 => FontSize {
+            width: 9,
+            height: 20,
+        },
+        120 => FontSize {
+            width: 12,
+            height: 25,
+        },
+        144 => FontSize {
+            width: 14,
+            height: 32,
+        },
+        _ => unimplemented!("Other DPIs then 96 (100%), 120 (125%) and 144 (150%) are supported as of now"),
+    };
+
+    let mut picker = Picker::new((size.width, size.height));
 
     let protocol = picker.guess_protocol();
 

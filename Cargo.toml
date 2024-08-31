@@ -45,4 +45,6 @@ clap = { version = "4.4.5", features = ["derive", "cargo"] }
 zip = "2.1.6"
 toml = "0.8.19"
 epub-builder = "0.7.4"
-win-term = "0.1.1"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59.0", features = ["Win32_Foundation", "Win32_System_Console", "Win32_UI_HiDpi"]}
