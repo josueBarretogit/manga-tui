@@ -1,0 +1,5 @@
+[hooks]
+pre-commit = "cargo fmt && git add ."
+
+[logging]
+verbose = true
