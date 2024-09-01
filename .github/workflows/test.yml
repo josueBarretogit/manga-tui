@@ -8,14 +8,14 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: full
 
 jobs:
-  build_and_test:
-    name: Test manga tui
+  check_code_format_and_lint:
+    name: Check code formatting and linting
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-
       - uses: Swatinem/rust-cache@v2
 
       - name: setup toolchain
@@ -26,6 +26,26 @@ jobs:
       - name: check-fmt
         run: cargo fmt --check
 
+      - name: clippy
+        run: cargo clippy -- -D warnings
+
+  build_and_test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    name: Build and test manga tui
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: setup toolchain
+        uses: hecrj/setup-rust-action@v1
+        with:
+          rust-version: nightly-2024-06-25
+
       - name: check 
         run: cargo check --locked
 
@@ -34,8 +54,3 @@ jobs:
 
       - name: test
         run: cargo test -- --test-threads=1
-
-      - name: clippy
-        run: cargo clippy -- -D warnings
-        env:
-          RUST_BACKTRACE: full

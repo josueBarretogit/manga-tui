@@ -1,4 +1,3 @@
-#![forbid(unsafe_code)]
 #![allow(dead_code)]
 #![allow(deprecated)]
 use std::time::Duration;
@@ -74,11 +73,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let client = Client::builder().timeout(Duration::from_secs(10)).user_agent(user_agent).build().unwrap();
 
-    let mangadex_client = MangadexClient::new(
-        client,
-        API_URL_BASE.parse().unwrap(),
-        COVER_IMG_URL_BASE.parse().unwrap(),
-    );
+    let mangadex_client = MangadexClient::new(client, API_URL_BASE.parse().unwrap(), COVER_IMG_URL_BASE.parse().unwrap());
 
     println!("Checking mangadex status...");
 

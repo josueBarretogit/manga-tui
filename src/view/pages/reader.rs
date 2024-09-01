@@ -85,7 +85,6 @@ impl Component for MangaReader {
     fn render(&mut self, area: Rect, frame: &mut Frame<'_>) {
         let buf = frame.buffer_mut();
 
-
         let layout =
             Layout::horizontal([Constraint::Fill(1), Constraint::Fill(self.current_page_size), Constraint::Fill(1)]).spacing(1);
 
@@ -267,7 +266,6 @@ impl MangaReader {
                 MangaReaderEvents::LoadPage(maybe_data) => self.load_page(maybe_data),
             }
         }
-
     }
 }
 
@@ -308,8 +306,6 @@ mod test {
         let mut reader_page = initialize_reader_page();
 
         let fetch_pages_event = reader_page.local_event_rx.recv().await.expect("the event to fetch pages is not sent");
-
-
 
         assert_eq!(MangaReaderEvents::FetchPages, fetch_pages_event);
         assert!(!reader_page.pages.is_empty());
