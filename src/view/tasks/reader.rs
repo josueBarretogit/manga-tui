@@ -18,11 +18,13 @@ pub async fn get_manga_panel(
 ) {
     let image_response = client.get_chapter_page(&endpoint, &file_name).await;
     match image_response {
-        Ok(bytes) => {
-            let procces_image_task = convert_bytes_to_manga_panel(bytes, page_index);
+        Ok(response) => {
+            if let Ok(bytes) = response.bytes().await {
+                let procces_image_task = convert_bytes_to_manga_panel(bytes, page_index);
 
-            if let Ok(page_data) = procces_image_task {
-                tx.send(MangaReaderEvents::LoadPage(Some(page_data))).ok();
+                if let Ok(page_data) = procces_image_task {
+                    tx.send(MangaReaderEvents::LoadPage(Some(page_data))).ok();
+                }
             }
         },
         Err(e) => {
@@ -43,6 +45,8 @@ fn convert_bytes_to_manga_panel(bytes: Bytes, page_index: usize) -> Result<PageD
 
 #[cfg(test)]
 mod test {
+    use httpmock::Method::GET;
+    use httpmock::MockServer;
     use pretty_assertions::assert_eq;
 
     use super::*;
@@ -60,7 +64,19 @@ mod test {
     async fn get_manga_panel_works() {
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<MangaReaderEvents>();
 
-        get_manga_panel(MockApiClient::new(), "some_endpoint".into(), "some_filename".into(), tx, 1).await;
+        let server = MockServer::start_async().await;
+        let expect_response = include_bytes!("../../../public/mangadex_support.jpg");
+
+        let request = server
+            .mock_async(|when, then| {
+                when.method(GET).path_contains("filename.png");
+                then.status(200).body(expect_response);
+            })
+            .await;
+
+        get_manga_panel(MockApiClient::new(), server.base_url(), "filename.png".to_string(), tx, 1).await;
+
+        request.assert_async().await;
 
         let event = rx.recv().await.expect("could not get manga panel");
 

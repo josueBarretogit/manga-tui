@@ -63,17 +63,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         None => PREFERRED_LANGUAGE.set(Languages::default()).unwrap(),
     }
 
-    let user_agent = format!(
-        "manga-tui/{} ({}/{}/{})",
-        env!("CARGO_PKG_VERSION"),
-        std::env::consts::FAMILY,
-        std::env::consts::OS,
-        std::env::consts::ARCH
-    );
-
-    let client = Client::builder().timeout(Duration::from_secs(10)).user_agent(user_agent).build().unwrap();
-
-    let mangadex_client = MangadexClient::new(client, API_URL_BASE.parse().unwrap(), COVER_IMG_URL_BASE.parse().unwrap());
+    let mangadex_client = MangadexClient::new(API_URL_BASE.parse().unwrap(), COVER_IMG_URL_BASE.parse().unwrap());
 
     println!("Checking mangadex status...");
 

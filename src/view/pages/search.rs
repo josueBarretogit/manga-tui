@@ -481,10 +481,11 @@ impl SearchPage {
 
         self.tasks.spawn(async move {
             let search_response = MangadexClient::global().search_mangas(&manga_to_search, page, filters).await;
-
             match search_response {
                 Ok(mangas_found) => {
-                    tx.send(SearchPageEvents::LoadMangasFound(Some(mangas_found))).ok();
+                    if let Ok(data) = mangas_found.json().await {
+                        tx.send(SearchPageEvents::LoadMangasFound(Some(data))).ok();
+                    }
                 },
                 Err(e) => {
                     write_to_error_log(ErrorType::FromError(Box::new(e)));

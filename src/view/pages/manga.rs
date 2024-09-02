@@ -24,7 +24,7 @@ use crate::backend::error_log::{self, write_to_error_log};
 use crate::backend::fetch::{MangadexClient, ITEMS_PER_PAGE_CHAPTERS};
 use crate::backend::filter::Languages;
 use crate::backend::tui::Events;
-use crate::backend::{AppDirectories, ChapterResponse, MangaStatisticsResponse, Statistics};
+use crate::backend::{AppDirectories, ChapterPagesResponse, ChapterResponse, MangaStatisticsResponse, Statistics};
 use crate::common::{Manga, PageType};
 use crate::config::{DownloadType, ImageQuality, MangaTuiConfig};
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
@@ -535,23 +535,25 @@ impl MangaPage {
                     let chapter_response = MangadexClient::global().get_chapter_pages(&id_chapter).await;
                     match chapter_response {
                         Ok(response) => {
-                            if !is_read {
-                                let save_response = save_history(MangaReadingHistorySave {
-                                    id: &manga_id,
-                                    title: &title,
-                                    img_url: img_url.as_deref(),
-                                    chapter_id: &id_chapter,
-                                    chapter_title: &chapter_title,
-                                });
+                            if let Ok(response) = response.json().await {
+                                if !is_read {
+                                    let save_response = save_history(MangaReadingHistorySave {
+                                        id: &manga_id,
+                                        title: &title,
+                                        img_url: img_url.as_deref(),
+                                        chapter_id: &id_chapter,
+                                        chapter_title: &chapter_title,
+                                    });
 
-                                if let Err(e) = save_response {
-                                    write_to_error_log(error_log::ErrorType::FromError(Box::new(e)));
+                                    if let Err(e) = save_response {
+                                        write_to_error_log(error_log::ErrorType::FromError(Box::new(e)));
+                                    }
                                 }
-                            }
 
-                            tx.send(Events::ReadChapter(response)).ok();
-                            local_tx.send(MangaPageEvents::CheckChapterStatus).ok();
-                            local_tx.send(MangaPageEvents::ReadSuccesful).ok();
+                                tx.send(Events::ReadChapter(response)).ok();
+                                local_tx.send(MangaPageEvents::CheckChapterStatus).ok();
+                                local_tx.send(MangaPageEvents::ReadSuccesful).ok();
+                            }
                         },
                         Err(e) => {
                             write_to_error_log(error_log::ErrorType::FromError(Box::new(e)));
@@ -662,41 +664,43 @@ impl MangaPage {
                 let manga_response = MangadexClient::global().get_chapter_pages(&chapter_id).await;
                 match manga_response {
                     Ok(response) => {
-                        let config = MangaTuiConfig::get();
+                        if let Ok(response) = response.json::<ChapterPagesResponse>().await {
+                            let config = MangaTuiConfig::get();
 
-                        let (files, quality) = match config.image_quality {
-                            ImageQuality::Low => (response.chapter.data_saver, PageType::LowQuality),
-                            ImageQuality::High => (response.chapter.data, PageType::HighQuality),
-                        };
+                            let (files, quality) = match config.image_quality {
+                                ImageQuality::Low => (response.chapter.data_saver, PageType::LowQuality),
+                                ImageQuality::High => (response.chapter.data, PageType::HighQuality),
+                            };
 
-                        let endpoint = format!("{}/{}/{}", response.base_url, quality, response.chapter.hash);
-                        let manga_title = to_filename(&manga_title);
-                        let chapter_title = to_filename(&title);
-                        let scanlator = to_filename(&scanlator);
+                            let endpoint = format!("{}/{}/{}", response.base_url, quality, response.chapter.hash);
+                            let manga_title = to_filename(&manga_title);
+                            let chapter_title = to_filename(&title);
+                            let scanlator = to_filename(&scanlator);
 
-                        let chapter = DownloadChapter {
-                            id_chapter: &chapter_id,
-                            manga_id: &manga_id,
-                            manga_title: &manga_title,
-                            chapter_title: &chapter_title,
-                            number: &number,
-                            scanlator: &scanlator,
-                            lang: &lang,
-                        };
+                            let chapter = DownloadChapter {
+                                id_chapter: &chapter_id,
+                                manga_id: &manga_id,
+                                manga_title: &manga_title,
+                                chapter_title: &chapter_title,
+                                number: &number,
+                                scanlator: &scanlator,
+                                lang: &lang,
+                            };
 
-                        let download_chapter_task = match config.download_type {
-                            DownloadType::Raw => download_chapter_raw_images(false, chapter, files, endpoint, tx.clone()),
-                            DownloadType::Cbz => download_chapter_cbz(false, chapter, files, endpoint, tx.clone()),
-                            DownloadType::Epub => download_chapter_epub(false, chapter, files, endpoint, tx.clone()),
-                        };
+                            let download_chapter_task = match config.download_type {
+                                DownloadType::Raw => download_chapter_raw_images(false, chapter, files, endpoint, tx.clone()),
+                                DownloadType::Cbz => download_chapter_cbz(false, chapter, files, endpoint, tx.clone()),
+                                DownloadType::Epub => download_chapter_epub(false, chapter, files, endpoint, tx.clone()),
+                            };
 
-                        if let Err(e) = download_chapter_task {
-                            write_to_error_log(error_log::ErrorType::FromError(Box::new(e)));
-                            tx.send(MangaPageEvents::DownloadError(chapter_id)).ok();
-                            return;
+                            if let Err(e) = download_chapter_task {
+                                write_to_error_log(error_log::ErrorType::FromError(Box::new(e)));
+                                tx.send(MangaPageEvents::DownloadError(chapter_id)).ok();
+                                return;
+                            }
+
+                            tx.send(MangaPageEvents::SaveChapterDownloadStatus(chapter_id, title)).ok();
                         }
-
-                        tx.send(MangaPageEvents::SaveChapterDownloadStatus(chapter_id, title)).ok();
                     },
                     Err(e) => {
                         write_to_error_log(error_log::ErrorType::FromError(Box::new(e)));

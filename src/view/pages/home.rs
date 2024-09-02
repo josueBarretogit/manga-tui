@@ -320,13 +320,15 @@ impl Home {
                     let file_name = file_name.clone();
                     self.tasks.spawn(async move {
                         let response = MangadexClient::global().get_cover_for_manga(&manga_id, &file_name).await;
-                        if let Ok(bytes) = response {
-                            let dyn_img = Reader::new(Cursor::new(bytes)).with_guessed_format().unwrap();
+                        if let Ok(res) = response {
+                            if let Ok(bytes) = res.bytes().await {
+                                let dyn_img = Reader::new(Cursor::new(bytes)).with_guessed_format().unwrap();
 
-                            let maybe_decoded = dyn_img.decode();
+                                let maybe_decoded = dyn_img.decode();
 
-                            if let Ok(decoded) = maybe_decoded {
-                                tx.send(HomeEvents::LoadCover(Some(decoded), manga_id)).ok();
+                                if let Ok(decoded) = maybe_decoded {
+                                    tx.send(HomeEvents::LoadCover(Some(decoded), manga_id)).ok();
+                                }
                             }
                         }
                     });

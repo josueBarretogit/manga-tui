@@ -75,15 +75,21 @@ pub fn download_chapter_raw_images(
             let file_name = Path::new(&file_name);
 
             match image_response {
-                Ok(bytes) => {
-                    let image_name = format!("{}.{}", index + 1, file_name.extension().unwrap().to_str().unwrap());
-                    let mut image_created = File::create(chapter_dir.join(image_name)).unwrap();
-                    image_created.write_all(&bytes).unwrap();
+                Ok(response) => match response.bytes().await {
+                    Ok(bytes) => {
+                        let image_name = format!("{}.{}", index + 1, file_name.extension().unwrap().to_str().unwrap());
+                        let mut image_created = File::create(chapter_dir.join(image_name)).unwrap();
+                        image_created.write_all(&bytes).unwrap();
 
-                    if !is_downloading_all_chapters {
-                        tx.send(MangaPageEvents::SetDownloadProgress((index as f64) / (total_pages as f64), chapter_id.clone()))
+                        if !is_downloading_all_chapters {
+                            tx.send(MangaPageEvents::SetDownloadProgress(
+                                (index as f64) / (total_pages as f64),
+                                chapter_id.clone(),
+                            ))
                             .ok();
-                    }
+                        }
+                    },
+                    Err(_) => {},
                 },
                 Err(e) => write_to_error_log(ErrorType::FromError(Box::new(e))),
             }
@@ -127,23 +133,24 @@ pub fn download_chapter_epub(
             let image_response = MangadexClient::global().get_chapter_page(&endpoint, &file_name).await;
 
             match image_response {
-                Ok(bytes) => {
-                    let image_path = format!("data/{}", file_name);
+                Ok(response) => {
+                    if let Ok(bytes) = response.bytes().await {
+                        let image_path = format!("data/{}", file_name);
 
-                    let file_name = Path::new(&file_name);
+                        let file_name = Path::new(&file_name);
 
-                    let mime_type = format!("image/{}", file_name.extension().unwrap().to_str().unwrap());
+                        let mime_type = format!("image/{}", file_name.extension().unwrap().to_str().unwrap());
 
-                    if index == 0 {
-                        epub.add_cover_image(&image_path, bytes.as_ref(), &mime_type).unwrap();
-                    }
+                        if index == 0 {
+                            epub.add_cover_image(&image_path, bytes.as_ref(), &mime_type).unwrap();
+                        }
 
-                    epub.add_resource(&image_path, bytes.as_ref(), &mime_type).unwrap();
+                        epub.add_resource(&image_path, bytes.as_ref(), &mime_type).unwrap();
 
-                    epub.add_content(epub_builder::EpubContent::new(
-                        format!("{}.xhtml", index + 1),
-                        format!(
-                            r#" 
+                        epub.add_content(epub_builder::EpubContent::new(
+                            format!("{}.xhtml", index + 1),
+                            format!(
+                                r#" 
                             <?xml version='1.0' encoding='utf-8'?>
                             <!DOCTYPE html>
                             <html xmlns="http://www.w3.org/1999/xhtml">
@@ -158,18 +165,19 @@ pub fn download_chapter_epub(
                               </body>
                             </html>
                         "#,
-                            image_path
-                        )
-                        .as_bytes(),
-                    ))
-                    .unwrap();
-
-                    if !is_downloading_all_chapters {
-                        tx.send(MangaPageEvents::SetDownloadProgress(
-                            (index as f64) / (total_pages as f64),
-                            chapter_id.to_string(),
+                                image_path
+                            )
+                            .as_bytes(),
                         ))
-                        .ok();
+                        .unwrap();
+
+                        if !is_downloading_all_chapters {
+                            tx.send(MangaPageEvents::SetDownloadProgress(
+                                (index as f64) / (total_pages as f64),
+                                chapter_id.to_string(),
+                            ))
+                            .ok();
+                        }
                     }
                 },
                 Err(e) => write_to_error_log(ErrorType::FromError(Box::new(e))),
@@ -219,19 +227,21 @@ pub fn download_chapter_cbz(
             let file_name = Path::new(&file_name);
 
             match image_response {
-                Ok(bytes) => {
-                    let image_name = format!("{}.{}", index + 1, file_name.extension().unwrap().to_str().unwrap());
+                Ok(response) => {
+                    if let Ok(bytes) = response.bytes().await {
+                        let image_name = format!("{}.{}", index + 1, file_name.extension().unwrap().to_str().unwrap());
 
-                    let _ = zip.start_file(chapter_dir_language.join(image_name).to_str().unwrap(), options);
+                        let _ = zip.start_file(chapter_dir_language.join(image_name).to_str().unwrap(), options);
 
-                    let _ = zip.write_all(&bytes);
+                        let _ = zip.write_all(&bytes);
 
-                    if !is_downloading_all_chapters {
-                        tx.send(MangaPageEvents::SetDownloadProgress(
-                            (index as f64) / (total_pages as f64),
-                            chapter_id.to_string(),
-                        ))
-                        .ok();
+                        if !is_downloading_all_chapters {
+                            tx.send(MangaPageEvents::SetDownloadProgress(
+                                (index as f64) / (total_pages as f64),
+                                chapter_id.to_string(),
+                            ))
+                            .ok();
+                        }
                     }
                 },
                 Err(e) => write_to_error_log(ErrorType::FromError(Box::new(e))),

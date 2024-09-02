@@ -3,7 +3,7 @@ use std::time::Duration as StdDuration;
 use bytes::Bytes;
 use chrono::Months;
 use once_cell::sync::OnceCell;
-use reqwest::{StatusCode, Url};
+use reqwest::{Body, Client, Method, Request, RequestBuilder, Response, StatusCode, Url};
 
 use super::filter::Languages;
 use super::{ChapterPagesResponse, ChapterResponse, MangaStatisticsResponse, SearchMangaResponse};
@@ -27,7 +27,7 @@ impl MockApiClient {
 }
 
 pub trait ApiClient {
-    async fn get_chapter_page(&self, endpoint: &str, file_name: &str) -> Result<Bytes, reqwest::Error>;
+    async fn get_chapter_page(&self, endpoint: &str, file_name: &str) -> Result<Response, reqwest::Error>;
 }
 
 pub static MANGADEX_CLIENT_INSTANCE: OnceCell<MangadexClient> = once_cell::sync::OnceCell::new();
@@ -43,20 +43,18 @@ pub static ITEMS_PER_PAGE_LATEST_CHAPTERS: u32 = 5;
 pub static ITEMS_PER_PAGE_SEARCH: u32 = 10;
 
 impl ApiClient for &MangadexClient {
-    async fn get_chapter_page(&self, endpoint: &str, file_name: &str) -> Result<Bytes, reqwest::Error> {
+    async fn get_chapter_page(&self, endpoint: &str, file_name: &str) -> Result<Response, reqwest::Error> {
         self.client
             .get(format!("{}/{}", endpoint, file_name))
             .timeout(StdDuration::from_secs(20))
             .send()
-            .await?
-            .bytes()
             .await
     }
 }
 
 impl ApiClient for &MockApiClient {
-    async fn get_chapter_page(&self, _endpoint: &str, _file_name: &str) -> Result<Bytes, reqwest::Error> {
-        Ok(include_bytes!("../../public/mangadex_support.jpg").to_vec().into())
+    async fn get_chapter_page(&self, endpoint: &str, file_name: &str) -> Result<Response, reqwest::Error> {
+        Client::new().get(format!("{endpoint}/{file_name}")).send().await
     }
 }
 
@@ -65,7 +63,19 @@ impl MangadexClient {
         MANGADEX_CLIENT_INSTANCE.get().expect("could not build mangadex client")
     }
 
-    pub fn new(client: reqwest::Client, api_url_base: Url, cover_img_url_base: Url) -> Self {
+    pub fn new(api_url_base: Url, cover_img_url_base: Url) -> Self {
+        let user_agent = format!(
+            "manga-tui/{} ({}/{}/{})",
+            env!("CARGO_PKG_VERSION"),
+            std::env::consts::FAMILY,
+            std::env::consts::OS,
+            std::env::consts::ARCH
+        );
+        let client = Client::builder()
+            .timeout(StdDuration::from_secs(10))
+            .user_agent(user_agent)
+            .build()
+            .unwrap();
         Self {
             client,
             api_url_base,
@@ -73,12 +83,7 @@ impl MangadexClient {
         }
     }
 
-    pub async fn search_mangas(
-        &self,
-        search_term: &str,
-        page: u32,
-        filters: Filters,
-    ) -> Result<SearchMangaResponse, reqwest::Error> {
+    pub async fn search_mangas(&self, search_term: &str, page: u32, filters: Filters) -> Result<Response, reqwest::Error> {
         let offset = (page - 1) * ITEMS_PER_PAGE_SEARCH;
 
         let search_by_title = if search_term.trim().is_empty() { "".to_string() } else { format!("title={search_term}") };
@@ -91,16 +96,14 @@ impl MangadexClient {
             filters.into_param(),
         );
 
-        self.client.get(url).send().await?.json().await
+        self.client.get(url).send().await
     }
 
-    pub async fn get_cover_for_manga(&self, id_manga: &str, file_name: &str) -> Result<bytes::Bytes, reqwest::Error> {
+    pub async fn get_cover_for_manga(&self, id_manga: &str, file_name: &str) -> Result<Response, reqwest::Error> {
         let file_name = format!("{}.512.jpg", file_name);
         self.client
             .get(format!("{}/{}/{}", self.cover_img_url_base, id_manga, file_name))
             .send()
-            .await?
-            .bytes()
             .await
     }
 
@@ -120,7 +123,7 @@ impl MangadexClient {
         page: u32,
         language: Languages,
         order: ChapterOrder,
-    ) -> Result<ChapterResponse, reqwest::Error> {
+    ) -> Result<reqwest::Response, reqwest::Error> {
         let language = language.as_iso_code();
         let page = (page - 1) * ITEMS_PER_PAGE_CHAPTERS;
 
@@ -130,13 +133,13 @@ impl MangadexClient {
             self.api_url_base, id, page, order, language
         );
 
-        self.client.get(endpoint).send().await?.json().await
+        self.client.get(endpoint).send().await
     }
 
-    pub async fn get_chapter_pages(&self, id: &str) -> Result<ChapterPagesResponse, reqwest::Error> {
+    pub async fn get_chapter_pages(&self, id: &str) -> Result<Response, reqwest::Error> {
         let endpoint = format!("{}/at-home/server/{}", self.api_url_base, id);
 
-        self.client.get(endpoint).send().await?.json().await
+        self.client.get(endpoint).send().await
     }
 
     pub async fn get_manga_statistics(&self, id_manga: &str) -> Result<MangaStatisticsResponse, reqwest::Error> {
@@ -227,11 +230,11 @@ impl MangadexClient {
 mod test {
 
     use httpmock::Method::GET;
-    use httpmock::MockServer;
+    use httpmock::{MockServer, Then};
     use pretty_assertions::assert_eq;
-    use reqwest::Client;
 
     use super::*;
+    use crate::backend::*;
 
     #[test]
     fn expected_mangadex_endpoints() {
@@ -250,6 +253,7 @@ mod test {
                 when.method(GET)
                     .path_contains("/manga")
                     .query_param("title", "some title")
+                    .header_exists("User-Agent")
                     .query_param("includes[]", "cover_art")
                     .query_param("includes[]", "artist")
                     .query_param("includes[]", "author")
@@ -260,14 +264,16 @@ mod test {
             })
             .await;
 
-        let client = MangadexClient::new(Client::new(), server.url("").parse().unwrap(), server.base_url().parse().unwrap());
+        let client = MangadexClient::new(server.base_url().parse().unwrap(), server.base_url().parse().unwrap());
 
         let response = client
             .search_mangas("some title", 1, Filters::default())
             .await
             .expect("an issue ocurrend when calling search_mangas");
 
-        request.assert();
+        request.assert_async().await;
+
+        let response = response.json().await.expect("Could not deserialize search_mangas response");
 
         assert_eq!(expected, response);
     }
@@ -280,54 +286,111 @@ mod test {
 
         let request = server
             .mock_async(|when, then| {
-                when.method(GET).path_contains("id_manga");
+                when.method(GET).path_contains("id_manga").header_exists("User-Agent");
 
                 then.status(200).header("content-type", "image/jpeg").body(expected);
             })
             .await;
 
-        let client = MangadexClient::new(Client::new(), server.url("").parse().unwrap(), server.base_url().parse().unwrap());
+        let client = MangadexClient::new(server.base_url().parse().unwrap(), server.base_url().parse().unwrap());
 
         let response = client
             .get_cover_for_manga("id_manga", "cover_image.png")
             .await
             .expect("could not get cover for a manga");
 
-        request.assert();
+        request.assert_async().await;
 
-        assert_eq!(response, expected);
+        let image_bytes = response.bytes().await.expect("could not get the bytes of the cover");
+
+        assert_eq!(expected, image_bytes);
     }
 
     #[tokio::test]
     async fn get_manga_chapters_mangadex() {
         let server = MockServer::start_async().await;
-
         let expected = ChapterResponse::default();
-
         let default_language = Languages::default();
         let default_chapter_order = ChapterOrder::default();
 
         let request = server
             .mock_async(|when, then| {
                 when.method(GET)
+                    .header_exists("User-Agent")
                     .path_contains("id_manga")
                     .path_contains("feed")
+                    .query_param("offset", "0")
                     .query_param("translatedLanguage[]", default_language.as_iso_code())
-                    .query_param("order[]", default_chapter_order.to_string());
+                    .query_param("order[volume]", default_chapter_order.to_string())
+                    .query_param("order[chapter]", default_chapter_order.to_string());
 
-                then.status(200).header("content-type", "image/jpeg").json_body_obj(&expected);
+                then.status(200).header("content-type", "application/json").json_body_obj(&expected);
             })
             .await;
 
-        let client = MangadexClient::new(Client::new(), server.url("").parse().unwrap(), server.base_url().parse().unwrap());
+        let client = MangadexClient::new(server.base_url().parse().unwrap(), server.base_url().parse().unwrap());
 
         let response = client
             .get_manga_chapters("id_manga", 1, Languages::default(), ChapterOrder::default())
             .await
             .expect("could not get manga chapters");
 
-        request.assert();
+        request.assert_async().await;
+
+        let response: ChapterResponse = response.json().await.expect("Could not deserialize response");
 
         assert_eq!(response, expected);
+    }
+
+    #[tokio::test]
+    async fn get_chapter_pages_response() {
+        let server = MockServer::start_async().await;
+        let client = MangadexClient::new(server.base_url().parse().unwrap(), server.base_url().parse().unwrap());
+
+        let expected = ChapterPagesResponse::default();
+
+        let request = server
+            .mock_async(|when, then| {
+                when.method(GET)
+                    .header_exists("User-Agent")
+                    .path_contains("id_manga")
+                    .path_contains("at-home")
+                    .path_contains("server");
+
+                then.status(200).header("content-type", "application/json").json_body_obj(&expected);
+            })
+            .await;
+
+        let response = client.get_chapter_pages("id_manga").await.expect("Error calling get_chapter_pages");
+
+        request.assert_async().await;
+
+        let response: ChapterPagesResponse = response.json().await.expect("Could not deserialize ChapterPagesResponse");
+
+        assert_eq!(response, expected);
+    }
+
+    #[tokio::test]
+    async fn get_chapter_page() {
+        let server = MockServer::start_async().await;
+        let client = &MangadexClient::new(server.base_url().parse().unwrap(), server.base_url().parse().unwrap());
+
+        let expected = "some_page_bytes";
+
+        let request = server
+            .mock_async(|when, then| {
+                when.method(GET).header_exists("User-Agent");
+
+                then.status(200).body(expected.as_bytes());
+            })
+            .await;
+        let response = client
+            .get_chapter_page(&server.base_url(), "chapter.png")
+            .await
+            .expect("could not get chapter page");
+
+        request.assert_async().await;
+
+        //assert_eq!(expected, response)
     }
 }
