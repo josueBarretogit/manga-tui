@@ -1,10 +1,9 @@
 #![allow(dead_code)]
 #![allow(deprecated)]
-use std::time::Duration;
 
 use clap::Parser;
 use ratatui::backend::CrosstermBackend;
-use reqwest::{Client, StatusCode};
+use reqwest::StatusCode;
 
 use self::backend::error_log::init_error_hooks;
 use self::backend::fetch::{MangadexClient, API_URL_BASE, COVER_IMG_URL_BASE, MANGADEX_CLIENT_INSTANCE};
@@ -70,14 +69,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mangadex_status = mangadex_client.check_status().await;
 
     match mangadex_status {
-        Ok(status) => {
-            if status != StatusCode::OK {
-                println!("Mangadex appears to be in maintenance, please come backe later");
+        Ok(response) => {
+            if response.status() != StatusCode::OK {
+                println!("Mangadex appears to be in maintenance, please come back later");
                 return Ok(());
             }
         },
-        Err(_) => {
-            println!("Mangadex appears to be in maintenance, please come backe later");
+        Err(e) => {
+            println!("Some error ocurred, more details : {e}");
             return Ok(());
         },
     }

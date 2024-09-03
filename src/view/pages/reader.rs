@@ -11,7 +11,10 @@ use ratatui_image::{Resize, StatefulImage};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
-use crate::backend::fetch::{MangadexClient, MockApiClient};
+#[cfg(not(test))]
+use crate::backend::fetch::MangadexClient;
+#[cfg(test)]
+use crate::backend::fetch::MockMangadexClient;
 use crate::backend::tui::Events;
 use crate::common::PageType;
 use crate::global::INSTRUCTIONS_STYLE;
@@ -241,16 +244,17 @@ impl MangaReader {
     fn fech_pages(&mut self) {
         let mut pages_list: Vec<PagesItem> = vec![];
 
-        #[cfg(not(test))]
-        let api_client = MangadexClient::global();
-
-        #[cfg(test)]
-        let api_client = MockApiClient::new();
-
         for (index, page) in self.pages.iter().enumerate() {
+            #[cfg(not(test))]
+            let api_client = MangadexClient::global().clone();
+
+            #[cfg(test)]
+            let api_client = MockMangadexClient::new();
+
             let file_name = page.url.clone();
             let endpoint = format!("{}/{}/{}", self.base_url, page.page_type, self.chapter_id);
             let tx = self.local_event_tx.clone();
+
             pages_list.push(PagesItem::new(index));
 
             self.image_tasks.spawn(get_manga_panel(api_client, endpoint, file_name, tx, index));

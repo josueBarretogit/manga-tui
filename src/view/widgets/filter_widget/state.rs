@@ -235,8 +235,10 @@ impl FilterListDynamic<AuthorState> {
     fn search_authors(&mut self, tx: UnboundedSender<FilterEvents>) {
         let name = self.get_name();
         tokio::spawn(async move {
-            let res = MangadexClient::global().get_authors(&name).await;
-            tx.send(FilterEvents::LoadAuthors(res.ok())).ok();
+            let response = MangadexClient::global().get_authors(&name).await;
+            if let Ok(res) = response {
+                tx.send(FilterEvents::LoadAuthors(res.json().await.ok())).ok();
+            }
         });
     }
 }
@@ -245,8 +247,11 @@ impl FilterListDynamic<ArtistState> {
     fn search_artists(&mut self, tx: UnboundedSender<FilterEvents>) {
         let name = self.get_name();
         tokio::spawn(async move {
-            let res = MangadexClient::global().get_authors(&name).await;
-            tx.send(FilterEvents::LoadArtists(res.ok())).ok();
+            let response = MangadexClient::global().get_authors(&name).await;
+
+            if let Ok(res) = response {
+                tx.send(FilterEvents::LoadArtists(res.json().await.ok())).ok();
+            }
         });
     }
 }
@@ -498,7 +503,9 @@ impl FilterState {
         tokio::spawn(async move {
             let response = MangadexClient::global().get_tags().await;
             if let Ok(res) = response {
-                tx.send(FilterEvents::LoadTags(res)).ok();
+                if let Ok(tags) = res.json().await {
+                    tx.send(FilterEvents::LoadTags(tags)).ok();
+                }
             }
         });
     }

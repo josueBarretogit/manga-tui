@@ -48,9 +48,10 @@ mod test {
     use httpmock::Method::GET;
     use httpmock::MockServer;
     use pretty_assertions::assert_eq;
+    use reqwest::Url;
 
     use super::*;
-    use crate::backend::fetch::MockApiClient;
+    use crate::backend::fetch::MangadexClient;
 
     #[test]
     fn convert_bytes_to_page_data() {
@@ -74,7 +75,16 @@ mod test {
             })
             .await;
 
-        get_manga_panel(MockApiClient::new(), server.base_url(), "filename.png".to_string(), tx, 1).await;
+        let base_url: Url = server.base_url().parse().unwrap();
+
+        get_manga_panel(
+            MangadexClient::new(base_url.clone(), base_url.clone()),
+            base_url.to_string(),
+            "filename.png".to_string(),
+            tx,
+            1,
+        )
+        .await;
 
         request.assert_async().await;
 

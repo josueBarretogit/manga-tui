@@ -295,11 +295,13 @@ impl Home {
         self.tasks.spawn(async move {
             let response = MangadexClient::global().get_popular_mangas().await;
             match response {
-                Ok(mangas) => {
-                    if mangas.data.is_empty() {
-                        tx.send(HomeEvents::LoadPopularMangas(None)).ok();
-                    } else {
-                        tx.send(HomeEvents::LoadPopularMangas(Some(mangas))).ok();
+                Ok(res) => {
+                    if let Ok(data) = res.json::<SearchMangaResponse>().await {
+                        if data.data.is_empty() {
+                            tx.send(HomeEvents::LoadPopularMangas(None)).ok();
+                        } else {
+                            tx.send(HomeEvents::LoadPopularMangas(Some(data))).ok();
+                        }
                     }
                 },
                 Err(e) => {
@@ -347,7 +349,9 @@ impl Home {
             let response = MangadexClient::global().get_recently_added().await;
             match response {
                 Ok(mangas) => {
-                    tx.send(HomeEvents::LoadRecentlyAddedMangas(Some(mangas))).ok();
+                    if let Ok(data) = mangas.json().await {
+                        tx.send(HomeEvents::LoadRecentlyAddedMangas(Some(data))).ok();
+                    }
                 },
                 Err(e) => {
                     write_to_error_log(ErrorType::FromError(Box::new(e)));

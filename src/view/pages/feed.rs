@@ -13,6 +13,7 @@ use tui_input::Input;
 
 use crate::backend::database::{get_history, MangaHistoryResponse, MangaHistoryType};
 use crate::backend::error_log::{write_to_error_log, ErrorType};
+use crate::backend::feed::OneMangaResponse;
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
 use crate::backend::ChapterResponse;
@@ -253,8 +254,10 @@ impl Feed {
                 self.tasks.spawn(async move {
                     let latest_chapter_response = MangadexClient::global().get_latest_chapters(&manga_id).await;
                     match latest_chapter_response {
-                        Ok(chapters) => {
-                            tx.send(FeedEvents::LoadRecentChapters(manga_id, Some(chapters))).ok();
+                        Ok(res) => {
+                            if let Ok(chapter_data) = res.json().await {
+                                tx.send(FeedEvents::LoadRecentChapters(manga_id, Some(chapter_data))).ok();
+                            }
                         },
                         Err(e) => {
                             write_to_error_log(ErrorType::FromError(Box::new(e)));
@@ -375,9 +378,11 @@ impl Feed {
                 self.tasks.spawn(async move {
                     let response = MangadexClient::global().get_one_manga(&manga_id).await;
                     match response {
-                        Ok(manga) => {
-                            let manga_found = from_manga_response(manga.data);
-                            tx.send(Events::GoToMangaPage(MangaItem::new(manga_found))).ok();
+                        Ok(res) => {
+                            if let Ok(manga) = res.json::<OneMangaResponse>().await {
+                                let manga_found = from_manga_response(manga.data);
+                                tx.send(Events::GoToMangaPage(MangaItem::new(manga_found))).ok();
+                            }
                         },
                         Err(e) => {
                             write_to_error_log(ErrorType::FromError(Box::new(e)));

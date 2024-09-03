@@ -75,8 +75,8 @@ pub fn download_chapter_raw_images(
             let file_name = Path::new(&file_name);
 
             match image_response {
-                Ok(response) => match response.bytes().await {
-                    Ok(bytes) => {
+                Ok(response) => {
+                    if let Ok(bytes) = response.bytes().await {
                         let image_name = format!("{}.{}", index + 1, file_name.extension().unwrap().to_str().unwrap());
                         let mut image_created = File::create(chapter_dir.join(image_name)).unwrap();
                         image_created.write_all(&bytes).unwrap();
@@ -88,8 +88,7 @@ pub fn download_chapter_raw_images(
                             ))
                             .ok();
                         }
-                    },
-                    Err(_) => {},
+                    }
                 },
                 Err(e) => write_to_error_log(ErrorType::FromError(Box::new(e))),
             }

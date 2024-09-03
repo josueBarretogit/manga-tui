@@ -58,105 +58,109 @@ pub async fn download_all_chapters_task(data: DownloadAllChaptersData) {
     use crate::backend::download::{download_chapter_cbz, download_chapter_epub, download_chapter_raw_images, DownloadChapter};
     use crate::backend::error_log::{self, write_to_error_log, ErrorType};
     use crate::backend::fetch::MangadexClient;
-    use crate::backend::ChapterPagesResponse;
+    use crate::backend::{ChapterPagesResponse, ChapterResponse};
     use crate::common::PageType;
     use crate::config::{DownloadType, ImageQuality, MangaTuiConfig};
     use crate::utils::to_filename;
 
     let chapter_response = MangadexClient::global().get_all_chapters_for_manga(&data.manga_id, data.lang).await;
+
     match chapter_response {
         Ok(response) => {
-            let total_chapters = response.data.len();
-            data.tx.send(MangaPageEvents::StartDownloadProgress(total_chapters as f64)).ok();
+            if let Ok(response) = response.json::<ChapterResponse>().await {
+                let total_chapters = response.data.len();
+                data.tx.send(MangaPageEvents::StartDownloadProgress(total_chapters as f64)).ok();
 
-            let download_chapter_delay = if total_chapters < 40 {
-                1
-            } else if (40..100).contains(&total_chapters) {
-                3
-            } else if (100..200).contains(&total_chapters) {
-                6
-            } else {
-                8
-            };
+                let download_chapter_delay = if total_chapters < 40 {
+                    1
+                } else if (40..100).contains(&total_chapters) {
+                    3
+                } else if (100..200).contains(&total_chapters) {
+                    6
+                } else {
+                    8
+                };
 
-            let config = MangaTuiConfig::get();
+                let config = MangaTuiConfig::get();
 
-            for chapter_found in response.data.into_iter() {
-                let chapter_id = chapter_found.id;
+                for chapter_found in response.data.into_iter() {
+                    let chapter_id = chapter_found.id;
 
-                let start_fetch_time = Instant::now();
+                    let start_fetch_time = Instant::now();
 
-                let pages_response = MangadexClient::global().get_chapter_pages(&chapter_id).await;
+                    let pages_response = MangadexClient::global().get_chapter_pages(&chapter_id).await;
 
-                let chapter_number = chapter_found.attributes.chapter.unwrap_or_default();
+                    let chapter_number = chapter_found.attributes.chapter.unwrap_or_default();
 
-                let scanlator = chapter_found
-                    .relationships
-                    .iter()
-                    .find(|rel| rel.type_field == "scanlation_group")
-                    .map(|rel| rel.attributes.as_ref().unwrap().name.to_string());
+                    let scanlator = chapter_found
+                        .relationships
+                        .iter()
+                        .find(|rel| rel.type_field == "scanlation_group")
+                        .map(|rel| rel.attributes.as_ref().unwrap().name.to_string());
 
-                let chapter_title = chapter_found.attributes.title.unwrap_or_default();
-                let scanlator = scanlator.unwrap_or_default();
+                    let chapter_title = chapter_found.attributes.title.unwrap_or_default();
+                    let scanlator = scanlator.unwrap_or_default();
 
-                match pages_response {
-                    Ok(response) => {
-                        if let Ok(res) = response.json::<ChapterPagesResponse>().await {
-                            let (files, quality) = match config.image_quality {
-                                ImageQuality::Low => (res.chapter.data_saver, PageType::LowQuality),
-                                ImageQuality::High => (res.chapter.data, PageType::HighQuality),
-                            };
+                    match pages_response {
+                        Ok(response) => {
+                            if let Ok(res) = response.json::<ChapterPagesResponse>().await {
+                                let (files, quality) = match config.image_quality {
+                                    ImageQuality::Low => (res.chapter.data_saver, PageType::LowQuality),
+                                    ImageQuality::High => (res.chapter.data, PageType::HighQuality),
+                                };
 
-                            let endpoint = format!("{}/{}/{}", res.base_url, quality, res.chapter.hash);
+                                let endpoint = format!("{}/{}/{}", res.base_url, quality, res.chapter.hash);
 
-                            let manga_title = to_filename(&data.manga_title);
-                            let chapter_title = to_filename(&chapter_title);
-                            let scanlator = to_filename(&scanlator);
+                                let manga_title = to_filename(&data.manga_title);
+                                let chapter_title = to_filename(&chapter_title);
+                                let scanlator = to_filename(&scanlator);
 
-                            let chapter_to_download = DownloadChapter {
-                                id_chapter: &chapter_id,
-                                manga_id: &data.manga_id,
-                                manga_title: &manga_title,
-                                chapter_title: &chapter_title,
-                                number: &chapter_number,
-                                scanlator: &scanlator,
-                                lang: &data.lang.as_human_readable(),
-                            };
+                                let chapter_to_download = DownloadChapter {
+                                    id_chapter: &chapter_id,
+                                    manga_id: &data.manga_id,
+                                    manga_title: &manga_title,
+                                    chapter_title: &chapter_title,
+                                    number: &chapter_number,
+                                    scanlator: &scanlator,
+                                    lang: &data.lang.as_human_readable(),
+                                };
 
-                            let download_proccess = match config.download_type {
-                                DownloadType::Cbz => {
-                                    download_chapter_cbz(true, chapter_to_download, files, endpoint, data.tx.clone())
-                                },
-                                DownloadType::Raw => {
-                                    download_chapter_raw_images(true, chapter_to_download, files, endpoint, data.tx.clone())
-                                },
-                                DownloadType::Epub => {
-                                    download_chapter_epub(true, chapter_to_download, files, endpoint, data.tx.clone())
-                                },
-                            };
+                                let download_proccess = match config.download_type {
+                                    DownloadType::Cbz => {
+                                        download_chapter_cbz(true, chapter_to_download, files, endpoint, data.tx.clone())
+                                    },
+                                    DownloadType::Raw => {
+                                        download_chapter_raw_images(true, chapter_to_download, files, endpoint, data.tx.clone())
+                                    },
+                                    DownloadType::Epub => {
+                                        download_chapter_epub(true, chapter_to_download, files, endpoint, data.tx.clone())
+                                    },
+                                };
 
-                            if let Err(e) = download_proccess {
-                                let error_message = format!("Chapter: {} could not be downloaded, details: {}", chapter_title, e);
+                                if let Err(e) = download_proccess {
+                                    let error_message =
+                                        format!("Chapter: {} could not be downloaded, details: {}", chapter_title, e);
 
-                                data.tx.send(MangaPageEvents::SetDownloadAllChaptersProgress).ok();
+                                    data.tx.send(MangaPageEvents::SetDownloadAllChaptersProgress).ok();
 
-                                write_to_error_log(ErrorType::FromError(Box::from(error_message)));
-                                return;
+                                    write_to_error_log(ErrorType::FromError(Box::from(error_message)));
+                                    return;
+                                }
+
+                                data.tx.send(MangaPageEvents::SaveChapterDownloadStatus(chapter_id, chapter_title)).ok();
                             }
+                        },
+                        Err(e) => {
+                            let error_message = format!("Chapter: {} could not be downloaded, details: {}", chapter_title, e);
 
-                            data.tx.send(MangaPageEvents::SaveChapterDownloadStatus(chapter_id, chapter_title)).ok();
-                        }
-                    },
-                    Err(e) => {
-                        let error_message = format!("Chapter: {} could not be downloaded, details: {}", chapter_title, e);
+                            data.tx.send(MangaPageEvents::SetDownloadAllChaptersProgress).ok();
+                            write_to_error_log(ErrorType::FromError(Box::from(error_message)));
+                        },
+                    }
 
-                        data.tx.send(MangaPageEvents::SetDownloadAllChaptersProgress).ok();
-                        write_to_error_log(ErrorType::FromError(Box::from(error_message)));
-                    },
+                    let time_since = start_fetch_time.elapsed();
+                    std::thread::sleep(Duration::from_secs(download_chapter_delay).saturating_sub(time_since));
                 }
-
-                let time_since = start_fetch_time.elapsed();
-                std::thread::sleep(Duration::from_secs(download_chapter_delay).saturating_sub(time_since));
             }
         },
         Err(e) => {

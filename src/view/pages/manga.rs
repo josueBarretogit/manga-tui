@@ -611,7 +611,9 @@ impl MangaPage {
 
             match response {
                 Ok(res) => {
-                    tx.send(MangaPageEvents::LoadStatistics(Some(res))).ok();
+                    if let Ok(statistics) = res.json().await {
+                        tx.send(MangaPageEvents::LoadStatistics(Some(statistics))).ok();
+                    }
                 },
                 Err(e) => {
                     write_to_error_log(error_log::ErrorType::FromError(Box::new(e)));
