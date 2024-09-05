@@ -14,7 +14,7 @@ use tui_input::Input;
 use crate::backend::database::{get_history, MangaHistoryResponse, MangaHistoryType};
 use crate::backend::error_log::{write_to_error_log, ErrorType};
 use crate::backend::feed::OneMangaResponse;
-use crate::backend::fetch::MangadexClient;
+use crate::backend::fetch::{ApiClient, MangadexClient};
 use crate::backend::tui::Events;
 use crate::backend::ChapterResponse;
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};

@@ -10,7 +10,7 @@ use tokio::sync::mpsc::UnboundedSender;
 use tokio::task::JoinSet;
 use tui_input::Input;
 
-use crate::backend::fetch::MangadexClient;
+use crate::backend::fetch::{ApiClient, MangadexClient};
 use crate::backend::filter::Languages;
 use crate::backend::Data;
 use crate::common::{Artist, Author, Manga};
@@ -53,13 +53,15 @@ pub fn search_manga_cover<IM: ImageHandler>(
     join_set.spawn(async move {
         let response = MangadexClient::global().get_cover_for_manga_lower_quality(&manga_id, &file_name).await;
         match response {
-            Ok(bytes) => {
-                let dyn_img = Reader::new(Cursor::new(bytes)).with_guessed_format().unwrap();
+            Ok(res) => {
+                if let Ok(bytes) = res.bytes().await {
+                    let dyn_img = Reader::new(Cursor::new(bytes)).with_guessed_format().unwrap();
 
-                let maybe_decoded = dyn_img.decode();
+                    let maybe_decoded = dyn_img.decode();
 
-                if let Ok(decoded) = maybe_decoded {
-                    tx.send(IM::load(decoded, manga_id)).ok();
+                    if let Ok(decoded) = maybe_decoded {
+                        tx.send(IM::load(decoded, manga_id)).ok();
+                    }
                 }
             },
             Err(_e) => {

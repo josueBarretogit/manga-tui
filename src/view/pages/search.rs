@@ -19,7 +19,7 @@ use tui_widget_list::ListState;
 
 use crate::backend::database::{save_plan_to_read, MangaPlanToReadSave};
 use crate::backend::error_log::{write_to_error_log, ErrorType};
-use crate::backend::fetch::MangadexClient;
+use crate::backend::fetch::{ApiClient, MangadexClient};
 use crate::backend::tui::Events;
 use crate::backend::SearchMangaResponse;
 use crate::common::{Artist, Author, ImageState};

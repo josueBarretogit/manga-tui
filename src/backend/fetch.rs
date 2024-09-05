@@ -4,16 +4,54 @@ use bytes::Bytes;
 use chrono::Months;
 use once_cell::sync::OnceCell;
 use reqwest::{Client, Response, Url};
+use serde::Serialize;
+use serde_json::json;
 
+use super::authors::AuthorsResponse;
+use super::feed::OneMangaResponse;
 use super::filter::Languages;
+use super::tags::TagsResponse;
+use super::{ChapterPagesResponse, ChapterResponse, MangaStatisticsResponse, SearchMangaResponse};
 use crate::backend::filter::{Filters, IntoParam};
 use crate::view::pages::manga::ChapterOrder;
 
 pub trait ApiClient {
     async fn get_chapter_page(&self, endpoint: &str, file_name: &str) -> Result<Response, reqwest::Error>;
+
+    async fn search_mangas(&self, search_term: &str, page: u32, filters: Filters) -> Result<Response, reqwest::Error>;
+
+    async fn get_cover_for_manga(&self, id_manga: &str, file_name: &str) -> Result<Response, reqwest::Error>;
+
+    async fn get_cover_for_manga_lower_quality(&self, id_manga: &str, file_name: &str) -> Result<Response, reqwest::Error>;
+
+    async fn get_manga_chapters(
+        &self,
+        id: &str,
+        page: u32,
+        language: Languages,
+        order: ChapterOrder,
+    ) -> Result<Response, reqwest::Error>;
+
+    async fn get_chapter_pages(&self, chapter_id: &str) -> Result<Response, reqwest::Error>;
+
+    async fn get_manga_statistics(&self, id_manga: &str) -> Result<Response, reqwest::Error>;
+
+    async fn get_popular_mangas(&self) -> Result<Response, reqwest::Error>;
+
+    async fn get_recently_added(&self) -> Result<Response, reqwest::Error>;
+
+    async fn get_one_manga(&self, manga_id: &str) -> Result<Response, reqwest::Error>;
+
+    async fn get_latest_chapters(&self, manga_id: &str) -> Result<Response, reqwest::Error>;
+
+    async fn get_tags(&self) -> Result<Response, reqwest::Error>;
+
+    async fn get_authors(&self, name: &str) -> Result<Response, reqwest::Error>;
+
+    async fn get_all_chapters_for_manga(&self, id: &str, language: Languages) -> Result<Response, reqwest::Error>;
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct MockMangadexClient {}
 
 #[derive(Clone, Debug)]
@@ -34,32 +72,6 @@ pub static ITEMS_PER_PAGE_CHAPTERS: u32 = 16;
 pub static ITEMS_PER_PAGE_LATEST_CHAPTERS: u32 = 5;
 
 pub static ITEMS_PER_PAGE_SEARCH: u32 = 10;
-
-impl ApiClient for MangadexClient {
-    async fn get_chapter_page(&self, endpoint: &str, file_name: &str) -> Result<Response, reqwest::Error> {
-        self.client
-            .get(format!("{}/{}", endpoint, file_name))
-            .timeout(StdDuration::from_secs(20))
-            .send()
-            .await
-    }
-}
-
-impl MockMangadexClient {
-    pub fn new() -> Self {
-        MockMangadexClient {}
-    }
-}
-
-impl ApiClient for MockMangadexClient {
-    async fn get_chapter_page(&self, _endpoint: &str, _file_name: &str) -> Result<Response, reqwest::Error> {
-        let image_bytes = include_bytes!("../../public/mangadex_support.jpg").to_vec();
-
-        let response = http::Response::builder().body(image_bytes).unwrap();
-
-        Ok(response.into())
-    }
-}
 
 impl MangadexClient {
     pub fn global() -> &'static MangadexClient {
@@ -87,99 +99,6 @@ impl MangadexClient {
         }
     }
 
-    pub async fn search_mangas(&self, search_term: &str, page: u32, filters: Filters) -> Result<Response, reqwest::Error> {
-        let offset = (page - 1) * ITEMS_PER_PAGE_SEARCH;
-
-        let search_by_title = if search_term.trim().is_empty() { "".to_string() } else { format!("title={search_term}") };
-
-        let url = format!(
-            "{}/manga?{}&includes[]=cover_art&includes[]=author&includes[]=artist&limit=10&offset={}{}&includedTagsMode=AND&excludedTagsMode=OR&hasAvailableChapters=true",
-            self.api_url_base,
-            search_by_title,
-            offset,
-            filters.into_param(),
-        );
-
-        self.client.get(url).send().await
-    }
-
-    pub async fn get_cover_for_manga(&self, id_manga: &str, file_name: &str) -> Result<Response, reqwest::Error> {
-        let file_name = format!("{}.512.jpg", file_name);
-        self.client
-            .get(format!("{}/{}/{}", self.cover_img_url_base, id_manga, file_name))
-            .send()
-            .await
-    }
-
-    pub async fn get_cover_for_manga_lower_quality(&self, id_manga: &str, file_name: &str) -> Result<bytes::Bytes, reqwest::Error> {
-        let file_name = format!("{}.256.jpg", file_name);
-        self.client
-            .get(format!("{}/{}/{}", self.cover_img_url_base, id_manga, file_name))
-            .send()
-            .await?
-            .bytes()
-            .await
-    }
-
-    /// Used to get the chapters of a manga
-    pub async fn get_manga_chapters(
-        &self,
-        id: &str,
-        page: u32,
-        language: Languages,
-        order: ChapterOrder,
-    ) -> Result<Response, reqwest::Error> {
-        let language = language.as_iso_code();
-        let page = (page - 1) * ITEMS_PER_PAGE_CHAPTERS;
-
-        let order = format!("order[volume]={order}&order[chapter]={order}");
-        let endpoint = format!(
-            "{}/manga/{}/feed?limit={ITEMS_PER_PAGE_CHAPTERS}&offset={}&{}&translatedLanguage[]={}&includes[]=scanlation_group&includeExternalUrl=0&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&contentRating[]=pornographic",
-            self.api_url_base, id, page, order, language
-        );
-
-        self.client.get(endpoint).send().await
-    }
-
-    /// Used to get the list of endpoints which provide the url to get a chapter's pages / panels
-    pub async fn get_chapter_pages(&self, chapter_id: &str) -> Result<Response, reqwest::Error> {
-        let endpoint = format!("{}/at-home/server/{}", self.api_url_base, chapter_id);
-
-        self.client.get(endpoint).send().await
-    }
-
-    /// Used in `manga` page to request the the amount of follows and stars a manga has
-    pub async fn get_manga_statistics(&self, id_manga: &str) -> Result<Response, reqwest::Error> {
-        let endpoint = format!("{}/statistics/manga/{}", self.api_url_base, id_manga);
-
-        self.client.get(endpoint).send().await
-    }
-
-    /// Used in `home` page to request the popular mangas of this month
-    pub async fn get_popular_mangas(&self) -> Result<Response, reqwest::Error> {
-        let current_date = chrono::offset::Local::now().date_naive().checked_sub_months(Months::new(1)).unwrap();
-
-        let endpoint = format!(
-            "{}/manga?includes[]=cover_art&includes[]=artist&includes[]=author&order[followedCount]=desc&contentRating[]=safe&contentRating[]=suggestive&hasAvailableChapters=true&availableTranslatedLanguage[]={}&createdAtSince={}T00:00:00",
-            self.api_url_base,
-            Languages::get_preferred_lang().as_iso_code(),
-            current_date
-        );
-
-        self.client.get(endpoint).send().await
-    }
-
-    /// Used in `home` page to request the most recently added mangas
-    pub async fn get_recently_added(&self) -> Result<Response, reqwest::Error> {
-        let endpoint = format!(
-            "{}/manga?limit=5&contentRating[]=safe&contentRating[]=suggestive&order[createdAt]=desc&includes[]=cover_art&includes[]=artist&includes[]=author&hasAvailableChapters=true&availableTranslatedLanguage[]={}",
-            self.api_url_base,
-            Languages::get_preferred_lang().as_iso_code()
-        );
-
-        self.client.get(endpoint).send().await
-    }
-
     // Not crucial this doesnt need to be tested
     pub async fn get_mangadex_image_support(&self) -> Result<Bytes, reqwest::Error> {
         self.client
@@ -190,54 +109,234 @@ impl MangadexClient {
             .await
     }
 
+    /// Check if mangadex is available
+    pub async fn check_status(&self) -> Result<Response, reqwest::Error> {
+        let endpoint = format!("{}/ping", self.api_url_base);
+        self.client.get(endpoint).send().await
+    }
+}
+
+impl ApiClient for MangadexClient {
+    async fn get_chapter_page(&self, endpoint: &str, file_name: &str) -> Result<Response, reqwest::Error> {
+        self.client
+            .get(format!("{endpoint}/{file_name}"))
+            .timeout(StdDuration::from_secs(20))
+            .send()
+            .await
+    }
+
+    async fn search_mangas(&self, search_term: &str, page: u32, filters: Filters) -> Result<Response, reqwest::Error> {
+        let offset = (page - 1) * ITEMS_PER_PAGE_SEARCH;
+
+        let search_by_title = if search_term.trim().is_empty() { "".to_string() } else { format!("title={search_term}") };
+        let filters = filters.into_param();
+
+        let url = format!(
+            "{}/manga?{search_by_title}&includes[]=cover_art&includes[]=author&includes[]=artist&limit={ITEMS_PER_PAGE_SEARCH}&offset={offset}{filters}&includedTagsMode=AND&excludedTagsMode=OR&hasAvailableChapters=true",
+            self.api_url_base,
+        );
+
+        self.client.get(url).send().await
+    }
+
+    async fn get_cover_for_manga(&self, id_manga: &str, file_name: &str) -> Result<Response, reqwest::Error> {
+        let file_name = format!("{file_name}.512.jpg");
+        self.client
+            .get(format!("{}/{id_manga}/{file_name}", self.cover_img_url_base))
+            .send()
+            .await
+    }
+
+    async fn get_cover_for_manga_lower_quality(&self, id_manga: &str, file_name: &str) -> Result<Response, reqwest::Error> {
+        let file_name = format!("{file_name}.256.jpg");
+        self.client
+            .get(format!("{}/{id_manga}/{file_name}", self.cover_img_url_base))
+            .send()
+            .await
+    }
+
+    /// Used to get the chapters of a manga
+    async fn get_manga_chapters(
+        &self,
+        manga_id: &str,
+        page: u32,
+        language: Languages,
+        order: ChapterOrder,
+    ) -> Result<Response, reqwest::Error> {
+        let language = language.as_iso_code();
+        let page = (page - 1) * ITEMS_PER_PAGE_CHAPTERS;
+
+        let order = format!("order[volume]={order}&order[chapter]={order}");
+
+        let endpoint = format!(
+            "{}/manga/{manga_id}/feed?limit={ITEMS_PER_PAGE_CHAPTERS}&offset={page}&{order}&translatedLanguage[]={language}&includes[]=scanlation_group&includeExternalUrl=0&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&contentRating[]=pornographic",
+            self.api_url_base,
+        );
+
+        self.client.get(endpoint).send().await
+    }
+
+    /// Used to get the list of endpoints which provide the url to get a chapter's pages / panels
+    async fn get_chapter_pages(&self, chapter_id: &str) -> Result<Response, reqwest::Error> {
+        let endpoint = format!("{}/at-home/server/{chapter_id}", self.api_url_base);
+
+        self.client.get(endpoint).send().await
+    }
+
+    /// Used in `manga` page to request the the amount of follows and stars a manga has
+    async fn get_manga_statistics(&self, id_manga: &str) -> Result<Response, reqwest::Error> {
+        let endpoint = format!("{}/statistics/manga/{id_manga}", self.api_url_base);
+
+        self.client.get(endpoint).send().await
+    }
+
+    /// Used in `home` page to request the popular mangas of this month
+    async fn get_popular_mangas(&self) -> Result<Response, reqwest::Error> {
+        let current_date = chrono::offset::Local::now().date_naive().checked_sub_months(Months::new(1)).unwrap();
+        let language = Languages::get_preferred_lang().as_iso_code();
+
+        let endpoint = format!(
+            "{}/manga?includes[]=cover_art&includes[]=artist&includes[]=author&order[followedCount]=desc&contentRating[]=safe&contentRating[]=suggestive&hasAvailableChapters=true&availableTranslatedLanguage[]={language}&createdAtSince={current_date}T00:00:00",
+            self.api_url_base,
+        );
+
+        self.client.get(endpoint).send().await
+    }
+
+    /// Used in `home` page to request the most recently added mangas
+    async fn get_recently_added(&self) -> Result<Response, reqwest::Error> {
+        let language = Languages::get_preferred_lang().as_iso_code();
+        let endpoint = format!(
+            "{}/manga?limit=5&contentRating[]=safe&contentRating[]=suggestive&order[createdAt]=desc&includes[]=cover_art&includes[]=artist&includes[]=author&hasAvailableChapters=true&availableTranslatedLanguage[]={language}",
+            self.api_url_base,
+        );
+
+        self.client.get(endpoint).send().await
+    }
+
     /// Used in `feed` page to request a single manga
-    pub async fn get_one_manga(&self, manga_id: &str) -> Result<Response, reqwest::Error> {
-        let endpoint = format!("{}/manga/{}?includes[]=cover_art&includes[]=author&includes[]=artist", self.api_url_base, manga_id);
+    async fn get_one_manga(&self, manga_id: &str) -> Result<Response, reqwest::Error> {
+        let endpoint = format!("{}/manga/{manga_id}?includes[]=cover_art&includes[]=author&includes[]=artist", self.api_url_base);
         self.client.get(endpoint).send().await
     }
 
     /// Used in `feed` to request most recent chapters of a manga
-    pub async fn get_latest_chapters(&self, manga_id: &str) -> Result<Response, reqwest::Error> {
+    async fn get_latest_chapters(&self, manga_id: &str) -> Result<Response, reqwest::Error> {
         let endpoint = format!(
-            "{}/manga/{}/feed?limit={}&includes[]=scanlation_group&offset=0&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&contentRating[]=pornographic&order[readableAt]=desc",
-            self.api_url_base, manga_id, ITEMS_PER_PAGE_LATEST_CHAPTERS
+            "{}/manga/{manga_id}/feed?limit={ITEMS_PER_PAGE_LATEST_CHAPTERS}&includes[]=scanlation_group&offset=0&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&contentRating[]=pornographic&order[readableAt]=desc",
+            self.api_url_base,
         );
 
         self.client.get(endpoint).send().await
     }
 
     /// Request the tags / genres available on mangadex used in `FilterWidget`
-    pub async fn get_tags(&self) -> Result<Response, reqwest::Error> {
+    async fn get_tags(&self) -> Result<Response, reqwest::Error> {
         let endpoint = format!("{}/manga/tag", self.api_url_base);
 
         self.client.get(endpoint).send().await
     }
 
     /// Used in `FilterWidget` to search an author and artist
-    pub async fn get_authors(&self, name: &str) -> Result<Response, reqwest::Error> {
-        let endpoint = format!("{}/author?name={}", self.api_url_base, name);
+    async fn get_authors(&self, name: &str) -> Result<Response, reqwest::Error> {
+        let endpoint = format!("{}/author?name={name}", self.api_url_base);
 
-        self.client.get(endpoint).send().await
-    }
-
-    /// Check if mangadex is available
-    pub async fn check_status(&self) -> Result<Response, reqwest::Error> {
-        let endpoint = format!("{}/ping", self.api_url_base);
         self.client.get(endpoint).send().await
     }
 
     /// Used when downloading all chapters of a manga, request as much chapters as possible
-    pub async fn get_all_chapters_for_manga(&self, id: &str, language: Languages) -> Result<Response, reqwest::Error> {
+    async fn get_all_chapters_for_manga(&self, manga_id: &str, language: Languages) -> Result<Response, reqwest::Error> {
         let language = language.as_iso_code();
 
         let order = "order[volume]=asc&order[chapter]=asc";
 
         let endpoint = format!(
-            "{}/manga/{}/feed?limit=300&offset=0&{}&translatedLanguage[]={}&includes[]=scanlation_group&includeExternalUrl=0&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&contentRating[]=pornographic",
-            self.api_url_base, id, order, language
+            "{}/manga/{manga_id}/feed?limit=300&offset=0&{order}&translatedLanguage[]={language}&includes[]=scanlation_group&includeExternalUrl=0&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&contentRating[]=pornographic",
+            self.api_url_base
         );
 
         self.client.get(endpoint).timeout(StdDuration::from_secs(10)).send().await
+    }
+}
+
+impl MockMangadexClient {
+    pub fn new() -> Self {
+        MockMangadexClient {}
+    }
+
+    pub fn mock_json_response(data: impl Serialize) -> Result<Response, reqwest::Error> {
+        let mock_response = json!(data).to_string();
+        Ok(http::Response::builder().body(mock_response).unwrap().into())
+    }
+
+    pub fn mock_bytes_response() -> Result<Response, reqwest::Error> {
+        let image_bytes = include_bytes!("../../public/mangadex_support.jpg").to_vec();
+        let response = http::Response::builder().body(image_bytes).unwrap();
+        Ok(response.into())
+    }
+}
+
+impl ApiClient for MockMangadexClient {
+    async fn get_chapter_page(&self, _endpoint: &str, _file_name: &str) -> Result<Response, reqwest::Error> {
+        Self::mock_bytes_response()
+    }
+
+    async fn search_mangas(&self, _search_term: &str, _page: u32, _filters: Filters) -> Result<Response, reqwest::Error> {
+        Self::mock_json_response(SearchMangaResponse::default())
+    }
+
+    async fn get_cover_for_manga(&self, _id_manga: &str, _file_name: &str) -> Result<Response, reqwest::Error> {
+        Self::mock_bytes_response()
+    }
+
+    async fn get_cover_for_manga_lower_quality(&self, _id_manga: &str, _file_name: &str) -> Result<Response, reqwest::Error> {
+        Self::mock_bytes_response()
+    }
+
+    async fn get_manga_chapters(
+        &self,
+        _id: &str,
+        _page: u32,
+        _language: Languages,
+        _order: ChapterOrder,
+    ) -> Result<Response, reqwest::Error> {
+        Self::mock_json_response(ChapterResponse::default())
+    }
+
+    async fn get_chapter_pages(&self, _chapter_id: &str) -> Result<Response, reqwest::Error> {
+        Self::mock_json_response(ChapterPagesResponse::default())
+    }
+
+    async fn get_manga_statistics(&self, _id_manga: &str) -> Result<Response, reqwest::Error> {
+        Self::mock_json_response(MangaStatisticsResponse::default())
+    }
+
+    async fn get_popular_mangas(&self) -> Result<Response, reqwest::Error> {
+        Self::mock_json_response(SearchMangaResponse::default())
+    }
+
+    async fn get_recently_added(&self) -> Result<Response, reqwest::Error> {
+        Self::mock_json_response(SearchMangaResponse::default())
+    }
+
+    async fn get_one_manga(&self, _manga_id: &str) -> Result<Response, reqwest::Error> {
+        Self::mock_json_response(OneMangaResponse::default())
+    }
+
+    async fn get_latest_chapters(&self, _manga_id: &str) -> Result<Response, reqwest::Error> {
+        Self::mock_json_response(ChapterResponse::default())
+    }
+
+    async fn get_tags(&self) -> Result<Response, reqwest::Error> {
+        Self::mock_json_response(TagsResponse::default())
+    }
+
+    async fn get_authors(&self, _name: &str) -> Result<Response, reqwest::Error> {
+        Self::mock_json_response(AuthorsResponse::default())
+    }
+
+    async fn get_all_chapters_for_manga(&self, _id: &str, _language: Languages) -> Result<Response, reqwest::Error> {
+        Self::mock_json_response(ChapterResponse::default())
     }
 }
 
@@ -299,28 +398,52 @@ mod test {
     #[tokio::test]
     async fn get_cover_image_works() {
         let server = MockServer::start_async().await;
+        let client = MangadexClient::new(server.base_url().parse().unwrap(), server.base_url().parse().unwrap());
 
         let expected = "some_image_bytes".as_bytes();
+        let cover_file_name = "cover_image.png";
 
-        let request = server
+        let request_high_quality_cover = server
             .mock_async(|when, then| {
-                when.method(GET).path_contains("id_manga").header_exists("User-Agent");
+                when.method(GET)
+                    .path_contains("id_manga")
+                    .path_contains("cover_image.png.512.jpg")
+                    .header_exists("User-Agent");
 
                 then.status(200).header("content-type", "image/jpeg").body(expected);
             })
             .await;
 
-        let client = MangadexClient::new(server.base_url().parse().unwrap(), server.base_url().parse().unwrap());
-
         let response = client
-            .get_cover_for_manga("id_manga", "cover_image.png")
+            .get_cover_for_manga("id_manga", cover_file_name)
             .await
             .expect("could not get cover for a manga");
 
-        request.assert_async().await;
+        request_high_quality_cover.assert_async().await;
 
         let image_bytes = response.bytes().await.expect("could not get the bytes of the cover");
 
+        assert_eq!(expected, image_bytes);
+
+        let request_lower_quality_cover = server
+            .mock_async(|when, then| {
+                when.method(GET)
+                    .path_contains("id_manga")
+                    .path_contains("cover_image.png.256.jpg")
+                    .header_exists("User-Agent");
+
+                then.status(200).header("content-type", "image/jpeg").body(expected);
+            })
+            .await;
+
+        let response = client
+            .get_cover_for_manga_lower_quality("id_manga", cover_file_name)
+            .await
+            .expect("could not get cover for a manga");
+
+        request_lower_quality_cover.assert_async().await;
+
+        let image_bytes = response.bytes().await.expect("could not get the bytes of the cover");
         assert_eq!(expected, image_bytes);
     }
 

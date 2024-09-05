@@ -8,7 +8,7 @@ use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
 
 use crate::backend::authors::AuthorsResponse;
-use crate::backend::fetch::MangadexClient;
+use crate::backend::fetch::{ApiClient, MangadexClient};
 use crate::backend::filter::{
     Artist, Author, ContentRating, Filters, Languages, MagazineDemographic, PublicationStatus, SortBy, TagData,
 };

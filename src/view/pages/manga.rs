@@ -21,7 +21,7 @@ use crate::backend::database::{
 };
 use crate::backend::download::{download_chapter_cbz, download_chapter_epub, download_chapter_raw_images, DownloadChapter};
 use crate::backend::error_log::{self, write_to_error_log};
-use crate::backend::fetch::{MangadexClient, ITEMS_PER_PAGE_CHAPTERS};
+use crate::backend::fetch::{ApiClient, MangadexClient, ITEMS_PER_PAGE_CHAPTERS};
 use crate::backend::filter::Languages;
 use crate::backend::tui::Events;
 use crate::backend::{AppDirectories, ChapterPagesResponse, ChapterResponse, MangaStatisticsResponse, Statistics};
@@ -868,8 +868,10 @@ impl MangaPage {
             let cover_image_response = MangadexClient::global().get_cover_for_manga_lower_quality(&manga_id, &file_name).await;
 
             if let Ok(response) = cover_image_response {
-                let img = Reader::new(Cursor::new(response)).with_guessed_format().unwrap().decode().unwrap();
-                tx.send(MangaPageEvents::LoadCover(img)).ok();
+                if let Ok(bytes) = response.bytes().await {
+                    let img = Reader::new(Cursor::new(bytes)).with_guessed_format().unwrap().decode().unwrap();
+                    tx.send(MangaPageEvents::LoadCover(img)).ok();
+                }
             }
         });
     }

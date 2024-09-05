@@ -12,7 +12,7 @@ pub async fn search_chapters_operation(
     tx: UnboundedSender<MangaPageEvents>,
 ) {
     use crate::backend::error_log::{write_to_error_log, ErrorType};
-    use crate::backend::fetch::MangadexClient;
+    use crate::backend::fetch::{ApiClient, MangadexClient};
     use crate::backend::ChapterResponse;
 
     let response = MangadexClient::global()
@@ -57,7 +57,7 @@ pub async fn download_all_chapters_task(data: DownloadAllChaptersData) {
 
     use crate::backend::download::{download_chapter_cbz, download_chapter_epub, download_chapter_raw_images, DownloadChapter};
     use crate::backend::error_log::{self, write_to_error_log, ErrorType};
-    use crate::backend::fetch::MangadexClient;
+    use crate::backend::fetch::{ApiClient, MangadexClient};
     use crate::backend::{ChapterPagesResponse, ChapterResponse};
     use crate::common::PageType;
     use crate::config::{DownloadType, ImageQuality, MangaTuiConfig};
