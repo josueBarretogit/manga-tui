@@ -1,16 +1,33 @@
 use std::sync::Mutex;
 
 use chrono::Utc;
-use manga_tui::build_check_exists_function;
 use once_cell::sync::Lazy;
 use rusqlite::{params, Connection};
-use strum::Display;
+use strum::{Display, EnumIter};
 
+#[cfg(not(test))]
 use super::{AppDirectories, APP_DATA_DIR};
 
-// Todo! document database schema
+#[derive(Display, Debug, Clone, Copy)]
+pub enum MangaHistoryType {
+    PlanToRead,
+    ReadingHistory,
+}
+
+#[derive(Debug, Clone, Copy, Display, EnumIter)]
+pub enum Table {
+    #[strum(to_string = "mangas")]
+    Mangas,
+    #[strum(to_string = "history_types")]
+    HistoryTypes,
+    #[strum(to_string = "chapters")]
+    Chapters,
+    #[strum(to_string = "manga_history_union")]
+    MangaHistoryUnion,
+}
 
 pub static DBCONN: Lazy<Mutex<Option<Connection>>> = Lazy::new(|| {
+    #[cfg(not(test))]
     let conn = Connection::open(
         APP_DATA_DIR
             .as_ref()
@@ -18,6 +35,9 @@ pub static DBCONN: Lazy<Mutex<Option<Connection>>> = Lazy::new(|| {
             .join(AppDirectories::History.to_string())
             .join("manga-tui-history.db"),
     );
+
+    #[cfg(test)]
+    let conn = Connection::open_in_memory();
 
     if conn.is_err() {
         return Mutex::new(None);
@@ -101,8 +121,15 @@ pub static DBCONN: Lazy<Mutex<Option<Connection>>> = Lazy::new(|| {
     Mutex::new(Some(conn))
 });
 
-build_check_exists_function!(check_chapter_exists, "chapters");
-build_check_exists_function!(check_manga_already_exists, "mangas");
+fn check_exists(id: &str, conn: &Connection, table: Table) -> rusqlite::Result<bool> {
+    let table = table.to_string();
+    let exists: bool = conn.query_row(
+        format!("SELECT EXISTS(SELECT id FROM {table} WHERE id = ?1) as row_exists").as_str(),
+        rusqlite::params![id],
+        |row| row.get(0),
+    )?;
+    Ok(exists)
+}
 
 fn manga_is_reading(id: &str, conn: &Connection) -> rusqlite::Result<bool> {
     let history_type: i32 = conn.query_row(
@@ -166,12 +193,6 @@ fn update_or_insert_manga_most_recent_read(manga_id: &str, conn: &Connection) ->
     }
 }
 
-#[derive(Display)]
-pub enum MangaHistoryType {
-    PlanToRead,
-    ReadingHistory,
-}
-
 pub struct MangaReadingHistorySave<'a> {
     pub id: &'a str,
     pub title: &'a str,
@@ -193,7 +214,7 @@ pub fn save_history(manga_read: MangaReadingHistorySave<'_>) -> rusqlite::Result
     )?;
 
     // Check if manga already exists in table mangas
-    if check_manga_already_exists(manga_read.id, conn)? {
+    if check_exists(manga_read.id, conn, Table::Mangas)? {
         insert_chapter(
             ChapterInsert {
                 id: manga_read.chapter_id,
@@ -387,7 +408,7 @@ pub fn save_plan_to_read(manga: MangaPlanToReadSave<'_>) -> rusqlite::Result<()>
     )?;
 
     if !is_already_plan_to_read {
-        if check_manga_already_exists(manga.id, conn)? {
+        if check_exists(manga.id, conn, Table::Mangas)? {
             conn.execute("INSERT INTO manga_history_union VALUES (?1, ?2)", (manga.id, history_type))?;
             return Ok(());
         }
@@ -428,11 +449,11 @@ pub fn set_chapter_downloaded(chapter: SetChapterDownloaded<'_>) -> rusqlite::Re
         |row| row.get(0),
     )?;
 
-    if check_chapter_exists(chapter.id, conn)? && check_manga_already_exists(chapter.manga_id, conn)? {
+    if check_exists(chapter.id, conn, Table::Chapters)? && check_exists(chapter.manga_id, conn, Table::Mangas)? {
         update_or_insert_manga_most_recent_read(chapter.manga_id, conn)?;
         conn.execute("UPDATE chapters SET is_downloaded = ?1, is_read = ?2 WHERE id = ?3", params![true, true, chapter.id])?;
         Ok(())
-    } else if !check_manga_already_exists(chapter.manga_id, conn)? {
+    } else if !check_exists(chapter.manga_id, conn, Table::Mangas)? {
         insert_manga(
             MangaInsert {
                 id: chapter.manga_id,
@@ -469,6 +490,39 @@ pub fn set_chapter_downloaded(chapter: SetChapterDownloaded<'_>) -> rusqlite::Re
         )?;
 
         update_or_insert_manga_most_recent_read(chapter.manga_id, conn)?;
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod test {
+
+    use rusqlite::Result;
+    use strum::IntoEnumIterator;
+
+    use super::*;
+
+    fn check_tables_exist(connection: &Connection) -> Result<()> {
+        for table in Table::iter() {
+            connection.query_row(
+                format!("SELECT name FROM sqlite_master WHERE type='table' AND name='{}'", table).as_str(),
+                [],
+                |row| row.get::<_, String>(0),
+            )?;
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn database_is_initialized() -> Result<()> {
+        let binding = DBCONN.lock().unwrap();
+        let connection = binding.as_ref();
+        assert!(connection.is_some());
+
+        let connection = connection.unwrap();
+
+        check_tables_exist(connection)?;
 
         Ok(())
     }
