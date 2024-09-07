@@ -84,4 +84,8 @@ impl ImageState {
     pub fn get_image_state(&mut self, id: &str) -> Option<&mut Box<dyn Protocol>> {
         self.image_state.get_mut(id)
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.image_state.is_empty()
+    }
 }

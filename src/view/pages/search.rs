@@ -19,19 +19,22 @@ use tui_widget_list::ListState;
 
 use crate::backend::database::{save_plan_to_read, MangaPlanToReadSave};
 use crate::backend::error_log::{write_to_error_log, ErrorType};
-use crate::backend::fetch::{ApiClient, MangadexClient};
+#[cfg(not(test))]
+use crate::backend::fetch::MangadexClient;
+#[cfg(test)]
+use crate::backend::fetch::MockMangadexClient;
 use crate::backend::tui::Events;
 use crate::backend::SearchMangaResponse;
 use crate::common::{Artist, Author, ImageState};
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
-use crate::utils::{render_search_bar, search_manga_cover};
+use crate::utils::render_search_bar;
+use crate::view::tasks::search::{search_manga_covers, search_mangas_operation};
 use crate::view::widgets::filter_widget::state::FilterState;
 use crate::view::widgets::filter_widget::FilterWidget;
 use crate::view::widgets::search::*;
-use crate::view::widgets::{Component, ImageHandler, StatefulWidgetFrame};
+use crate::view::widgets::{Component, StatefulWidgetFrame};
 
-/// Determine wheter or not mangas are being searched
-/// if so then this should not make a request until the most recent one finishes
+/// The state in which `search` page is currently in
 #[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 enum PageState {
     SearchingMangas,
@@ -42,24 +45,16 @@ enum PageState {
     Normal,
 }
 
-/// These happens in the background
+/// These are events that do not require user input, like mouse or key events
+#[derive(Debug, PartialEq)]
 pub enum SearchPageEvents {
+    /// Indicate to search manga covers, if the terminal supports it
     SearchCovers,
     LoadCover(Option<DynamicImage>, String),
     LoadMangasFound(Option<SearchMangaResponse>),
 }
 
-impl ImageHandler for SearchPageEvents {
-    fn load(image: DynamicImage, id: String) -> Self {
-        Self::LoadCover(Some(image), id)
-    }
-
-    fn not_found(id: String) -> Self {
-        Self::LoadCover(None, id)
-    }
-}
-
-/// These are actions that the user actively does
+/// These are actions that the user actively via key events or mouse events
 #[derive(Debug, PartialEq, Eq)]
 pub enum SearchPageActions {
     StartTyping,
@@ -81,7 +76,6 @@ pub enum InputMode {
     Idle,
 }
 
-///This is the "page" where the user can search for a manga
 pub struct SearchPage {
     /// This tx "talks" to the app
     global_event_tx: UnboundedSender<Events>,
@@ -472,27 +466,17 @@ impl SearchPage {
         self.state = PageState::SearchingMangas;
 
         let page = self.mangas_found_list.page;
-
         let tx = self.local_event_tx.clone();
-
         let manga_to_search = self.search_bar.value().to_string();
-
         let filters = self.filter_state.filters.clone();
 
-        self.tasks.spawn(async move {
-            let search_response = MangadexClient::global().search_mangas(&manga_to_search, page, filters).await;
-            match search_response {
-                Ok(mangas_found) => {
-                    if let Ok(data) = mangas_found.json().await {
-                        tx.send(SearchPageEvents::LoadMangasFound(Some(data))).ok();
-                    }
-                },
-                Err(e) => {
-                    write_to_error_log(ErrorType::FromError(Box::new(e)));
-                    tx.send(SearchPageEvents::LoadMangasFound(None)).ok();
-                },
-            }
-        });
+        #[cfg(not(test))]
+        let api_client = MangadexClient::global().clone();
+
+        #[cfg(test)]
+        let api_client = MockMangadexClient::new();
+
+        self.tasks.spawn(search_mangas_operation(api_client, manga_to_search, page, filters, tx));
     }
 
     fn search_next_page(&mut self) {
@@ -554,10 +538,15 @@ impl SearchPage {
             let manga_id = item.manga.id.clone();
             let tx = self.local_event_tx.clone();
 
-            match item.manga.img_url.as_ref() {
+            #[cfg(not(test))]
+            let api_client = MangadexClient::global().clone();
+
+            #[cfg(test)]
+            let api_client = MockMangadexClient::new();
+
+            match item.manga.img_url.as_ref().cloned() {
                 Some(file_name) => {
-                    let file_name = file_name.clone();
-                    search_manga_cover(file_name, manga_id, &mut self.tasks, tx);
+                    self.tasks.spawn(search_manga_covers(api_client, manga_id, file_name, tx));
                 },
                 None => {
                     tx.send(SearchPageEvents::LoadCover(None, manga_id)).ok();
@@ -599,7 +588,74 @@ mod test {
     use ratatui::buffer::Buffer;
 
     use super::*;
+    use crate::backend::{Data, MangaSearchAttributes, MangaSearchRelationship};
     use crate::view::widgets::press_key;
+
+    //#[tokio::test]
+    //async fn should_not_search_covers_when_picker_is_none() {
+    //    let (tx, mut rx) = mpsc::unbounded_channel::<Events>();
+    //    let mut search_page = SearchPage::init(tx, None);
+    //}
+
+    #[tokio::test]
+    async fn search_page_events() {
+        let (tx, mut rx) = mpsc::unbounded_channel::<Events>();
+        let mut search_page = SearchPage::init(tx, Some(Picker::new((8, 9))));
+
+        let mock_search_result = SearchMangaResponse {
+            data: vec![
+                Data {
+                    id: "manga_id_1".to_string(),
+                    relationships: vec![MangaSearchRelationship {
+                        type_field: "cover_art".to_string(),
+
+                        attributes: Some(MangaSearchAttributes {
+                            file_name: Some("file_name.jpg".to_string()),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                },
+                Data {
+                    id: "manga_id_2".to_string(),
+                    relationships: vec![MangaSearchRelationship {
+                        type_field: "cover_art".to_string(),
+
+                        attributes: Some(MangaSearchAttributes {
+                            file_name: Some("file_name.jpg".to_string()),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+
+        // assuming a search was made
+        search_page
+            .local_event_tx
+            .send(SearchPageEvents::LoadMangasFound(Some(mock_search_result)))
+            .ok();
+
+        search_page.tick();
+
+        // On first tick page should receive the SearchCovers event
+        search_page.tick();
+
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        // load first manga cover
+        search_page.tick();
+
+        // load second manga cover
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        search_page.tick();
+
+        assert!(!search_page.manga_cover_state.is_empty());
+        assert!(search_page.manga_cover_state.get_image_state("manga_id_2").is_some())
+    }
 
     #[tokio::test]
     async fn search_page_key_events() {

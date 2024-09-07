@@ -1,6 +1,8 @@
 use std::io::Cursor;
 
+use bytes::Bytes;
 use image::io::Reader;
+use image::DynamicImage;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Style, Stylize};
 use ratatui::text::{Line, Span};
@@ -70,6 +72,10 @@ pub fn search_manga_cover<IM: ImageHandler>(
             },
         }
     });
+}
+
+pub fn decode_bytes_to_image(data: Bytes) -> Result<DynamicImage, image::ImageError> {
+    Reader::new(Cursor::new(data)).with_guessed_format()?.decode()
 }
 
 pub fn from_manga_response(value: Data) -> Manga {
