@@ -12,12 +12,13 @@ use ratatui::Frame;
 use ratatui_image::picker::Picker;
 use ratatui_image::protocol::Protocol;
 use ratatui_image::{Image, Resize};
+use rusqlite::config::DbConfig;
 use strum::Display;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
 use crate::backend::database::{
-    get_chapters_history_status, save_history, set_chapter_downloaded, MangaReadingHistorySave, SetChapterDownloaded,
+    get_chapters_history_status, save_history, set_chapter_downloaded, MangaReadingHistorySave, SetChapterDownloaded, DBCONN,
 };
 use crate::backend::download::{download_chapter_cbz, download_chapter_epub, download_chapter_raw_images, DownloadChapter};
 use crate::backend::error_log::{self, write_to_error_log};
@@ -537,13 +538,18 @@ impl MangaPage {
                         Ok(response) => {
                             if let Ok(response) = response.json().await {
                                 if !is_read {
-                                    let save_response = save_history(MangaReadingHistorySave {
-                                        id: &manga_id,
-                                        title: &title,
-                                        img_url: img_url.as_deref(),
-                                        chapter_id: &id_chapter,
-                                        chapter_title: &chapter_title,
-                                    });
+                                    let binding = DBCONN.lock().unwrap();
+                                    let conn = binding.as_ref().unwrap();
+                                    let save_response = save_history(
+                                        MangaReadingHistorySave {
+                                            id: &manga_id,
+                                            title: &title,
+                                            img_url: img_url.as_deref(),
+                                            chapter_id: &id_chapter,
+                                            chapter_title: &chapter_title,
+                                        },
+                                        conn,
+                                    );
 
                                     if let Err(e) = save_response {
                                         write_to_error_log(error_log::ErrorType::FromError(Box::new(e)));
@@ -624,7 +630,9 @@ impl MangaPage {
     }
 
     fn check_chapters_read(&mut self) {
-        let history = get_chapters_history_status(&self.manga.id);
+        let binding = DBCONN.lock().unwrap();
+        let conn = binding.as_ref().unwrap();
+        let history = get_chapters_history_status(&self.manga.id, conn);
         match history {
             Ok(his) => {
                 if let Some(chapters) = self.chapters.as_mut() {
@@ -723,13 +731,19 @@ impl MangaPage {
     }
 
     fn save_download_status(&mut self, id_chapter: String, title: String) {
-        let save_download_operation = set_chapter_downloaded(SetChapterDownloaded {
-            id: &id_chapter,
-            title: &title,
-            manga_id: &self.manga.id,
-            manga_title: &self.manga.title,
-            img_url: self.manga.img_url.as_deref(),
-        });
+        let binding = DBCONN.lock().unwrap();
+        let conn = binding.as_ref().unwrap();
+
+        let save_download_operation = set_chapter_downloaded(
+            SetChapterDownloaded {
+                id: &id_chapter,
+                title: &title,
+                manga_id: &self.manga.id,
+                manga_title: &self.manga.title,
+                img_url: self.manga.img_url.as_deref(),
+            },
+            conn,
+        );
 
         if let Err(e) = save_download_operation {
             write_to_error_log(error_log::ErrorType::FromError(Box::new(e)));

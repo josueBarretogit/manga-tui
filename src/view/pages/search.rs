@@ -17,7 +17,7 @@ use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
 use tui_widget_list::ListState;
 
-use crate::backend::database::{save_plan_to_read, MangaPlanToReadSave};
+use crate::backend::database::{save_plan_to_read, MangaPlanToReadSave, DBCONN};
 use crate::backend::error_log::{write_to_error_log, ErrorType};
 #[cfg(not(test))]
 use crate::backend::fetch::MangadexClient;
@@ -373,11 +373,16 @@ impl SearchPage {
 
     fn plan_to_read(&mut self) {
         if let Some(item) = self.get_current_manga_selected() {
-            let plan_to_read_operation = save_plan_to_read(MangaPlanToReadSave {
-                id: &item.manga.id,
-                title: &item.manga.title,
-                img_url: item.manga.img_url.as_deref(),
-            });
+            let binding = DBCONN.lock().unwrap();
+            let conn = binding.as_ref().unwrap();
+            let plan_to_read_operation = save_plan_to_read(
+                MangaPlanToReadSave {
+                    id: &item.manga.id,
+                    title: &item.manga.title,
+                    img_url: item.manga.img_url.as_deref(),
+                },
+                conn,
+            );
 
             match plan_to_read_operation {
                 Ok(()) => {

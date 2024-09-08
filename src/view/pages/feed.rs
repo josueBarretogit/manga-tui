@@ -11,7 +11,7 @@ use tokio::task::JoinSet;
 use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
 
-use crate::backend::database::{get_history, MangaHistoryResponse, MangaHistoryType};
+use crate::backend::database::{get_history, MangaHistoryResponse, MangaHistoryType, DBCONN};
 use crate::backend::error_log::{write_to_error_log, ErrorType};
 use crate::backend::feed::OneMangaResponse;
 use crate::backend::fetch::{ApiClient, MangadexClient};
@@ -291,7 +291,9 @@ impl Feed {
         };
 
         self.tasks.spawn(async move {
-            let maybe_reading_history = get_history(history_type, page, &search_term);
+            let binding = DBCONN.lock().unwrap();
+            let conn = binding.as_ref().unwrap();
+            let maybe_reading_history = get_history(conn, history_type, page, &search_term);
 
             match maybe_reading_history {
                 Ok(history) => {
