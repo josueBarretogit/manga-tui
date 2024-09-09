@@ -2230,6 +2230,7 @@ dependencies = [
  "toml 0.8.19",
  "tui-input",
  "tui-widget-list",
+ "uuid",
  "windows-sys 0.59.0",
  "zip 2.1.6",
 ]
@@ -3908,6 +3909,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81dfa00651efa65069b0b6b651f4aaa31ba9e3c3ce0137aaad053604ee7e0314"
 dependencies = [
  "getrandom",
+ "rand",
 ]
 
 [[package]]

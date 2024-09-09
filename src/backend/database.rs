@@ -189,6 +189,7 @@ fn insert_manga_in_reading_history(manga_id: &str, conn: &Connection) -> rusqlit
     Ok(())
 }
 
+/// Insert a manga in the reading history type or update the `last_read` field
 fn update_or_insert_manga_most_recent_read(manga_id: &str, conn: &Connection) -> rusqlite::Result<()> {
     if !manga_is_reading(manga_id, conn)? {
         insert_manga_in_reading_history(manga_id, conn)?;
@@ -297,19 +298,24 @@ pub struct MangaHistoryResponse {
     pub page: u32,
     pub total_items: u32,
 }
+
+pub struct GetHistoryArgs<'a> {
+    pub conn: &'a Connection,
+    pub hist_type: MangaHistoryType,
+    pub page: u32,
+    pub search: &'a str,
+    pub items_per_page: u32,
+}
 /// This is used in the `feed` page to retrieve the mangas the user is currently reading
-pub fn get_history(
-    conn: &Connection,
-    hist_type: MangaHistoryType,
-    page: u32,
-    search: &str,
-) -> rusqlite::Result<MangaHistoryResponse> {
-    let offset = (page - 1) * 5;
+pub fn get_history(args: GetHistoryArgs<'_>) -> rusqlite::Result<MangaHistoryResponse> {
+    let items_per_page = args.items_per_page;
+    let offset = (args.page - 1) * items_per_page;
 
     let history_type_id: i32 =
-        conn.query_row("SELECT id from history_types WHERE name = ?1", params![hist_type.to_string()], |row| row.get(0))?;
+        args.conn
+            .query_row("SELECT id from history_types WHERE name = ?1", params![args.hist_type.to_string()], |row| row.get(0))?;
 
-    let total_mangas: u32 = conn.query_row(
+    let total_mangas: u32 = args.conn.query_row(
         "
                 SELECT COUNT(*) from mangas
                 INNER JOIN manga_history_union ON mangas.id = manga_history_union.manga_id 
@@ -318,7 +324,7 @@ pub fn get_history(
         |row| row.get(0),
     )?;
 
-    let mut get_statement = conn.prepare(
+    let mut get_statement = args.conn.prepare(
         "SELECT  mangas.id, mangas.title from mangas 
                      INNER JOIN manga_history_union ON mangas.id = manga_history_union.manga_id 
                      WHERE manga_history_union.type_id = ?1
@@ -326,7 +332,7 @@ pub fn get_history(
                      LIMIT 5 OFFSET ?2",
     )?;
 
-    let mut get_statement_with_search_term = conn.prepare(
+    let mut get_statement_with_search_term = args.conn.prepare(
         "SELECT  mangas.id, mangas.title from mangas 
                      INNER JOIN manga_history_union ON mangas.id = manga_history_union.manga_id 
                      WHERE manga_history_union.type_id = ?1 AND LOWER(mangas.title) LIKE '%' || ?2 || '%'
@@ -336,7 +342,7 @@ pub fn get_history(
 
     let mut manga_history: Vec<MangaHistory> = vec![];
 
-    if search.trim().is_empty() {
+    if args.search.trim().is_empty() {
         let iter_mangas = get_statement.query_map(params![history_type_id, offset], |row| {
             Ok(MangaHistory {
                 id: row.get(0)?,
@@ -352,25 +358,27 @@ pub fn get_history(
         Ok(MangaHistoryResponse {
             mangas: manga_history,
             total_items: total_mangas,
-            page,
+            page: args.page,
         })
     } else {
-        let total_mangas_with_search: u32 = conn.query_row(
+        let total_mangas_with_search: u32 = args.conn.query_row(
             "
                 SELECT COUNT(*) from mangas
                 INNER JOIN manga_history_union ON mangas.id = manga_history_union.manga_id 
                 WHERE manga_history_union.type_id = ?1 AND LOWER(mangas.title) LIKE '%' || ?2 || '%'",
-            params![history_type_id, search.trim().to_lowercase()],
+            params![history_type_id, args.search.trim().to_lowercase()],
             |row| row.get(0),
         )?;
-        let iter_mangas =
-            get_statement_with_search_term.query_map(params![history_type_id, search.trim().to_lowercase(), offset], |row| {
+        let iter_mangas = get_statement_with_search_term.query_map(
+            params![history_type_id, args.search.trim().to_lowercase(), offset],
+            |row| {
                 Ok(MangaHistory {
                     id: row.get(0)?,
                     title: row.get(1)?,
                     // img_url: row.get(2)?,
                 })
-            })?;
+            },
+        )?;
 
         for manga in iter_mangas {
             manga_history.push(manga?);
@@ -379,7 +387,7 @@ pub fn get_history(
         Ok(MangaHistoryResponse {
             mangas: manga_history,
             total_items: total_mangas_with_search,
-            page,
+            page: args.page,
         })
     }
 }
@@ -495,6 +503,7 @@ mod test {
     use pretty_assertions::assert_eq;
     use rusqlite::Result;
     use strum::IntoEnumIterator;
+    use uuid::Uuid;
 
     use super::*;
 
@@ -518,6 +527,7 @@ mod test {
     struct GetChapters {
         id: String,
         title: String,
+        manga_id: String,
         is_read: bool,
         is_downloaded: bool,
     }
@@ -531,8 +541,9 @@ mod test {
             Ok(GetChapters {
                 id: row.get(0)?,
                 title: row.get(1)?,
-                is_read: row.get(2)?,
-                is_downloaded: row.get(3)?,
+                manga_id: row.get(2)?,
+                is_read: row.get(3)?,
+                is_downloaded: row.get(4)?,
             })
         })?;
 
@@ -561,9 +572,13 @@ mod test {
         let binding = DBCONN.lock().expect("could not get db conn");
         let connection = binding.as_ref().unwrap();
 
+        let manga_id = Uuid::new_v4().to_string();
+
+        let chapter_id = Uuid::new_v4().to_string();
+
         insert_manga(
             MangaInsert {
-                id: "some_manga_id",
+                id: &manga_id,
                 title: "some_title",
                 img_url: None,
             },
@@ -572,9 +587,9 @@ mod test {
 
         insert_chapter(
             ChapterInsert {
-                id: "some_id",
+                id: &chapter_id,
                 title: "some_title",
-                manga_id: "some_manga_id",
+                manga_id: &manga_id,
                 is_read: true,
                 is_downloaded: false,
             },
@@ -588,21 +603,22 @@ mod test {
     fn save_manga_plan_to_read_which_does_not_exist() -> Result<()> {
         let binding = DBCONN.lock().expect("could not get db conn");
         let connection = binding.as_ref().unwrap();
-        let manga_id = "plan_to_save_manga";
+        let manga_id = Uuid::new_v4().to_string();
+
         save_plan_to_read(
             MangaPlanToReadSave {
-                id: manga_id,
+                id: &manga_id,
                 title: "some_title",
                 img_url: None,
             },
             connection,
         )?;
 
-        let manga_was_saved = check_exists(manga_id, connection, Table::Mangas)?;
+        let manga_was_saved = check_exists(&manga_id, connection, Table::Mangas)?;
 
         assert!(manga_was_saved, "manga should have been saved");
 
-        let manga_is_plan_to_read = manga_is_plan_to_read(manga_id, connection)?;
+        let manga_is_plan_to_read = manga_is_plan_to_read(&manga_id, connection)?;
 
         assert!(manga_is_plan_to_read, "the manga was not plan to read");
 
@@ -613,31 +629,31 @@ mod test {
     fn save_already_existing_manga_plan_to_read() -> Result<()> {
         let binding = DBCONN.lock().expect("could not get db conn");
         let connection = binding.as_ref().unwrap();
-        let manga_id = "manga_already_exist";
+        let manga_id = Uuid::new_v4().to_string();
 
         insert_manga(
             MangaInsert {
-                id: manga_id,
+                id: &manga_id,
                 title: "some_title",
                 img_url: None,
             },
             connection,
         )?;
 
-        let manga_should_not_be_plan_to_read = manga_is_plan_to_read(manga_id, connection)?;
+        let manga_should_not_be_plan_to_read = manga_is_plan_to_read(&manga_id, connection)?;
 
         assert!(!manga_should_not_be_plan_to_read);
 
         save_plan_to_read(
             MangaPlanToReadSave {
-                id: manga_id,
+                id: &manga_id,
                 title: "some_title",
                 img_url: None,
             },
             connection,
         )?;
 
-        let manga_should_be_plan_to_read = manga_is_plan_to_read(manga_id, connection)?;
+        let manga_should_be_plan_to_read = manga_is_plan_to_read(&manga_id, connection)?;
 
         assert!(manga_should_be_plan_to_read);
 
@@ -649,22 +665,22 @@ mod test {
         let binding = DBCONN.lock().expect("could not get db conn");
         let connection = binding.as_ref().unwrap();
 
-        let manga_id = "manga_is_reading";
-        let chapter_id = "chapter_id_is_reading";
+        let manga_id = Uuid::new_v4().to_string();
+        let chapter_id = Uuid::new_v4().to_string();
 
         save_history(
             MangaReadingHistorySave {
-                id: manga_id,
+                id: &manga_id,
                 title: "some_title",
                 img_url: None,
-                chapter_id,
+                chapter_id: &chapter_id,
                 chapter_title: "some_chapter_title",
             },
             connection,
         )?;
 
-        let manga_was_created = check_exists(manga_id, connection, Table::Mangas)?;
-        let chapter_was_created = check_exists(chapter_id, connection, Table::Chapters)?;
+        let manga_was_created = check_exists(&manga_id, connection, Table::Mangas)?;
+        let chapter_was_created = check_exists(&chapter_id, connection, Table::Chapters)?;
 
         assert!(manga_was_created);
 
@@ -678,13 +694,13 @@ mod test {
         let binding = DBCONN.lock().expect("could not get db conn");
         let connection = binding.as_ref().unwrap();
 
-        let manga_id = "manga_with_chapters_that_are_being_read";
-        let chapter_id_not_read = "chapter_not_read";
-        let chapter_id_read = "chapter_that_is_read";
+        let manga_id = Uuid::new_v4().to_string();
+        let chapter_id_not_read = Uuid::new_v4().to_string();
+        let chapter_id_read = Uuid::new_v4().to_string();
 
         insert_manga(
             MangaInsert {
-                id: manga_id,
+                id: &manga_id,
                 title: "some_manga",
                 img_url: None,
             },
@@ -693,9 +709,9 @@ mod test {
 
         insert_chapter(
             ChapterInsert {
-                id: chapter_id_not_read,
+                id: &chapter_id_not_read,
                 title: "some_chapter",
-                manga_id,
+                manga_id: &manga_id,
                 is_read: false,
                 is_downloaded: false,
             },
@@ -704,16 +720,16 @@ mod test {
 
         insert_chapter(
             ChapterInsert {
-                id: chapter_id_read,
+                id: &chapter_id_read,
                 title: "some_chapter",
-                manga_id,
+                manga_id: &manga_id,
                 is_read: true,
                 is_downloaded: false,
             },
             connection,
         )?;
 
-        let chapters = get_chapters_history_status(manga_id, connection)?;
+        let chapters = get_chapters_history_status(&manga_id, connection)?;
 
         assert!(!chapters.is_empty());
 
@@ -737,30 +753,38 @@ mod test {
         let binding = DBCONN.lock().expect("could not get db conn");
         let connection = binding.as_ref().unwrap();
 
-        let manga_is_in_reading_history_id = "manga_in_reading_history";
-        let manga_not_in_reading_history_id = "not_ind_reading_history";
+        let manga_is_in_reading_history_id = Uuid::new_v4().to_string();
+        let manga_not_in_reading_history_id = Uuid::new_v4().to_string();
 
         insert_manga(
             MangaInsert {
-                id: manga_is_in_reading_history_id,
+                id: &manga_is_in_reading_history_id,
                 title: "some_title",
                 img_url: None,
             },
             connection,
         )?;
 
-        insert_manga_in_reading_history(manga_is_in_reading_history_id, connection)?;
+        insert_manga_in_reading_history(&manga_is_in_reading_history_id, connection)?;
 
         insert_manga(
             MangaInsert {
-                id: manga_not_in_reading_history_id,
+                id: &manga_not_in_reading_history_id,
                 title: "some_title",
                 img_url: None,
             },
             connection,
         )?;
 
-        let history = get_history(connection, MangaHistoryType::ReadingHistory, 1, "")?;
+        let history = get_history(GetHistoryArgs {
+            conn: connection,
+            hist_type: MangaHistoryType::ReadingHistory,
+            page: 1,
+            search: "",
+            items_per_page: 100,
+        })?;
+
+        println!("{}", history.mangas.len());
 
         assert!(history.total_items > 0);
 
@@ -776,32 +800,38 @@ mod test {
         let binding = DBCONN.lock().expect("could not get db conn");
         let connection = binding.as_ref().unwrap();
 
-        let manga_id_filtered_out = "manga_id_filtered";
-        let manga_id_included_in_search = "manga_id_included";
+        let manga_id_filtered_out = Uuid::new_v4().to_string();
+        let manga_id_included_in_search = Uuid::new_v4().to_string();
 
         insert_manga(
             MangaInsert {
-                id: manga_id_filtered_out,
+                id: &manga_id_filtered_out,
                 title: "filtered_out",
                 img_url: None,
             },
             connection,
         )?;
 
-        insert_manga_in_reading_history(manga_id_filtered_out, connection)?;
+        insert_manga_in_reading_history(&manga_id_filtered_out, connection)?;
 
         insert_manga(
             MangaInsert {
-                id: manga_id_included_in_search,
+                id: &manga_id_included_in_search,
                 title: "included",
                 img_url: None,
             },
             connection,
         )?;
 
-        insert_manga_in_reading_history(manga_id_included_in_search, connection)?;
+        insert_manga_in_reading_history(&manga_id_included_in_search, connection)?;
 
-        let history = get_history(connection, MangaHistoryType::ReadingHistory, 1, "included")?;
+        let history = get_history(GetHistoryArgs {
+            conn: connection,
+            hist_type: MangaHistoryType::ReadingHistory,
+            page: 1,
+            search: "included",
+            items_per_page: 100,
+        })?;
 
         assert!(history.total_items > 0);
 
@@ -818,21 +848,83 @@ mod test {
         let binding = DBCONN.lock().expect("could not get db conn");
         let connection = binding.as_ref().unwrap();
 
-        let chapter_id = "chapter_id_downloaded";
-        let manga_id = "manga_with_chapter_downloaded";
+        let chapter_id = Uuid::new_v4().to_string();
+        let manga_id = Uuid::new_v4().to_string();
 
         set_chapter_downloaded(
             SetChapterDownloaded {
-                id: chapter_id,
+                id: &chapter_id,
                 title: "some_title",
-                manga_id,
+                manga_id: &manga_id,
                 manga_title: "some_title",
                 img_url: None,
             },
             connection,
         )?;
 
-        assert!(check_exists(manga_id, connection, Table::Mangas)?);
+        assert!(check_exists(&manga_id, connection, Table::Mangas)?);
+
+        let chapters = get_all_chapters(connection)?;
+
+        let chapter_downloaded = chapters
+            .iter()
+            .find(|chap| chap.id == chapter_id)
+            .expect("chapter downloaded was nost found");
+
+        assert!(chapter_downloaded.is_downloaded);
+
+        Ok(())
+    }
+
+    // Test the case when both manga and chapter already exist in database
+    #[test]
+    fn save_chapter_download_status_manga_and_chapter_exists() -> Result<()> {
+        let binding = DBCONN.lock().expect("could not get db conn");
+        let connection = binding.as_ref().unwrap();
+
+        let chapter_id_exist_in_database = Uuid::new_v4().to_string();
+        let manga_id_exist_in_database = Uuid::new_v4().to_string();
+
+        insert_manga(
+            MangaInsert {
+                id: &manga_id_exist_in_database,
+                title: "some_title",
+                img_url: None,
+            },
+            connection,
+        )?;
+
+        insert_chapter(
+            ChapterInsert {
+                id: &chapter_id_exist_in_database,
+                title: "some_title",
+                manga_id: &manga_id_exist_in_database,
+                is_read: false,
+                is_downloaded: false,
+            },
+            connection,
+        )?;
+
+        set_chapter_downloaded(
+            SetChapterDownloaded {
+                id: &chapter_id_exist_in_database,
+                title: "some_title",
+                manga_id: &manga_id_exist_in_database,
+                manga_title: "some_title",
+                img_url: None,
+            },
+            connection,
+        )?;
+
+        let chapters = get_all_chapters(connection)?;
+
+        let chapter_downloaded = chapters
+            .iter()
+            .find(|chap| chap.id == chapter_id_exist_in_database)
+            .expect("chapter downloaded was nost found");
+
+        assert!(chapter_downloaded.is_read);
+        assert!(chapter_downloaded.is_downloaded);
 
         Ok(())
     }
