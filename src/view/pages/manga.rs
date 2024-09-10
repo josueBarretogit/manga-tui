@@ -524,7 +524,7 @@ impl MangaPage {
                 chapter_selected.set_normal_state();
                 let id_chapter = chapter_selected.id.clone();
                 let chapter_title = chapter_selected.title.clone();
-                let is_read = chapter_selected.is_read;
+                let is_already_reading = chapter_selected.is_read;
                 let manga_id = self.manga.id.clone();
                 let title = self.manga.title.clone();
                 let img_url = self.manga.img_url.clone();
@@ -536,23 +536,22 @@ impl MangaPage {
                     match chapter_response {
                         Ok(response) => {
                             if let Ok(response) = response.json().await {
-                                if !is_read {
-                                    let binding = DBCONN.lock().unwrap();
-                                    let conn = binding.as_ref().unwrap();
-                                    let save_response = save_history(
-                                        MangaReadingHistorySave {
-                                            id: &manga_id,
-                                            title: &title,
-                                            img_url: img_url.as_deref(),
-                                            chapter_id: &id_chapter,
-                                            chapter_title: &chapter_title,
-                                        },
-                                        conn,
-                                    );
+                                let binding = DBCONN.lock().unwrap();
+                                let conn = binding.as_ref().unwrap();
+                                let save_response = save_history(
+                                    MangaReadingHistorySave {
+                                        id: &manga_id,
+                                        title: &title,
+                                        img_url: img_url.as_deref(),
+                                        chapter_id: &id_chapter,
+                                        chapter_title: &chapter_title,
+                                        is_already_reading,
+                                    },
+                                    conn,
+                                );
 
-                                    if let Err(e) = save_response {
-                                        write_to_error_log(error_log::ErrorType::FromError(Box::new(e)));
-                                    }
+                                if let Err(e) = save_response {
+                                    write_to_error_log(error_log::ErrorType::FromError(Box::new(e)));
                                 }
 
                                 tx.send(Events::ReadChapter(response)).ok();

@@ -1,4 +1,5 @@
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent, MouseEventKind};
+use manga_tui::SearchTerm;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Margin, Rect};
 use ratatui::style::{Color, Style};
@@ -298,7 +299,7 @@ impl Feed {
                 conn,
                 hist_type: history_type,
                 page,
-                search: &search_term,
+                search: SearchTerm::trimmed_lowercased(&search_term),
                 items_per_page: 10,
             });
 
