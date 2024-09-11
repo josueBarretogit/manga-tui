@@ -1,3 +1,4 @@
+use manga_tui::SearchTerm;
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::backend::error_log::{write_to_error_log, ErrorType};
@@ -9,12 +10,12 @@ use crate::view::pages::search::SearchPageEvents;
 /// This function searchs for mangas and send a `SearchPageEvents::LoadMangasFound` event
 pub async fn search_mangas_operation(
     api_client: impl ApiClient,
-    manga_title: String,
+    search_by_manga_title: Option<SearchTerm>,
     page: u32,
     filters: Filters,
     tx: UnboundedSender<SearchPageEvents>,
 ) {
-    let search_response = api_client.search_mangas(&manga_title, page, filters).await;
+    let search_response = api_client.search_mangas(search_by_manga_title, page, filters).await;
     match search_response {
         Ok(mangas_found) => {
             if let Ok(data) = mangas_found.json().await {
@@ -58,7 +59,7 @@ mod test {
 
         let expected = SearchMangaResponse::default();
 
-        search_mangas_operation(MockMangadexClient::new(), String::default(), 1, Filters::default(), tx).await;
+        search_mangas_operation(MockMangadexClient::new(), None, 1, Filters::default(), tx).await;
 
         let event = rx.recv().await.expect("LoadMangasFound event not sent");
 

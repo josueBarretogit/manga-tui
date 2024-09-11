@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 /// Shortcut for: Path::new($path).try_exists().is_ok_and(|is_true| is_true)
 #[macro_export]
 macro_rules! exists {
@@ -6,8 +8,16 @@ macro_rules! exists {
     };
 }
 
-#[derive(Debug)]
+/// This type ensures that the inner `String` is never an empty string, it is also lowercased and
+/// trimmed to be used in searches
+#[derive(Debug, Default)]
 pub struct SearchTerm(String);
+
+impl Display for SearchTerm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.get())
+    }
+}
 
 impl SearchTerm {
     pub fn trimmed_lowercased(search_term: &str) -> Option<Self> {

@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use crossterm::event::{self, KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 use image::DynamicImage;
+use manga_tui::SearchTerm;
 use ratatui::layout::{Constraint, Direction, Layout, Margin, Rect};
 use ratatui::style::{Color, Style, Stylize};
 use ratatui::text::{Line, Span, ToSpan};
@@ -472,7 +473,7 @@ impl SearchPage {
 
         let page = self.mangas_found_list.page;
         let tx = self.local_event_tx.clone();
-        let manga_to_search = self.search_bar.value().to_string();
+        let manga_to_search = SearchTerm::trimmed_lowercased(self.search_bar.value());
         let filters = self.filter_state.filters.clone();
 
         #[cfg(not(test))]

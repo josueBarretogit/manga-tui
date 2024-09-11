@@ -2,6 +2,7 @@ use std::time::Duration as StdDuration;
 
 use bytes::Bytes;
 use chrono::Months;
+use manga_tui::SearchTerm;
 use once_cell::sync::OnceCell;
 use reqwest::{Client, Response, Url};
 use serde::Serialize;
@@ -18,7 +19,8 @@ use crate::view::pages::manga::ChapterOrder;
 pub trait ApiClient {
     async fn get_chapter_page(&self, endpoint: &str, file_name: &str) -> Result<Response, reqwest::Error>;
 
-    async fn search_mangas(&self, search_term: &str, page: u32, filters: Filters) -> Result<Response, reqwest::Error>;
+    async fn search_mangas(&self, search_term: Option<SearchTerm>, page: u32, filters: Filters)
+    -> Result<Response, reqwest::Error>;
 
     async fn get_cover_for_manga(&self, id_manga: &str, file_name: &str) -> Result<Response, reqwest::Error>;
 
@@ -46,7 +48,7 @@ pub trait ApiClient {
 
     async fn get_tags(&self) -> Result<Response, reqwest::Error>;
 
-    async fn get_authors(&self, name: &str) -> Result<Response, reqwest::Error>;
+    async fn get_authors(&self, name_to_search: SearchTerm) -> Result<Response, reqwest::Error>;
 
     async fn get_all_chapters_for_manga(&self, id: &str, language: Languages) -> Result<Response, reqwest::Error>;
 }
@@ -125,10 +127,19 @@ impl ApiClient for MangadexClient {
             .await
     }
 
-    async fn search_mangas(&self, search_term: &str, page: u32, filters: Filters) -> Result<Response, reqwest::Error> {
+    async fn search_mangas(
+        &self,
+        search_term: Option<SearchTerm>,
+        page: u32,
+        filters: Filters,
+    ) -> Result<Response, reqwest::Error> {
         let offset = (page - 1) * ITEMS_PER_PAGE_SEARCH;
 
-        let search_by_title = if search_term.trim().is_empty() { "".to_string() } else { format!("title={search_term}") };
+        let search_by_title = match search_term {
+            Some(search) => format!("title={}", search),
+            None => "".to_string(),
+        };
+
         let filters = filters.into_param();
 
         let url = format!(
@@ -238,8 +249,8 @@ impl ApiClient for MangadexClient {
     }
 
     /// Used in `FilterWidget` to search an author and artist
-    async fn get_authors(&self, name: &str) -> Result<Response, reqwest::Error> {
-        let endpoint = format!("{}/author?name={name}", self.api_url_base);
+    async fn get_authors(&self, name_to_search: SearchTerm) -> Result<Response, reqwest::Error> {
+        let endpoint = format!("{}/author?name={name_to_search}", self.api_url_base);
 
         self.client.get(endpoint).send().await
     }
@@ -281,7 +292,12 @@ impl ApiClient for MockMangadexClient {
         Self::mock_bytes_response()
     }
 
-    async fn search_mangas(&self, _search_term: &str, _page: u32, _filters: Filters) -> Result<Response, reqwest::Error> {
+    async fn search_mangas(
+        &self,
+        _search_term: Option<SearchTerm>,
+        _page: u32,
+        _filters: Filters,
+    ) -> Result<Response, reqwest::Error> {
         Self::mock_json_response(SearchMangaResponse::default())
     }
 
@@ -331,7 +347,7 @@ impl ApiClient for MockMangadexClient {
         Self::mock_json_response(TagsResponse::default())
     }
 
-    async fn get_authors(&self, _name: &str) -> Result<Response, reqwest::Error> {
+    async fn get_authors(&self, _name: SearchTerm) -> Result<Response, reqwest::Error> {
         Self::mock_json_response(AuthorsResponse::default())
     }
 
@@ -384,7 +400,7 @@ mod test {
         let client = MangadexClient::new(server.base_url().parse().unwrap(), server.base_url().parse().unwrap());
 
         let response = client
-            .search_mangas("some title", 1, Filters::default())
+            .search_mangas(SearchTerm::trimmed_lowercased("some title"), 1, Filters::default())
             .await
             .expect("an issue ocurrend when calling search_mangas");
 
@@ -754,7 +770,7 @@ mod test {
             .await;
 
         let response = client
-            .get_authors(search_term)
+            .get_authors(SearchTerm::trimmed_lowercased(search_term).unwrap())
             .await
             .expect("Could not send request to get mangadex author / artist");
 

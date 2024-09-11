@@ -19,7 +19,9 @@ use tokio::task::JoinSet;
 use crate::backend::database::{
     get_chapters_history_status, save_history, set_chapter_downloaded, MangaReadingHistorySave, SetChapterDownloaded, DBCONN,
 };
-use crate::backend::download::{download_chapter_cbz, download_chapter_epub, download_chapter_raw_images, DownloadChapter};
+use crate::backend::download::{
+    download_chapter_cbz, download_chapter_epub, download_chapter_raw_images, to_filename, DownloadChapter,
+};
 use crate::backend::error_log::{self, write_to_error_log};
 use crate::backend::fetch::{ApiClient, MangadexClient, ITEMS_PER_PAGE_CHAPTERS};
 use crate::backend::filter::Languages;
@@ -28,7 +30,7 @@ use crate::backend::{AppDirectories, ChapterPagesResponse, ChapterResponse, Mang
 use crate::common::{Manga, PageType};
 use crate::config::{DownloadType, ImageQuality, MangaTuiConfig};
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
-use crate::utils::{set_status_style, set_tags_style, to_filename};
+use crate::utils::{set_status_style, set_tags_style};
 use crate::view::tasks::manga::{download_all_chapters_task, search_chapters_operation, DownloadAllChaptersData};
 use crate::view::widgets::manga::{
     ChapterItem, ChaptersListWidget, DownloadAllChaptersState, DownloadAllChaptersWidget, DownloadPhase,
@@ -681,9 +683,9 @@ impl MangaPage {
                             };
 
                             let endpoint = format!("{}/{}/{}", response.base_url, quality, response.chapter.hash);
-                            let manga_title = to_filename(&manga_title);
-                            let chapter_title = to_filename(&title);
-                            let scanlator = to_filename(&scanlator);
+                            let manga_title = to_filename(&manga_title).display().to_string();
+                            let chapter_title = to_filename(&title).display().to_string();
+                            let scanlator = to_filename(&scanlator).display().to_string();
 
                             let chapter = DownloadChapter {
                                 id_chapter: &chapter_id,

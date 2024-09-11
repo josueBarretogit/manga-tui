@@ -2,13 +2,14 @@ use std::fs::{create_dir, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+use bytes::Bytes;
 use manga_tui::exists;
 use tokio::sync::mpsc::UnboundedSender;
 use zip::write::SimpleFileOptions;
 use zip::ZipWriter;
 
 use super::error_log::{write_to_error_log, ErrorType};
-use super::fetch::{ApiClient, MangadexClient};
+use super::fetch::{ApiClient, MangadexClient, MockMangadexClient};
 use super::APP_DATA_DIR;
 use crate::view::pages::manga::MangaPageEvents;
 
@@ -45,6 +46,11 @@ fn create_manga_directory(chapter: &DownloadChapter<'_>) -> Result<PathBuf, std:
     Ok(chapter_language_dir)
 }
 
+async fn fetch_page(client: impl ApiClient, endpoint: String, filename: String) -> Result<Bytes, reqwest::Error> {
+    let response = client.get_chapter_page(&endpoint, &filename).await?;
+    response.bytes().await
+}
+
 pub fn download_chapter_raw_images(
     is_downloading_all_chapters: bool,
     chapter: DownloadChapter<'_>,
@@ -70,7 +76,7 @@ pub fn download_chapter_raw_images(
     tokio::spawn(async move {
         let total_pages = files.len();
         for (index, file_name) in files.into_iter().enumerate() {
-            let image_response = MangadexClient::global().get_chapter_page(&endpoint, &file_name).await;
+            let image_response = MockMangadexClient::new().get_chapter_page(&endpoint, &file_name).await;
 
             let file_name = Path::new(&file_name);
 
@@ -256,4 +262,94 @@ pub fn download_chapter_cbz(
     });
 
     Ok(())
+}
+
+/// Remove special characteres that may cause errors
+pub fn to_filename(title: &str) -> PathBuf {
+    let invalid_chars = ['\\', '/', ':', '*', '?', '"', '<', '>', '|'];
+
+    let sanitized_title: String = title.chars().filter(|c| !invalid_chars.contains(c)).collect();
+
+    sanitized_title.into()
+}
+
+// fetch pages
+// make directory
+// create file with the page
+// notify back that proccess is succesful
+
+#[cfg(test)]
+mod tests {
+    use core::panic;
+    use std::fs;
+
+    use fake::*;
+    use pretty_assertions::assert_eq;
+    use uuid::Uuid;
+
+    use super::*;
+    use crate::backend::filter::Languages;
+
+    #[test]
+    fn filename_does_not_contain_conflicting_characteres() {
+        let example = "a good example";
+
+        let to_correct_filename = to_filename(example);
+        assert_eq!(example, to_correct_filename.to_str().unwrap());
+
+        let bad_example = "a / wrong example";
+
+        let to_correct_filename = to_filename(bad_example);
+        assert_eq!("a  wrong example", to_correct_filename.to_str().unwrap());
+    }
+
+    #[test]
+    fn it_should_make_a_directory_for_a_manga() -> Result<(), std::io::Error> {
+        let chapter_to_download = DownloadChapter {
+            id_chapter: &Uuid::new_v4().to_string(),
+            manga_id: &Uuid::new_v4().to_string(),
+            manga_title: &Faker.fake::<String>(),
+            chapter_title: &Faker.fake::<String>(),
+            number: &Faker.fake::<u32>().to_string(),
+            scanlator: &Faker.fake::<String>(),
+            lang: &Languages::default().as_human_readable(),
+        };
+
+        let directory_path = create_manga_directory(&chapter_to_download)?;
+
+        fs::read_dir(&directory_path)?;
+
+        dbg!(directory_path);
+
+        Ok(())
+    }
+
+    //#[tokio::test]
+    //async fn download_as_cbz() {
+    //    let id = Uuid::new_v4().to_string();
+    //
+    //    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<MangaPageEvents>();
+    //
+    //    let chapter_to_download = DownloadChapter {
+    //        id_chapter: &id,
+    //        manga_id: "some_manga_id",
+    //        manga_title: "some_title",
+    //        chapter_title: "some_title",
+    //        number: "1",
+    //        scanlator: "some_scanlator",
+    //        lang: Languages::default().as_iso_code(),
+    //    };
+    //
+    //    let resullt = download_chapter_raw_images(
+    //        false,
+    //        chapter_to_download,
+    //        vec!["file1.png".to_string(), "file2.png".to_string()],
+    //        "some_endpoint".to_string(),
+    //        tx,
+    //    );
+    //
+    //    if let Err(e) = resullt {
+    //        panic!("{e}");
+    //    }
+    //}
 }

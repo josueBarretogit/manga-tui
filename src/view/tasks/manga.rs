@@ -1,6 +1,16 @@
+use std::time::{Duration, Instant};
+
 use tokio::sync::mpsc::UnboundedSender;
 
+use crate::backend::download::{
+    download_chapter_cbz, download_chapter_epub, download_chapter_raw_images, to_filename, DownloadChapter,
+};
+use crate::backend::error_log::{self, write_to_error_log, ErrorType};
+use crate::backend::fetch::{ApiClient, MangadexClient};
 use crate::backend::filter::Languages;
+use crate::backend::{ChapterPagesResponse, ChapterResponse};
+use crate::common::PageType;
+use crate::config::{DownloadType, ImageQuality, MangaTuiConfig};
 use crate::view::pages::manga::{ChapterOrder, MangaPageEvents};
 
 #[cfg(not(test))]
@@ -51,18 +61,7 @@ pub struct DownloadAllChaptersData {
     pub lang: Languages,
 }
 
-#[cfg(not(test))]
 pub async fn download_all_chapters_task(data: DownloadAllChaptersData) {
-    use std::time::{Duration, Instant};
-
-    use crate::backend::download::{download_chapter_cbz, download_chapter_epub, download_chapter_raw_images, DownloadChapter};
-    use crate::backend::error_log::{self, write_to_error_log, ErrorType};
-    use crate::backend::fetch::{ApiClient, MangadexClient};
-    use crate::backend::{ChapterPagesResponse, ChapterResponse};
-    use crate::common::PageType;
-    use crate::config::{DownloadType, ImageQuality, MangaTuiConfig};
-    use crate::utils::to_filename;
-
     let chapter_response = MangadexClient::global().get_all_chapters_for_manga(&data.manga_id, data.lang).await;
 
     match chapter_response {
@@ -111,9 +110,9 @@ pub async fn download_all_chapters_task(data: DownloadAllChaptersData) {
 
                                 let endpoint = format!("{}/{}/{}", res.base_url, quality, res.chapter.hash);
 
-                                let manga_title = to_filename(&data.manga_title);
-                                let chapter_title = to_filename(&chapter_title);
-                                let scanlator = to_filename(&scanlator);
+                                let manga_title = to_filename(&data.manga_title).display().to_string();
+                                let chapter_title = to_filename(&chapter_title).display().to_string();
+                                let scanlator = to_filename(&scanlator).display().to_string();
 
                                 let chapter_to_download = DownloadChapter {
                                     id_chapter: &chapter_id,
@@ -147,7 +146,9 @@ pub async fn download_all_chapters_task(data: DownloadAllChaptersData) {
                                     return;
                                 }
 
-                                data.tx.send(MangaPageEvents::SaveChapterDownloadStatus(chapter_id, chapter_title)).ok();
+                                data.tx
+                                    .send(MangaPageEvents::SaveChapterDownloadStatus(chapter_id, chapter_title.to_string()))
+                                    .ok();
                             }
                         },
                         Err(e) => {
@@ -168,9 +169,4 @@ pub async fn download_all_chapters_task(data: DownloadAllChaptersData) {
             write_to_error_log(error_log::ErrorType::FromError(Box::new(e)));
         },
     }
-}
-
-#[cfg(test)]
-pub async fn download_all_chapters_task(data: DownloadAllChaptersData) {
-    data.tx.send(MangaPageEvents::StartDownloadProgress(10.0)).ok();
 }

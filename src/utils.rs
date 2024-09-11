@@ -208,12 +208,3 @@ pub fn render_search_bar(is_typing: bool, input_help: Line<'_>, input: &Input, f
         false => {},
     }
 }
-
-/// Remove special characteres that may cause errors
-pub fn to_filename(title: &str) -> String {
-    let invalid_chars = ['\\', '/', ':', '*', '?', '"', '<', '>', '|'];
-
-    let sanitized_title: String = title.chars().map(|c| if invalid_chars.contains(&c) { '_' } else { c }).collect();
-
-    sanitized_title
-}

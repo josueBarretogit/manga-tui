@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 
 use crossterm::event::{KeyCode, KeyEvent};
+use manga_tui::SearchTerm;
 use ratatui::widgets::*;
 use strum::{Display, IntoEnumIterator};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
@@ -233,26 +234,30 @@ pub struct FilterListDynamic<T> {
 
 impl FilterListDynamic<AuthorState> {
     fn search_authors(&mut self, tx: UnboundedSender<FilterEvents>) {
-        let name = self.get_name();
-        tokio::spawn(async move {
-            let response = MangadexClient::global().get_authors(&name).await;
-            if let Ok(res) = response {
-                tx.send(FilterEvents::LoadAuthors(res.json().await.ok())).ok();
-            }
-        });
+        let name_to_search = SearchTerm::trimmed_lowercased(self.search_bar.value());
+        if let Some(search_term) = name_to_search {
+            tokio::spawn(async move {
+                let response = MangadexClient::global().get_authors(search_term).await;
+                if let Ok(res) = response {
+                    tx.send(FilterEvents::LoadAuthors(res.json().await.ok())).ok();
+                }
+            });
+        }
     }
 }
 
 impl FilterListDynamic<ArtistState> {
     fn search_artists(&mut self, tx: UnboundedSender<FilterEvents>) {
-        let name = self.get_name();
-        tokio::spawn(async move {
-            let response = MangadexClient::global().get_authors(&name).await;
+        let name_to_search = SearchTerm::trimmed_lowercased(self.search_bar.value());
+        if let Some(search_term) = name_to_search {
+            tokio::spawn(async move {
+                let response = MangadexClient::global().get_authors(search_term).await;
 
-            if let Ok(res) = response {
-                tx.send(FilterEvents::LoadArtists(res.json().await.ok())).ok();
-            }
-        });
+                if let Ok(res) = response {
+                    tx.send(FilterEvents::LoadArtists(res.json().await.ok())).ok();
+                }
+            });
+        }
     }
 }
 
@@ -269,10 +274,6 @@ impl<T> FilterListDynamic<T> {
                 })
                 .collect(),
         );
-    }
-
-    pub fn get_name(&self) -> String {
-        self.search_bar.value().trim().to_lowercase()
     }
 
     fn set_users_not_found(&mut self) {
