@@ -19,9 +19,7 @@ use tokio::task::JoinSet;
 use crate::backend::database::{
     get_chapters_history_status, save_history, set_chapter_downloaded, MangaReadingHistorySave, SetChapterDownloaded, DBCONN,
 };
-use crate::backend::download::{
-    download_chapter_cbz, download_chapter_epub, download_chapter_raw_images, to_filename, DownloadChapter,
-};
+use crate::backend::download::{download_chapter_cbz, download_chapter_epub, download_chapter_raw_images, DownloadChapter};
 use crate::backend::error_log::{self, write_to_error_log};
 use crate::backend::fetch::{ApiClient, MangadexClient, ITEMS_PER_PAGE_CHAPTERS};
 use crate::backend::filter::Languages;
@@ -662,7 +660,7 @@ impl MangaPage {
                 return;
             }
             chapter.set_normal_state();
-            let title = chapter.title.clone();
+            let chapter_title = chapter.title.clone();
             let number = chapter.chapter_number.clone();
             let scanlator = chapter.scanlator.clone();
             let chapter_id = chapter.id.clone();
@@ -683,19 +681,16 @@ impl MangaPage {
                             };
 
                             let endpoint = format!("{}/{}/{}", response.base_url, quality, response.chapter.hash);
-                            let manga_title = to_filename(&manga_title).display().to_string();
-                            let chapter_title = to_filename(&title).display().to_string();
-                            let scanlator = to_filename(&scanlator).display().to_string();
 
-                            let chapter = DownloadChapter {
-                                id_chapter: &chapter_id,
-                                manga_id: &manga_id,
-                                manga_title: &manga_title,
-                                chapter_title: &chapter_title,
-                                number: &number,
-                                scanlator: &scanlator,
-                                lang: &lang,
-                            };
+                            let chapter = DownloadChapter::new(
+                                &chapter_id,
+                                &manga_id,
+                                &manga_title,
+                                &chapter_title,
+                                number.parse().unwrap_or_default(),
+                                &scanlator,
+                                &lang,
+                            );
 
                             let download_chapter_task = match config.download_type {
                                 DownloadType::Raw => download_chapter_raw_images(false, chapter, files, endpoint, tx.clone()),
@@ -709,7 +704,7 @@ impl MangaPage {
                                 return;
                             }
 
-                            tx.send(MangaPageEvents::SaveChapterDownloadStatus(chapter_id, title)).ok();
+                            tx.send(MangaPageEvents::SaveChapterDownloadStatus(chapter_id, chapter_title)).ok();
                         }
                     },
                     Err(e) => {

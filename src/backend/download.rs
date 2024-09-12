@@ -1,47 +1,74 @@
-use std::fs::{create_dir, File};
+use std::fs::{create_dir, create_dir_all, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use bytes::Bytes;
-use manga_tui::exists;
+use manga_tui::{exists, SanitizedFilename};
 use tokio::sync::mpsc::UnboundedSender;
 use zip::write::SimpleFileOptions;
 use zip::ZipWriter;
 
 use super::error_log::{write_to_error_log, ErrorType};
 use super::fetch::{ApiClient, MangadexClient, MockMangadexClient};
-use super::APP_DATA_DIR;
+use super::AppDirectories;
 use crate::view::pages::manga::MangaPageEvents;
 
-pub struct DownloadChapter<'a> {
-    pub id_chapter: &'a str,
-    pub manga_id: &'a str,
-    pub manga_title: &'a str,
-    pub chapter_title: &'a str,
-    pub number: &'a str,
-    pub scanlator: &'a str,
-    pub lang: &'a str,
+pub struct DownloadChapter {
+    pub id_chapter: SanitizedFilename,
+    pub manga_id: SanitizedFilename,
+    pub manga_title: SanitizedFilename,
+    pub chapter_title: SanitizedFilename,
+    pub number: u32,
+    pub scanlator: SanitizedFilename,
+    pub lang: SanitizedFilename,
 }
 
-fn create_manga_directory(chapter: &DownloadChapter<'_>) -> Result<PathBuf, std::io::Error> {
-    // need directory with the manga's title, and its id to make it unique
+impl<'a> DownloadChapter {
+    pub fn new(
+        id_chapter: &'a str,
+        manga_id: &'a str,
+        manga_title: &'a str,
+        chapter_title: &'a str,
+        number: u32,
+        scanlator: &'a str,
+        lang: &'a str,
+    ) -> Self {
+        Self {
+            id_chapter: SanitizedFilename::new(id_chapter),
+            manga_id: SanitizedFilename::new(manga_id),
+            manga_title: SanitizedFilename::new(manga_title),
+            chapter_title: SanitizedFilename::new(chapter_title),
+            number,
+            scanlator: SanitizedFilename::new(scanlator),
+            lang: SanitizedFilename::new(lang),
+        }
+    }
 
-    let dir_manga_downloads = APP_DATA_DIR.as_ref().unwrap().join("mangaDownloads");
+    pub fn make_chapter_name(&'a self) -> PathBuf {
+        let file_name = format!("Ch. {} {} {} {}", self.number, self.chapter_title, self.scanlator, self.id_chapter);
+        PathBuf::from(file_name)
+    }
+}
 
-    let dir_manga = dir_manga_downloads.join(format!("{} {}", chapter.manga_title.trim(), chapter.manga_id));
+fn create_manga_directory(chapter: &DownloadChapter, base_directory: &Path) -> Result<PathBuf, std::io::Error> {
+    let dir_manga_downloads = base_directory.join("mangaDownloads");
+
+    if !exists!(&dir_manga_downloads) {
+        create_dir_all(&dir_manga_downloads)?;
+    }
+
+    let dir_manga = dir_manga_downloads.join(format!("{} {}", chapter.manga_title, chapter.manga_id));
 
     if !exists!(&dir_manga) {
         create_dir(&dir_manga)?;
     }
 
     // need directory to store the language the chapter is in
-    let chapter_language_dir = dir_manga.join(chapter.lang);
+    let chapter_language_dir = dir_manga.join(chapter.lang.as_path());
 
     if !exists!(&chapter_language_dir) {
         create_dir(&chapter_language_dir)?;
     }
-
-    // need directory with chapter's title, number and scanlator
 
     Ok(chapter_language_dir)
 }
@@ -53,20 +80,15 @@ async fn fetch_page(client: impl ApiClient, endpoint: String, filename: String) 
 
 pub fn download_chapter_raw_images(
     is_downloading_all_chapters: bool,
-    chapter: DownloadChapter<'_>,
+    chapter: DownloadChapter,
     files: Vec<String>,
     endpoint: String,
     tx: UnboundedSender<MangaPageEvents>,
 ) -> Result<(), std::io::Error> {
-    let chapter_language_dir = create_manga_directory(&chapter)?;
+    let chapter_language_dir = create_manga_directory(&chapter, AppDirectories::get_base_directory())?;
 
-    let chapter_dir = chapter_language_dir.join(format!(
-        "Ch. {} {} {} {}",
-        chapter.number,
-        chapter.chapter_title.trim(),
-        chapter.scanlator.trim(),
-        chapter.id_chapter,
-    ));
+    let chapter_dir = chapter_language_dir
+        .join(format!("Ch. {} {} {} {}", chapter.number, chapter.chapter_title, chapter.scanlator, chapter.id_chapter,));
 
     if !exists!(&chapter_dir) {
         create_dir(&chapter_dir)?;
@@ -112,16 +134,15 @@ pub fn download_chapter_raw_images(
 
 pub fn download_chapter_epub(
     is_downloading_all_chapters: bool,
-    chapter: DownloadChapter<'_>,
+    chapter: DownloadChapter,
     files: Vec<String>,
     endpoint: String,
     tx: UnboundedSender<MangaPageEvents>,
 ) -> Result<(), std::io::Error> {
-    let chapter_dir_language = create_manga_directory(&chapter)?;
+    let chapter_dir_language = create_manga_directory(&chapter, AppDirectories::get_base_directory())?;
 
     let chapter_id = chapter.id_chapter.to_string();
-    let chapter_name =
-        format!("Ch. {} {} {} {}", chapter.number, chapter.chapter_title.trim(), chapter.scanlator.trim(), chapter.id_chapter,);
+    let chapter_name = format!("Ch. {} {} {} {}", chapter.number, chapter.chapter_title, chapter.scanlator, chapter.id_chapter);
 
     tokio::spawn(async move {
         let total_pages = files.len();
@@ -203,16 +224,15 @@ pub fn download_chapter_epub(
 
 pub fn download_chapter_cbz(
     is_downloading_all_chapters: bool,
-    chapter: DownloadChapter<'_>,
+    chapter: DownloadChapter,
     files: Vec<String>,
     endpoint: String,
     tx: UnboundedSender<MangaPageEvents>,
 ) -> Result<(), std::io::Error> {
-    let chapter_dir_language = create_manga_directory(&chapter)?;
+    let chapter_dir_language = create_manga_directory(&chapter, AppDirectories::get_base_directory())?;
 
     let chapter_id = chapter.id_chapter.to_string();
-    let chapter_name =
-        format!("Ch. {} {} {} {}", chapter.number, chapter.chapter_title.trim(), chapter.scanlator.trim(), chapter.id_chapter,);
+    let chapter_name = format!("Ch. {} {} {} {}", chapter.number, chapter.chapter_title, chapter.scanlator, chapter.id_chapter);
 
     let chapter_name = format!("{}.cbz", chapter_name);
 
@@ -264,15 +284,6 @@ pub fn download_chapter_cbz(
     Ok(())
 }
 
-/// Remove special characteres that may cause errors
-pub fn to_filename(title: &str) -> PathBuf {
-    let invalid_chars = ['\\', '/', ':', '*', '?', '"', '<', '>', '|'];
-
-    let sanitized_title: String = title.chars().filter(|c| !invalid_chars.contains(c)).collect();
-
-    sanitized_title.into()
-}
-
 // fetch pages
 // make directory
 // create file with the page
@@ -280,46 +291,31 @@ pub fn to_filename(title: &str) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
-    use core::panic;
     use std::fs;
 
     use fake::*;
     use pretty_assertions::assert_eq;
     use uuid::Uuid;
 
+    use self::faker::name::en::{FirstName, Title};
     use super::*;
     use crate::backend::filter::Languages;
 
     #[test]
-    fn filename_does_not_contain_conflicting_characteres() {
-        let example = "a good example";
-
-        let to_correct_filename = to_filename(example);
-        assert_eq!(example, to_correct_filename.to_str().unwrap());
-
-        let bad_example = "a / wrong example";
-
-        let to_correct_filename = to_filename(bad_example);
-        assert_eq!("a  wrong example", to_correct_filename.to_str().unwrap());
-    }
-
-    #[test]
     fn it_should_make_a_directory_for_a_manga() -> Result<(), std::io::Error> {
-        let chapter_to_download = DownloadChapter {
-            id_chapter: &Uuid::new_v4().to_string(),
-            manga_id: &Uuid::new_v4().to_string(),
-            manga_title: &Faker.fake::<String>(),
-            chapter_title: &Faker.fake::<String>(),
-            number: &Faker.fake::<u32>().to_string(),
-            scanlator: &Faker.fake::<String>(),
-            lang: &Languages::default().as_human_readable(),
-        };
+        let chapter_to_download = DownloadChapter::new(
+            &Uuid::new_v4().to_string(),
+            &Uuid::new_v4().to_string(),
+            Title().fake(),
+            Title().fake(),
+            1,
+            FirstName().fake(),
+            &Languages::default().as_human_readable(),
+        );
 
-        let directory_path = create_manga_directory(&chapter_to_download)?;
+        let directory_path = create_manga_directory(&chapter_to_download, Path::new("./"))?;
 
         fs::read_dir(&directory_path)?;
-
-        dbg!(directory_path);
 
         Ok(())
     }

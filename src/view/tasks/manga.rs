@@ -2,9 +2,7 @@ use std::time::{Duration, Instant};
 
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::backend::download::{
-    download_chapter_cbz, download_chapter_epub, download_chapter_raw_images, to_filename, DownloadChapter,
-};
+use crate::backend::download::{download_chapter_cbz, download_chapter_epub, download_chapter_raw_images, DownloadChapter};
 use crate::backend::error_log::{self, write_to_error_log, ErrorType};
 use crate::backend::fetch::{ApiClient, MangadexClient};
 use crate::backend::filter::Languages;
@@ -110,19 +108,15 @@ pub async fn download_all_chapters_task(data: DownloadAllChaptersData) {
 
                                 let endpoint = format!("{}/{}/{}", res.base_url, quality, res.chapter.hash);
 
-                                let manga_title = to_filename(&data.manga_title).display().to_string();
-                                let chapter_title = to_filename(&chapter_title).display().to_string();
-                                let scanlator = to_filename(&scanlator).display().to_string();
-
-                                let chapter_to_download = DownloadChapter {
-                                    id_chapter: &chapter_id,
-                                    manga_id: &data.manga_id,
-                                    manga_title: &manga_title,
-                                    chapter_title: &chapter_title,
-                                    number: &chapter_number,
-                                    scanlator: &scanlator,
-                                    lang: &data.lang.as_human_readable(),
-                                };
+                                let chapter_to_download = DownloadChapter::new(
+                                    &chapter_id,
+                                    &data.manga_id,
+                                    &data.manga_title,
+                                    &chapter_title,
+                                    chapter_number.parse().unwrap_or_default(),
+                                    &scanlator,
+                                    &data.lang.as_human_readable(),
+                                );
 
                                 let download_proccess = match config.download_type {
                                     DownloadType::Cbz => {

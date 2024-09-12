@@ -43,6 +43,10 @@ impl AppDirectories {
         }
         Ok(())
     }
+
+    pub fn get_base_directory() -> &'static Path {
+        APP_DATA_DIR.as_ref().unwrap()
+    }
 }
 
 pub static APP_DATA_DIR: Lazy<Option<PathBuf>> = Lazy::new(|| {
