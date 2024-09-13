@@ -20,3 +20,4 @@ result
 #.idea/
 *.db
 *~
+test_results/

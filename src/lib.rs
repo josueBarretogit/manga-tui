@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use std::ops::Add;
 use std::path::{Path, PathBuf};
 
 /// Shortcut for: Path::new($path).try_exists().is_ok_and(|is_true| is_true)
@@ -43,7 +44,7 @@ fn remove_conflicting_characteres<T: AsRef<Path>>(title: T) -> PathBuf {
     sanitized_title.into()
 }
 
-/// This type ensures that the inner `PathBuf` doesnt contain characteres tha may throw errors
+/// This type ensures that a filename will not contain characteres that may throw errors
 /// like ":" or "/"
 #[derive(Debug, Default, PartialEq)]
 pub struct SanitizedFilename(PathBuf);
@@ -103,6 +104,10 @@ mod test {
     fn filename_is_constructed_correctly() {
         let file_name = SanitizedFilename::new("some name which contains :");
 
-        assert_eq!(Path::new("some name which contains _"), file_name.as_path())
+        assert_eq!(Path::new("some name which contains _"), file_name.as_path());
+
+        let file_name = SanitizedFilename::new("some / name / which contains ");
+
+        assert_eq!(Path::new("some _ name _ which contains"), file_name.as_path())
     }
 }
