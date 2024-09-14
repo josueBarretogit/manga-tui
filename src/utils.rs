@@ -12,9 +12,9 @@ use tokio::sync::mpsc::UnboundedSender;
 use tokio::task::JoinSet;
 use tui_input::Input;
 
+use crate::backend::api_responses::Data;
 use crate::backend::fetch::{ApiClient, MangadexClient};
 use crate::backend::filter::Languages;
-use crate::backend::Data;
 use crate::common::{Artist, Author, Manga};
 use crate::view::widgets::filter_widget::state::{TagListItem, TagListItemState};
 use crate::view::widgets::ImageHandler;

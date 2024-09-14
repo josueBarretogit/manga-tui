@@ -8,12 +8,12 @@ use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
 
-use crate::backend::authors::AuthorsResponse;
+use crate::backend::api_responses::authors::AuthorsResponse;
+use crate::backend::api_responses::tags::TagsResponse;
 use crate::backend::fetch::{ApiClient, MangadexClient};
 use crate::backend::filter::{
     Artist, Author, ContentRating, Filters, Languages, MagazineDemographic, PublicationStatus, SortBy, TagData,
 };
-use crate::backend::tags::TagsResponse;
 use crate::backend::tui::Events;
 
 pub enum FilterEvents {
@@ -891,8 +891,8 @@ impl FilterState {
 mod test {
 
     use super::*;
-    use crate::backend::authors::Data;
-    use crate::backend::tags::TagsData;
+    use crate::backend::api_responses::authors::Data;
+    use crate::backend::api_responses::tags::TagsData;
 
     #[test]
     fn filter_list_works() {

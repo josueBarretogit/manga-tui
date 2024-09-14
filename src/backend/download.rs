@@ -2,6 +2,7 @@ use std::fs::{create_dir, create_dir_all, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+use bytes::Bytes;
 use epub_builder::{EpubBuilder, EpubContent, ZipLibrary};
 use manga_tui::{exists, SanitizedFilename};
 use zip::write::SimpleFileOptions;
@@ -24,7 +25,7 @@ static EPUB_FILE_TEMPLATE: &str = r#"
                             </html>
 "#;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DownloadChapter {
     id_chapter: SanitizedFilename,
     manga_id: SanitizedFilename,
@@ -36,15 +37,15 @@ pub struct DownloadChapter {
 }
 
 #[derive(Debug)]
-struct ImageMetada<'a> {
-    extension: &'a str,
-    image_bytes: &'a [u8],
+pub struct ImageMetada {
+    extension: String,
+    image_bytes: Bytes,
 }
 
-impl<'a> ImageMetada<'a> {
-    fn new(extension: &'a str, image_bytes: &'a [u8]) -> Self {
+impl ImageMetada {
+    pub fn new(extension: &str, image_bytes: Bytes) -> Self {
         Self {
-            extension,
+            extension: extension.to_string(),
             image_bytes,
         }
     }
@@ -81,7 +82,7 @@ impl<'a> DownloadChapter {
         format!("{} {}", self.manga_title, self.manga_id)
     }
 
-    fn make_raw_images_directory(&'a self, base_directory: &Path) -> Result<PathBuf, std::io::Error> {
+    pub fn make_raw_images_directory(&'a self, base_directory: &Path) -> Result<PathBuf, std::io::Error> {
         let directory = base_directory.join(self.make_chapter_file_name());
         if !exists!(&directory) {
             create_dir(&directory)?;
@@ -91,7 +92,7 @@ impl<'a> DownloadChapter {
         }
     }
 
-    fn create_image_file(
+    pub fn create_image_file(
         &'a self,
         image_bytes: &[u8],
         base_directory: &Path,
@@ -106,7 +107,11 @@ impl<'a> DownloadChapter {
         Ok(image_path)
     }
 
-    fn create_cbz(&'a self, base_directory: &Path, images_to_store_in_cbz: Vec<ImageMetada>) -> Result<PathBuf, std::io::Error> {
+    pub fn create_cbz(
+        &'a self,
+        base_directory: &Path,
+        images_to_store_in_cbz: Vec<ImageMetada>,
+    ) -> Result<PathBuf, std::io::Error> {
         let cbz_filename = format!("{}.cbz", self.make_chapter_file_name());
 
         let cbz_path = base_directory.join(&cbz_filename);
@@ -122,7 +127,7 @@ impl<'a> DownloadChapter {
         for (index, image_to_cbz) in images_to_store_in_cbz.into_iter().enumerate() {
             zip.start_file(format!("{}.{}", index, image_to_cbz.extension), options)?;
 
-            zip.write_all(image_to_cbz.image_bytes)?;
+            zip.write_all(&image_to_cbz.image_bytes)?;
         }
 
         zip.finish()?;
@@ -130,10 +135,10 @@ impl<'a> DownloadChapter {
         Ok(cbz_path)
     }
 
-    fn create_epub(
+    pub fn create_epub(
         &'a self,
-        images_to_store_in_epub: Vec<ImageMetada>,
         base_directory: &Path,
+        images_to_store_in_epub: Vec<ImageMetada>,
     ) -> color_eyre::eyre::Result<PathBuf> {
         let epub_path = base_directory.join(format!("{}.epub", self.make_chapter_file_name()));
 
@@ -152,10 +157,10 @@ impl<'a> DownloadChapter {
             let mime_type = format!("image/{}", image_data.extension);
 
             if index == 0 {
-                epub_builder.add_cover_image(&image_path, image_data.image_bytes, &mime_type)?;
+                epub_builder.add_cover_image(&image_path, image_data.image_bytes.as_ref(), &mime_type)?;
             }
 
-            epub_builder.add_resource(&image_path, image_data.image_bytes, &mime_type)?;
+            epub_builder.add_resource(&image_path, image_data.image_bytes.as_ref(), &mime_type)?;
 
             let xml_file_path = format!("{}.xhtml", index);
 
@@ -170,7 +175,11 @@ impl<'a> DownloadChapter {
         Ok(epub_path)
     }
 
-    fn create_manga_directory(&'a self, base_directory: &Path) -> Result<PathBuf, std::io::Error> {
+    pub fn get_chapter_id(&self) -> String {
+        self.id_chapter.to_string()
+    }
+
+    pub fn create_manga_directory(&'a self, base_directory: &Path) -> Result<PathBuf, std::io::Error> {
         let dir_manga_downloads = base_directory.join("mangaDownloads");
 
         if !exists!(&dir_manga_downloads) {
@@ -194,218 +203,10 @@ impl<'a> DownloadChapter {
     }
 }
 
-//pub fn download_chapter_raw_images(
-//    is_downloading_all_chapters: bool,
-//    chapter: DownloadChapter,
-//    files: Vec<String>,
-//    endpoint: String,
-//    tx: UnboundedSender<MangaPageEvents>,
-//) -> Result<(), std::io::Error> {
-//    let chapter_language_dir = chapter.create_manga_directory(AppDirectories::get_base_directory())?;
-//
-//    let chapter_dir = chapter_language_dir
-//        .join(format!("Ch. {} {} {} {}", chapter.number, chapter.chapter_title, chapter.scanlator, chapter.id_chapter,));
-//
-//    if !exists!(&chapter_dir) {
-//        create_dir(&chapter_dir)?;
-//    }
-//    let chapter_id = chapter.id_chapter.to_string();
-//
-//    tokio::spawn(async move {
-//        let total_pages = files.len();
-//        for (index, file_name) in files.into_iter().enumerate() {
-//            let image_response = MangadexClient::global().get_chapter_page(&endpoint, &file_name).await;
-//
-//            let file_name = Path::new(&file_name);
-//
-//            match image_response {
-//                Ok(response) => {
-//                    if let Ok(bytes) = response.bytes().await {
-//                        let image_name = format!("{}.{}", index + 1, file_name.extension().unwrap().to_str().unwrap());
-//                        let mut image_created = File::create(chapter_dir.join(image_name)).unwrap();
-//                        image_created.write_all(&bytes).unwrap();
-//
-//                        if !is_downloading_all_chapters {
-//                            tx.send(MangaPageEvents::SetDownloadProgress(
-//                                (index as f64) / (total_pages as f64),
-//                                chapter_id.clone(),
-//                            ))
-//                            .ok();
-//                        }
-//                    }
-//                },
-//                Err(e) => write_to_error_log(ErrorType::FromError(Box::new(e))),
-//            }
-//        }
-//
-//        if is_downloading_all_chapters {
-//            tx.send(MangaPageEvents::SetDownloadAllChaptersProgress).ok();
-//        } else {
-//            tx.send(MangaPageEvents::ChapterFinishedDownloading(chapter_id)).ok();
-//        }
-//    });
-//
-//    Ok(())
-//}
-//
-//pub fn download_chapter_epub(
-//    is_downloading_all_chapters: bool,
-//    chapter: DownloadChapter,
-//    files: Vec<String>,
-//    endpoint: String,
-//    tx: UnboundedSender<MangaPageEvents>,
-//) -> Result<(), std::io::Error> {
-//    let chapter_dir_language = chapter.create_manga_directory(AppDirectories::get_base_directory())?;
-//
-//    let chapter_id = chapter.id_chapter.to_string();
-//    let chapter_name = format!("Ch. {} {} {} {}", chapter.number, chapter.chapter_title, chapter.scanlator, chapter.id_chapter);
-//
-//    tokio::spawn(async move {
-//        let total_pages = files.len();
-//
-//        let mut epub_output = File::create(chapter_dir_language.join(format!("{}.epub", chapter_name))).unwrap();
-//
-//        let mut epub = epub_builder::EpubBuilder::new(epub_builder::ZipLibrary::new().unwrap()).unwrap();
-//
-//        epub.epub_version(epub_builder::EpubVersion::V30);
-//
-//        let _ = epub.metadata("title", chapter_name);
-//
-//        for (index, file_name) in files.into_iter().enumerate() {
-//            let image_response = MangadexClient::global().get_chapter_page(&endpoint, &file_name).await;
-//
-//            match image_response {
-//                Ok(response) => {
-//                    if let Ok(bytes) = response.bytes().await {
-//                        let image_path = format!("data/{}", file_name);
-//
-//                        let file_name = Path::new(&file_name);
-//
-//                        let mime_type = format!("image/{}", file_name.extension().unwrap().to_str().unwrap());
-//
-//                        if index == 0 {
-//                            epub.add_cover_image(&image_path, bytes.as_ref(), &mime_type).unwrap();
-//                        }
-//
-//                        epub.add_resource(&image_path, bytes.as_ref(), &mime_type).unwrap();
-//
-//                        epub.add_content(epub_builder::EpubContent::new(
-//                            format!("{}.xhtml", index + 1),
-//                            format!(
-//                                r#"
-//                            <?xml version='1.0' encoding='utf-8'?>
-//                            <!DOCTYPE html>
-//                            <html xmlns="http://www.w3.org/1999/xhtml">
-//                              <head>
-//                                <title>Panel</title>
-//                                <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
-//                              </head>
-//                              <body>
-//                                <div class="centered_image">
-//                                    <img src="{}" alt="Panel" />
-//                                </div>
-//                              </body>
-//                            </html>
-//                        "#,
-//                                image_path
-//                            )
-//                            .as_bytes(),
-//                        ))
-//                        .unwrap();
-//
-//                        if !is_downloading_all_chapters {
-//                            tx.send(MangaPageEvents::SetDownloadProgress(
-//                                (index as f64) / (total_pages as f64),
-//                                chapter_id.to_string(),
-//                            ))
-//                            .ok();
-//                        }
-//                    }
-//                },
-//                Err(e) => write_to_error_log(ErrorType::FromError(Box::new(e))),
-//            }
-//        }
-//
-//        epub.generate(&mut epub_output).unwrap();
-//
-//        if is_downloading_all_chapters {
-//            tx.send(MangaPageEvents::SetDownloadAllChaptersProgress).ok();
-//        } else {
-//            tx.send(MangaPageEvents::ChapterFinishedDownloading(chapter_id)).ok();
-//        }
-//    });
-//
-//    Ok(())
-//}
-//
-//pub fn download_chapter_cbz(
-//    is_downloading_all_chapters: bool,
-//    chapter: DownloadChapter,
-//    files: Vec<String>,
-//    endpoint: String,
-//    tx: UnboundedSender<MangaPageEvents>,
-//) -> Result<(), std::io::Error> {
-//    let chapter_dir_language = create_manga_directory(&chapter, AppDirectories::get_base_directory())?;
-//
-//    let chapter_id = chapter.id_chapter.to_string();
-//    let chapter_name = format!("Ch. {} {} {} {}", chapter.number, chapter.chapter_title, chapter.scanlator, chapter.id_chapter);
-//
-//    let chapter_name = format!("{}.cbz", chapter_name);
-//
-//    let chapter_zip_file = File::create(chapter_dir_language.join(chapter_name))?;
-//
-//    tokio::spawn(async move {
-//        let mut zip = ZipWriter::new(chapter_zip_file);
-//        let total_pages = files.len();
-//
-//        let options = SimpleFileOptions::default()
-//            .compression_method(zip::CompressionMethod::Deflated)
-//            .unix_permissions(0o755);
-//
-//        for (index, file_name) in files.into_iter().enumerate() {
-//            let image_response = MangadexClient::global().get_chapter_page(&endpoint, &file_name).await;
-//
-//            let file_name = Path::new(&file_name);
-//
-//            match image_response {
-//                Ok(response) => {
-//                    if let Ok(bytes) = response.bytes().await {
-//                        let image_name = format!("{}.{}", index + 1, file_name.extension().unwrap().to_str().unwrap());
-//
-//                        let _ = zip.start_file(chapter_dir_language.join(image_name).to_str().unwrap(), options);
-//
-//                        let _ = zip.write_all(&bytes);
-//
-//                        if !is_downloading_all_chapters {
-//                            tx.send(MangaPageEvents::SetDownloadProgress(
-//                                (index as f64) / (total_pages as f64),
-//                                chapter_id.to_string(),
-//                            ))
-//                            .ok();
-//                        }
-//                    }
-//                },
-//                Err(e) => write_to_error_log(ErrorType::FromError(Box::new(e))),
-//            }
-//        }
-//        zip.finish().unwrap();
-//
-//        if is_downloading_all_chapters {
-//            tx.send(MangaPageEvents::SetDownloadAllChaptersProgress).ok();
-//        } else {
-//            tx.send(MangaPageEvents::ChapterFinishedDownloading(chapter_id)).ok();
-//        }
-//    });
-//
-//    Ok(())
-//}
-//
-
 #[cfg(test)]
 mod tests {
     use std::fs;
 
-    use epub_builder::{EpubBuilder, EpubContent, ZipLibrary};
     use fake::faker::name::en::Name;
     use fake::Fake;
     use pretty_assertions::assert_eq;
@@ -523,12 +324,21 @@ mod tests {
         let base_directory = create_tests_directory()?;
 
         let images_to_store_in_cbz: Vec<ImageMetada> = vec![
-            ImageMetada::new("jpg", include_bytes!("../../data_test/images/1.jpg")),
-            ImageMetada::new("jpg", include_bytes!("../../data_test/images/2.jpg")),
-            ImageMetada::new("jpg", include_bytes!("../../data_test/images/3.jpg")),
+            ImageMetada::new("jpg", include_bytes!("../../data_test/images/1.jpg").to_vec().into()),
+            ImageMetada::new("jpg", include_bytes!("../../data_test/images/2.jpg").to_vec().into()),
+            ImageMetada::new("jpg", include_bytes!("../../data_test/images/3.jpg").to_vec().into()),
         ];
 
         let cbz_path = chapter.create_cbz(&base_directory, images_to_store_in_cbz)?;
+
+        assert!(
+            cbz_path
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .contains(&chapter.make_chapter_file_name())
+        );
 
         let zip_file_created = File::open(&cbz_path)?;
 
@@ -549,14 +359,23 @@ mod tests {
         let base_directory = create_tests_directory()?;
 
         let images_to_store_in_epub: Vec<ImageMetada> = vec![
-            ImageMetada::new("jpg", include_bytes!("../../data_test/images/1.jpg")),
-            ImageMetada::new("jpg", include_bytes!("../../data_test/images/2.jpg")),
-            ImageMetada::new("jpg", include_bytes!("../../data_test/images/3.jpg")),
+            ImageMetada::new("jpg", include_bytes!("../../data_test/images/1.jpg").to_vec().into()),
+            ImageMetada::new("jpg", include_bytes!("../../data_test/images/2.jpg").to_vec().into()),
+            ImageMetada::new("jpg", include_bytes!("../../data_test/images/3.jpg").to_vec().into()),
         ];
 
-        let epub_created_path = chapter.create_epub(images_to_store_in_epub, &base_directory)?;
+        let epub_created_path = chapter.create_epub(&base_directory, images_to_store_in_epub)?;
 
         assert_eq!(epub_created_path.extension().unwrap(), "epub");
+
+        assert!(
+            epub_created_path
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .contains(&chapter.make_chapter_file_name())
+        );
 
         Ok(())
     }

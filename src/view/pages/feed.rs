@@ -12,12 +12,12 @@ use tokio::task::JoinSet;
 use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
 
+use crate::backend::api_responses::feed::OneMangaResponse;
+use crate::backend::api_responses::ChapterResponse;
 use crate::backend::database::{get_history, GetHistoryArgs, MangaHistoryResponse, MangaHistoryType, DBCONN};
 use crate::backend::error_log::{write_to_error_log, ErrorType};
-use crate::backend::feed::OneMangaResponse;
 use crate::backend::fetch::{ApiClient, MangadexClient};
 use crate::backend::tui::Events;
-use crate::backend::ChapterResponse;
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
 use crate::utils::{from_manga_response, render_search_bar};
 use crate::view::widgets::feed::{FeedTabs, HistoryWidget, MangasRead};

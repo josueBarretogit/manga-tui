@@ -50,8 +50,8 @@ mod test {
     use tokio::sync::mpsc::unbounded_channel;
 
     use super::*;
+    use crate::backend::api_responses::SearchMangaResponse;
     use crate::backend::fetch::MockMangadexClient;
-    use crate::backend::SearchMangaResponse;
 
     #[tokio::test]
     async fn search_mangas_task() {

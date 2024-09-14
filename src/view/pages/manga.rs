@@ -16,6 +16,7 @@ use strum::Display;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
+use crate::backend::api_responses::{ChapterResponse, MangaStatisticsResponse, Statistics};
 use crate::backend::database::{
     get_chapters_history_status, save_history, set_chapter_downloaded, MangaReadingHistorySave, SetChapterDownloaded, DBCONN,
 };
@@ -24,7 +25,7 @@ use crate::backend::error_log::{self, write_to_error_log};
 use crate::backend::fetch::{ApiClient, MangadexClient, ITEMS_PER_PAGE_CHAPTERS};
 use crate::backend::filter::Languages;
 use crate::backend::tui::Events;
-use crate::backend::{AppDirectories, ChapterPagesResponse, ChapterResponse, MangaStatisticsResponse, Statistics};
+use crate::backend::AppDirectories;
 use crate::common::{Manga, PageType};
 use crate::config::{DownloadType, ImageQuality, MangaTuiConfig};
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
@@ -1036,7 +1037,7 @@ impl Component for MangaPage {
 mod test {
 
     use super::*;
-    use crate::backend::ChapterData;
+    use crate::backend::api_responses::ChapterData;
     use crate::view::widgets::press_key;
 
     fn get_manga_page() -> MangaPage {

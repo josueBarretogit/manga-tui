@@ -10,7 +10,7 @@ use ratatui::Terminal;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::task::JoinHandle;
 
-use super::ChapterPagesResponse;
+use super::api_responses::ChapterPagesResponse;
 use crate::common::{Artist, Author};
 use crate::view::app::{App, AppState};
 use crate::view::pages::SelectedPage;

@@ -18,6 +18,7 @@ use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
 use tui_widget_list::ListState;
 
+use crate::backend::api_responses::SearchMangaResponse;
 use crate::backend::database::{save_plan_to_read, MangaPlanToReadSave, DBCONN};
 use crate::backend::error_log::{write_to_error_log, ErrorType};
 #[cfg(not(test))]
@@ -25,7 +26,6 @@ use crate::backend::fetch::MangadexClient;
 #[cfg(test)]
 use crate::backend::fetch::MockMangadexClient;
 use crate::backend::tui::Events;
-use crate::backend::SearchMangaResponse;
 use crate::common::{Artist, Author, ImageState};
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
 use crate::utils::render_search_bar;
@@ -594,7 +594,7 @@ mod test {
     use ratatui::buffer::Buffer;
 
     use super::*;
-    use crate::backend::{Data, MangaSearchAttributes, MangaSearchRelationship};
+    use crate::backend::api_responses::{Data, MangaSearchAttributes, MangaSearchRelationship};
     use crate::view::widgets::press_key;
 
     //#[tokio::test]

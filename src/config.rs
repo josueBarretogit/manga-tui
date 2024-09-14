@@ -18,12 +18,21 @@ pub enum DownloadType {
     Epub,
 }
 
-#[derive(Default, Debug, Serialize, Deserialize, Display, EnumIter)]
+#[derive(Default, Debug, Serialize, Deserialize, Display, EnumIter, Clone, Copy)]
 #[serde(rename_all = "snake_case")]
 pub enum ImageQuality {
     #[default]
     Low,
     High,
+}
+
+impl ImageQuality {
+    pub fn as_param(self) -> &'static str {
+        match self {
+            Self::Low => "data-saver",
+            Self::High => "data",
+        }
+    }
 }
 
 #[derive(Default, Debug, Serialize, Deserialize)]

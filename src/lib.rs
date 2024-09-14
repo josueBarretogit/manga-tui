@@ -1,5 +1,4 @@
 use std::fmt::Display;
-use std::ops::Add;
 use std::path::{Path, PathBuf};
 
 /// Shortcut for: Path::new($path).try_exists().is_ok_and(|is_true| is_true)
@@ -46,7 +45,7 @@ fn remove_conflicting_characteres<T: AsRef<Path>>(title: T) -> PathBuf {
 
 /// This type ensures that a filename will not contain characteres that may throw errors
 /// like ":" or "/"
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct SanitizedFilename(PathBuf);
 
 impl Display for SanitizedFilename {
@@ -62,6 +61,12 @@ impl SanitizedFilename {
 
     pub fn as_path(&self) -> &Path {
         &self.0
+    }
+}
+
+impl<T: AsRef<Path>> From<T> for SanitizedFilename {
+    fn from(value: T) -> Self {
+        Self::new(value)
     }
 }
 

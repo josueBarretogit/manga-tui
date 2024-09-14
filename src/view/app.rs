@@ -14,8 +14,8 @@ use self::reader::MangaReader;
 use self::search::{InputMode, SearchPage};
 use super::widgets::search::MangaItem;
 use super::widgets::Component;
+use crate::backend::api_responses::ChapterPagesResponse;
 use crate::backend::tui::{Action, Events};
-use crate::backend::ChapterPagesResponse;
 use crate::global::INSTRUCTIONS_STYLE;
 use crate::view::pages::*;
 

@@ -7,7 +7,7 @@ use ratatui_image::Image;
 use throbber_widgets_tui::{Throbber, ThrobberState};
 use tui_widget_list::PreRender;
 
-use crate::backend::Data;
+use crate::backend::api_responses::Data;
 use crate::common::{ImageState, Manga};
 use crate::global::CURRENT_LIST_ITEM_STYLE;
 use crate::utils::{from_manga_response, set_status_style, set_tags_style};

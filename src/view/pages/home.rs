@@ -17,10 +17,10 @@ use ratatui_image::{Image, Resize};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
+use crate::backend::api_responses::SearchMangaResponse;
 use crate::backend::error_log::{write_to_error_log, ErrorType};
 use crate::backend::fetch::{ApiClient, MangadexClient};
 use crate::backend::tui::Events;
-use crate::backend::SearchMangaResponse;
 use crate::common::ImageState;
 use crate::global::INSTRUCTIONS_STYLE;
 use crate::utils::search_manga_cover;

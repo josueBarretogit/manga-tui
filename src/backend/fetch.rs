@@ -8,11 +8,11 @@ use reqwest::{Client, Response, Url};
 use serde::Serialize;
 use serde_json::json;
 
-use super::authors::AuthorsResponse;
-use super::feed::OneMangaResponse;
+use super::api_responses::authors::AuthorsResponse;
+use super::api_responses::feed::OneMangaResponse;
+use super::api_responses::tags::TagsResponse;
+use super::api_responses::{ChapterPages, ChapterPagesResponse, ChapterResponse, MangaStatisticsResponse, SearchMangaResponse};
 use super::filter::Languages;
-use super::tags::TagsResponse;
-use super::{ChapterPagesResponse, ChapterResponse, MangaStatisticsResponse, SearchMangaResponse};
 use crate::backend::filter::{Filters, IntoParam};
 use crate::view::pages::manga::ChapterOrder;
 
@@ -281,7 +281,7 @@ impl MockMangadexClient {
     }
 
     pub fn mock_bytes_response() -> Result<Response, reqwest::Error> {
-        let image_bytes = include_bytes!("../../public/mangadex_support.jpg").to_vec();
+        let image_bytes = include_bytes!("../../data_test/images/1.jpg").to_vec();
         let response = http::Response::builder().body(image_bytes).unwrap();
         Ok(response.into())
     }
@@ -320,7 +320,17 @@ impl ApiClient for MockMangadexClient {
     }
 
     async fn get_chapter_pages(&self, _chapter_id: &str) -> Result<Response, reqwest::Error> {
-        Self::mock_json_response(ChapterPagesResponse::default())
+        let chapter_pages_response = ChapterPagesResponse {
+            chapter: {
+                ChapterPages {
+                    data: vec!["some_file_name.jpg".to_string(), "and_another.jpg".to_string()],
+                    data_saver: vec!["some_file_name.jpg".to_string(), "and_another.jpg".to_string()],
+                    ..Default::default()
+                }
+            },
+            ..Default::default()
+        };
+        Self::mock_json_response(chapter_pages_response)
     }
 
     async fn get_manga_statistics(&self, _id_manga: &str) -> Result<Response, reqwest::Error> {
@@ -363,9 +373,9 @@ mod test {
     use pretty_assertions::assert_eq;
     use reqwest::StatusCode;
 
-    use self::authors::AuthorsResponse;
-    use self::feed::OneMangaResponse;
-    use self::tags::TagsResponse;
+    use self::api_responses::authors::AuthorsResponse;
+    use self::api_responses::feed::OneMangaResponse;
+    use self::api_responses::tags::TagsResponse;
     use super::*;
     use crate::backend::*;
 

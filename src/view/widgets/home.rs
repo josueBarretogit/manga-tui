@@ -6,7 +6,7 @@ use ratatui::widgets::{Block, Paragraph, StatefulWidget, Widget, Wrap};
 use ratatui_image::Image;
 use throbber_widgets_tui::{Throbber, ThrobberState};
 
-use crate::backend::{Data, SearchMangaResponse};
+use crate::backend::api_responses::{Data, SearchMangaResponse};
 use crate::common::{ImageState, Manga};
 use crate::utils::{from_manga_response, set_status_style, set_tags_style};
 
