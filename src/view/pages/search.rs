@@ -480,7 +480,7 @@ impl SearchPage {
         let api_client = MangadexClient::global().clone();
 
         #[cfg(test)]
-        let api_client = MockMangadexClient::new();
+        let api_client = MockMangadexClient::new(1);
 
         self.tasks.spawn(search_mangas_operation(api_client, manga_to_search, page, filters, tx));
     }
@@ -548,7 +548,7 @@ impl SearchPage {
             let api_client = MangadexClient::global().clone();
 
             #[cfg(test)]
-            let api_client = MockMangadexClient::new();
+            let api_client = MockMangadexClient::new(1);
 
             match item.manga.img_url.as_ref().cloned() {
                 Some(file_name) => {

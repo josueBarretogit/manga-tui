@@ -82,7 +82,7 @@ impl<'a> DownloadChapter {
         format!("{} {}", self.manga_title, self.manga_id)
     }
 
-    pub fn make_raw_images_directory(&'a self, base_directory: &Path) -> Result<PathBuf, std::io::Error> {
+    pub fn make_chapter_directory(&'a self, base_directory: &Path) -> Result<PathBuf, std::io::Error> {
         let directory = base_directory.join(self.make_chapter_file_name());
         if !exists!(&directory) {
             create_dir(&directory)?;
@@ -107,92 +107,77 @@ impl<'a> DownloadChapter {
         Ok(image_path)
     }
 
-    pub fn create_cbz(
-        &'a self,
-        base_directory: &Path,
-        images_to_store_in_cbz: Vec<ImageMetada>,
-    ) -> Result<PathBuf, std::io::Error> {
+    pub fn create_cbz_file(&'a self, base_directory: &Path) -> Result<(ZipWriter<File>, PathBuf), std::io::Error> {
         let cbz_filename = format!("{}.cbz", self.make_chapter_file_name());
 
         let cbz_path = base_directory.join(&cbz_filename);
 
         let cbz_file = File::create(&cbz_path)?;
 
-        let mut zip = ZipWriter::new(cbz_file);
+        let zip = ZipWriter::new(cbz_file);
 
+        Ok((zip, cbz_path))
+    }
+
+    pub fn insert_into_cbz(&'a self, zip_writer: &mut ZipWriter<File>, file_name: &'a str, image_bytes: &[u8]) {
         let options = SimpleFileOptions::default()
             .compression_method(zip::CompressionMethod::Deflated)
             .unix_permissions(0o755);
 
-        for (index, image_to_cbz) in images_to_store_in_cbz.into_iter().enumerate() {
-            zip.start_file(format!("{}.{}", index, image_to_cbz.extension), options)?;
+        zip_writer.start_file(file_name, options).ok();
 
-            zip.write_all(&image_to_cbz.image_bytes)?;
-        }
-
-        zip.finish()?;
-
-        Ok(cbz_path)
+        zip_writer.write_all(image_bytes).ok();
     }
 
-    pub fn create_epub(
-        &'a self,
-        base_directory: &Path,
-        images_to_store_in_epub: Vec<ImageMetada>,
-    ) -> color_eyre::eyre::Result<PathBuf> {
+    pub fn create_epub_file(&'a self, base_directory: &Path) -> color_eyre::eyre::Result<(EpubBuilder<ZipLibrary>, File, PathBuf)> {
         let epub_path = base_directory.join(format!("{}.epub", self.make_chapter_file_name()));
 
-        let mut epub = File::create(&epub_path)?;
+        let epub_file = File::create(&epub_path)?;
 
         let mut epub_builder = EpubBuilder::new(ZipLibrary::new()?)?;
 
         epub_builder.epub_version(epub_builder::EpubVersion::V30);
 
-        epub_builder.metadata("title", self.manga_title.to_string())?;
+        epub_builder.metadata("title", self.manga_title.to_string()).ok();
 
-        for (index, image_data) in images_to_store_in_epub.into_iter().enumerate() {
-            let file_name = format!("{}.{}", index, image_data.extension);
-            let image_path = format!("data/{}", file_name);
+        Ok((epub_builder, epub_file, epub_path))
+    }
 
-            let mime_type = format!("image/{}", image_data.extension);
+    pub fn insert_into_epub(
+        &'a self,
+        epub_builder: &mut EpubBuilder<ZipLibrary>,
+        file_name: &'a str,
+        extension: &'a str,
+        index: usize,
+        image_bytes: &[u8],
+    ) {
+        let image_path = format!("data/{}", file_name);
 
-            if index == 0 {
-                epub_builder.add_cover_image(&image_path, image_data.image_bytes.as_ref(), &mime_type)?;
-            }
+        let mime_type = format!("image/{}", extension);
 
-            epub_builder.add_resource(&image_path, image_data.image_bytes.as_ref(), &mime_type)?;
+        if index == 0 {
+            epub_builder.add_cover_image(&image_path, image_bytes, &mime_type).ok();
+        }
 
-            let xml_file_path = format!("{}.xhtml", index);
+        epub_builder.add_resource(&image_path, image_bytes, &mime_type).ok();
 
-            epub_builder.add_content(EpubContent::new(
+        let xml_file_path = format!("{}.xhtml", index);
+
+        epub_builder
+            .add_content(EpubContent::new(
                 xml_file_path,
                 EPUB_FILE_TEMPLATE.replace("REPLACE_IMAGE_SOURCE", &image_path).as_bytes(),
-            ))?;
-        }
-
-        epub_builder.generate(&mut epub)?;
-
-        Ok(epub_path)
+            ))
+            .ok();
     }
 
-    pub fn get_chapter_id(&self) -> String {
-        self.id_chapter.to_string()
-    }
-
-    pub fn create_manga_directory(&'a self, base_directory: &Path) -> Result<PathBuf, std::io::Error> {
-        let dir_manga_downloads = base_directory.join("mangaDownloads");
-
-        if !exists!(&dir_manga_downloads) {
-            create_dir_all(&dir_manga_downloads)?;
-        }
-
-        let dir_manga = dir_manga_downloads.join(self.make_manga_directory_filename());
+    pub fn make_base_manga_directory(&'a self, base_directory: &Path) -> Result<PathBuf, std::io::Error> {
+        let dir_manga = base_directory.join(self.make_manga_directory_filename());
 
         if !exists!(&dir_manga) {
-            create_dir(&dir_manga)?;
+            create_dir_all(&dir_manga)?;
         }
 
-        // need directory to store the language the chapter is in
         let chapter_language_dir = dir_manga.join(self.lang.as_path());
 
         if !exists!(&chapter_language_dir) {
@@ -216,10 +201,10 @@ mod tests {
     use crate::backend::filter::Languages;
 
     fn create_tests_directory() -> Result<PathBuf, std::io::Error> {
-        let base_directory = Path::new("./test_results");
+        let base_directory = Path::new("./test_results/download");
 
         if !exists!(&base_directory) {
-            fs::create_dir(base_directory)?;
+            fs::create_dir_all(base_directory)?;
         }
 
         Ok(base_directory.to_path_buf())
@@ -271,15 +256,20 @@ mod tests {
         let chapter_to_download = get_chapter_for_testing();
 
         let base_directory = create_tests_directory()?;
-        let directory_manga_path = chapter_to_download.create_manga_directory(&base_directory)?;
 
-        fs::read_dir(directory_manga_path.as_path())?;
+        let directory_manga_path = chapter_to_download.make_base_manga_directory(&base_directory)?;
 
         assert!(directory_manga_path.is_dir());
 
-        let last_folder = directory_manga_path.iter().last().unwrap();
+        assert!(directory_manga_path.starts_with(&base_directory));
 
-        assert_eq!(Languages::default().as_human_readable().as_str(), last_folder);
+        let manga_base_directory = base_directory.join(chapter_to_download.make_manga_directory_filename());
+
+        assert!(directory_manga_path.starts_with(&manga_base_directory));
+
+        let language_directory = manga_base_directory.join(Languages::default().as_human_readable());
+
+        assert!(directory_manga_path.starts_with(language_directory));
 
         Ok(())
     }
@@ -289,7 +279,7 @@ mod tests {
         let chapter = get_chapter_for_testing();
         let base_directory = create_tests_directory()?;
 
-        let path = chapter.make_raw_images_directory(&base_directory)?;
+        let path = chapter.make_chapter_directory(&base_directory)?;
 
         fs::read_dir(&path)?;
 
@@ -318,27 +308,17 @@ mod tests {
     }
 
     #[test]
-    fn make_cbz() -> Result<(), std::io::Error> {
+    fn create_cbz_file() -> Result<(), std::io::Error> {
         let chapter = get_chapter_for_testing();
 
-        let base_directory = create_tests_directory()?;
+        let (mut zip, cbz_path) = chapter.create_cbz_file(&create_tests_directory()?)?;
 
-        let images_to_store_in_cbz: Vec<ImageMetada> = vec![
-            ImageMetada::new("jpg", include_bytes!("../../data_test/images/1.jpg").to_vec().into()),
-            ImageMetada::new("jpg", include_bytes!("../../data_test/images/2.jpg").to_vec().into()),
-            ImageMetada::new("jpg", include_bytes!("../../data_test/images/3.jpg").to_vec().into()),
-        ];
+        assert_eq!(format!("{}.cbz", chapter.make_chapter_file_name()).as_str(), cbz_path.file_name().unwrap());
 
-        let cbz_path = chapter.create_cbz(&base_directory, images_to_store_in_cbz)?;
+        chapter.insert_into_cbz(&mut zip, "create_cbz1.jpg", include_bytes!("../../data_test/images/1.jpg"));
+        chapter.insert_into_cbz(&mut zip, "create_cbz2.jpg", include_bytes!("../../data_test/images/2.jpg"));
 
-        assert!(
-            cbz_path
-                .file_name()
-                .unwrap()
-                .to_str()
-                .unwrap()
-                .contains(&chapter.make_chapter_file_name())
-        );
+        zip.finish()?;
 
         let zip_file_created = File::open(&cbz_path)?;
 
@@ -346,36 +326,30 @@ mod tests {
 
         for file_in_cbz_index in 0..zip_file_created.len() {
             let file = zip_file_created.by_index(file_in_cbz_index)?;
-            assert_eq!(format!("{}.jpg", file_in_cbz_index), file.name());
+            assert_eq!(format!("create_cbz{}.jpg", file_in_cbz_index + 1), file.name());
         }
 
         Ok(())
     }
 
     #[test]
-    fn make_epub() -> color_eyre::eyre::Result<()> {
+    fn create_epub_file() -> color_eyre::eyre::Result<()> {
         let chapter = get_chapter_for_testing();
 
         let base_directory = create_tests_directory()?;
 
-        let images_to_store_in_epub: Vec<ImageMetada> = vec![
-            ImageMetada::new("jpg", include_bytes!("../../data_test/images/1.jpg").to_vec().into()),
-            ImageMetada::new("jpg", include_bytes!("../../data_test/images/2.jpg").to_vec().into()),
-            ImageMetada::new("jpg", include_bytes!("../../data_test/images/3.jpg").to_vec().into()),
-        ];
+        let (mut epub_builder, mut file, epub_path) = chapter.create_epub_file(&base_directory)?;
 
-        let epub_created_path = chapter.create_epub(&base_directory, images_to_store_in_epub)?;
+        chapter.insert_into_epub(&mut epub_builder, "test.jpg", "jpg", 0, include_bytes!("../../data_test/images/1.jpg"));
+        chapter.insert_into_epub(&mut epub_builder, "test2.jpg", "jpg", 1, include_bytes!("../../data_test/images/2.jpg"));
 
-        assert_eq!(epub_created_path.extension().unwrap(), "epub");
+        epub_builder.generate(&mut file)?;
 
-        assert!(
-            epub_created_path
-                .file_name()
-                .unwrap()
-                .to_str()
-                .unwrap()
-                .contains(&chapter.make_chapter_file_name())
-        );
+        fs::File::open(&epub_path)?;
+
+        let expected_epub_name = format!("{}.epub", chapter.make_chapter_file_name());
+
+        assert_eq!(expected_epub_name.as_str(), epub_path.file_name().unwrap());
 
         Ok(())
     }

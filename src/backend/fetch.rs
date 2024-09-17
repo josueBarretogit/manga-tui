@@ -54,7 +54,10 @@ pub trait ApiClient {
 }
 
 #[derive(Clone, Debug)]
-pub struct MockMangadexClient {}
+pub struct MockMangadexClient {
+    /// How many `items` the fake response is expected to return
+    amount_results: usize,
+}
 
 #[derive(Clone, Debug)]
 pub struct MangadexClient {
@@ -271,8 +274,8 @@ impl ApiClient for MangadexClient {
 }
 
 impl MockMangadexClient {
-    pub fn new() -> Self {
-        MockMangadexClient {}
+    pub fn new(amount_results: usize) -> Self {
+        MockMangadexClient { amount_results }
     }
 
     pub fn mock_json_response(data: impl Serialize) -> Result<Response, reqwest::Error> {
@@ -320,11 +323,19 @@ impl ApiClient for MockMangadexClient {
     }
 
     async fn get_chapter_pages(&self, _chapter_id: &str) -> Result<Response, reqwest::Error> {
+        let mut data: Vec<String> = vec![];
+        let mut data_saver: Vec<String> = vec![];
+
+        for _ in 0..self.amount_results {
+            data.push("some_file_name.jpg".to_string());
+            data_saver.push("some_file_name.jpg".to_string());
+        }
+
         let chapter_pages_response = ChapterPagesResponse {
             chapter: {
                 ChapterPages {
-                    data: vec!["some_file_name.jpg".to_string(), "and_another.jpg".to_string()],
-                    data_saver: vec!["some_file_name.jpg".to_string(), "and_another.jpg".to_string()],
+                    data,
+                    data_saver,
                     ..Default::default()
                 }
             },

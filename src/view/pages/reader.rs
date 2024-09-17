@@ -249,7 +249,7 @@ impl MangaReader {
             let api_client = MangadexClient::global().clone();
 
             #[cfg(test)]
-            let api_client = MockMangadexClient::new();
+            let api_client = MockMangadexClient::new(1);
 
             let file_name = page.url.clone();
             let endpoint = format!("{}/{}/{}", self.base_url, page.page_type, self.chapter_id);

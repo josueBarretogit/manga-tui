@@ -12,7 +12,7 @@ use ratatui::Frame;
 use ratatui_image::picker::Picker;
 use ratatui_image::protocol::Protocol;
 use ratatui_image::{Image, Resize};
-use strum::Display;
+use strum::{Display, EnumIs};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
@@ -67,7 +67,7 @@ pub enum MangaPageActions {
     SearchPreviousChapterPage,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, EnumIs)]
 pub enum MangaPageEvents {
     SearchChapters,
     SearchCover,
