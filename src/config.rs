@@ -1,6 +1,6 @@
 use std::fs::File;
 use std::io::{Read, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use manga_tui::exists;
 use once_cell::sync::OnceCell;
@@ -9,7 +9,7 @@ use strum::{Display, EnumIter};
 
 use crate::backend::AppDirectories;
 
-#[derive(Default, Debug, Serialize, Deserialize, Display, EnumIter)]
+#[derive(Default, Debug, Serialize, Deserialize, Display, EnumIter, Clone, Copy)]
 #[serde(rename_all = "snake_case")]
 pub enum DownloadType {
     #[default]
@@ -50,8 +50,8 @@ impl MangaTuiConfig {
         CONFIG.get().expect("Could not get download type")
     }
 
-    pub fn read_config(base_directory: &Path) -> Result<String, std::io::Error> {
-        let config_file = base_directory.join(AppDirectories::Config.to_string()).join(CONFIG_FILE);
+    pub fn read_raw_config(base_directory: &Path) -> Result<String, std::io::Error> {
+        let config_file = base_directory.join(Self::get_config_file_path());
 
         let mut config_file = File::open(config_file)?;
 
@@ -61,24 +61,20 @@ impl MangaTuiConfig {
         Ok(contents)
     }
 
-    #[allow(clippy::format_collect)]
-    pub fn write_config(base_directory: &Path) -> Result<(), std::io::Error> {
+    pub fn get_config_file_path() -> PathBuf {
+        PathBuf::from(AppDirectories::Config.to_string()).join(CONFIG_FILE)
+    }
+
+    pub fn get_file_contents() -> &'static str {
+        include_str!("../manga-tui-config.toml")
+    }
+
+    pub fn write_if_not_exists(base_directory: &Path) -> Result<(), std::io::Error> {
         let config_file = base_directory.join(AppDirectories::Config.to_string()).join(CONFIG_FILE);
 
         if !exists!(&config_file) {
-            let contents = r#" 
-            # The format of the manga downloaded
-            # values : cbz , raw, epub 
-            # default : cbz
-            download_type = "cbz"
+            let contents = Self::get_file_contents();
 
-            # Download image quality, low quality means images are compressed and is recommended for slow internet connections
-            # values : low, high
-            # default : low
-            image_quality = "low"
-            "#;
-
-            let contents: String = contents.trim().lines().map(|line| format!("{} \n", line.trim())).collect();
             let mut config_file = File::create(config_file)?;
             config_file.write_all(contents.as_bytes())?
         }

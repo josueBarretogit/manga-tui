@@ -48,6 +48,7 @@ impl AppDirectories {
     }
 }
 
+#[cfg(not(test))]
 pub static APP_DATA_DIR: Lazy<Option<PathBuf>> = Lazy::new(|| {
     directories::ProjectDirs::from("", "", "manga-tui").map(|dirs| match std::env::var("MANGA_TUI_DATA_DIR").ok() {
         Some(data_dir) => PathBuf::from(data_dir),
@@ -55,7 +56,10 @@ pub static APP_DATA_DIR: Lazy<Option<PathBuf>> = Lazy::new(|| {
     })
 });
 
-pub fn build_data_dir() -> Result<(), std::io::Error> {
+#[cfg(test)]
+pub static APP_DATA_DIR: Lazy<Option<PathBuf>> = Lazy::new(|| Some(PathBuf::from("./test_results/data-directory")));
+
+pub fn build_data_dir() -> Result<PathBuf, std::io::Error> {
     let data_dir = APP_DATA_DIR.as_ref();
     match data_dir {
         Some(dir) => {
@@ -68,16 +72,66 @@ pub fn build_data_dir() -> Result<(), std::io::Error> {
                 File::create(dir.join(AppDirectories::ErrorLogs.to_string()).join(ERROR_LOGS_FILE))?;
             }
 
-            MangaTuiConfig::write_config(dir)?;
+            MangaTuiConfig::write_if_not_exists(dir)?;
 
-            let config_contents = MangaTuiConfig::read_config(dir)?;
+            let config_contents = MangaTuiConfig::read_raw_config(dir)?;
 
             let config_contents: MangaTuiConfig = toml::from_str(&config_contents).unwrap_or_default();
 
-            CONFIG.set(config_contents).unwrap();
+            CONFIG.get_or_init(|| config_contents);
 
-            Ok(())
+            Ok(dir.to_path_buf())
         },
         None => Err(std::io::Error::other("data dir could not be found")),
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::error::Error;
+    use std::fs;
+
+    use pretty_assertions::assert_eq;
+
+    use super::*;
+
+    #[test]
+    fn test_config_file() -> Result<(), Box<dyn Error>> {
+        let data_dir = build_data_dir().expect("Could not build data directory");
+
+        let config_template = MangaTuiConfig::get_file_contents();
+
+        toml::from_str::<MangaTuiConfig>(config_template).expect("error when deserializing config template");
+
+        let contents = MangaTuiConfig::read_raw_config(&data_dir).expect("error when reading raw config file");
+
+        toml::from_str::<MangaTuiConfig>(&contents).expect("error when deserializing config file");
+
+        assert_eq!(contents, MangaTuiConfig::get_file_contents());
+
+        Ok(())
+    }
+
+    #[test]
+    fn data_directory_is_built() -> Result<(), Box<dyn Error>> {
+        build_data_dir().expect("Could not build data directory");
+
+        let mut amount_directories = 0;
+
+        let directory_built = fs::read_dir(APP_DATA_DIR.as_ref().unwrap())?;
+
+        for dir in directory_built {
+            let dir = dir?;
+
+            let directory_name = dir.file_name();
+
+            assert!(AppDirectories::iter().any(|app_dir| app_dir.to_string() == directory_name.to_string_lossy()));
+
+            amount_directories += 1;
+        }
+
+        assert_eq!(4, amount_directories);
+
+        Ok(())
     }
 }
