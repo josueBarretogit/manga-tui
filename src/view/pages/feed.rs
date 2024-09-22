@@ -20,29 +20,32 @@ use crate::backend::fetch::{ApiClient, MangadexClient};
 use crate::backend::tui::Events;
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
 use crate::utils::{from_manga_response, render_search_bar};
-use crate::view::widgets::feed::{FeedTabs, HistoryWidget, MangasRead};
+use crate::view::widgets::feed::{FeedTabs, HistoryWidget};
 use crate::view::widgets::search::MangaItem;
 use crate::view::widgets::Component;
 
-#[derive(Eq, PartialEq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum FeedState {
     SearchingHistory,
     ErrorSearchingHistory,
+    HistoryNotFound,
     SearchingMangaPage,
     MangaPageNotFound,
     DisplayingHistory,
 }
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum FeedActions {
     ScrollHistoryUp,
     ScrollHistoryDown,
     ToggleSearchBar,
     NextPage,
     PreviousPage,
-    ChangeTab,
+    SwitchTab,
     GoToMangaPage,
 }
 
+#[derive(Debug, PartialEq)]
 pub enum FeedEvents {
     SearchingFinalized,
     SearchHistory,
@@ -58,7 +61,7 @@ pub struct Feed {
     state: FeedState,
     pub history: Option<HistoryWidget>,
     pub loading_state: Option<ThrobberState>,
-    pub global_event_tx: UnboundedSender<Events>,
+    pub global_event_tx: Option<UnboundedSender<Events>>,
     pub local_action_tx: UnboundedSender<FeedActions>,
     pub local_action_rx: UnboundedReceiver<FeedActions>,
     pub local_event_tx: UnboundedSender<FeedEvents>,
@@ -69,7 +72,7 @@ pub struct Feed {
 }
 
 impl Feed {
-    pub fn new(global_event_tx: UnboundedSender<Events>) -> Self {
+    pub fn new() -> Self {
         let (local_action_tx, local_action_rx) = mpsc::unbounded_channel::<FeedActions>();
         let (local_event_tx, local_event_rx) = mpsc::unbounded_channel::<FeedEvents>();
         Self {
@@ -77,7 +80,7 @@ impl Feed {
             loading_state: None,
             history: None,
             state: FeedState::DisplayingHistory,
-            global_event_tx,
+            global_event_tx: None,
             local_action_tx,
             local_action_rx,
             local_event_tx,
@@ -92,24 +95,31 @@ impl Feed {
         self.is_typing
     }
 
+    pub fn with_global_sender(mut self, sender: UnboundedSender<Events>) -> Self {
+        self.global_event_tx = Some(sender);
+        self
+    }
+
     fn render_history(&mut self, area: Rect, buf: &mut Buffer) {
+        if self.state == FeedState::ErrorSearchingHistory {
+            Paragraph::new(
+                "Cannot get your reading history due to some issues, please check error logs"
+                    .to_span()
+                    .style(*ERROR_STYLE),
+            )
+            .render(area, buf);
+            return;
+        }
         match self.history.as_mut() {
             Some(history) => {
-                if history.mangas.is_empty() {
+                if self.state == FeedState::HistoryNotFound {
                     Paragraph::new("It seems you have no mangas stored here, try reading some").render(area, buf);
                 } else {
                     StatefulWidget::render(history.clone(), area, buf, &mut history.state);
                 }
             },
             None => {
-                if self.state == FeedState::ErrorSearchingHistory {
-                    Paragraph::new(
-                        "Cannot get your reading history due to some issues, please check error logs"
-                            .to_span()
-                            .style(*ERROR_STYLE),
-                    )
-                    .render(area, buf);
-                }
+                Paragraph::new("It seems you have no mangas stored here, try reading some").render(area, buf);
             },
         }
     }
@@ -195,7 +205,7 @@ impl Feed {
         } else {
             match key_event.code {
                 KeyCode::Tab => {
-                    self.local_action_tx.send(FeedActions::ChangeTab).ok();
+                    self.local_action_tx.send(FeedActions::SwitchTab).ok();
                 },
                 KeyCode::Char('j') | KeyCode::Down => {
                     self.local_action_tx.send(FeedActions::ScrollHistoryDown).ok();
@@ -286,10 +296,7 @@ impl Feed {
             None => 1,
         };
 
-        let history_type = match self.tabs {
-            FeedTabs::History => MangaHistoryType::ReadingHistory,
-            FeedTabs::PlantToRead => MangaHistoryType::PlanToRead,
-        };
+        let history_type: MangaHistoryType = self.tabs.into();
 
         self.tasks.spawn(async move {
             let binding = DBCONN.lock().unwrap();
@@ -330,28 +337,14 @@ impl Feed {
     }
 
     fn load_history(&mut self, maybe_history: Option<MangaHistoryResponse>) {
-        match maybe_history {
+        match maybe_history.filter(|history| !history.mangas.is_empty()) {
             Some(history) => {
-                self.history = Some(HistoryWidget {
-                    page: history.page,
-                    total_results: history.total_items,
-                    mangas: history
-                        .mangas
-                        .iter()
-                        .map(|history| MangasRead {
-                            id: history.id.clone(),
-                            title: history.title.clone(),
-                            recent_chapters: vec![],
-                            style: Style::default(),
-                        })
-                        .collect(),
-                    state: tui_widget_list::ListState::default(),
-                });
+                self.history = Some(HistoryWidget::from_database_response(history));
                 self.state = FeedState::DisplayingHistory;
                 self.local_event_tx.send(FeedEvents::SearchRecentChapters).ok();
             },
             None => {
-                self.state = FeedState::ErrorSearchingHistory;
+                self.state = FeedState::HistoryNotFound;
                 self.history = None;
             },
         }
@@ -380,7 +373,7 @@ impl Feed {
         if let Some(history) = self.history.as_mut() {
             if let Some(currently_selected_manga) = history.get_current_manga_selected() {
                 self.state = FeedState::SearchingMangaPage;
-                let tx = self.global_event_tx.clone();
+                let tx = self.global_event_tx.as_ref().cloned().unwrap();
                 let loca_tx = self.local_event_tx.clone();
                 let manga_id = currently_selected_manga.id.clone();
 
@@ -408,6 +401,14 @@ impl Feed {
         self.is_typing = !self.is_typing;
     }
 
+    fn switch_tabs(&mut self) {
+        self.tabs = self.tabs.cycle();
+        if let Some(history) = self.history.as_mut() {
+            history.page = 1;
+        }
+        self.search_history();
+    }
+
     fn handle_mouse_event(&mut self, mouse_event: MouseEvent) {
         match mouse_event.kind {
             MouseEventKind::ScrollUp => {
@@ -418,6 +419,11 @@ impl Feed {
             },
             _ => {},
         }
+    }
+
+    #[cfg(test)]
+    fn get_history(&self) -> HistoryWidget {
+        self.history.as_ref().cloned().unwrap()
     }
 }
 
@@ -443,13 +449,7 @@ impl Component for Feed {
                 FeedActions::GoToMangaPage => self.go_to_manga_page(),
                 FeedActions::ScrollHistoryUp => self.select_previous_manga(),
                 FeedActions::ScrollHistoryDown => self.select_next_manga(),
-                FeedActions::ChangeTab => {
-                    if let Some(history) = self.history.as_mut() {
-                        history.page = 1;
-                    }
-                    self.change_tab();
-                    self.search_history();
-                },
+                FeedActions::SwitchTab => self.switch_tabs(),
             }
         }
     }
@@ -469,5 +469,170 @@ impl Component for Feed {
             Events::Tick => self.tick(),
             _ => {},
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use core::panic;
+
+    use pretty_assertions::{assert_eq, assert_ne};
+
+    use super::*;
+    use crate::backend::api_responses::ChapterData;
+    use crate::backend::database::MangaHistory;
+    use crate::view::widgets::press_key;
+
+    fn history_data() -> MangaHistoryResponse {
+        let mangas_in_history = vec![MangaHistory::default(), MangaHistory::default()];
+        let total_items = mangas_in_history.len();
+
+        MangaHistoryResponse {
+            mangas: mangas_in_history,
+            page: 1,
+            total_items: total_items as u32,
+        }
+    }
+
+    #[test]
+    fn search_for_history_when_instantiated() {
+        let mut feed_page = Feed::new();
+
+        let expected_event = FeedEvents::SearchHistory;
+
+        feed_page.init_search();
+
+        let event = feed_page.local_event_rx.blocking_recv().expect("the event was not sent");
+
+        assert_eq!(expected_event, event);
+    }
+
+    #[test]
+    fn history_is_loaded() {
+        let mut feed_page = Feed::new();
+        let response_from_database = history_data();
+
+        let expected_widget = HistoryWidget::from_database_response(response_from_database.clone());
+
+        feed_page.load_history(Some(response_from_database));
+
+        assert!(feed_page.history.is_some());
+
+        assert_eq!(FeedState::DisplayingHistory, feed_page.state);
+
+        let history = feed_page.get_history();
+
+        assert_eq!(expected_widget.mangas, history.mangas);
+        assert_eq!(expected_widget.total_results, history.total_results);
+        assert_eq!(expected_widget.page, history.page);
+    }
+
+    #[test]
+    fn send_events_after_history_is_loaded() {
+        let mut feed_page = Feed::new();
+        let response_from_database = history_data();
+
+        feed_page.load_history(Some(response_from_database));
+
+        let expected_event = FeedEvents::SearchRecentChapters;
+
+        let event_sent = feed_page.local_event_rx.blocking_recv().expect("no event was sent");
+
+        assert_eq!(expected_event, event_sent);
+    }
+
+    #[test]
+    fn load_no_mangas_found_from_database() {
+        let mut feed_page = Feed::new();
+
+        let mut some_empty_response = history_data();
+
+        some_empty_response.mangas = vec![];
+
+        feed_page.load_history(Some(some_empty_response));
+
+        assert_eq!(feed_page.state, FeedState::HistoryNotFound);
+
+        feed_page.load_history(None);
+
+        assert_eq!(feed_page.state, FeedState::HistoryNotFound);
+    }
+
+    #[test]
+    fn load_chapters_of_manga() {
+        let mut feed_page = Feed::new();
+
+        let mut history = history_data();
+
+        let manga_id = "some_manga_id";
+
+        history.mangas.push(MangaHistory {
+            id: "some_manga_id".to_string(),
+            title: "some_title".to_string(),
+        });
+
+        feed_page.load_history(Some(history));
+        let chapter_response = ChapterResponse {
+            data: vec![ChapterData::default(), ChapterData::default()],
+            ..Default::default()
+        };
+
+        feed_page.load_recent_chapters(manga_id.to_string(), Some(chapter_response));
+
+        let expected_result = feed_page.get_history();
+        let expected_result = expected_result
+            .mangas
+            .iter()
+            .find(|manga| manga.id == manga_id)
+            .expect("manga was not loaded");
+
+        assert!(!expected_result.recent_chapters.is_empty());
+    }
+
+    #[tokio::test]
+    async fn switch_between_tabs() {
+        let mut feed_page = Feed::new();
+
+        assert_eq!(feed_page.tabs, FeedTabs::History);
+
+        feed_page.switch_tabs();
+
+        assert_eq!(feed_page.tabs, FeedTabs::PlantToRead);
+
+        feed_page.switch_tabs();
+
+        assert_eq!(feed_page.tabs, FeedTabs::History);
+    }
+
+    #[tokio::test]
+    async fn search_history_in_database() {
+        let mut feed_page = Feed::new();
+
+        feed_page.search_history();
+
+        assert_eq!(feed_page.state, FeedState::SearchingHistory);
+
+        let event_sent = feed_page.local_event_rx.recv().await.expect("no event was sent");
+
+        match event_sent {
+            FeedEvents::LoadHistory(_) => {},
+            _ => panic!("expected event LoadHistory "),
+        }
+    }
+
+    #[tokio::test]
+    async fn listen_key_event_to_switch_tabs() {
+        let mut feed_page = Feed::new();
+
+        let initial_tab = feed_page.tabs;
+
+        press_key(&mut feed_page, KeyCode::Tab);
+
+        let action_sent = feed_page.local_action_rx.recv().await.expect("no key event was sent");
+
+        feed_page.update(action_sent);
+
+        assert_eq!(feed_page.state, FeedState::SearchingHistory);
+        assert_ne!(feed_page.tabs, initial_tab);
     }
 }

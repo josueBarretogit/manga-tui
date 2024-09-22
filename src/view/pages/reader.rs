@@ -11,10 +11,10 @@ use ratatui_image::{Resize, StatefulImage};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
+#[cfg(test)]
+use crate::backend::fetch::fake_api_client::MockMangadexClient;
 #[cfg(not(test))]
 use crate::backend::fetch::MangadexClient;
-#[cfg(test)]
-use crate::backend::fetch::MockMangadexClient;
 use crate::backend::tui::Events;
 use crate::common::PageType;
 use crate::global::INSTRUCTIONS_STYLE;
@@ -249,7 +249,7 @@ impl MangaReader {
             let api_client = MangadexClient::global().clone();
 
             #[cfg(test)]
-            let api_client = MockMangadexClient::new(1);
+            let api_client = MockMangadexClient::new().with_amount_returning_items(1);
 
             let file_name = page.url.clone();
             let endpoint = format!("{}/{}/{}", self.base_url, page.page_type, self.chapter_id);

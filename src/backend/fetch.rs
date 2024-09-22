@@ -5,18 +5,12 @@ use chrono::Months;
 use manga_tui::SearchTerm;
 use once_cell::sync::OnceCell;
 use reqwest::{Client, Response, Url};
-use serde::Serialize;
-use serde_json::json;
 
-use super::api_responses::authors::AuthorsResponse;
-use super::api_responses::feed::OneMangaResponse;
-use super::api_responses::tags::TagsResponse;
-use super::api_responses::{ChapterPages, ChapterPagesResponse, ChapterResponse, MangaStatisticsResponse, SearchMangaResponse};
 use super::filter::Languages;
 use crate::backend::filter::{Filters, IntoParam};
 use crate::view::pages::manga::ChapterOrder;
 
-pub trait ApiClient {
+pub trait ApiClient: Clone {
     async fn get_chapter_page(&self, endpoint: &str, file_name: &str) -> Result<Response, reqwest::Error>;
 
     async fn search_mangas(&self, search_term: Option<SearchTerm>, page: u32, filters: Filters)
@@ -51,12 +45,6 @@ pub trait ApiClient {
     async fn get_authors(&self, name_to_search: SearchTerm) -> Result<Response, reqwest::Error>;
 
     async fn get_all_chapters_for_manga(&self, id: &str, language: Languages) -> Result<Response, reqwest::Error>;
-}
-
-#[derive(Clone, Debug)]
-pub struct MockMangadexClient {
-    /// How many `items` the fake response is expected to return
-    amount_results: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -273,107 +261,144 @@ impl ApiClient for MangadexClient {
     }
 }
 
-impl MockMangadexClient {
-    pub fn new(amount_results: usize) -> Self {
-        MockMangadexClient { amount_results }
+#[cfg(test)]
+pub mod fake_api_client {
+
+    use manga_tui::SearchTerm;
+    use reqwest::Response;
+    use serde::Serialize;
+    use serde_json::json;
+
+    use self::authors::AuthorsResponse;
+    use self::feed::OneMangaResponse;
+    use self::tags::TagsResponse;
+    use super::super::api_responses::*;
+    use super::ApiClient;
+    use crate::backend::filter::{Filters, Languages};
+    use crate::view::pages::manga::ChapterOrder;
+
+    #[derive(Clone, Debug)]
+    pub struct MockMangadexClient {
+        /// How many `items` the fake response is expected to return
+        amount_results: Option<usize>,
+        chapters_response: Option<ChapterResponse>,
     }
 
-    pub fn mock_json_response(data: impl Serialize) -> Result<Response, reqwest::Error> {
-        let mock_response = json!(data).to_string();
-        Ok(http::Response::builder().body(mock_response).unwrap().into())
-    }
-
-    pub fn mock_bytes_response() -> Result<Response, reqwest::Error> {
-        let image_bytes = include_bytes!("../../data_test/images/1.jpg").to_vec();
-        let response = http::Response::builder().body(image_bytes).unwrap();
-        Ok(response.into())
-    }
-}
-
-impl ApiClient for MockMangadexClient {
-    async fn get_chapter_page(&self, _endpoint: &str, _file_name: &str) -> Result<Response, reqwest::Error> {
-        Self::mock_bytes_response()
-    }
-
-    async fn search_mangas(
-        &self,
-        _search_term: Option<SearchTerm>,
-        _page: u32,
-        _filters: Filters,
-    ) -> Result<Response, reqwest::Error> {
-        Self::mock_json_response(SearchMangaResponse::default())
-    }
-
-    async fn get_cover_for_manga(&self, _id_manga: &str, _file_name: &str) -> Result<Response, reqwest::Error> {
-        Self::mock_bytes_response()
-    }
-
-    async fn get_cover_for_manga_lower_quality(&self, _id_manga: &str, _file_name: &str) -> Result<Response, reqwest::Error> {
-        Self::mock_bytes_response()
-    }
-
-    async fn get_manga_chapters(
-        &self,
-        _id: &str,
-        _page: u32,
-        _language: Languages,
-        _order: ChapterOrder,
-    ) -> Result<Response, reqwest::Error> {
-        Self::mock_json_response(ChapterResponse::default())
-    }
-
-    async fn get_chapter_pages(&self, _chapter_id: &str) -> Result<Response, reqwest::Error> {
-        let mut data: Vec<String> = vec![];
-        let mut data_saver: Vec<String> = vec![];
-
-        for _ in 0..self.amount_results {
-            data.push("some_file_name.jpg".to_string());
-            data_saver.push("some_file_name.jpg".to_string());
+    impl MockMangadexClient {
+        pub fn with_amount_returning_items(mut self, items: usize) -> Self {
+            self.amount_results = Some(items);
+            self
         }
 
-        let chapter_pages_response = ChapterPagesResponse {
-            chapter: {
-                ChapterPages {
-                    data,
-                    data_saver,
-                    ..Default::default()
-                }
-            },
-            ..Default::default()
-        };
-        Self::mock_json_response(chapter_pages_response)
+        pub fn with_chapter_response(mut self, response: ChapterResponse) -> Self {
+            self.chapters_response = Some(response);
+            self
+        }
+
+        pub fn new() -> Self {
+            MockMangadexClient {
+                amount_results: None,
+                chapters_response: None,
+            }
+        }
+
+        pub fn mock_json_response(data: impl Serialize) -> Result<Response, reqwest::Error> {
+            let mock_response = json!(data).to_string();
+            Ok(http::Response::builder().body(mock_response).unwrap().into())
+        }
+
+        pub fn mock_bytes_response() -> Result<Response, reqwest::Error> {
+            let image_bytes = include_bytes!("../../data_test/images/1.jpg").to_vec();
+            let response = http::Response::builder().body(image_bytes).unwrap();
+            Ok(response.into())
+        }
     }
 
-    async fn get_manga_statistics(&self, _id_manga: &str) -> Result<Response, reqwest::Error> {
-        Self::mock_json_response(MangaStatisticsResponse::default())
-    }
+    impl ApiClient for MockMangadexClient {
+        async fn get_chapter_page(&self, _endpoint: &str, _file_name: &str) -> Result<Response, reqwest::Error> {
+            Self::mock_bytes_response()
+        }
 
-    async fn get_popular_mangas(&self) -> Result<Response, reqwest::Error> {
-        Self::mock_json_response(SearchMangaResponse::default())
-    }
+        async fn search_mangas(
+            &self,
+            _search_term: Option<SearchTerm>,
+            _page: u32,
+            _filters: Filters,
+        ) -> Result<Response, reqwest::Error> {
+            Self::mock_json_response(SearchMangaResponse::default())
+        }
 
-    async fn get_recently_added(&self) -> Result<Response, reqwest::Error> {
-        Self::mock_json_response(SearchMangaResponse::default())
-    }
+        async fn get_cover_for_manga(&self, _id_manga: &str, _file_name: &str) -> Result<Response, reqwest::Error> {
+            Self::mock_bytes_response()
+        }
 
-    async fn get_one_manga(&self, _manga_id: &str) -> Result<Response, reqwest::Error> {
-        Self::mock_json_response(OneMangaResponse::default())
-    }
+        async fn get_cover_for_manga_lower_quality(&self, _id_manga: &str, _file_name: &str) -> Result<Response, reqwest::Error> {
+            Self::mock_bytes_response()
+        }
 
-    async fn get_latest_chapters(&self, _manga_id: &str) -> Result<Response, reqwest::Error> {
-        Self::mock_json_response(ChapterResponse::default())
-    }
+        async fn get_manga_chapters(
+            &self,
+            _id: &str,
+            _page: u32,
+            _language: Languages,
+            _order: ChapterOrder,
+        ) -> Result<Response, reqwest::Error> {
+            Self::mock_json_response(ChapterResponse::default())
+        }
 
-    async fn get_tags(&self) -> Result<Response, reqwest::Error> {
-        Self::mock_json_response(TagsResponse::default())
-    }
+        async fn get_chapter_pages(&self, _chapter_id: &str) -> Result<Response, reqwest::Error> {
+            let mut data: Vec<String> = vec![];
+            let mut data_saver: Vec<String> = vec![];
 
-    async fn get_authors(&self, _name: SearchTerm) -> Result<Response, reqwest::Error> {
-        Self::mock_json_response(AuthorsResponse::default())
-    }
+            for _ in 0..self.amount_results.unwrap_or(1) {
+                data.push("some_file_name.jpg".to_string());
+                data_saver.push("some_file_name.jpg".to_string());
+            }
 
-    async fn get_all_chapters_for_manga(&self, _id: &str, _language: Languages) -> Result<Response, reqwest::Error> {
-        Self::mock_json_response(ChapterResponse::default())
+            let chapter_pages_response = ChapterPagesResponse {
+                chapter: {
+                    ChapterPages {
+                        data,
+                        data_saver,
+                        ..Default::default()
+                    }
+                },
+                ..Default::default()
+            };
+            Self::mock_json_response(chapter_pages_response)
+        }
+
+        async fn get_manga_statistics(&self, _id_manga: &str) -> Result<Response, reqwest::Error> {
+            Self::mock_json_response(MangaStatisticsResponse::default())
+        }
+
+        async fn get_popular_mangas(&self) -> Result<Response, reqwest::Error> {
+            Self::mock_json_response(SearchMangaResponse::default())
+        }
+
+        async fn get_recently_added(&self) -> Result<Response, reqwest::Error> {
+            Self::mock_json_response(SearchMangaResponse::default())
+        }
+
+        async fn get_one_manga(&self, _manga_id: &str) -> Result<Response, reqwest::Error> {
+            Self::mock_json_response(OneMangaResponse::default())
+        }
+
+        async fn get_latest_chapters(&self, _manga_id: &str) -> Result<Response, reqwest::Error> {
+            Self::mock_json_response(ChapterResponse::default())
+        }
+
+        async fn get_tags(&self) -> Result<Response, reqwest::Error> {
+            Self::mock_json_response(TagsResponse::default())
+        }
+
+        async fn get_authors(&self, _name: SearchTerm) -> Result<Response, reqwest::Error> {
+            Self::mock_json_response(AuthorsResponse::default())
+        }
+
+        async fn get_all_chapters_for_manga(&self, _id: &str, _language: Languages) -> Result<Response, reqwest::Error> {
+            Self::mock_json_response(self.chapters_response.as_ref().cloned().unwrap_or_default())
+        }
     }
 }
 
@@ -387,6 +412,7 @@ mod test {
     use self::api_responses::authors::AuthorsResponse;
     use self::api_responses::feed::OneMangaResponse;
     use self::api_responses::tags::TagsResponse;
+    use self::api_responses::{ChapterPagesResponse, ChapterResponse, MangaStatisticsResponse, SearchMangaResponse};
     use super::*;
     use crate::backend::*;
 

@@ -107,7 +107,7 @@ impl App {
             picker,
             current_tab: SelectedPage::default(),
             search_page: SearchPage::init(global_event_tx.clone(), picker),
-            feed_page: Feed::new(global_event_tx.clone()),
+            feed_page: Feed::new().with_global_sender(global_event_tx.clone()),
             home_page: Home::new(global_event_tx.clone(), picker),
             manga_page: None,
             manga_reader_page: None,

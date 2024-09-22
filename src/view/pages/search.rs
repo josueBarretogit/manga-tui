@@ -21,10 +21,10 @@ use tui_widget_list::ListState;
 use crate::backend::api_responses::SearchMangaResponse;
 use crate::backend::database::{save_plan_to_read, MangaPlanToReadSave, DBCONN};
 use crate::backend::error_log::{write_to_error_log, ErrorType};
+#[cfg(test)]
+use crate::backend::fetch::fake_api_client::MockMangadexClient;
 #[cfg(not(test))]
 use crate::backend::fetch::MangadexClient;
-#[cfg(test)]
-use crate::backend::fetch::MockMangadexClient;
 use crate::backend::tui::Events;
 use crate::common::{Artist, Author, ImageState};
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
@@ -480,7 +480,7 @@ impl SearchPage {
         let api_client = MangadexClient::global().clone();
 
         #[cfg(test)]
-        let api_client = MockMangadexClient::new(1);
+        let api_client = MockMangadexClient::new();
 
         self.tasks.spawn(search_mangas_operation(api_client, manga_to_search, page, filters, tx));
     }
@@ -548,7 +548,7 @@ impl SearchPage {
             let api_client = MangadexClient::global().clone();
 
             #[cfg(test)]
-            let api_client = MockMangadexClient::new(1);
+            let api_client = MockMangadexClient::new();
 
             match item.manga.img_url.as_ref().cloned() {
                 Some(file_name) => {

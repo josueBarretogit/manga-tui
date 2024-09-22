@@ -21,16 +21,16 @@ use crate::backend::database::{
     get_chapters_history_status, save_history, set_chapter_downloaded, MangaReadingHistorySave, SetChapterDownloaded, DBCONN,
 };
 use crate::backend::download::DownloadChapter;
-use crate::backend::error_log::{self, write_to_error_log};
+use crate::backend::error_log::{self, write_to_error_log, ErrorType};
 use crate::backend::fetch::{ApiClient, MangadexClient, ITEMS_PER_PAGE_CHAPTERS};
 use crate::backend::filter::Languages;
 use crate::backend::tui::Events;
 use crate::backend::AppDirectories;
-use crate::common::{Manga, PageType};
-use crate::config::{DownloadType, ImageQuality, MangaTuiConfig};
+use crate::common::Manga;
+use crate::config::MangaTuiConfig;
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
 use crate::utils::{set_status_style, set_tags_style};
-use crate::view::tasks::manga::{download_all_chapters_task, search_chapters_operation, DownloadAllChaptersData};
+use crate::view::tasks::manga::{download_all_chapters, download_chapter_task, search_chapters_operation, DownloadAllChapters};
 use crate::view::widgets::manga::{
     ChapterItem, ChaptersListWidget, DownloadAllChaptersState, DownloadAllChaptersWidget, DownloadPhase,
 };
@@ -667,57 +667,47 @@ impl MangaPage {
             let chapter_id = chapter.id.clone();
             let lang = chapter.translated_language.as_human_readable().to_string();
 
-            chapter.download_loading_state = Some(0.001);
+            let download_chapter =
+                DownloadChapter::new(&chapter_id, &manga_id, &manga_title, &chapter_title, &number, &scanlator, &lang);
 
-            //self.tasks.spawn(async move {
-            //    let manga_response = MangadexClient::global().get_chapter_pages(&chapter_id).await;
-            //    match manga_response {
-            //        Ok(response) => {
-            //            if let Ok(response) = response.json::<ChapterPagesResponse>().await {
-            //                let config = MangaTuiConfig::get();
-            //
-            //                let (files, quality) = match config.image_quality {
-            //                    ImageQuality::Low => (response.chapter.data_saver, PageType::LowQuality),
-            //                    ImageQuality::High => (response.chapter.data, PageType::HighQuality),
-            //                };
-            //
-            //                let endpoint = format!("{}/{}/{}", response.base_url, quality, response.chapter.hash);
-            //
-            //                let chapter = DownloadChapter::new(
-            //                    &chapter_id,
-            //                    &manga_id,
-            //                    &manga_title,
-            //                    &chapter_title,
-            //                    number.parse().unwrap_or_default(),
-            //                    &scanlator,
-            //                    &lang,
-            //                );
-            //
-            //                let download_chapter_task = match config.download_type {
-            //                    DownloadType::Raw => download_chapter_raw_images(false, chapter, files, endpoint, tx.clone()),
-            //                    DownloadType::Cbz => download_chapter_cbz(false, chapter, files, endpoint, tx.clone()),
-            //                    DownloadType::Epub => download_chapter_epub(false, chapter, files, endpoint, tx.clone()),
-            //                };
-            //
-            //                if let Err(e) = download_chapter_task {
-            //                    write_to_error_log(error_log::ErrorType::FromError(Box::new(e)));
-            //                    tx.send(MangaPageEvents::DownloadError(chapter_id)).ok();
-            //                    return;
-            //                }
-            //
-            //                tx.send(MangaPageEvents::SaveChapterDownloadStatus(chapter_id, chapter_title)).ok();
-            //            }
-            //        },
-            //        Err(e) => {
-            //            write_to_error_log(error_log::ErrorType::FromError(Box::new(e)));
-            //            tx.send(MangaPageEvents::DownloadError(chapter_id)).ok();
-            //        },
-            //    }
-            //});
+            chapter.download_loading_state = Some(0.001);
+            self.tasks.spawn(async move {
+                #[cfg(not(test))]
+                let api_client = MangadexClient::global().clone();
+
+                #[cfg(test)]
+                let api_client = crate::backend::fetch::fake_api_client::MockMangadexClient::new();
+
+                let config = MangaTuiConfig::get();
+
+                let download_result = download_chapter_task(
+                    download_chapter,
+                    api_client,
+                    config.image_quality,
+                    AppDirectories::MangaDownloads.get_full_path(),
+                    config.download_type,
+                    chapter_id.clone(),
+                    true,
+                    tx.clone(),
+                )
+                .await;
+
+                match download_result {
+                    Ok(_) => {
+                        tx.send(MangaPageEvents::SaveChapterDownloadStatus(chapter_id.clone(), chapter_title))
+                            .ok();
+                        tx.send(MangaPageEvents::ChapterFinishedDownloading(chapter_id)).ok();
+                    },
+                    Err(e) => {
+                        write_to_error_log(ErrorType::FromError(e));
+                        tx.send(MangaPageEvents::DownloadError(chapter_id)).ok();
+                    },
+                }
+            });
         }
     }
 
-    fn stop_loader_for_chapter(&mut self, chapter_id: String) {
+    fn set_chapter_finished_downloading(&mut self, chapter_id: String) {
         if let Some(chapters) = self.chapters.as_mut() {
             if let Some(chap) = chapters.widget.chapters.iter_mut().find(|chap| chap.id == chapter_id) {
                 chap.download_loading_state = None;
@@ -821,12 +811,30 @@ impl MangaPage {
         let manga_title = self.manga.title.clone();
         let lang = self.get_current_selected_language();
         let tx = self.local_event_tx.clone();
-        self.tasks.spawn(download_all_chapters_task(DownloadAllChaptersData {
-            tx,
-            manga_id,
-            manga_title,
-            lang,
-        }));
+        self.tasks.spawn(async move {
+            #[cfg(not(test))]
+            let api_client = MangadexClient::global().clone();
+
+            #[cfg(test)]
+            let api_client = crate::backend::fetch::fake_api_client::MockMangadexClient::new();
+
+            let config = MangaTuiConfig::get();
+            let download_all_chapters_process = download_all_chapters(api_client, DownloadAllChapters {
+                sender: tx.clone(),
+                manga_id: &manga_id,
+                manga_title: &manga_title,
+                image_quality: config.image_quality,
+                directory_to_download: &AppDirectories::MangaDownloads.get_full_path(),
+                file_format: config.download_type,
+                language: lang,
+            })
+            .await;
+
+            if let Err(e) = download_all_chapters_process {
+                tx.send(MangaPageEvents::DownloadAllChaptersError).ok();
+                write_to_error_log(ErrorType::FromError(e));
+            }
+        });
     }
 
     fn cancel_download_all_chapters(&mut self) {
@@ -840,7 +848,7 @@ impl MangaPage {
         self.download_all_chapters_state.start_download();
         self.download_all_chapters_state.set_total_chapters(total_chapters);
         self.download_all_chapters_state
-            .set_download_location(AppDirectories::MangaDownloads.into_path_buf().join(&self.manga.title));
+            .set_download_location(AppDirectories::MangaDownloads.get_full_path().join(&self.manga.title));
     }
 
     pub fn is_downloading_all_chapters(&self) -> bool {
@@ -937,7 +945,7 @@ impl MangaPage {
                     self.set_download_progress_for_chapter(progress, id_chapter)
                 },
                 MangaPageEvents::SaveChapterDownloadStatus(id_chapter, title) => self.save_download_status(id_chapter, title),
-                MangaPageEvents::ChapterFinishedDownloading(id_chapter) => self.stop_loader_for_chapter(id_chapter),
+                MangaPageEvents::ChapterFinishedDownloading(id_chapter) => self.set_chapter_finished_downloading(id_chapter),
                 MangaPageEvents::FethStatistics => self.fetch_statistics(),
                 MangaPageEvents::SearchChapters => self.search_chapters(),
                 MangaPageEvents::LoadChapters(response) => self.load_chapters(response),

@@ -41,13 +41,13 @@ pub struct MangaTuiConfig {
     pub image_quality: ImageQuality,
 }
 
-pub static CONFIG_FILE: &str = "manga-tui-config.toml";
-
 pub static CONFIG: OnceCell<MangaTuiConfig> = OnceCell::new();
+
+static CONFIG_TEMPLATE: &str = include_str!("../manga-tui-config.toml");
 
 impl MangaTuiConfig {
     pub fn get() -> &'static Self {
-        CONFIG.get().expect("Could not get download type")
+        CONFIG.get_or_init(MangaTuiConfig::default)
     }
 
     pub fn read_raw_config(base_directory: &Path) -> Result<String, std::io::Error> {
@@ -62,20 +62,20 @@ impl MangaTuiConfig {
     }
 
     pub fn get_config_file_path() -> PathBuf {
-        PathBuf::from(AppDirectories::Config.to_string()).join(CONFIG_FILE)
+        AppDirectories::Config.get_path()
     }
 
-    pub fn get_file_contents() -> &'static str {
-        include_str!("../manga-tui-config.toml")
+    pub fn get_config_template() -> &'static str {
+        CONFIG_TEMPLATE
     }
 
     pub fn write_if_not_exists(base_directory: &Path) -> Result<(), std::io::Error> {
-        let config_file = base_directory.join(AppDirectories::Config.to_string()).join(CONFIG_FILE);
+        let config_file = base_directory.join(Self::get_config_file_path());
 
         if !exists!(&config_file) {
-            let contents = Self::get_file_contents();
+            let contents = Self::get_config_template();
 
-            let mut config_file = File::create(config_file)?;
+            let mut config_file = File::create(config_file).expect("cannot create conf file");
             config_file.write_all(contents.as_bytes())?
         }
 

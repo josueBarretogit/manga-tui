@@ -51,7 +51,7 @@ mod test {
 
     use super::*;
     use crate::backend::api_responses::SearchMangaResponse;
-    use crate::backend::fetch::MockMangadexClient;
+    use crate::backend::fetch::fake_api_client::MockMangadexClient;
 
     #[tokio::test]
     async fn search_mangas_task() {
@@ -59,7 +59,7 @@ mod test {
 
         let expected = SearchMangaResponse::default();
 
-        search_mangas_operation(MockMangadexClient::new(1), None, 1, Filters::default(), tx).await;
+        search_mangas_operation(MockMangadexClient::new(), None, 1, Filters::default(), tx).await;
 
         let event = rx.recv().await.expect("LoadMangasFound event not sent");
 
@@ -72,7 +72,7 @@ mod test {
 
         let manga_id = String::from("manga_id");
 
-        search_manga_covers(MockMangadexClient::new(1), manga_id.clone(), String::default(), tx).await;
+        search_manga_covers(MockMangadexClient::new(), manga_id.clone(), String::default(), tx).await;
 
         let event = rx.recv().await.expect("LoadCover event not sent");
 

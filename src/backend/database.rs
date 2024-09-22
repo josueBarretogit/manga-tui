@@ -7,12 +7,22 @@ use rusqlite::{params, Connection};
 use strum::{Display, EnumIter};
 
 #[cfg(not(test))]
-use super::{AppDirectories, APP_DATA_DIR};
+use super::AppDirectories;
+use crate::view::widgets::feed::FeedTabs;
 
 #[derive(Display, Debug, Clone, Copy)]
 pub enum MangaHistoryType {
     PlanToRead,
     ReadingHistory,
+}
+
+impl From<FeedTabs> for MangaHistoryType {
+    fn from(value: FeedTabs) -> Self {
+        match value {
+            FeedTabs::History => Self::ReadingHistory,
+            FeedTabs::PlantToRead => Self::PlanToRead,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Display, EnumIter)]
@@ -29,13 +39,7 @@ pub enum Table {
 
 pub static DBCONN: Lazy<Mutex<Option<Connection>>> = Lazy::new(|| {
     #[cfg(not(test))]
-    let conn = Connection::open(
-        APP_DATA_DIR
-            .as_ref()
-            .unwrap()
-            .join(AppDirectories::History.to_string())
-            .join("manga-tui-history.db"),
-    );
+    let conn = Connection::open(AppDirectories::History.get_full_path());
 
     #[cfg(test)]
     let conn = Connection::open_in_memory();
@@ -294,12 +298,14 @@ pub fn get_chapters_history_status(manga_id: &str, conn: &Connection) -> rusqlit
     Ok(chapter_ids)
 }
 
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct MangaHistory {
     pub id: String,
     pub title: String,
     // img_url: Option<String>,
 }
 
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct MangaHistoryResponse {
     pub mangas: Vec<MangaHistory>,
     pub page: u32,
