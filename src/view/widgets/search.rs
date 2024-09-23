@@ -129,7 +129,7 @@ impl<'a> StatefulWidget for MangaPreview<'a> {
     }
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug)]
 pub struct MangaItem {
     pub manga: Manga,
     pub style: Style,

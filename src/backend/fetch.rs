@@ -1,3 +1,4 @@
+use std::future::Future;
 use std::time::Duration as StdDuration;
 
 use bytes::Bytes;
@@ -10,41 +11,54 @@ use super::filter::Languages;
 use crate::backend::filter::{Filters, IntoParam};
 use crate::view::pages::manga::ChapterOrder;
 
-pub trait ApiClient: Clone {
-    async fn get_chapter_page(&self, endpoint: &str, file_name: &str) -> Result<Response, reqwest::Error>;
+pub trait ApiClient: Clone + Send + 'static {
+    fn get_chapter_page(&self, endpoint: &str, file_name: &str) -> impl Future<Output = Result<Response, reqwest::Error>> + Send;
 
-    async fn search_mangas(&self, search_term: Option<SearchTerm>, page: u32, filters: Filters)
-    -> Result<Response, reqwest::Error>;
+    fn search_mangas(
+        &self,
+        search_term: Option<SearchTerm>,
+        page: u32,
+        filters: Filters,
+    ) -> impl Future<Output = Result<Response, reqwest::Error>> + Send;
 
-    async fn get_cover_for_manga(&self, id_manga: &str, file_name: &str) -> Result<Response, reqwest::Error>;
+    fn get_cover_for_manga(&self, id_manga: &str, file_name: &str)
+    -> impl Future<Output = Result<Response, reqwest::Error>> + Send;
 
-    async fn get_cover_for_manga_lower_quality(&self, id_manga: &str, file_name: &str) -> Result<Response, reqwest::Error>;
+    fn get_cover_for_manga_lower_quality(
+        &self,
+        id_manga: &str,
+        file_name: &str,
+    ) -> impl Future<Output = Result<Response, reqwest::Error>> + Send;
 
-    async fn get_manga_chapters(
+    fn get_manga_chapters(
         &self,
         id: &str,
         page: u32,
         language: Languages,
         order: ChapterOrder,
-    ) -> Result<Response, reqwest::Error>;
+    ) -> impl Future<Output = Result<Response, reqwest::Error>> + Send;
 
-    async fn get_chapter_pages(&self, chapter_id: &str) -> Result<Response, reqwest::Error>;
+    fn get_chapter_pages(&self, chapter_id: &str) -> impl Future<Output = Result<Response, reqwest::Error>> + Send;
 
-    async fn get_manga_statistics(&self, id_manga: &str) -> Result<Response, reqwest::Error>;
+    fn get_manga_statistics(&self, id_manga: &str) -> impl Future<Output = Result<Response, reqwest::Error>> + Send;
 
-    async fn get_popular_mangas(&self) -> Result<Response, reqwest::Error>;
+    fn get_popular_mangas(&self) -> impl Future<Output = Result<Response, reqwest::Error>> + Send;
 
-    async fn get_recently_added(&self) -> Result<Response, reqwest::Error>;
+    fn get_recently_added(&self) -> impl Future<Output = Result<Response, reqwest::Error>> + Send;
 
-    async fn get_one_manga(&self, manga_id: &str) -> Result<Response, reqwest::Error>;
+    fn get_one_manga(&self, manga_id: &str) -> impl Future<Output = Result<Response, reqwest::Error>> + Send;
 
-    async fn get_latest_chapters(&self, manga_id: &str) -> Result<Response, reqwest::Error>;
+    fn get_latest_chapters(&self, manga_id: &str) -> impl Future<Output = Result<Response, reqwest::Error>> + Send;
 
-    async fn get_tags(&self) -> Result<Response, reqwest::Error>;
+    fn get_tags(&self) -> impl Future<Output = Result<Response, reqwest::Error>> + Send;
 
-    async fn get_authors(&self, name_to_search: SearchTerm) -> Result<Response, reqwest::Error>;
+    fn get_authors(&self, name_to_search: SearchTerm) -> impl Future<Output = Result<Response, reqwest::Error>> + Send;
 
-    async fn get_all_chapters_for_manga(&self, id: &str, language: Languages) -> Result<Response, reqwest::Error>;
+    fn get_all_chapters_for_manga(
+        &self,
+        id: &str,
+        language: Languages,
+    ) -> impl Future<Output = Result<Response, reqwest::Error>> + Send;
 }
 
 #[derive(Clone, Debug)]
@@ -264,8 +278,10 @@ impl ApiClient for MangadexClient {
 #[cfg(test)]
 pub mod fake_api_client {
 
+    use std::time::Duration;
+
     use manga_tui::SearchTerm;
-    use reqwest::Response;
+    use reqwest::{Client, Response};
     use serde::Serialize;
     use serde_json::json;
 
@@ -282,6 +298,8 @@ pub mod fake_api_client {
         /// How many `items` the fake response is expected to return
         amount_results: Option<usize>,
         chapters_response: Option<ChapterResponse>,
+        return_error: bool,
+        client: Client,
     }
 
     impl MockMangadexClient {
@@ -295,10 +313,17 @@ pub mod fake_api_client {
             self
         }
 
+        pub fn with_returning_errors(mut self) -> Self {
+            self.return_error = true;
+            self
+        }
+
         pub fn new() -> Self {
             MockMangadexClient {
                 amount_results: None,
                 chapters_response: None,
+                return_error: false,
+                client: Client::builder().timeout(Duration::from_millis(100)).build().unwrap(),
             }
         }
 
@@ -381,11 +406,14 @@ pub mod fake_api_client {
         }
 
         async fn get_one_manga(&self, _manga_id: &str) -> Result<Response, reqwest::Error> {
+            if self.return_error {
+                return self.client.get("should_fail").send().await;
+            }
             Self::mock_json_response(OneMangaResponse::default())
         }
 
         async fn get_latest_chapters(&self, _manga_id: &str) -> Result<Response, reqwest::Error> {
-            Self::mock_json_response(ChapterResponse::default())
+            Self::mock_json_response(self.chapters_response.as_ref().cloned().unwrap_or_default())
         }
 
         async fn get_tags(&self) -> Result<Response, reqwest::Error> {

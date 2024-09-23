@@ -22,7 +22,7 @@ pub enum Action {
 }
 
 /// These are the events this app will listen to
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Events {
     Tick,
     Key(KeyEvent),

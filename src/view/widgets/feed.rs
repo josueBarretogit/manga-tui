@@ -6,7 +6,7 @@ use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph, StatefulWidget
 use tui_widget_list::PreRender;
 
 use crate::backend::api_responses::{ChapterData, ChapterResponse};
-use crate::backend::database::{MangaHistoryResponse, MangaHistoryType};
+use crate::backend::database::MangaHistoryResponse;
 use crate::backend::filter::Languages;
 use crate::global::CURRENT_LIST_ITEM_STYLE;
 use crate::utils::display_dates_since_publication;
@@ -28,6 +28,7 @@ impl FeedTabs {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RecentChapters {
+    pub id: String,
     pub title: String,
     pub number: String,
     pub translated_language: Languages,
@@ -61,6 +62,7 @@ pub struct MangasRead {
 
 impl From<ChapterData> for RecentChapters {
     fn from(value: ChapterData) -> Self {
+        let id = value.id;
         let today = chrono::offset::Local::now().date_naive();
         let parse_date = chrono::DateTime::parse_from_rfc3339(&value.attributes.readable_at).unwrap_or_default();
 
@@ -72,6 +74,7 @@ impl From<ChapterData> for RecentChapters {
             Languages::try_from_iso_code(&value.attributes.translated_language).unwrap_or(*Languages::get_preferred_lang());
 
         Self {
+            id,
             title: value.attributes.title.unwrap_or("No title ".to_string()),
             number: value.attributes.chapter.unwrap_or_default(),
             readeable_at: display_dates_since_publication(num_days),
@@ -143,15 +146,11 @@ impl HistoryWidget {
     }
 
     pub fn next_page(&mut self) {
-        if self.page as f64 != (self.total_results as f64 / 5_f64).ceil() && !self.mangas.is_empty() {
-            self.page += 1
-        }
+        self.page += 1
     }
 
     pub fn previous_page(&mut self) {
-        if self.page != 1 && !self.mangas.is_empty() {
-            self.page -= 1;
-        }
+        self.page -= 1;
     }
 
     pub fn set_chapter(&mut self, manga_id: String, response: ChapterResponse) {

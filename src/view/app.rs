@@ -15,6 +15,7 @@ use self::search::{InputMode, SearchPage};
 use super::widgets::search::MangaItem;
 use super::widgets::Component;
 use crate::backend::api_responses::ChapterPagesResponse;
+use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::{Action, Events};
 use crate::global::INSTRUCTIONS_STYLE;
 use crate::view::pages::*;
@@ -107,7 +108,9 @@ impl App {
             picker,
             current_tab: SelectedPage::default(),
             search_page: SearchPage::init(global_event_tx.clone(), picker),
-            feed_page: Feed::new().with_global_sender(global_event_tx.clone()),
+            feed_page: Feed::new()
+                .with_global_sender(global_event_tx.clone())
+                .with_api_client(MangadexClient::global().clone()),
             home_page: Home::new(global_event_tx.clone(), picker),
             manga_page: None,
             manga_reader_page: None,
@@ -322,4 +325,13 @@ fn get_picker() -> Option<Picker> {
         return None;
     }
     Some(picker)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn can_go_to_manga_page_from_feed() {
+        //let app = App::new();
+    }
 }
