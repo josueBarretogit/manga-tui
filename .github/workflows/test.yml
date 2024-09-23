@@ -52,5 +52,11 @@ jobs:
       - name: build
         run: cargo build --release --verbose
 
+      - name: install cargo nextest
+        run: cargo install cargo-nextest
+
       - name: test
-        run: cargo test -- --test-threads=1
+        run: cargo nextest run --no-fail-fast
+
+      - name: run ignored tests 
+        run: cargo nextest run -- --ignored
