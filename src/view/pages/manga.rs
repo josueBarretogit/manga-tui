@@ -819,12 +819,13 @@ impl MangaPage {
             let api_client = crate::backend::fetch::fake_api_client::MockMangadexClient::new();
 
             let config = MangaTuiConfig::get();
+
             let download_all_chapters_process = download_all_chapters(api_client, DownloadAllChapters {
                 sender: tx.clone(),
-                manga_id: &manga_id,
-                manga_title: &manga_title,
+                manga_id,
+                manga_title,
                 image_quality: config.image_quality,
-                directory_to_download: &AppDirectories::MangaDownloads.get_full_path(),
+                directory_to_download: AppDirectories::MangaDownloads.get_full_path(),
                 file_format: config.download_type,
                 language: lang,
             })

@@ -1,8 +1,8 @@
 use std::error::Error;
-use std::fs::{File, OpenOptions};
+use std::fs::{create_dir_all, File, OpenOptions};
 use std::io::Write;
 use std::panic::PanicInfo;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use chrono::offset;
 use color_eyre::config::HookBuilder;
@@ -16,8 +16,18 @@ pub enum ErrorType<'a> {
     FromError(Box<dyn Error>),
 }
 
+fn get_error_logs_path() -> PathBuf {
+    let path = AppDirectories::ErrorLogs.get_base_directory();
+
+    if !exists!(&path) {
+        create_dir_all(&path).ok();
+    }
+
+    AppDirectories::ErrorLogs.get_full_path()
+}
+
 pub fn write_to_error_log(e: ErrorType<'_>) {
-    let error_file_name = AppDirectories::ErrorLogs.get_full_path();
+    let error_file_name = get_error_logs_path();
 
     let now = offset::Local::now();
 

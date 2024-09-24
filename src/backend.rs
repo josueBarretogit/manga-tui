@@ -53,6 +53,10 @@ impl AppDirectories {
         APP_DATA_DIR.as_ref().unwrap()
     }
 
+    pub fn get_base_directory(self) -> PathBuf {
+        Self::get_app_directory().join(self.to_string())
+    }
+
     pub fn get_path(self) -> PathBuf {
         let base_directory = self.to_string();
         match self {
