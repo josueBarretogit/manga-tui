@@ -435,7 +435,7 @@ mod tests {
         let chapter_id = Uuid::new_v4().to_string();
         let report_progress = true;
 
-        let cbz_created = download_chapter_task(
+        download_chapter_task(
             get_chapter_for_testing(),
             MockMangadexClient::new().with_amount_returning_items(expected_amount_files),
             ImageQuality::Low,
@@ -461,7 +461,7 @@ mod tests {
         let chapter_id = Uuid::new_v4().to_string();
         let should_report_progress = true;
 
-        let epub_created = download_chapter_task(
+        download_chapter_task(
             get_chapter_for_testing(),
             MockMangadexClient::new().with_amount_returning_items(expected_amount_files),
             ImageQuality::Low,

@@ -7,13 +7,14 @@ use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScree
 use futures::{FutureExt, StreamExt};
 use ratatui::backend::Backend;
 use ratatui::Terminal;
+use ratatui_image::picker::{Picker, ProtocolType};
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::task::JoinHandle;
 
 use super::api_responses::ChapterPagesResponse;
+use super::fetch::MangadexClient;
 use crate::common::{Artist, Author};
 use crate::view::app::{App, AppState};
-use crate::view::pages::SelectedPage;
 use crate::view::widgets::search::MangaItem;
 use crate::view::widgets::Component;
 
@@ -22,7 +23,7 @@ pub enum Action {
 }
 
 /// These are the events this app will listen to
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Events {
     Tick,
     Key(KeyEvent),
@@ -49,11 +50,66 @@ pub fn restore() -> std::io::Result<()> {
     Ok(())
 }
 
+#[cfg(unix)]
+fn get_picker() -> Option<Picker> {
+    Picker::from_termios()
+        .ok()
+        .map(|mut picker| {
+            picker.guess_protocol();
+            picker
+        })
+        .filter(|picker| picker.protocol_type != ProtocolType::Halfblocks)
+}
+
+#[cfg(target_os = "windows")]
+fn get_picker() -> Option<Picker> {
+    use windows_sys::Win32::System::Console::GetConsoleWindow;
+    use windows_sys::Win32::UI::HiDpi::GetDpiForWindow;
+
+    struct FontSize {
+        pub width: u16,
+        pub height: u16,
+    }
+    impl Default for FontSize {
+        fn default() -> Self {
+            FontSize {
+                width: 17,
+                height: 38,
+            }
+        }
+    }
+
+    let size: FontSize = match unsafe { GetDpiForWindow(GetConsoleWindow()) } {
+        96 => FontSize {
+            width: 9,
+            height: 20,
+        },
+        120 => FontSize {
+            width: 12,
+            height: 25,
+        },
+        144 => FontSize {
+            width: 14,
+            height: 32,
+        },
+        _ => FontSize::default(),
+    };
+
+    let mut picker = Picker::new((size.width, size.height));
+
+    let protocol = picker.guess_protocol();
+
+    if protocol == ProtocolType::Halfblocks {
+        return None;
+    }
+    Some(picker)
+}
+
 ///Start app's main loop
 pub async fn run_app(backend: impl Backend) -> Result<(), Box<dyn Error>> {
     let mut terminal = Terminal::new(backend)?;
 
-    let mut app = App::new();
+    let mut app = App::new(MangadexClient::global().clone(), get_picker());
 
     let tick_rate = std::time::Duration::from_millis(250);
 
@@ -64,62 +120,9 @@ pub async fn run_app(backend: impl Backend) -> Result<(), Box<dyn Error>> {
             app.render(f.size(), f);
         })?;
 
-        if let Some(event) = app.global_event_rx.recv().await {
-            app.handle_events(event.clone());
-            match app.current_tab {
-                SelectedPage::Search => {
-                    app.search_page.handle_events(event);
-                },
-                SelectedPage::MangaTab => {
-                    app.manga_page.as_mut().unwrap().handle_events(event);
-                },
-                SelectedPage::ReaderTab => {
-                    app.manga_reader_page.as_mut().unwrap().handle_events(event);
-                },
-                SelectedPage::Home => {
-                    app.home_page.handle_events(event);
-                },
-                SelectedPage::Feed => {
-                    app.feed_page.handle_events(event);
-                },
-            };
-        }
+        app.listen_to_event().await;
 
-        if let Ok(app_action) = app.global_action_rx.try_recv() {
-            app.update(app_action);
-        }
-
-        match app.current_tab {
-            SelectedPage::Search => {
-                if let Ok(search_page_action) = app.search_page.local_action_rx.try_recv() {
-                    app.search_page.update(search_page_action);
-                }
-            },
-            SelectedPage::MangaTab => {
-                if let Some(manga_page) = app.manga_page.as_mut() {
-                    if let Ok(action) = manga_page.local_action_rx.try_recv() {
-                        manga_page.update(action);
-                    }
-                }
-            },
-            SelectedPage::ReaderTab => {
-                if let Some(reader_page) = app.manga_reader_page.as_mut() {
-                    if let Ok(reader_action) = reader_page.local_action_rx.try_recv() {
-                        reader_page.update(reader_action);
-                    }
-                }
-            },
-            SelectedPage::Home => {
-                if let Ok(home_action) = app.home_page.local_action_rx.try_recv() {
-                    app.home_page.update(home_action);
-                }
-            },
-            SelectedPage::Feed => {
-                if let Ok(feed_event) = app.feed_page.local_action_rx.try_recv() {
-                    app.feed_page.update(feed_event);
-                }
-            },
-        };
+        app.update_based_on_action();
     }
 
     main_event_handle.abort();

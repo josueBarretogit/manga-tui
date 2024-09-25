@@ -79,7 +79,7 @@ pub enum InputMode {
 
 pub struct SearchPage {
     /// This tx "talks" to the app
-    global_event_tx: UnboundedSender<Events>,
+    global_event_tx: Option<UnboundedSender<Events>>,
     local_action_tx: UnboundedSender<SearchPageActions>,
     pub local_action_rx: UnboundedReceiver<SearchPageActions>,
     local_event_tx: UnboundedSender<SearchPageEvents>,
@@ -136,7 +136,7 @@ impl Component for SearchPage {
             SearchPageActions::GoToMangaPage => {
                 let manga_selected = self.get_current_manga_selected();
                 if let Some(manga) = manga_selected {
-                    self.global_event_tx.send(Events::GoToMangaPage(manga.clone())).ok();
+                    self.global_event_tx.as_ref().unwrap().send(Events::GoToMangaPage(manga.clone())).ok();
                 }
             },
             SearchPageActions::PlanToRead => self.plan_to_read(),
@@ -172,12 +172,12 @@ impl Component for SearchPage {
 }
 
 impl SearchPage {
-    pub fn init(event_tx: UnboundedSender<Events>, picker: Option<Picker>) -> Self {
+    pub fn new(picker: Option<Picker>) -> Self {
         let (action_tx, action_rx) = mpsc::unbounded_channel::<SearchPageActions>();
         let (local_event_tx, local_event) = mpsc::unbounded_channel::<SearchPageEvents>();
 
         Self {
-            global_event_tx: event_tx,
+            global_event_tx: None,
             local_action_tx: action_tx,
             local_action_rx: action_rx,
             local_event_tx,
@@ -193,6 +193,11 @@ impl SearchPage {
             picker,
             manga_cover_state: ImageState::default(),
         }
+    }
+
+    pub fn with_global_sender(mut self, sender: UnboundedSender<Events>) -> Self {
+        self.global_event_tx = Some(sender);
+        self
     }
 
     fn render_input_area(&self, area: Rect, frame: &mut Frame<'_>) {
@@ -530,12 +535,18 @@ impl SearchPage {
                 self.mangas_found_list.widget = ListMangasFoundWidget::from_response(response.data);
                 self.mangas_found_list.total_result = response.total;
                 self.state = PageState::DisplayingMangasFound;
-                self.local_event_tx.send(SearchPageEvents::SearchCovers).ok();
+                self.init_search_manga_covers();
             },
             None => {
                 self.state = PageState::ErrorOcurred;
                 self.mangas_found_list.total_result = 0;
             },
+        }
+    }
+
+    fn init_search_manga_covers(&self) {
+        if self.picker.is_some() {
+            self.local_event_tx.send(SearchPageEvents::SearchCovers).ok();
         }
     }
 
@@ -597,16 +608,9 @@ mod test {
     use crate::backend::api_responses::{Data, MangaSearchAttributes, MangaSearchRelationship};
     use crate::view::widgets::press_key;
 
-    //#[tokio::test]
-    //async fn should_not_search_covers_when_picker_is_none() {
-    //    let (tx, mut rx) = mpsc::unbounded_channel::<Events>();
-    //    let mut search_page = SearchPage::init(tx, None);
-    //}
-
     #[tokio::test]
     async fn search_page_events() {
-        let (tx, mut rx) = mpsc::unbounded_channel::<Events>();
-        let mut search_page = SearchPage::init(tx, Some(Picker::new((8, 9))));
+        let mut search_page = SearchPage::new(Some(Picker::new((8, 9))));
 
         let mock_search_result = SearchMangaResponse {
             data: vec![
@@ -665,8 +669,7 @@ mod test {
 
     #[tokio::test]
     async fn search_page_key_events() {
-        let (tx, _) = mpsc::unbounded_channel::<Events>();
-        let mut search_page = SearchPage::init(tx, None);
+        let mut search_page = SearchPage::new(None);
 
         assert!(search_page.state == PageState::Normal);
         assert!(!search_page.filter_state.is_open);
@@ -779,5 +782,31 @@ mod test {
         } else {
             panic!("The action `go to manga page` is not working");
         }
+    }
+
+    #[test]
+    fn search_manga_cover_if_picker_is_some_after_mangas_were_found() {
+        let mut search_page = SearchPage::new(Some(Picker::new((8, 9))));
+
+        search_page.load_mangas_found(Some(SearchMangaResponse {
+            data: vec![Data::default()],
+            ..Default::default()
+        }));
+
+        let event = search_page.local_event_rx.blocking_recv().expect("no event was sent");
+
+        assert_eq!(event, SearchPageEvents::SearchCovers);
+    }
+
+    #[test]
+    fn doesnt_search_cover_if_picker_is_none_after_mangas_were_found() {
+        let mut search_page = SearchPage::new(None);
+
+        search_page.load_mangas_found(Some(SearchMangaResponse {
+            data: vec![Data::default()],
+            ..Default::default()
+        }));
+
+        assert!(search_page.local_event_rx.is_empty());
     }
 }

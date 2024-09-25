@@ -113,7 +113,7 @@ pub struct MangaPage {
     pub manga: Manga,
     image_state: Option<Box<dyn Protocol>>,
     cover_area: Rect,
-    global_event_tx: UnboundedSender<Events>,
+    global_event_tx: Option<UnboundedSender<Events>>,
     local_action_tx: UnboundedSender<MangaPageActions>,
     pub local_action_rx: UnboundedReceiver<MangaPageActions>,
     local_event_tx: UnboundedSender<MangaPageEvents>,
@@ -150,13 +150,14 @@ struct ChaptersData {
 }
 
 impl MangaPage {
-    pub fn new(manga: Manga, global_event_tx: UnboundedSender<Events>, picker: Option<Picker>) -> Self {
+    pub fn new(manga: Manga, picker: Option<Picker>) -> Self {
         let (local_action_tx, local_action_rx) = mpsc::unbounded_channel::<MangaPageActions>();
         let (local_event_tx, local_event_rx) = mpsc::unbounded_channel::<MangaPageEvents>();
 
         local_event_tx.send(MangaPageEvents::SearchChapters).ok();
         local_event_tx.send(MangaPageEvents::FethStatistics).ok();
         local_event_tx.send(MangaPageEvents::SearchCover).ok();
+
         let cover_area = Rect::default();
 
         let chapter_language = manga
@@ -169,7 +170,7 @@ impl MangaPage {
             manga,
             image_state: None,
             picker,
-            global_event_tx,
+            global_event_tx: None,
             local_action_tx,
             local_action_rx,
             local_event_tx: local_event_tx.clone(),
@@ -185,6 +186,11 @@ impl MangaPage {
             chapter_language: chapter_language.unwrap_or(Languages::default()),
             cover_area,
         }
+    }
+
+    pub fn with_global_sender(mut self, sender: UnboundedSender<Events>) -> Self {
+        self.global_event_tx = Some(sender);
+        self
     }
 
     fn render_cover(&mut self, area: Rect, buf: &mut Buffer) {
@@ -519,6 +525,9 @@ impl MangaPage {
     }
 
     fn read_chapter(&mut self) {
+        if self.picker.is_none() {
+            return;
+        }
         self.state = PageState::SearchingChapterData;
         match self.get_current_selected_chapter_mut() {
             Some(chapter_selected) => {
@@ -529,7 +538,7 @@ impl MangaPage {
                 let manga_id = self.manga.id.clone();
                 let title = self.manga.title.clone();
                 let img_url = self.manga.img_url.clone();
-                let tx = self.global_event_tx.clone();
+                let tx = self.global_event_tx.as_ref().cloned().unwrap();
                 let local_tx = self.local_event_tx.clone();
 
                 tokio::spawn(async move {
@@ -737,11 +746,19 @@ impl MangaPage {
     }
 
     fn go_mangas_author(&mut self) {
-        self.global_event_tx.send(Events::GoSearchMangasAuthor(self.manga.author.clone())).ok();
+        self.global_event_tx
+            .as_ref()
+            .unwrap()
+            .send(Events::GoSearchMangasAuthor(self.manga.author.clone()))
+            .ok();
     }
 
     fn go_mangas_artist(&mut self) {
-        self.global_event_tx.send(Events::GoSearchMangasArtist(self.manga.artist.clone())).ok();
+        self.global_event_tx
+            .as_ref()
+            .unwrap()
+            .send(Events::GoSearchMangasArtist(self.manga.artist.clone()))
+            .ok();
     }
 
     fn set_download_progress_for_chapter(&mut self, progress: f64, id_chapter: String) {
@@ -976,6 +993,11 @@ impl MangaPage {
     fn get_chapter_data(&self) -> ChaptersData {
         self.chapters.as_ref().cloned().unwrap()
     }
+
+    #[cfg(test)]
+    pub fn start_downloading_all_chapters(&mut self) {
+        self.start_download_all_chapters(10.0);
+    }
 }
 
 impl Component for MangaPage {
@@ -1016,9 +1038,6 @@ impl Component for MangaPage {
             },
             MangaPageActions::ReadChapter => {
                 if self.state != PageState::SearchingChapterData {
-                    if self.picker.is_none() {
-                        return;
-                    }
                     self.read_chapter();
                 }
             },
@@ -1042,18 +1061,14 @@ impl Component for MangaPage {
     }
 }
 
+// these tests still need improvements, maybe a lot of this logic can be separated to its own
+// struct / widge
 #[cfg(test)]
 mod test {
 
     use super::*;
     use crate::backend::api_responses::ChapterData;
     use crate::view::widgets::press_key;
-
-    fn get_manga_page() -> MangaPage {
-        let manga = Manga::default();
-        let (tx, _) = mpsc::unbounded_channel::<Events>();
-        MangaPage::new(manga, tx, None)
-    }
 
     fn get_chapters_response() -> ChapterResponse {
         ChapterResponse {
@@ -1081,7 +1096,7 @@ mod test {
 
     #[tokio::test]
     async fn key_events_trigger_expected_actions() {
-        let mut manga_page = get_manga_page();
+        let mut manga_page = MangaPage::new(Manga::default(), None);
 
         // Scroll down chapters list
         press_key(&mut manga_page, KeyCode::Char('j'));
@@ -1198,7 +1213,7 @@ mod test {
 
     #[tokio::test]
     async fn listen_to_key_events_based_on_conditions() {
-        let mut manga_page = get_manga_page();
+        let mut manga_page = MangaPage::new(Manga::default(), None);
 
         assert!(!manga_page.is_list_languages_open);
 
@@ -1241,13 +1256,14 @@ mod test {
 
     #[tokio::test]
     async fn handle_events() {
-        let mut manga_page = get_manga_page();
+        let mut manga_page = MangaPage::new(Manga::default(), None);
+
         manga_page_initialized_correctly(&mut manga_page).await;
     }
 
     #[tokio::test]
     async fn handle_key_events() {
-        let mut manga_page = get_manga_page();
+        let mut manga_page = MangaPage::new(Manga::default(), None);
         manga_page.state = PageState::SearchingChapters;
         manga_page.manga.available_languages =
             vec![Languages::default(), Languages::Spanish, Languages::German, Languages::Japanese];
@@ -1333,5 +1349,25 @@ mod test {
         manga_page.update(action);
 
         assert!(!manga_page.download_process_started());
+    }
+
+    #[test]
+    fn doesnt_go_to_reader_if_picker_is_none() {
+        let mut manga_page = MangaPage::new(Manga::default(), None);
+
+        manga_page.load_chapters(Some(get_chapters_response()));
+
+        render_chapters(&mut manga_page);
+
+        manga_page.scroll_chapter_down();
+
+        manga_page.read_chapter();
+    }
+
+    #[test]
+    fn doesnt_search_manga_cover_if_picker_is_none() {
+        let mut manga_page = MangaPage::new(Manga::default(), None);
+
+        manga_page.search_cover();
     }
 }

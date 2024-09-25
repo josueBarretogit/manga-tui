@@ -6,19 +6,19 @@ use strum::{Display, EnumIter};
 
 use crate::backend::filter::Languages;
 
-#[derive(Default, Clone, Debug)]
+#[derive(Default, Clone, Debug, PartialEq)]
 pub struct Author {
     pub id: String,
     pub name: String,
 }
 
-#[derive(Default, Clone, Debug)]
+#[derive(Default, Clone, Debug, PartialEq)]
 pub struct Artist {
     pub id: String,
     pub name: String,
 }
 
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Default, Debug, PartialEq)]
 pub struct Manga {
     pub id: String,
     pub title: String,

@@ -15,7 +15,7 @@ use tui_input::Input;
 use crate::backend::api_responses::ChapterResponse;
 use crate::backend::database::{get_history, GetHistoryArgs, MangaHistoryResponse, MangaHistoryType, DBCONN};
 use crate::backend::error_log::{write_to_error_log, ErrorType};
-use crate::backend::fetch::{ApiClient, MangadexClient};
+use crate::backend::fetch::ApiClient;
 use crate::backend::tui::Events;
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
 use crate::utils::render_search_bar;
@@ -55,7 +55,7 @@ pub enum FeedEvents {
     LoadHistory(Option<MangaHistoryResponse>),
 }
 
-pub struct Feed<T: ApiClient = MangadexClient> {
+pub struct Feed<T: ApiClient> {
     pub tabs: FeedTabs,
     state: FeedState,
     pub history: Option<HistoryWidget>,

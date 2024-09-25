@@ -33,6 +33,7 @@ pub enum HomeState {
     Unused,
 }
 
+#[derive(Debug, PartialEq)]
 pub enum HomeEvents {
     SearchPopularNewMangas,
     SearchPopularMangasCover,
@@ -56,6 +57,7 @@ impl ImageHandler for HomeEvents {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub enum HomeActions {
     SelectNextPopularManga,
     SelectPreviousPopularManga,
@@ -71,7 +73,7 @@ pub struct Home {
     carrousel_popular_mangas: PopularMangaCarrousel,
     carrousel_recently_added: RecentlyAddedCarrousel,
     state: HomeState,
-    pub global_event_tx: UnboundedSender<Events>,
+    pub global_event_tx: Option<UnboundedSender<Events>>,
     pub local_action_tx: UnboundedSender<HomeActions>,
     pub local_action_rx: UnboundedReceiver<HomeActions>,
     pub local_event_tx: UnboundedSender<HomeEvents>,
@@ -109,7 +111,11 @@ impl Component for Home {
             HomeActions::SelectPreviousRecentlyAddedManga => self.carrousel_recently_added.select_previous(),
             HomeActions::GoToRecentlyAddedMangaPage => {
                 if let Some(item) = self.carrousel_recently_added.get_current_selected_manga() {
-                    self.global_event_tx.send(Events::GoToMangaPage(MangaItem::new(item.manga.clone()))).ok();
+                    self.global_event_tx
+                        .as_mut()
+                        .unwrap()
+                        .send(Events::GoToMangaPage(MangaItem::new(item.manga.clone())))
+                        .ok();
                 }
             },
             HomeActions::SupportProject => self.support_project(),
@@ -137,7 +143,7 @@ impl Component for Home {
 }
 
 impl Home {
-    pub fn new(tx: UnboundedSender<Events>, picker: Option<Picker>) -> Self {
+    pub fn new(picker: Option<Picker>) -> Self {
         let (local_action_tx, local_action_rx) = mpsc::unbounded_channel::<HomeActions>();
         let (local_event_tx, local_event_rx) = mpsc::unbounded_channel::<HomeEvents>();
 
@@ -145,7 +151,7 @@ impl Home {
             carrousel_popular_mangas: PopularMangaCarrousel::default(),
             carrousel_recently_added: RecentlyAddedCarrousel::new(picker.is_some()),
             state: HomeState::Unused,
-            global_event_tx: tx,
+            global_event_tx: None,
             local_event_tx,
             local_event_rx,
             local_action_tx,
@@ -157,6 +163,11 @@ impl Home {
             recently_added_manga_state: ImageState::default(),
             tasks: JoinSet::new(),
         }
+    }
+
+    pub fn with_global_sender(mut self, tx: UnboundedSender<Events>) -> Self {
+        self.global_event_tx = Some(tx);
+        self
     }
 
     pub fn render_popular_mangas_carrousel(&mut self, area: Rect, buf: &mut Buffer) {
@@ -190,7 +201,11 @@ impl Home {
 
     pub fn go_to_manga_page_popular(&self) {
         if let Some(item) = self.get_current_popular_manga() {
-            self.global_event_tx.send(Events::GoToMangaPage(MangaItem::new(item.manga.clone()))).ok();
+            self.global_event_tx
+                .as_ref()
+                .unwrap()
+                .send(Events::GoToMangaPage(MangaItem::new(item.manga.clone())))
+                .ok();
         }
     }
 
@@ -208,6 +223,18 @@ impl Home {
         self.local_event_tx.send(HomeEvents::SearchRecentlyAddedMangas).ok();
         if self.picker.is_some() {
             self.local_event_tx.send(HomeEvents::SearchSupportImage).ok();
+        }
+    }
+
+    pub fn init_search_popular_mangas_cover(&self) {
+        if self.picker.is_some() {
+            self.local_event_tx.send(HomeEvents::SearchPopularMangasCover).ok();
+        }
+    }
+
+    pub fn init_search_recently_added_mangas_cover(&self) {
+        if self.picker.is_some() {
+            self.local_event_tx.send(HomeEvents::SearchRecentlyCover).ok();
         }
     }
 
@@ -267,9 +294,7 @@ impl Home {
         match maybe_response {
             Some(response) => {
                 self.carrousel_popular_mangas = PopularMangaCarrousel::from_response(response, self.picker.is_some());
-                if self.picker.is_some() {
-                    self.local_event_tx.send(HomeEvents::SearchPopularMangasCover).ok();
-                }
+                self.init_search_popular_mangas_cover();
             },
             None => {
                 self.carrousel_popular_mangas.state = CarrouselState::NotFound;
@@ -365,9 +390,7 @@ impl Home {
         match maybe_response {
             Some(response) => {
                 self.carrousel_recently_added = RecentlyAddedCarrousel::from_response(response, self.picker.is_some());
-                if self.picker.is_some() {
-                    self.local_event_tx.send(HomeEvents::SearchRecentlyCover).ok();
-                }
+                self.init_search_recently_added_mangas_cover();
             },
             None => {
                 self.carrousel_recently_added.state = CarrouselState::NotFound;
@@ -494,5 +517,59 @@ impl Home {
             },
             _ => {},
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use pretty_assertions::assert_eq;
+
+    use super::*;
+    use crate::backend::api_responses::Data;
+
+    #[test]
+    fn searches_popular_manga_cover_after_mangas_are_loaded_if_picker_is_some() {
+        let mut home = Home::new(Some(Picker::new((8, 8))));
+
+        home.load_popular_mangas(Some(SearchMangaResponse {
+            data: vec![Data::default()],
+            ..Default::default()
+        }));
+
+        let event = home.local_event_rx.blocking_recv().expect("no event was");
+
+        assert_eq!(event, HomeEvents::SearchPopularMangasCover)
+    }
+    #[test]
+    fn searches_recently_added_manga_cover_after_mangas_are_loaded_if_picker_is_some() {
+        let mut home = Home::new(Some(Picker::new((8, 8))));
+
+        home.load_recently_added_mangas(Some(SearchMangaResponse {
+            data: vec![Data::default()],
+            ..Default::default()
+        }));
+
+        let event = home.local_event_rx.blocking_recv().expect("no event was");
+
+        assert_eq!(event, HomeEvents::SearchRecentlyCover)
+    }
+
+    #[test]
+    fn doesnt_search_manga_cover_if_picker_is_none() {
+        let mut home = Home::new(None);
+
+        home.load_popular_mangas(Some(SearchMangaResponse {
+            data: vec![Data::default()],
+            ..Default::default()
+        }));
+
+        assert!(home.local_event_rx.is_empty());
+
+        home.load_recently_added_mangas(Some(SearchMangaResponse {
+            data: vec![Data::default()],
+            ..Default::default()
+        }));
+
+        assert!(home.local_event_rx.is_empty());
     }
 }

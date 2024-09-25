@@ -4,7 +4,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::widgets::{Block, Borders, Tabs, Widget};
 use ratatui::Frame;
-use ratatui_image::picker::{Picker, ProtocolType};
+use ratatui_image::picker::Picker;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
 use self::feed::Feed;
@@ -15,7 +15,7 @@ use self::search::{InputMode, SearchPage};
 use super::widgets::search::MangaItem;
 use super::widgets::Component;
 use crate::backend::api_responses::ChapterPagesResponse;
-use crate::backend::fetch::MangadexClient;
+use crate::backend::fetch::ApiClient;
 use crate::backend::tui::{Action, Events};
 use crate::global::INSTRUCTIONS_STYLE;
 use crate::view::pages::*;
@@ -26,7 +26,7 @@ pub enum AppState {
     Done,
 }
 
-pub struct App {
+pub struct App<T: ApiClient> {
     pub global_action_tx: UnboundedSender<Action>,
     pub global_action_rx: UnboundedReceiver<Action>,
     pub global_event_tx: UnboundedSender<Events>,
@@ -37,14 +37,14 @@ pub struct App {
     pub manga_reader_page: Option<MangaReader>,
     pub search_page: SearchPage,
     pub home_page: Home,
-    pub feed_page: Feed,
+    pub feed_page: Feed<T>,
     // The picker is what decides how big a image needs to be rendered depending on the user's
     // terminal font size and the graphics it supports
     // if the terminal doesn't support any graphics protocol the picker is `None`
     picker: Option<Picker>,
 }
 
-impl Component for App {
+impl<T: ApiClient> Component for App<T> {
     type Actions = Action;
 
     fn render(&mut self, area: Rect, frame: &mut Frame<'_>) {
@@ -95,23 +95,19 @@ impl Component for App {
     fn clean_up(&mut self) {}
 }
 
-impl App {
-    pub fn new() -> Self {
+impl<T: ApiClient> App<T> {
+    pub fn new(api_client: T, picker: Option<Picker>) -> Self {
         let (global_action_tx, global_action_rx) = unbounded_channel::<Action>();
         let (global_event_tx, global_event_rx) = unbounded_channel::<Events>();
 
         global_event_tx.send(Events::GoToHome).ok();
 
-        let picker = get_picker();
-
         App {
             picker,
             current_tab: SelectedPage::default(),
-            search_page: SearchPage::init(global_event_tx.clone(), picker),
-            feed_page: Feed::new()
-                .with_global_sender(global_event_tx.clone())
-                .with_api_client(MangadexClient::global().clone()),
-            home_page: Home::new(global_event_tx.clone(), picker),
+            search_page: SearchPage::new(picker).with_global_sender(global_event_tx.clone()),
+            feed_page: Feed::new().with_global_sender(global_event_tx.clone()).with_api_client(api_client),
+            home_page: Home::new(picker).with_global_sender(global_event_tx.clone()),
             manga_page: None,
             manga_reader_page: None,
             global_action_tx,
@@ -231,7 +227,7 @@ impl App {
         self.feed_page.clean_up();
 
         self.current_tab = SelectedPage::MangaTab;
-        self.manga_page = Some(MangaPage::new(manga.manga, self.global_event_tx.clone(), self.picker));
+        self.manga_page = Some(MangaPage::new(manga.manga, self.picker).with_global_sender(self.global_event_tx.clone()));
     }
 
     fn go_to_read_chapter(&mut self, chapter_response: ChapterPagesResponse) {
@@ -271,67 +267,158 @@ impl App {
         self.feed_page.init_search();
         self.current_tab = SelectedPage::Feed;
     }
-}
 
-#[cfg(unix)]
-fn get_picker() -> Option<Picker> {
-    Picker::from_termios()
-        .ok()
-        .map(|mut picker| {
-            picker.guess_protocol();
-            picker
-        })
-        .filter(|picker| picker.protocol_type != ProtocolType::Halfblocks)
-}
-#[cfg(target_os = "windows")]
-fn get_picker() -> Option<Picker> {
-    use windows_sys::Win32::System::Console::GetConsoleWindow;
-    use windows_sys::Win32::UI::HiDpi::GetDpiForWindow;
-
-    struct FontSize {
-        pub width: u16,
-        pub height: u16,
-    }
-    impl Default for FontSize {
-        fn default() -> Self {
-            FontSize {
-                width: 17,
-                height: 38,
-            }
+    pub async fn listen_to_event(&mut self) {
+        if let Some(event) = self.global_event_rx.recv().await {
+            self.handle_events(event.clone());
+            match self.current_tab {
+                SelectedPage::Search => {
+                    self.search_page.handle_events(event);
+                },
+                SelectedPage::MangaTab => {
+                    self.manga_page.as_mut().unwrap().handle_events(event);
+                },
+                SelectedPage::ReaderTab => {
+                    self.manga_reader_page.as_mut().unwrap().handle_events(event);
+                },
+                SelectedPage::Home => {
+                    self.home_page.handle_events(event);
+                },
+                SelectedPage::Feed => {
+                    self.feed_page.handle_events(event);
+                },
+            };
         }
     }
 
-    let size: FontSize = match unsafe { GetDpiForWindow(GetConsoleWindow()) } {
-        96 => FontSize {
-            width: 9,
-            height: 20,
-        },
-        120 => FontSize {
-            width: 12,
-            height: 25,
-        },
-        144 => FontSize {
-            width: 14,
-            height: 32,
-        },
-        _ => FontSize::default(),
-    };
+    pub fn update_based_on_action(&mut self) {
+        if let Ok(app_action) = self.global_action_rx.try_recv() {
+            self.update(app_action);
+        }
 
-    let mut picker = Picker::new((size.width, size.height));
-
-    let protocol = picker.guess_protocol();
-
-    if protocol == ProtocolType::Halfblocks {
-        return None;
+        match self.current_tab {
+            SelectedPage::Search => {
+                if let Ok(search_page_action) = self.search_page.local_action_rx.try_recv() {
+                    self.search_page.update(search_page_action);
+                }
+            },
+            SelectedPage::MangaTab => {
+                if let Some(manga_page) = self.manga_page.as_mut() {
+                    if let Ok(action) = manga_page.local_action_rx.try_recv() {
+                        manga_page.update(action);
+                    }
+                }
+            },
+            SelectedPage::ReaderTab => {
+                if let Some(reader_page) = self.manga_reader_page.as_mut() {
+                    if let Ok(reader_action) = reader_page.local_action_rx.try_recv() {
+                        reader_page.update(reader_action);
+                    }
+                }
+            },
+            SelectedPage::Home => {
+                if let Ok(home_action) = self.home_page.local_action_rx.try_recv() {
+                    self.home_page.update(home_action);
+                }
+            },
+            SelectedPage::Feed => {
+                if let Ok(feed_event) = self.feed_page.local_action_rx.try_recv() {
+                    self.feed_page.update(feed_event);
+                }
+            },
+        };
     }
-    Some(picker)
+
+    #[cfg(test)]
+    fn with_manga_page(mut self) -> Self {
+        self.manga_page = Some(MangaPage::new(crate::common::Manga::default(), self.picker.as_ref().cloned()));
+
+        self
+    }
 }
 
 #[cfg(test)]
 mod tests {
+
+    use pretty_assertions::assert_eq;
+
     use super::*;
+    use crate::backend::fetch::fake_api_client::MockMangadexClient;
+    use crate::view::widgets::press_key;
+
+    fn tick<T: ApiClient>(app: &mut App<T>) {
+        let max_amoun_ticks = 10;
+        let mut count = 0;
+
+        loop {
+            if let Ok(event) = app.global_event_rx.try_recv() {
+                app.handle_events(event);
+            }
+
+            if count > max_amoun_ticks {
+                break;
+            }
+            count += 1;
+        }
+    }
+
     #[test]
-    fn can_go_to_manga_page_from_feed() {
-        //let app = App::new();
+    fn goes_to_home_page() {
+        let mut app = App::new(MockMangadexClient::new(), None);
+
+        let first_event = app.global_event_rx.blocking_recv().expect("no event was sent");
+
+        assert_eq!(Events::GoToHome, first_event);
+        assert_eq!(app.current_tab, SelectedPage::Home);
+    }
+
+    #[test]
+    fn can_go_to_search_page_by_pressing_i() {
+        let mut app = App::new(MockMangadexClient::new(), None);
+
+        press_key(&mut app, KeyCode::Char('i'));
+
+        tick(&mut app);
+
+        assert_eq!(app.current_tab, SelectedPage::Search);
+    }
+
+    #[test]
+    fn can_go_to_home_by_pressing_u() {
+        let mut app = App::new(MockMangadexClient::new(), None);
+
+        app.go_search_page();
+
+        press_key(&mut app, KeyCode::Char('u'));
+
+        tick(&mut app);
+
+        assert_eq!(app.current_tab, SelectedPage::Home);
+    }
+
+    #[test]
+    fn can_go_to_feed_by_pressing_o() {
+        let mut app = App::new(MockMangadexClient::new(), None);
+
+        press_key(&mut app, KeyCode::Char('o'));
+
+        tick(&mut app);
+
+        assert_eq!(app.current_tab, SelectedPage::Feed);
+    }
+
+    #[test]
+    fn doesnt_listen_to_key_events_if_it_is_downloading_all_chapters() {
+        let mut app = App::new(MockMangadexClient::new(), None).with_manga_page();
+
+        app.manga_page.as_mut().unwrap().start_downloading_all_chapters();
+
+        press_key(&mut app, KeyCode::Char('o'));
+        press_key(&mut app, KeyCode::Char('i'));
+        press_key(&mut app, KeyCode::F(2));
+
+        tick(&mut app);
+
+        assert_eq!(app.current_tab, SelectedPage::Home)
     }
 }

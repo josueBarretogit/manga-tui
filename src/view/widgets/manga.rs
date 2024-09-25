@@ -420,7 +420,7 @@ impl<'a> StatefulWidget for DownloadAllChaptersWidget<'a> {
                 StatefulWidget::render(loader, download_information_area, buf, &mut state.loader_state);
             },
             DownloadPhase::ErrorChaptersData => {
-                "Could not get chapters data, press <Spacebar> to try again"
+                "Could not get chapters data, press <Enter> to try again"
                     .to_span()
                     .style(*ERROR_STYLE)
                     .render(download_information_area, buf);
