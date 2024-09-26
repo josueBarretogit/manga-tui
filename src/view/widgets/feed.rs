@@ -161,6 +161,14 @@ impl HistoryWidget {
         }
     }
 
+    pub fn can_search_next_page(&self, total_items: f64) -> bool {
+        self.page as f64 != (self.total_results as f64 / total_items).ceil() && !self.mangas.is_empty()
+    }
+
+    pub fn can_search_previous_page(&self) -> bool {
+        !self.mangas.is_empty() && self.page != 1
+    }
+
     pub fn from_database_response(response: MangaHistoryResponse) -> Self {
         Self {
             page: response.page,

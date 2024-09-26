@@ -322,9 +322,7 @@ impl<T: ApiClient> Feed<T> {
 
     fn search_next_page(&mut self) {
         if let Some(history) = self.history.as_mut() {
-            if history.page as f64 != (history.total_results as f64 / self.items_per_page as f64).ceil()
-                && !history.mangas.is_empty()
-            {
+            if history.can_search_next_page(self.items_per_page as f64) {
                 history.next_page();
                 self.search_history();
             }
@@ -333,7 +331,7 @@ impl<T: ApiClient> Feed<T> {
 
     fn search_previous_page(&mut self) {
         if let Some(history) = self.history.as_mut() {
-            if !history.mangas.is_empty() && history.page != 1 {
+            if history.can_search_previous_page() {
                 history.previous_page();
                 self.search_history();
             }

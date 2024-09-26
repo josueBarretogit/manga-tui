@@ -44,7 +44,6 @@ clap = { version = "4.4.5", features = ["derive", "cargo"] }
 zip = "2.1.6"
 toml = "0.8.19"
 epub-builder = "0.7.4"
-http = "1.0"
 
 [dev-dependencies]
 httpmock = "0.7.0-rc.1"
@@ -52,6 +51,7 @@ pretty_assertions = "1.4.0"
 rusty-hook = "0.11.2"
 uuid = { version = "1.10.0", features = ["v4", "fast-rng"] }
 fake = "2.9.2"
+http = "1.0"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59.0", features = ["Win32_Foundation", "Win32_System_Console", "Win32_UI_HiDpi"]}

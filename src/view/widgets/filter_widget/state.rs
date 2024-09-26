@@ -16,6 +16,7 @@ use crate::backend::filter::{
 };
 use crate::backend::tui::Events;
 
+#[derive(Debug, PartialEq)]
 pub enum FilterEvents {
     LoadAuthors(Option<AuthorsResponse>),
     LoadArtists(Option<AuthorsResponse>),
@@ -232,36 +233,35 @@ pub struct FilterListDynamic<T> {
     _state: PhantomData<T>,
 }
 
-impl FilterListDynamic<AuthorState> {
-    fn search_authors(&mut self, tx: UnboundedSender<FilterEvents>) {
+pub trait SendEventOnSuccess {
+    fn send(data: Option<AuthorsResponse>) -> FilterEvents;
+}
+
+impl SendEventOnSuccess for ArtistState {
+    fn send(data: Option<AuthorsResponse>) -> FilterEvents {
+        FilterEvents::LoadArtists(data)
+    }
+}
+
+impl SendEventOnSuccess for AuthorState {
+    fn send(data: Option<AuthorsResponse>) -> FilterEvents {
+        FilterEvents::LoadAuthors(data)
+    }
+}
+
+impl<T: SendEventOnSuccess> FilterListDynamic<T> {
+    pub fn search_items(&self, tx: UnboundedSender<FilterEvents>, api_client: impl ApiClient) {
         let name_to_search = SearchTerm::trimmed_lowercased(self.search_bar.value());
         if let Some(search_term) = name_to_search {
             tokio::spawn(async move {
-                let response = MangadexClient::global().get_authors(search_term).await;
+                let response = api_client.get_authors(search_term).await;
                 if let Ok(res) = response {
-                    tx.send(FilterEvents::LoadAuthors(res.json().await.ok())).ok();
+                    tx.send(T::send(res.json().await.ok())).ok();
                 }
             });
         }
     }
-}
 
-impl FilterListDynamic<ArtistState> {
-    fn search_artists(&mut self, tx: UnboundedSender<FilterEvents>) {
-        let name_to_search = SearchTerm::trimmed_lowercased(self.search_bar.value());
-        if let Some(search_term) = name_to_search {
-            tokio::spawn(async move {
-                let response = MangadexClient::global().get_authors(search_term).await;
-
-                if let Ok(res) = response {
-                    tx.send(FilterEvents::LoadArtists(res.json().await.ok())).ok();
-                }
-            });
-        }
-    }
-}
-
-impl<T> FilterListDynamic<T> {
     pub fn set_users_found(&mut self, response: AuthorsResponse) {
         self.items = Some(
             response
@@ -278,6 +278,10 @@ impl<T> FilterListDynamic<T> {
 
     fn set_users_not_found(&mut self) {
         self.items = None;
+    }
+
+    fn set_search_term(&mut self, search: &str) {
+        self.search_bar = search.into();
     }
 
     fn toggle(&mut self) {
@@ -518,10 +522,11 @@ impl FilterState {
     fn search(&mut self) {
         if let Some(filter) = FILTERS.get(self.id_filter) {
             let tx = self.tx.clone();
+            let api_client = MangadexClient::global().clone();
             if *filter == MangaFilters::Authors {
-                self.author_state.search_authors(tx);
+                self.author_state.search_items(tx, api_client);
             } else if *filter == MangaFilters::Artists {
-                self.artist_state.search_artists(tx);
+                self.artist_state.search_items(tx, api_client);
             }
         }
     }
@@ -890,9 +895,11 @@ impl FilterState {
 #[cfg(test)]
 mod test {
 
+    use self::mpsc::unbounded_channel;
     use super::*;
     use crate::backend::api_responses::authors::Data;
     use crate::backend::api_responses::tags::TagsData;
+    use crate::backend::fetch::fake_api_client::MockMangadexClient;
 
     #[test]
     fn filter_list_works() {
@@ -1111,5 +1118,39 @@ mod test {
         close_filter(&mut filter_state);
 
         assert!(!filter_state.is_open);
+    }
+
+    #[tokio::test]
+    async fn search_authors_sends_expected_event() {
+        let (tx, mut rx) = unbounded_channel::<FilterEvents>();
+        let mut filter_state_author: FilterListDynamic<AuthorState> = FilterListDynamic::default();
+
+        let client = MockMangadexClient::new();
+        filter_state_author.set_search_term("some thing");
+
+        filter_state_author.search_items(tx, client);
+
+        let event_sent = rx.recv().await.expect("no event was sent");
+
+        let expected = FilterEvents::LoadAuthors(Some(AuthorsResponse::default()));
+
+        assert_eq!(event_sent, expected);
+    }
+
+    #[tokio::test]
+    async fn search_artist_sends_expected_event() {
+        let (tx, mut rx) = unbounded_channel::<FilterEvents>();
+        let mut filter_state_artist: FilterListDynamic<ArtistState> = FilterListDynamic::default();
+
+        let client = MockMangadexClient::new();
+        filter_state_artist.set_search_term("some thing");
+
+        filter_state_artist.search_items(tx, client);
+
+        let event_sent = rx.recv().await.expect("no event was sent");
+
+        let expected = FilterEvents::LoadArtists(Some(AuthorsResponse::default()));
+
+        assert_eq!(event_sent, expected);
     }
 }
