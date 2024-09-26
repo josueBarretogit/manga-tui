@@ -5,18 +5,30 @@ use ratatui::text::Line;
 use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph, StatefulWidget, Widget, Wrap};
 use tui_widget_list::PreRender;
 
+use crate::backend::api_responses::{ChapterData, ChapterResponse};
+use crate::backend::database::MangaHistoryResponse;
 use crate::backend::filter::Languages;
-use crate::backend::ChapterResponse;
 use crate::global::CURRENT_LIST_ITEM_STYLE;
 use crate::utils::display_dates_since_publication;
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum FeedTabs {
     History,
     PlantToRead,
 }
 
-#[derive(Clone)]
+impl FeedTabs {
+    pub fn cycle(self) -> Self {
+        match self {
+            Self::History => Self::PlantToRead,
+            Self::PlantToRead => Self::History,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RecentChapters {
+    pub id: String,
     pub title: String,
     pub number: String,
     pub translated_language: Languages,
@@ -40,12 +52,35 @@ impl From<RecentChapters> for ListItem<'_> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct MangasRead {
     pub id: String,
     pub title: String,
     pub style: Style,
     pub recent_chapters: Vec<RecentChapters>,
+}
+
+impl From<ChapterData> for RecentChapters {
+    fn from(value: ChapterData) -> Self {
+        let id = value.id;
+        let today = chrono::offset::Local::now().date_naive();
+        let parse_date = chrono::DateTime::parse_from_rfc3339(&value.attributes.readable_at).unwrap_or_default();
+
+        let difference = today - parse_date.date_naive();
+
+        let num_days = difference.num_days();
+
+        let translated_language =
+            Languages::try_from_iso_code(&value.attributes.translated_language).unwrap_or(*Languages::get_preferred_lang());
+
+        Self {
+            id,
+            title: value.attributes.title.unwrap_or("No title ".to_string()),
+            number: value.attributes.chapter.unwrap_or_default(),
+            readeable_at: display_dates_since_publication(num_days),
+            translated_language,
+        }
+    }
 }
 
 impl Widget for MangasRead {
@@ -86,7 +121,7 @@ impl PreRender for MangasRead {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, Default)]
 pub struct HistoryWidget {
     pub page: u32,
     pub total_results: u32,
@@ -111,38 +146,44 @@ impl HistoryWidget {
     }
 
     pub fn next_page(&mut self) {
-        if self.page as f64 != (self.total_results as f64 / 5_f64).ceil() && !self.mangas.is_empty() {
-            self.page += 1
-        }
+        self.page += 1
     }
 
     pub fn previous_page(&mut self) {
-        if self.page != 1 && !self.mangas.is_empty() {
-            self.page -= 1;
-        }
+        self.page -= 1;
     }
 
     pub fn set_chapter(&mut self, manga_id: String, response: ChapterResponse) {
         if let Some(manga) = self.mangas.iter_mut().find(|manga| manga.id == manga_id) {
             for chapter in response.data {
-                let today = chrono::offset::Local::now().date_naive();
-                let parse_date = chrono::DateTime::parse_from_rfc3339(&chapter.attributes.readable_at).unwrap_or_default();
-
-                let difference = today - parse_date.date_naive();
-
-                let num_days = difference.num_days();
-
-                let translated_language = Languages::try_from_iso_code(&chapter.attributes.translated_language)
-                    .unwrap_or(*Languages::get_preferred_lang());
-
-                let recent_chapter = RecentChapters {
-                    title: chapter.attributes.title.unwrap_or("No title ".to_string()),
-                    number: chapter.attributes.chapter.unwrap_or_default(),
-                    readeable_at: display_dates_since_publication(num_days),
-                    translated_language,
-                };
-                manga.recent_chapters.push(recent_chapter);
+                manga.recent_chapters.push(RecentChapters::from(chapter));
             }
+        }
+    }
+
+    pub fn can_search_next_page(&self, total_items: f64) -> bool {
+        self.page as f64 != (self.total_results as f64 / total_items).ceil() && !self.mangas.is_empty()
+    }
+
+    pub fn can_search_previous_page(&self) -> bool {
+        !self.mangas.is_empty() && self.page != 1
+    }
+
+    pub fn from_database_response(response: MangaHistoryResponse) -> Self {
+        Self {
+            page: response.page,
+            total_results: response.total_items,
+            mangas: response
+                .mangas
+                .iter()
+                .map(|history| MangasRead {
+                    id: history.id.clone(),
+                    title: history.title.clone(),
+                    recent_chapters: vec![],
+                    style: Style::default(),
+                })
+                .collect(),
+            state: tui_widget_list::ListState::default(),
         }
     }
 

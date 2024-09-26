@@ -1,29 +1,33 @@
 use std::error::Error;
-use std::fs::{File, OpenOptions};
+use std::fs::{create_dir_all, File, OpenOptions};
 use std::io::Write;
 use std::panic::PanicInfo;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use chrono::offset;
 use color_eyre::config::HookBuilder;
 use manga_tui::exists;
 
 use super::tui::restore;
-use super::{AppDirectories, APP_DATA_DIR};
-
-pub static ERROR_LOGS_FILE: &str = "manga-tui-error-logs.txt";
+use super::AppDirectories;
 
 pub enum ErrorType<'a> {
     FromPanic(&'a PanicInfo<'a>),
     FromError(Box<dyn Error>),
 }
 
+fn get_error_logs_path() -> PathBuf {
+    let path = AppDirectories::ErrorLogs.get_base_directory();
+
+    if !exists!(&path) {
+        create_dir_all(&path).ok();
+    }
+
+    AppDirectories::ErrorLogs.get_full_path()
+}
+
 pub fn write_to_error_log(e: ErrorType<'_>) {
-    let error_file_name = APP_DATA_DIR
-        .as_ref()
-        .unwrap()
-        .join(AppDirectories::ErrorLogs.to_string())
-        .join(ERROR_LOGS_FILE);
+    let error_file_name = get_error_logs_path();
 
     let now = offset::Local::now();
 
@@ -43,6 +47,14 @@ pub fn write_to_error_log(e: ErrorType<'_>) {
 
         error_logs.write_all(error_format_bytes).unwrap();
     }
+}
+
+pub fn create_error_logs_files(base_directory: &Path) -> std::io::Result<()> {
+    let error_logs_path = base_directory.join(AppDirectories::ErrorLogs.get_path());
+    if !exists!(&error_logs_path) {
+        File::create(error_logs_path)?;
+    }
+    Ok(())
 }
 
 pub fn init_error_hooks() -> color_eyre::Result<()> {

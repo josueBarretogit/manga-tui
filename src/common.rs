@@ -6,19 +6,19 @@ use strum::{Display, EnumIter};
 
 use crate::backend::filter::Languages;
 
-#[derive(Default, Clone, Debug)]
+#[derive(Default, Clone, Debug, PartialEq)]
 pub struct Author {
     pub id: String,
     pub name: String,
 }
 
-#[derive(Default, Clone, Debug)]
+#[derive(Default, Clone, Debug, PartialEq)]
 pub struct Artist {
     pub id: String,
     pub name: String,
 }
 
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Default, Debug, PartialEq)]
 pub struct Manga {
     pub id: String,
     pub title: String,
@@ -83,5 +83,9 @@ impl ImageState {
     /// get the image cover state given the manga id
     pub fn get_image_state(&mut self, id: &str) -> Option<&mut Box<dyn Protocol>> {
         self.image_state.get_mut(id)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.image_state.is_empty()
     }
 }

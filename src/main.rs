@@ -1,13 +1,12 @@
 #![allow(dead_code)]
 #![allow(deprecated)]
-use std::time::Duration;
 
 use clap::Parser;
 use ratatui::backend::CrosstermBackend;
-use reqwest::{Client, StatusCode};
+use reqwest::StatusCode;
 
 use self::backend::error_log::init_error_hooks;
-use self::backend::fetch::{MangadexClient, MANGADEX_CLIENT_INSTANCE};
+use self::backend::fetch::{MangadexClient, API_URL_BASE, COVER_IMG_URL_BASE, MANGADEX_CLIENT_INSTANCE};
 use self::backend::filter::Languages;
 use self::backend::tui::{init, restore, run_app};
 use self::backend::{build_data_dir, APP_DATA_DIR};
@@ -63,30 +62,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         None => PREFERRED_LANGUAGE.set(Languages::default()).unwrap(),
     }
 
-    let user_agent = format!(
-        "manga-tui/{} ({}/{}/{})",
-        env!("CARGO_PKG_VERSION"),
-        std::env::consts::FAMILY,
-        std::env::consts::OS,
-        std::env::consts::ARCH
-    );
-
-    let mangadex_client =
-        MangadexClient::new(Client::builder().timeout(Duration::from_secs(10)).user_agent(user_agent).build().unwrap());
+    let mangadex_client = MangadexClient::new(API_URL_BASE.parse().unwrap(), COVER_IMG_URL_BASE.parse().unwrap());
 
     println!("Checking mangadex status...");
 
     let mangadex_status = mangadex_client.check_status().await;
 
     match mangadex_status {
-        Ok(status) => {
-            if status != StatusCode::OK {
-                println!("Mangadex appears to be in maintenance, please come backe later");
+        Ok(response) => {
+            if response.status() != StatusCode::OK {
+                println!("Mangadex appears to be in maintenance, please come back later");
                 return Ok(());
             }
         },
-        Err(_) => {
-            println!("Mangadex appears to be in maintenance, please come backe later");
+        Err(e) => {
+            println!("Some error ocurred, more details : {e}");
             return Ok(());
         },
     }

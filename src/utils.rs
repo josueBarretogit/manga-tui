@@ -1,6 +1,8 @@
 use std::io::Cursor;
 
+use bytes::Bytes;
 use image::io::Reader;
+use image::DynamicImage;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Style, Stylize};
 use ratatui::text::{Line, Span};
@@ -10,9 +12,9 @@ use tokio::sync::mpsc::UnboundedSender;
 use tokio::task::JoinSet;
 use tui_input::Input;
 
-use crate::backend::fetch::MangadexClient;
+use crate::backend::api_responses::Data;
+use crate::backend::fetch::{ApiClient, MangadexClient};
 use crate::backend::filter::Languages;
-use crate::backend::Data;
 use crate::common::{Artist, Author, Manga};
 use crate::view::widgets::filter_widget::state::{TagListItem, TagListItemState};
 use crate::view::widgets::ImageHandler;
@@ -53,13 +55,15 @@ pub fn search_manga_cover<IM: ImageHandler>(
     join_set.spawn(async move {
         let response = MangadexClient::global().get_cover_for_manga_lower_quality(&manga_id, &file_name).await;
         match response {
-            Ok(bytes) => {
-                let dyn_img = Reader::new(Cursor::new(bytes)).with_guessed_format().unwrap();
+            Ok(res) => {
+                if let Ok(bytes) = res.bytes().await {
+                    let dyn_img = Reader::new(Cursor::new(bytes)).with_guessed_format().unwrap();
 
-                let maybe_decoded = dyn_img.decode();
+                    let maybe_decoded = dyn_img.decode();
 
-                if let Ok(decoded) = maybe_decoded {
-                    tx.send(IM::load(decoded, manga_id)).ok();
+                    if let Ok(decoded) = maybe_decoded {
+                        tx.send(IM::load(decoded, manga_id)).ok();
+                    }
                 }
             },
             Err(_e) => {
@@ -68,6 +72,10 @@ pub fn search_manga_cover<IM: ImageHandler>(
             },
         }
     });
+}
+
+pub fn decode_bytes_to_image(data: Bytes) -> Result<DynamicImage, image::ImageError> {
+    Reader::new(Cursor::new(data)).with_guessed_format()?.decode()
 }
 
 pub fn from_manga_response(value: Data) -> Manga {
@@ -199,13 +207,4 @@ pub fn render_search_bar(is_typing: bool, input_help: Line<'_>, input: &Input, f
         true => frame.set_cursor(area.x + ((input.visual_cursor()).max(scroll) - scroll) as u16 + 1, area.y + 1),
         false => {},
     }
-}
-
-/// Remove special characteres that may cause errors
-pub fn to_filename(title: &str) -> String {
-    let invalid_chars = ['\\', '/', ':', '*', '?', '"', '<', '>', '|'];
-
-    let sanitized_title: String = title.chars().map(|c| if invalid_chars.contains(&c) { '_' } else { c }).collect();
-
-    sanitized_title
 }

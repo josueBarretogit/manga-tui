@@ -50,8 +50,7 @@ need_stdout = false
 # - the tests of a package: bacon test -- -- -p config
 [jobs.test]
 command = [
-    "cargo", "test", "--color", "always",
-    "--", "--color", "always", "--test-threads=1" # see https://github.com/Canop/bacon/issues/124
+    "cargo", "nextest", "run", "--color", "always",
 ]
 need_stdout = true
 

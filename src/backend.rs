@@ -1,15 +1,14 @@
-use std::collections::HashMap;
-use std::fs::{create_dir, create_dir_all, File};
+use std::fs::{create_dir, create_dir_all};
 use std::path::{Path, PathBuf};
 
 use manga_tui::exists;
 use once_cell::sync::Lazy;
-use serde::{Deserialize, Serialize};
 use strum::{Display, EnumIter, IntoEnumIterator};
 
-use self::error_log::ERROR_LOGS_FILE;
+use self::error_log::create_error_logs_files;
 use crate::config::{MangaTuiConfig, CONFIG};
 
+pub mod api_responses;
 pub mod database;
 pub mod download;
 pub mod error_log;
@@ -29,22 +28,47 @@ pub enum AppDirectories {
     Config,
 }
 
+static ERROR_LOGS_FILE: &str = "manga-tui-error-logs.txt";
+
+static DATABASE_FILE: &str = "manga-tui-history.db";
+
+static CONFIG_FILE: &str = "manga-tui-config.toml";
+
 impl AppDirectories {
-    pub fn into_path_buf(self) -> PathBuf {
-        let base_directory = APP_DATA_DIR.as_ref();
-        PathBuf::from(&base_directory.unwrap().join(self.to_string()))
+    pub fn get_full_path(self) -> PathBuf {
+        Self::get_app_directory().join(self.get_path())
     }
 
-    pub fn build_if_not_exists(base_directory: &Path) -> Result<(), std::io::Error> {
+    pub fn build_if_not_exists(app_directory: &Path) -> Result<(), std::io::Error> {
         for dir in AppDirectories::iter() {
-            if !exists!(&base_directory.join(dir.to_string())) {
-                create_dir(base_directory.join(dir.to_string()))?;
+            let directory_path = app_directory.join(dir.to_string());
+            if !exists!(&directory_path) {
+                create_dir(directory_path)?;
             }
         }
         Ok(())
     }
+
+    pub fn get_app_directory() -> &'static Path {
+        APP_DATA_DIR.as_ref().unwrap()
+    }
+
+    pub fn get_base_directory(self) -> PathBuf {
+        Self::get_app_directory().join(self.to_string())
+    }
+
+    pub fn get_path(self) -> PathBuf {
+        let base_directory = self.to_string();
+        match self {
+            Self::Config => PathBuf::from(base_directory).join(CONFIG_FILE),
+            Self::History => PathBuf::from(base_directory).join(DATABASE_FILE),
+            Self::ErrorLogs => PathBuf::from(base_directory).join(ERROR_LOGS_FILE),
+            Self::MangaDownloads => PathBuf::from(base_directory),
+        }
+    }
 }
 
+#[cfg(not(test))]
 pub static APP_DATA_DIR: Lazy<Option<PathBuf>> = Lazy::new(|| {
     directories::ProjectDirs::from("", "", "manga-tui").map(|dirs| match std::env::var("MANGA_TUI_DATA_DIR").ok() {
         Some(data_dir) => PathBuf::from(data_dir),
@@ -52,290 +76,94 @@ pub static APP_DATA_DIR: Lazy<Option<PathBuf>> = Lazy::new(|| {
     })
 });
 
-pub fn build_data_dir() -> Result<(), std::io::Error> {
+#[cfg(test)]
+pub static APP_DATA_DIR: Lazy<Option<PathBuf>> = Lazy::new(|| Some(PathBuf::from("./test_results/data-directory")));
+
+pub fn build_data_dir() -> Result<PathBuf, std::io::Error> {
     let data_dir = APP_DATA_DIR.as_ref();
     match data_dir {
         Some(dir) => {
             if !exists!(dir) {
                 create_dir_all(dir)?;
             }
+
             AppDirectories::build_if_not_exists(dir)?;
 
-            if !exists!(&dir.join(AppDirectories::ErrorLogs.to_string()).join(ERROR_LOGS_FILE)) {
-                File::create(dir.join(AppDirectories::ErrorLogs.to_string()).join(ERROR_LOGS_FILE))?;
-            }
+            create_error_logs_files(dir)?;
 
-            MangaTuiConfig::write_config(dir)?;
+            MangaTuiConfig::write_if_not_exists(dir)?;
 
-            let config_contents = MangaTuiConfig::read_config(dir)?;
+            let config_contents = MangaTuiConfig::read_raw_config(dir)?;
 
             let config_contents: MangaTuiConfig = toml::from_str(&config_contents).unwrap_or_default();
 
-            CONFIG.set(config_contents).unwrap();
+            CONFIG.get_or_init(|| config_contents);
 
-            Ok(())
+            Ok(dir.to_path_buf())
         },
         None => Err(std::io::Error::other("data dir could not be found")),
     }
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SearchMangaResponse {
-    pub result: String,
-    pub response: String,
-    pub data: Vec<Data>,
-    pub limit: i32,
-    pub offset: u32,
-    pub total: u32,
-}
+#[cfg(test)]
+mod test {
+    use std::error::Error;
+    use std::fs;
+    use std::thread::sleep;
+    use std::time::Duration;
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Data {
-    pub id: String,
-    pub attributes: Attributes,
-    pub relationships: Vec<MangaSearchRelationship>,
-}
+    use pretty_assertions::assert_eq;
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Attributes {
-    pub title: Title,
-    pub description: Option<Description>,
-    pub status: String,
-    pub tags: Vec<Tag>,
-    pub content_rating: String,
-    pub state: String,
-    pub created_at: String,
-    pub publication_demographic: Option<String>,
-    pub available_translated_languages: Vec<Option<String>>,
-}
+    use super::*;
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Title {
-    pub en: Option<String>,
-    pub ja: Option<String>,
-    #[serde(rename = "ja-ro")]
-    pub ja_ro: Option<String>,
-    pub jp: Option<String>,
-    pub zh: Option<String>,
-    pub ko: Option<String>,
-    #[serde(rename = "zh-ro")]
-    pub zh_ro: Option<String>,
-    #[serde(rename = "zh-ro")]
-    pub ko_ro: Option<String>,
-}
+    #[test]
+    #[ignore]
+    fn test_config_file() -> Result<(), Box<dyn Error>> {
+        sleep(Duration::from_millis(100));
+        let data_dir = build_data_dir().expect("Could not build data directory");
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Description {
-    pub en: Option<String>,
-}
+        let config_template = MangaTuiConfig::get_config_template();
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MangaSearchRelationship {
-    pub id: String,
-    #[serde(rename = "type")]
-    pub type_field: String,
-    pub attributes: Option<MangaSearchAttributes>,
-}
+        toml::from_str::<MangaTuiConfig>(config_template).expect("error when deserializing config template");
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct MangaSearchAttributes {
-    #[serde(rename = "fileName")]
-    pub file_name: Option<String>,
-    pub name: Option<String>,
-    pub locale: Option<String>,
-}
+        let contents = MangaTuiConfig::read_raw_config(&data_dir).expect("error when reading raw config file");
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Tag {
-    pub id: String,
-    pub attributes: TagAtributtes,
-}
+        toml::from_str::<MangaTuiConfig>(&contents).expect("error when deserializing config file");
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TagAtributtes {
-    pub name: Name,
-}
+        assert_eq!(contents, MangaTuiConfig::get_config_template());
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Name {
-    pub en: String,
-}
-
-// manga chapter structs
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ChapterResponse {
-    pub result: String,
-    pub response: String,
-    pub data: Vec<ChapterData>,
-    pub limit: i64,
-    pub offset: i64,
-    pub total: i64,
-}
-
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ChapterData {
-    pub id: String,
-    #[serde(rename = "type")]
-    pub type_field: String,
-    pub attributes: ChapterAttribute,
-    pub relationships: Vec<Relationship>,
-}
-
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ChapterAttribute {
-    pub volume: Option<String>,
-    pub chapter: Option<String>,
-    pub title: Option<String>,
-    pub translated_language: String,
-    pub external_url: Option<String>,
-    pub publish_at: String,
-    pub readable_at: String,
-    pub created_at: String,
-    pub updated_at: String,
-    pub pages: i64,
-    pub version: i64,
-}
-
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Relationship {
-    pub id: String,
-    #[serde(rename = "type")]
-    pub type_field: String,
-    pub attributes: Option<ChapterRelationshipAttribute>,
-}
-
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ChapterRelationshipAttribute {
-    pub name: String,
-}
-
-// Translations
-
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ChapterPagesResponse {
-    pub result: String,
-    pub base_url: String,
-    pub chapter: ChapterPages,
-}
-
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ChapterPages {
-    pub hash: String,
-    pub data: Vec<String>,
-    pub data_saver: Vec<String>,
-}
-
-// manga statistics
-//
-
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MangaStatisticsResponse {
-    pub result: String,
-    pub statistics: HashMap<String, Statistics>,
-}
-
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Statistics {
-    pub rating: Rating,
-    pub follows: Option<u64>,
-}
-
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Rating {
-    pub average: Option<f64>,
-}
-
-pub mod feed {
-    use serde::{Deserialize, Serialize};
-
-    #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-    #[serde(rename_all = "camelCase")]
-    pub struct OneMangaResponse {
-        pub result: String,
-        pub response: String,
-        pub data: super::Data,
-    }
-}
-
-pub mod tags {
-    use serde::{Deserialize, Serialize};
-
-    #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-    #[serde(rename_all = "camelCase")]
-    pub struct TagsResponse {
-        pub result: String,
-        pub response: String,
-        pub data: Vec<TagsData>,
+        Ok(())
     }
 
-    #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-    #[serde(rename_all = "camelCase")]
-    pub struct TagsData {
-        pub id: String,
-        #[serde(rename = "type")]
-        pub type_field: String,
-        pub attributes: Attributes,
-    }
+    #[test]
+    #[ignore]
+    fn data_directory_is_built() -> Result<(), Box<dyn Error>> {
+        sleep(Duration::from_millis(1000));
+        dbg!(build_data_dir().expect("Could not build data directory"));
 
-    #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-    #[serde(rename_all = "camelCase")]
-    pub struct Attributes {
-        pub name: Name,
-        pub group: String,
-        pub version: i64,
-    }
+        let mut amount_directories = 0;
 
-    #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-    #[serde(rename_all = "camelCase")]
-    pub struct Name {
-        pub en: String,
-    }
-}
+        let directory_built = fs::read_dir(AppDirectories::get_app_directory())?;
 
-pub mod authors {
-    use serde::{Deserialize, Serialize};
+        for dir in directory_built {
+            let dir = dir?;
 
-    #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-    #[serde(rename_all = "camelCase")]
-    pub struct AuthorsResponse {
-        pub result: String,
-        pub response: String,
-        pub data: Vec<Data>,
-    }
+            let directory_name = dir.file_name();
 
-    #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-    #[serde(rename_all = "camelCase")]
-    pub struct Data {
-        pub id: String,
-        #[serde(rename = "type")]
-        pub type_field: String,
-        pub attributes: Attributes,
-    }
+            let directory_was_created =
+                AppDirectories::iter().any(|app_dir| app_dir.to_string() == directory_name.to_string_lossy());
 
-    #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-    #[serde(rename_all = "camelCase")]
-    pub struct Attributes {
-        pub name: String,
-        pub created_at: String,
-        pub updated_at: String,
-        pub version: i64,
+            assert!(directory_was_created);
+
+            amount_directories += 1;
+        }
+
+        assert_eq!(4, amount_directories);
+
+        let error_logs_path = dbg!(AppDirectories::ErrorLogs.get_full_path());
+
+        fs::File::open(error_logs_path).expect("Could not open error logs file");
+
+        Ok(())
     }
 }

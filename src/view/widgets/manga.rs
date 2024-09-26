@@ -10,8 +10,8 @@ use throbber_widgets_tui::{Throbber, ThrobberState};
 use tokio::sync::mpsc::UnboundedSender;
 use tui_widget_list::PreRender;
 
+use crate::backend::api_responses::ChapterResponse;
 use crate::backend::filter::Languages;
-use crate::backend::ChapterResponse;
 use crate::global::{CURRENT_LIST_ITEM_STYLE, ERROR_STYLE, INSTRUCTIONS_STYLE};
 use crate::utils::display_dates_since_publication;
 use crate::view::pages::manga::MangaPageEvents;
@@ -420,7 +420,7 @@ impl<'a> StatefulWidget for DownloadAllChaptersWidget<'a> {
                 StatefulWidget::render(loader, download_information_area, buf, &mut state.loader_state);
             },
             DownloadPhase::ErrorChaptersData => {
-                "Could not get chapters data, press <Spacebar> to try again"
+                "Could not get chapters data, press <Enter> to try again"
                     .to_span()
                     .style(*ERROR_STYLE)
                     .render(download_information_area, buf);
