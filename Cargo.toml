@@ -30,7 +30,7 @@ image = "0.25.1"
 reqwest = { version = "0.12.4", features = ["json"] }
 serde = { version = "1.0.210", features = ["derive"] }
 tokio = { version = "1.38.0", features = ["full"] }
-strum = "0.26.2"
+strum = "0.26.3"
 strum_macros = "0.26"
 color-eyre = "0.6.2"
 futures = "0.3.28"
