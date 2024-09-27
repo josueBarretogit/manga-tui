@@ -28,8 +28,8 @@ crossterm = { version = "0.28.1", features = ["event-stream"] }
 directories = "5.0.1"
 image = "0.25.1"
 reqwest = { version = "0.12.4", features = ["json"] }
+tokio = { version = "1.40.0", features = ["full"] }
 serde = { version = "1.0.210", features = ["derive"] }
-tokio = { version = "1.38.0", features = ["full"] }
 strum = "0.26.3"
 strum_macros = "0.26"
 color-eyre = "0.6.2"
