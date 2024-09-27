@@ -28,9 +28,9 @@ crossterm = { version = "0.28.1", features = ["event-stream"] }
 directories = "5.0.1"
 image = "0.25.1"
 reqwest = { version = "0.12.4", features = ["json"] }
-serde = { version = "1.0.203", features = ["derive"] }
 tokio = { version = "1.40.0", features = ["full"] }
-strum = "0.26.2"
+serde = { version = "1.0.210", features = ["derive"] }
+strum = "0.26.3"
 strum_macros = "0.26"
 color-eyre = "0.6.2"
 futures = "0.3.28"
@@ -40,7 +40,7 @@ once_cell = "1.19.0"
 chrono = "0.4.38"
 open = "5"
 rusqlite = { version = "0.31.0", features = ["bundled"] }
-clap = { version = "4.4.5", features = ["derive", "cargo"] }
+clap = { version = "4.5.18", features = ["derive", "cargo"] }
 zip = "2.1.6"
 toml = "0.8.19"
 epub-builder = "0.7.4"
@@ -50,7 +50,7 @@ httpmock = "0.7.0-rc.1"
 pretty_assertions = "1.4.0"
 rusty-hook = "0.11.2"
 uuid = { version = "1.10.0", features = ["v4", "fast-rng"] }
-fake = "2.9.2"
+fake = "2.10.0"
 http = "1.0"
 
 [target.'cfg(windows)'.dependencies]
