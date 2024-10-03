@@ -118,13 +118,6 @@ impl<'a> Migration<'a, Building> {
 
         Ok(Some(migration))
     }
-
-    fn should_run_migration(&self, transaction: &Transaction) -> rusqlite::Result<bool> {
-        let query = "SELECT EXISTS(SELECT id FROM migrations WHERE name = ?1 AND version = ?2) as row_exists";
-        let migration_exists: bool = transaction.query_row(query, [self.name, self.version], |row| row.get(0))?;
-
-        Ok(!migration_exists)
-    }
 }
 
 impl<'a> Migration<'a, Up> {
@@ -188,6 +181,13 @@ impl<'a, T> Migration<'a, T> {
         }
 
         Ok(false)
+    }
+
+    fn should_run_migration(&self, transaction: &Transaction) -> rusqlite::Result<bool> {
+        let query = "SELECT EXISTS(SELECT id FROM migrations WHERE name = ?1 AND version = ?2) as row_exists";
+        let migration_exists: bool = transaction.query_row(query, [self.name, self.version], |row| row.get(0))?;
+
+        Ok(!migration_exists)
     }
 
     fn create_table_migrations_if_not_exists(&self, transaction: &Transaction) -> rusqlite::Result<()> {

@@ -32,6 +32,7 @@ pub struct ChapterItem {
     pub readable_at: String,
     pub scanlator: String,
     pub chapter_number: String,
+    pub volume_number: Option<String>,
     pub is_read: bool,
     pub is_downloaded: bool,
     pub state: ChapterItemState,
@@ -136,6 +137,7 @@ impl ChapterItem {
         id: String,
         title: String,
         chapter_number: String,
+        volume_number: Option<String>,
         readable_at: String,
         scanlator: String,
         translated_language: Languages,
@@ -146,6 +148,7 @@ impl ChapterItem {
             readable_at,
             scanlator,
             chapter_number,
+            volume_number,
             is_read: false,
             is_downloaded: false,
             download_loading_state: None,
@@ -198,10 +201,13 @@ impl ChaptersListWidget {
                 .find(|rel| rel.type_field == "scanlation_group")
                 .map(|rel| rel.attributes.as_ref().unwrap().name.to_string());
 
+            let volume = chapter.attributes.volume.clone();
+
             chapters.push(ChapterItem::new(
                 id,
                 title,
                 chapter_number,
+                volume,
                 display_dates_since_publication(difference.num_days()),
                 scanlator.unwrap_or_default(),
                 translated_language,

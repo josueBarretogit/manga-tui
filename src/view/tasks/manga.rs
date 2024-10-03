@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
+use reqwest::Url;
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::backend::api_responses::{ChapterPagesResponse, ChapterResponse};
@@ -86,7 +87,9 @@ async fn download_chapter_raw_images(
     for (index, chapter_page_file_name) in data.files.into_iter().enumerate() {
         let extension = Path::new(&chapter_page_file_name).extension().unwrap().to_str().unwrap();
 
-        if let Ok(response) = api_client.get_chapter_page(data.endpoint, &chapter_page_file_name).await {
+        let endpoint: Url = format!("{}/{}", data.endpoint, chapter_page_file_name).parse().unwrap();
+
+        if let Ok(response) = api_client.get_chapter_page(endpoint).await {
             if let Ok(bytes) = response.bytes().await {
                 data.chapter_to_download.create_image_file(
                     &bytes,
@@ -115,7 +118,10 @@ async fn download_chapter_cbz(
 
     for (index, file_name) in data.files.into_iter().enumerate() {
         let extension = Path::new(&file_name).extension().unwrap().to_str().unwrap();
-        if let Ok(response) = api_client.get_chapter_page(data.endpoint, &file_name).await {
+
+        let endpoint: Url = format!("{}/{}", data.endpoint, file_name).parse().unwrap();
+
+        if let Ok(response) = api_client.get_chapter_page(endpoint).await {
             if let Ok(bytes) = response.bytes().await {
                 let file_name = format!("{}.{}", index + 1, extension);
                 data.chapter_to_download.insert_into_cbz(&mut zip_writer, &file_name, &bytes);
@@ -144,7 +150,10 @@ async fn download_chapter_epub(
 
     for (index, file_name) in data.files.into_iter().enumerate() {
         let extension = Path::new(&file_name).extension().unwrap().to_str().unwrap();
-        if let Ok(response) = api_client.get_chapter_page(data.endpoint, &file_name).await {
+
+        let endpoint: Url = format!("{}/{}", data.endpoint, file_name).parse().unwrap();
+
+        if let Ok(response) = api_client.get_chapter_page(endpoint).await {
             if let Ok(bytes) = response.bytes().await {
                 let file_name = format!("{}.{}", index + 1, extension);
                 data.chapter_to_download

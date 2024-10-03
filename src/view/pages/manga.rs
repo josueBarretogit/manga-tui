@@ -16,7 +16,8 @@ use strum::{Display, EnumIs};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
-use crate::backend::api_responses::{ChapterResponse, MangaStatisticsResponse, Statistics};
+use super::reader::Chapter;
+use crate::backend::api_responses::{ChapterPagesResponse, ChapterResponse, MangaStatisticsResponse, Statistics};
 use crate::backend::database::{
     get_chapters_history_status, save_history, set_chapter_downloaded, MangaReadingHistorySave, SetChapterDownloaded, DBCONN,
 };
@@ -532,9 +533,12 @@ impl MangaPage {
         match self.get_current_selected_chapter_mut() {
             Some(chapter_selected) => {
                 chapter_selected.set_normal_state();
+
                 let id_chapter = chapter_selected.id.clone();
                 let chapter_title = chapter_selected.title.clone();
                 let is_already_reading = chapter_selected.is_read;
+                let number: u32 = chapter_selected.chapter_number.parse().unwrap_or_default();
+                let volume_number: Option<u32> = chapter_selected.volume_number.as_ref().map(|num| num.parse().unwrap_or_default());
                 let manga_id = self.manga.id.clone();
                 let title = self.manga.title.clone();
                 let img_url = self.manga.img_url.clone();
@@ -545,7 +549,7 @@ impl MangaPage {
                     let chapter_response = MangadexClient::global().get_chapter_pages(&id_chapter).await;
                     match chapter_response {
                         Ok(response) => {
-                            if let Ok(response) = response.json().await {
+                            if let Ok(response) = response.json::<ChapterPagesResponse>().await {
                                 let binding = DBCONN.lock().unwrap();
                                 let conn = binding.as_ref().unwrap();
                                 let save_response = save_history(
@@ -564,7 +568,16 @@ impl MangaPage {
                                     write_to_error_log(error_log::ErrorType::FromError(Box::new(e)));
                                 }
 
-                                tx.send(Events::ReadChapter(response)).ok();
+                                let chapter: Chapter = Chapter {
+                                    id: response.chapter.hash.clone(),
+                                    base_url: response.base_url.clone(),
+                                    number,
+                                    volume_number,
+                                    pages_url: response.get_files_based_on_quality(crate::config::ImageQuality::Low),
+                                    language: Languages::default(),
+                                };
+
+                                tx.send(Events::ReadChapter(chapter, manga_id)).ok();
                                 local_tx.send(MangaPageEvents::CheckChapterStatus).ok();
                                 local_tx.send(MangaPageEvents::ReadSuccesful).ok();
                             }

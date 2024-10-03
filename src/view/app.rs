@@ -10,11 +10,10 @@ use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use self::feed::Feed;
 use self::home::Home;
 use self::manga::MangaPage;
-use self::reader::MangaReader;
+use self::reader::{Chapter, MangaReader, SearchChapter, SearchMangaPanel};
 use self::search::{InputMode, SearchPage};
 use super::widgets::search::MangaItem;
 use super::widgets::Component;
-use crate::backend::api_responses::ChapterPagesResponse;
 use crate::backend::fetch::ApiClient;
 use crate::backend::tui::{Action, Events};
 use crate::global::INSTRUCTIONS_STYLE;
@@ -26,7 +25,7 @@ pub enum AppState {
     Done,
 }
 
-pub struct App<T: ApiClient> {
+pub struct App<T: ApiClient + SearchChapter + SearchMangaPanel> {
     pub global_action_tx: UnboundedSender<Action>,
     pub global_action_rx: UnboundedReceiver<Action>,
     pub global_event_tx: UnboundedSender<Events>,
@@ -34,17 +33,18 @@ pub struct App<T: ApiClient> {
     pub state: AppState,
     pub current_tab: SelectedPage,
     pub manga_page: Option<MangaPage>,
-    pub manga_reader_page: Option<MangaReader>,
+    pub manga_reader_page: Option<MangaReader<T>>,
     pub search_page: SearchPage,
     pub home_page: Home,
     pub feed_page: Feed<T>,
+    api_client: T,
     // The picker is what decides how big a image needs to be rendered depending on the user's
     // terminal font size and the graphics it supports
     // if the terminal doesn't support any graphics protocol the picker is `None`
     picker: Option<Picker>,
 }
 
-impl<T: ApiClient> Component for App<T> {
+impl<T: ApiClient + SearchChapter + SearchMangaPanel> Component for App<T> {
     type Actions = Action;
 
     fn render(&mut self, area: Rect, frame: &mut Frame<'_>) {
@@ -65,7 +65,7 @@ impl<T: ApiClient> Component for App<T> {
         match events {
             Events::Key(key_event) => self.handle_key_events(key_event),
             Events::GoToMangaPage(manga) => self.go_to_manga_page(manga),
-            Events::ReadChapter(chapter_response) => self.go_to_read_chapter(chapter_response),
+            Events::ReadChapter(chapter_response, manga_id) => self.go_to_read_chapter(chapter_response, manga_id),
             Events::GoSearchPage => {
                 self.go_search_page();
             },
@@ -95,7 +95,7 @@ impl<T: ApiClient> Component for App<T> {
     fn clean_up(&mut self) {}
 }
 
-impl<T: ApiClient> App<T> {
+impl<T: ApiClient + SearchChapter + SearchMangaPanel> App<T> {
     pub fn new(api_client: T, picker: Option<Picker>) -> Self {
         let (global_action_tx, global_action_rx) = unbounded_channel::<Action>();
         let (global_event_tx, global_event_rx) = unbounded_channel::<Events>();
@@ -106,7 +106,9 @@ impl<T: ApiClient> App<T> {
             picker,
             current_tab: SelectedPage::default(),
             search_page: SearchPage::new(picker).with_global_sender(global_event_tx.clone()),
-            feed_page: Feed::new().with_global_sender(global_event_tx.clone()).with_api_client(api_client),
+            feed_page: Feed::new()
+                .with_global_sender(global_event_tx.clone())
+                .with_api_client(api_client.clone()),
             home_page: Home::new(picker).with_global_sender(global_event_tx.clone()),
             manga_page: None,
             manga_reader_page: None,
@@ -115,6 +117,7 @@ impl<T: ApiClient> App<T> {
             global_event_tx,
             global_event_rx,
             state: AppState::Runnning,
+            api_client,
         }
     }
 
@@ -230,18 +233,18 @@ impl<T: ApiClient> App<T> {
         self.manga_page = Some(MangaPage::new(manga.manga, self.picker).with_global_sender(self.global_event_tx.clone()));
     }
 
-    fn go_to_read_chapter(&mut self, chapter_response: ChapterPagesResponse) {
+    fn go_to_read_chapter(&mut self, chapter_to_read: Chapter, manga_id: String) {
         self.home_page.clean_up();
         self.feed_page.clean_up();
         self.current_tab = SelectedPage::ReaderTab;
-        self.manga_reader_page = Some(MangaReader::new(
-            self.global_event_tx.clone(),
-            chapter_response.chapter.hash,
-            chapter_response.base_url,
-            chapter_response.chapter.data_saver,
-            chapter_response.chapter.data,
-            self.picker.as_ref().cloned().unwrap(),
-        ));
+
+        let manga_reader =
+            MangaReader::new(chapter_to_read, manga_id, self.picker.as_ref().cloned().unwrap(), self.api_client.clone())
+                .with_global_sender(self.global_event_tx.clone());
+
+        manga_reader.init_fetching_chapter();
+
+        self.manga_reader_page = Some(manga_reader);
     }
 
     fn go_to_home(&mut self) {
@@ -346,7 +349,7 @@ mod tests {
     use crate::backend::fetch::fake_api_client::MockMangadexClient;
     use crate::view::widgets::press_key;
 
-    fn tick<T: ApiClient>(app: &mut App<T>) {
+    fn tick<T: ApiClient + SearchChapter + SearchMangaPanel>(app: &mut App<T>) {
         let max_amoun_ticks = 10;
         let mut count = 0;
 

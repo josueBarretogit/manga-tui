@@ -1,5 +1,6 @@
 use std::fmt::{Debug, Write};
 
+use serde::Deserialize;
 use strum::{Display, EnumIter, IntoEnumIterator};
 
 use crate::global::PREFERRED_LANGUAGE;
@@ -254,7 +255,7 @@ where
     }
 }
 
-#[derive(Debug, Display, EnumIter, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Display, EnumIter, Default, Clone, Copy, PartialEq, Eq, Deserialize)]
 pub enum Languages {
     French,
     #[default]
