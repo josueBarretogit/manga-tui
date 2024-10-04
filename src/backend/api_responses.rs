@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use reqwest::Url;
 use serde::{Deserialize, Serialize};
 
 use crate::config::ImageQuality;
@@ -169,6 +170,25 @@ impl ChapterPagesResponse {
             ImageQuality::High => self.chapter.data,
         }
     }
+
+    /// Based on the mangadex api the `data_saver` array is used when image quality is low and
+    /// `data` is used when ImageQuality is high
+    pub fn get_files_based_on_quality_as_url(self, quality: ImageQuality) -> Vec<Url> {
+        let base_endpoint = self.get_image_url_endpoint(quality);
+
+        let endpoint_formatted = |raw_url: String| format!("{base_endpoint}/{}", raw_url).parse::<Url>();
+
+        match quality {
+            ImageQuality::Low => self
+                .chapter
+                .data_saver
+                .into_iter()
+                .map(endpoint_formatted)
+                .filter_map(|res| res.ok())
+                .collect(),
+            ImageQuality::High => self.chapter.data.into_iter().map(endpoint_formatted).filter_map(|res| res.ok()).collect(),
+        }
+    }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -209,8 +229,15 @@ pub struct AggregateChapterResponse {
 impl AggregateChapterResponse {
     pub fn search_chapter(&self, volume: &str, chapter_number: &str) -> Option<Chapters> {
         let chapter = self.volumes.get(volume).and_then(|volum| volum.chapters.get(chapter_number)).cloned();
-
         chapter
+    }
+
+    pub fn search_chapter_in_next_volume(&self, volume: &str, chapter_number: &str) -> Option<Chapters> {
+        let volumen_as_number: u32 = volume.parse().ok()?;
+        let volume_incremented = volumen_as_number + 1;
+
+        self.search_chapter(volume, chapter_number)
+            .map_or(self.search_chapter(&volume_incremented.to_string(), chapter_number), Some)
     }
 }
 
@@ -316,17 +343,32 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_array_containing_image_filenames() {
+    fn it_constructs_manga_panel_endpoint_based_on_image_quality() {
         let mut response = ChapterPagesResponse::default();
 
         response.chapter.data_saver = vec!["low_quality1.jpg".into(), "low_quality2.jpg".into()];
         response.chapter.data = vec!["high_quality1.jpg".into(), "high_quality2.jpg".into()];
 
-        let image_quality = ImageQuality::High;
-        assert_eq!(response.chapter.data, response.clone().get_files_based_on_quality(image_quality));
+        response.chapter.hash = "the_hash".to_string();
+        response.base_url = "http://localhost".to_string();
 
         let image_quality = ImageQuality::Low;
-        assert_eq!(response.chapter.data_saver, response.clone().get_files_based_on_quality(image_quality));
+
+        let expected: Url =
+            format!("{}/{}/{}/low_quality1.jpg", response.base_url, image_quality.as_param(), response.chapter.hash,)
+                .parse()
+                .unwrap();
+
+        assert_eq!(&expected, response.clone().get_files_based_on_quality_as_url(image_quality).first().unwrap());
+
+        let image_quality = ImageQuality::High;
+
+        let expected: Url =
+            format!("{}/{}/{}/high_quality1.jpg", response.base_url, image_quality.as_param(), response.chapter.hash)
+                .parse()
+                .unwrap();
+
+        assert_eq!(&expected, response.clone().get_files_based_on_quality_as_url(image_quality).first().unwrap());
     }
 
     #[test]
@@ -348,7 +390,7 @@ mod tests {
     }
 
     #[test]
-    fn it_searches_chapter_given_a_number() {
+    fn it_searches_chapter_given_a_chapter_number() {
         let chapter_to_search = Chapters {
             chapter: "2".to_string(),
             id: "some_id_other".to_string(),
@@ -390,9 +432,63 @@ mod tests {
 
         let chapter_found = response.search_chapter("1", "2").expect("should not be none");
 
-        let chapter_not_found_because_volumen_not_found = response.search_chapter("4", "1");
+        let chapter_not_found = response.search_chapter("1", "10");
 
         assert_eq!(chapter_to_search, chapter_found);
-        assert!(chapter_not_found_because_volumen_not_found.is_none());
+        assert!(chapter_not_found.is_none());
+    }
+
+    #[test]
+    fn it_searches_chapter_in_next_volume() {
+        let chapters_vol_1: HashMap<String, Chapters> = HashMap::from([
+            ("1".to_string(), Chapters {
+                chapter: "1".to_string(),
+                id: "some_id".to_string(),
+                ..Default::default()
+            }),
+            ("2".to_string(), Chapters {
+                chapter: "2".to_string(),
+                id: "some_id_other".to_string(),
+                ..Default::default()
+            }),
+        ]);
+
+        let chapter_to_search = Chapters {
+            chapter: "3".to_string(),
+            id: "chapter_expected_to_be_found".to_string(),
+            ..Default::default()
+        };
+
+        let chapters_vol_2: HashMap<String, Chapters> = HashMap::from([
+            ("3".to_string(), chapter_to_search.clone()),
+            ("4".to_string(), Chapters {
+                chapter: "4".to_string(),
+                ..Default::default()
+            }),
+        ]);
+
+        let volumes: HashMap<String, Volumes> = HashMap::from([
+            ("1".to_string(), Volumes {
+                volume: "1".to_string(),
+                count: 1,
+                chapters: chapters_vol_1.clone(),
+            }),
+            ("2".to_string(), Volumes {
+                volume: "2".to_string(),
+                count: 1,
+                chapters: chapters_vol_2.clone(),
+            }),
+        ]);
+
+        let response = AggregateChapterResponse {
+            result: "ok".to_string(),
+            volumes: volumes.clone(),
+        };
+
+        let chapter_found = response.search_chapter_in_next_volume("1", "3").expect("should be found");
+        let chapter_found_not_found = response.search_chapter_in_next_volume("3", "5");
+
+        assert_eq!(chapter_found, chapter_to_search);
+        assert!(chapter_found_not_found.is_none());
     }
 }

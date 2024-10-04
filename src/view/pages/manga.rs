@@ -567,13 +567,13 @@ impl MangaPage {
                                 if let Err(e) = save_response {
                                     write_to_error_log(error_log::ErrorType::FromError(Box::new(e)));
                                 }
+                                let config = MangaTuiConfig::get();
 
                                 let chapter: Chapter = Chapter {
                                     id: response.chapter.hash.clone(),
-                                    base_url: response.base_url.clone(),
                                     number,
                                     volume_number,
-                                    pages_url: response.get_files_based_on_quality(crate::config::ImageQuality::Low),
+                                    pages_url: response.get_files_based_on_quality_as_url(config.image_quality),
                                     language: Languages::default(),
                                 };
 

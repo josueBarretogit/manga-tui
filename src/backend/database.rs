@@ -6,7 +6,6 @@ use once_cell::sync::Lazy;
 use rusqlite::{params, Connection};
 use strum::{Display, EnumIter};
 
-#[cfg(not(test))]
 use super::AppDirectories;
 use crate::view::widgets::feed::FeedTabs;
 
@@ -512,6 +511,84 @@ pub fn set_chapter_downloaded(chapter: SetChapterDownloaded<'_>, conn: &Connecti
     }
 }
 
+pub struct Database {}
+
+impl Database {
+    pub fn setup(conn: &mut Connection) -> rusqlite::Result<()> {
+        conn.execute(
+            "CREATE TABLE if not exists app_version (
+                version TEXT PRIMARY KEY
+             )",
+            (),
+        )?;
+
+        let already_has_data: i32 = conn.query_row("SELECT COUNT(*) from app_version", [], |row| row.get(0))?;
+
+        if already_has_data == 0 {
+            conn.execute("INSERT INTO app_version(version) VALUES (?1) ", [env!("CARGO_PKG_VERSION")])?;
+        }
+
+        conn.execute(
+            "CREATE TABLE if not exists history_types (
+                id    INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE
+             )",
+            (),
+        )?;
+
+        conn.execute(
+            "CREATE TABLE if not exists mangas (
+                id    TEXT  PRIMARY KEY,
+                title TEXT  NOT NULL,
+                created_at  DATETIME DEFAULT (datetime('now')),
+                updated_at  DATETIME DEFAULT (datetime('now')),
+                last_read  DATETIME DEFAULT (datetime('now')),
+                deleted_at  DATETIME NULL,
+                img_url TEXT NULL
+             )",
+            (),
+        )?;
+
+        conn.execute(
+            "CREATE TABLE if not exists chapters (
+                id    TEXT  PRIMARY KEY,
+                title TEXT  NOT NULL,
+                manga_id TEXT  NOT NULL,
+                is_read BOOLEAN NOT NULL DEFAULT 0,
+                is_downloaded BOOLEAN NOT NULL DEFAULT 0,
+                is_bookmarked BOOLEAN NOT NULL DEFAULT false,
+                FOREIGN KEY (manga_id) REFERENCES mangas (id)
+            )",
+            (),
+        )?;
+
+        conn.execute(
+            "CREATE TABLE if not exists manga_history_union (
+                manga_id TEXT, 
+                type_id INTEGER, 
+                PRIMARY KEY (manga_id, type_id),
+                FOREIGN KEY (manga_id) REFERENCES mangas (id),
+                FOREIGN KEY (type_id) REFERENCES history_types (id)
+             )",
+            (),
+        )?;
+
+        let already_has_data: i32 = conn.query_row("SELECT COUNT(*) from history_types", [], |row| row.get(0))?;
+
+        if already_has_data < 2 {
+            conn.execute("INSERT INTO history_types(name) VALUES (?1) ", [MangaHistoryType::ReadingHistory.to_string()])?;
+
+            conn.execute("INSERT INTO history_types(name) VALUES (?1) ", [MangaHistoryType::PlanToRead.to_string()])?;
+        }
+
+        Ok(())
+    }
+
+    pub fn get_connection() -> rusqlite::Result<Connection> {
+        if cfg!(test) { Connection::open_in_memory() } else { Connection::open(AppDirectories::History.get_full_path()) }
+    }
+}
+
 #[cfg(test)]
 mod test {
 
@@ -571,13 +648,11 @@ mod test {
 
     #[test]
     fn database_is_initialized() -> Result<()> {
-        let binding = DBCONN.lock().expect("could not get db conn");
-        let connection = binding.as_ref();
-        assert!(connection.is_some());
+        let mut connection = Database::get_connection()?;
 
-        let connection = connection.unwrap();
+        Database::setup(&mut connection).expect("could not setup the database");
 
-        check_tables_exist(connection)?;
+        check_tables_exist(&connection)?;
 
         Ok(())
     }

@@ -242,7 +242,7 @@ impl<T: ApiClient + SearchChapter + SearchMangaPanel> App<T> {
             MangaReader::new(chapter_to_read, manga_id, self.picker.as_ref().cloned().unwrap(), self.api_client.clone())
                 .with_global_sender(self.global_event_tx.clone());
 
-        manga_reader.init_fetching_chapter();
+        manga_reader.init_fetching_pages();
 
         self.manga_reader_page = Some(manga_reader);
     }

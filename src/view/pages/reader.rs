@@ -12,13 +12,11 @@ use ratatui_image::picker::Picker;
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::{Resize, StatefulImage};
 use reqwest::Url;
-use serde::Deserialize;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
 use crate::backend::filter::Languages;
 use crate::backend::tui::Events;
-use crate::common::PageType;
 use crate::global::INSTRUCTIONS_STYLE;
 use crate::view::tasks::reader::get_manga_panel;
 use crate::view::widgets::reader::{PageItemState, PagesItem, PagesList};
@@ -53,6 +51,8 @@ pub enum MangaReaderActions {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum State {
+    ErrorSearchingChapter,
+    DisplayingChapterNotFound,
     SearchingChapter,
     SearchingPages,
 }
@@ -75,29 +75,24 @@ pub enum MangaReaderEvents {
 
 pub struct Page {
     pub image_state: Option<Box<dyn StatefulProtocol>>,
-    pub url: String,
-    pub page_type: PageType,
     pub dimensions: Option<(u32, u32)>,
 }
 
 impl Page {
-    pub fn new(url: String, page_type: PageType) -> Self {
+    pub fn new() -> Self {
         Self {
             image_state: None,
             dimensions: None,
-            url,
-            page_type,
         }
     }
 }
 
-#[derive(Debug, PartialEq, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Chapter {
     pub id: String,
-    pub base_url: String,
     pub number: u32,
     pub volume_number: Option<u32>,
-    pub pages_url: Vec<String>,
+    pub pages_url: Vec<Url>,
     pub language: Languages,
 }
 
@@ -105,7 +100,6 @@ impl Default for Chapter {
     fn default() -> Self {
         Self {
             id: String::default(),
-            base_url: String::default(),
             number: 1,
             volume_number: Some(1),
             pages_url: vec![],
@@ -148,6 +142,14 @@ impl<T: SearchChapter + SearchMangaPanel> Component for MangaReader<T> {
 
         Paragraph::new(Line::from(vec!["Go back: ".into(), Span::raw("<Backspace>").style(*INSTRUCTIONS_STYLE)]))
             .render(right, buf);
+
+        self.render_instructions(
+            buf,
+            right.inner(Margin {
+                horizontal: 2,
+                vertical: 2,
+            }),
+        );
 
         match self.pages.get_mut(self.page_list_state.selected.unwrap_or(0)) {
             Some(page) => match page.image_state.as_mut() {
@@ -200,6 +202,7 @@ impl<T: SearchChapter + SearchMangaPanel> Component for MangaReader<T> {
         self.image_tasks.abort_all();
         self.pages = vec![];
         self.pages_list.pages = vec![];
+        self.page_list_state = tui_widget_list::ListState::default();
     }
 }
 
@@ -209,16 +212,10 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
         let (local_action_tx, local_action_rx) = mpsc::unbounded_channel::<MangaReaderActions>();
         let (local_event_tx, local_event_rx) = mpsc::unbounded_channel::<MangaReaderEvents>();
 
-        let mut pages: Vec<Page> = vec![];
-
-        for url in chapter.pages_url.iter() {
-            pages.push(Page::new(url.to_string(), PageType::LowQuality));
-        }
-
         Self {
             _global_event_tx: None,
             chapter,
-            pages,
+            pages: vec![],
             manga_id,
             page_list_state: tui_widget_list::ListState::default(),
             image_tasks: set,
@@ -276,35 +273,49 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
         }
     }
 
-    fn fech_pages(&mut self) {
-        let mut pages_list: Vec<PagesItem> = vec![];
+    fn load_chapter(&mut self, chapter: Chapter) {
+        self.clean_up();
+        self.chapter = chapter;
+        self.state = State::SearchingPages;
+        self.init_fetching_pages();
+    }
 
-        for (index, page) in self.pages.iter().enumerate() {
-            let api_client = self.api_client.clone();
-
-            let file_name = page.url.clone();
-            let endpoint = format!("{}/{}/{}/{}", self.chapter.base_url, page.page_type, self.chapter.id, file_name);
-            let endpoint = Url::parse(&endpoint);
+    fn fecht_pages(&mut self) {
+        for (index, url) in self.chapter.pages_url.iter_mut().enumerate() {
+            self.pages.push(Page::new());
+            self.pages_list.pages.push(PagesItem::new(index));
             let tx = self.local_event_tx.clone();
-
-            pages_list.push(PagesItem::new(index));
-
-            if let Ok(url) = endpoint {
-                self.image_tasks.spawn(get_manga_panel(api_client, url, tx, index));
-            }
+            let api_client = self.api_client.clone();
+            self.image_tasks.spawn(get_manga_panel(api_client, url.clone(), tx, index));
         }
-        self.pages_list = PagesList::new(pages_list);
+    }
+
+    fn set_chapter_not_found(&mut self) {
+        self.state = State::DisplayingChapterNotFound;
+    }
+
+    fn set_error_searching_chapter(&mut self) {
+        self.state = State::ErrorSearchingChapter;
+    }
+
+    fn render_instructions(&mut self, buf: &mut Buffer, area: Rect) {
+        match self.state {
+            State::DisplayingChapterNotFound => "There is no more chapter".render(area, buf),
+            State::ErrorSearchingChapter => "error searching chapter".render(area, buf),
+            State::SearchingChapter => "searching chapter".render(area, buf),
+            _ => {},
+        };
     }
 
     fn tick(&mut self) {
         self.pages_list.on_tick();
         if let Ok(background_event) = self.local_event_rx.try_recv() {
             match background_event {
-                MangaReaderEvents::ErrorSearchingChapter => {},
-                MangaReaderEvents::ChapterNotFound => {},
-                MangaReaderEvents::LoadChapter(next_chapter_data) => {},
-                MangaReaderEvents::SearchNextChapter => {},
-                MangaReaderEvents::FetchPages => self.fech_pages(),
+                MangaReaderEvents::ErrorSearchingChapter => self.set_error_searching_chapter(),
+                MangaReaderEvents::ChapterNotFound => self.set_chapter_not_found(),
+                MangaReaderEvents::LoadChapter(chapter_found) => self.load_chapter(chapter_found),
+                MangaReaderEvents::SearchNextChapter => self.search_chapter(self.api_client.clone()),
+                MangaReaderEvents::FetchPages => self.fecht_pages(),
                 MangaReaderEvents::LoadPage(maybe_data) => self.load_page(maybe_data),
             }
         }
@@ -325,7 +336,7 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
         }
     }
 
-    pub fn init_fetching_chapter(&self) {
+    pub fn init_fetching_pages(&self) {
         self.local_event_tx.send(MangaReaderEvents::FetchPages).ok();
     }
 
@@ -447,11 +458,10 @@ mod test {
         let picker = Picker::new((8, 19));
         let chapter_id = "some_id".to_string();
         let base_url = "some_base_url".to_string();
-        let url_imgs = vec!["some_page_url1".into(), "some_page_url2".into()];
+        let url_imgs = vec!["http://localhost".parse().unwrap(), "http://localhost".parse().unwrap()];
         MangaReader::new(
             Chapter {
                 id: chapter_id,
-                base_url,
                 number: 1,
                 pages_url: url_imgs,
                 volume_number: Some(2),
@@ -476,17 +486,6 @@ mod test {
         let action = reader_page.local_action_rx.recv().await.unwrap();
 
         assert_eq!(MangaReaderActions::PreviousPage, action);
-    }
-
-    #[tokio::test]
-    async fn correct_initialization() {
-        let mut reader_page = initialize_reader_page(TestApiClient::new());
-        reader_page.init_fetching_chapter();
-
-        let fetch_pages_event = reader_page.local_event_rx.recv().await.expect("the event to fetch pages is not sent");
-
-        assert_eq!(MangaReaderEvents::FetchPages, fetch_pages_event);
-        assert!(!reader_page.pages.is_empty());
     }
 
     #[test]
@@ -517,33 +516,18 @@ mod test {
     }
 
     #[tokio::test]
-    async fn handle_events() {
-        let mut reader_page = initialize_reader_page(TestApiClient::new());
-        assert!(reader_page.pages_list.pages.is_empty());
+    async fn it_collects_pages() {
+        let chapter: Chapter = Chapter {
+            pages_url: vec!["http://localhost".parse().unwrap(), "http://localhost".parse().unwrap()],
+            ..Default::default()
+        };
 
-        reader_page.init_fetching_chapter();
+        let mut manga_reader = MangaReader::new(chapter, "some_id".to_string(), Picker::new((8, 8)), TestApiClient::new());
 
-        reader_page.tick();
+        manga_reader.fecht_pages();
 
-        assert!(!reader_page.pages_list.pages.is_empty());
-
-        reader_page
-            .local_event_tx
-            .send(MangaReaderEvents::LoadPage(Some(PageData {
-                index: 1,
-
-                panel: MangaPanel {
-                    image_decoded: DynamicImage::default(),
-                    dimensions: (10, 20),
-                },
-            })))
-            .expect("error sending event");
-
-        reader_page.tick();
-
-        let loaded_page = reader_page.pages.get(1).expect("could not load page");
-
-        assert!(loaded_page.dimensions.is_some_and(|dimensions| dimensions == (10, 20)));
+        assert!(!manga_reader.pages.is_empty());
+        assert!(!manga_reader.pages_list.pages.is_empty());
     }
 
     #[tokio::test]
@@ -591,10 +575,9 @@ mod test {
     async fn it_searches_chapter_and_sends_successful_result() {
         let expected = Chapter {
             id: "next_chapter_id".to_string(),
-            base_url: "some_base_ur".to_string(),
             number: 2,
             volume_number: Some(1),
-            pages_url: vec!["http:some_page.png".to_string(), "http:some_page.png".to_string()],
+            pages_url: vec!["http://localhost".parse().unwrap()],
             language: Languages::default(),
         };
 
@@ -640,5 +623,94 @@ mod test {
             .unwrap();
 
         assert_eq!(result, MangaReaderEvents::ErrorSearchingChapter);
+    }
+
+    #[test]
+    fn it_loads_chapter_found_and_sets_state_as_searching_pages() {
+        let expected = Chapter {
+            id: "id_before".to_string(),
+            number: 1,
+            volume_number: Some(1),
+            pages_url: vec![],
+            language: Languages::default(),
+        };
+
+        let api_client = TestApiClient::with_response(expected.clone());
+
+        let mut manga_reader = MangaReader::new(Chapter::default(), "some_id".to_string(), Picker::new((8, 8)), api_client);
+
+        manga_reader.state = State::SearchingChapter;
+
+        manga_reader.load_chapter(expected.clone());
+
+        assert_eq!(expected, manga_reader.chapter);
+        assert_eq!(manga_reader.state, State::SearchingPages);
+    }
+
+    #[test]
+    fn it_resets_pages_after_chapter_was_found() {
+        let api_client = TestApiClient::new();
+
+        let mut manga_reader = MangaReader::new(Chapter::default(), "some_id".to_string(), Picker::new((8, 8)), api_client);
+
+        manga_reader.pages = vec![Page::new(), Page::new()];
+        manga_reader.pages_list.pages = vec![PagesItem::new(1), PagesItem::new(1)];
+        manga_reader.page_list_state.select(Some(1));
+
+        manga_reader.load_chapter(Chapter::default());
+        assert!(manga_reader.pages.is_empty());
+        assert!(manga_reader.pages_list.pages.is_empty());
+        assert!(manga_reader.page_list_state.selected.is_none());
+    }
+
+    #[tokio::test]
+    async fn it_send_event_to_search_pages_after_chapter_was_loaded() {
+        let api_client = TestApiClient::new();
+        let mut manga_reader = MangaReader::new(Chapter::default(), "some_id".to_string(), Picker::new((8, 8)), api_client);
+
+        manga_reader.load_chapter(Chapter::default());
+
+        let expected = MangaReaderEvents::FetchPages;
+
+        let result = timeout(Duration::from_millis(250), manga_reader.local_event_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(expected, result)
+    }
+
+    #[test]
+    fn it_loads_chapter_on_event() {
+        let chapter_to_load = Chapter {
+            id: "new_chapter_id".to_string(),
+            ..Default::default()
+        };
+
+        let api_client = TestApiClient::new();
+
+        let mut manga_reader = MangaReader::new(Chapter::default(), "some_id".to_string(), Picker::new((8, 8)), api_client);
+
+        manga_reader
+            .local_event_tx
+            .send(MangaReaderEvents::LoadChapter(chapter_to_load.clone()))
+            .ok();
+
+        manga_reader.tick();
+
+        assert_eq!(manga_reader.chapter.id, chapter_to_load.id);
+    }
+
+    #[test]
+    fn it_is_set_as_error_searching_chapter_on_event() {
+        let api_client = TestApiClient::new();
+
+        let mut manga_reader = MangaReader::new(Chapter::default(), "some_id".to_string(), Picker::new((8, 8)), api_client);
+
+        manga_reader.local_event_tx.send(MangaReaderEvents::ErrorSearchingChapter).ok();
+
+        manga_reader.tick();
+
+        assert_eq!(manga_reader.state, State::ErrorSearchingChapter);
     }
 }

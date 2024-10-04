@@ -13,6 +13,7 @@ use reqwest::{Client, Response, Url};
 use super::api_responses::{AggregateChapterResponse, ChapterPagesResponse};
 use super::filter::Languages;
 use crate::backend::filter::{Filters, IntoParam};
+use crate::config::ImageQuality;
 use crate::view::pages::manga::ChapterOrder;
 use crate::view::pages::reader::{Chapter, MangaPanel, SearchChapter, SearchMangaPanel};
 
@@ -72,6 +73,7 @@ pub struct MangadexClient {
     client: reqwest::Client,
     api_url_base: Url,
     cover_img_url_base: Url,
+    image_quality: ImageQuality,
 }
 
 pub static MANGADEX_CLIENT_INSTANCE: OnceCell<MangadexClient> = once_cell::sync::OnceCell::new();
@@ -109,7 +111,13 @@ impl MangadexClient {
             client,
             api_url_base,
             cover_img_url_base,
+            image_quality: ImageQuality::default(),
         }
+    }
+
+    pub fn with_image_quality(mut self, image_quality: ImageQuality) -> Self {
+        self.image_quality = image_quality;
+        self
     }
 
     // Not crucial this doesnt need to be tested
@@ -470,19 +478,18 @@ impl SearchChapter for MangadexClient {
     ) -> Result<Option<Chapter>, Box<dyn std::error::Error>> {
         let chapters_reponse: AggregateChapterResponse = self.search_chapters_aggregate(manga_id, language).await?.json().await?;
 
-        let mut chapter = chapters_reponse.search_chapter(volume_number, chapter_number);
+        let chapter = chapters_reponse.search_chapter_in_next_volume(volume_number, chapter_number);
 
-        match chapter.as_mut() {
+        match chapter {
             Some(found) => {
                 let res: ChapterPagesResponse = self.get_chapter_pages(&found.id).await?.json().await?;
 
                 Ok(Some(Chapter {
-                    id: res.chapter.hash,
-                    base_url: res.base_url,
+                    id: res.chapter.hash.clone(),
                     number: found.chapter.parse().unwrap_or_default(),
                     volume_number: Some(volume_number.parse().unwrap_or_default()),
                     language,
-                    pages_url: vec![],
+                    pages_url: res.get_files_based_on_quality_as_url(self.image_quality),
                 }))
             },
             None => Ok(None),
