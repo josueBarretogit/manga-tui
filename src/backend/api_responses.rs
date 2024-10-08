@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use reqwest::Url;
 use serde::{Deserialize, Serialize};
 
 use crate::config::ImageQuality;
@@ -169,6 +170,25 @@ impl ChapterPagesResponse {
             ImageQuality::High => self.chapter.data,
         }
     }
+
+    /// Based on the mangadex api the `data_saver` array is used when image quality is low and
+    /// `data` is used when ImageQuality is high
+    pub fn get_files_based_on_quality_as_url(self, quality: ImageQuality) -> Vec<Url> {
+        let base_endpoint = self.get_image_url_endpoint(quality);
+
+        let endpoint_formatted = |raw_url: String| format!("{base_endpoint}/{}", raw_url).parse::<Url>();
+
+        match quality {
+            ImageQuality::Low => self
+                .chapter
+                .data_saver
+                .into_iter()
+                .map(endpoint_formatted)
+                .filter_map(|res| res.ok())
+                .collect(),
+            ImageQuality::High => self.chapter.data.into_iter().map(endpoint_formatted).filter_map(|res| res.ok()).collect(),
+        }
+    }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -197,6 +217,30 @@ pub struct Statistics {
 #[serde(rename_all = "camelCase")]
 pub struct Rating {
     pub average: Option<f64>,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AggregateChapterResponse {
+    pub result: String,
+    pub volumes: HashMap<String, Volumes>,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Volumes {
+    pub volume: String,
+    pub count: i32,
+    pub chapters: HashMap<String, Chapters>,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Chapters {
+    pub chapter: String,
+    pub id: String,
+    pub others: Vec<String>,
+    pub count: i32,
 }
 
 pub mod feed {
@@ -276,24 +320,53 @@ pub mod authors {
     }
 }
 
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OneChapterResponse {
+    pub data: OneChapterData,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OneChapterData {
+    pub id: String,
+    pub attributes: ChapterAttribute,
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
     use uuid::Uuid;
 
     use super::*;
+
     #[test]
-    fn the_array_containing_image_filenames() {
+    fn it_constructs_manga_panel_endpoint_based_on_image_quality() {
         let mut response = ChapterPagesResponse::default();
 
         response.chapter.data_saver = vec!["low_quality1.jpg".into(), "low_quality2.jpg".into()];
         response.chapter.data = vec!["high_quality1.jpg".into(), "high_quality2.jpg".into()];
 
-        let image_quality = ImageQuality::High;
-        assert_eq!(response.chapter.data, response.clone().get_files_based_on_quality(image_quality));
+        response.chapter.hash = "the_hash".to_string();
+        response.base_url = "http://localhost".to_string();
 
         let image_quality = ImageQuality::Low;
-        assert_eq!(response.chapter.data_saver, response.clone().get_files_based_on_quality(image_quality));
+
+        let expected: Url =
+            format!("{}/{}/{}/low_quality1.jpg", response.base_url, image_quality.as_param(), response.chapter.hash,)
+                .parse()
+                .unwrap();
+
+        assert_eq!(&expected, response.clone().get_files_based_on_quality_as_url(image_quality).first().unwrap());
+
+        let image_quality = ImageQuality::High;
+
+        let expected: Url =
+            format!("{}/{}/{}/high_quality1.jpg", response.base_url, image_quality.as_param(), response.chapter.hash)
+                .parse()
+                .unwrap();
+
+        assert_eq!(&expected, response.clone().get_files_based_on_quality_as_url(image_quality).first().unwrap());
     }
 
     #[test]
