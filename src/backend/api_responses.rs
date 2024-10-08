@@ -226,21 +226,6 @@ pub struct AggregateChapterResponse {
     pub volumes: HashMap<String, Volumes>,
 }
 
-impl AggregateChapterResponse {
-    pub fn search_chapter(&self, volume: &str, chapter_number: &str) -> Option<Chapters> {
-        let chapter = self.volumes.get(volume).and_then(|volum| volum.chapters.get(chapter_number)).cloned();
-        chapter
-    }
-
-    pub fn search_chapter_in_next_volume(&self, volume: &str, chapter_number: &str) -> Option<Chapters> {
-        let volumen_as_number: u32 = volume.parse().ok()?;
-        let volume_incremented = volumen_as_number + 1;
-
-        self.search_chapter(volume, chapter_number)
-            .map_or(self.search_chapter(&volume_incremented.to_string(), chapter_number), Some)
-    }
-}
-
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Volumes {
@@ -335,6 +320,19 @@ pub mod authors {
     }
 }
 
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OneChapterResponse {
+    pub data: OneChapterData,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OneChapterData {
+    pub id: String,
+    pub attributes: ChapterAttribute,
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -387,108 +385,5 @@ mod tests {
 
         let image_quality = ImageQuality::Low;
         assert_eq!(format!("http://some_url/data-saver/{}", response.chapter.hash), response.get_image_url_endpoint(image_quality));
-    }
-
-    #[test]
-    fn it_searches_chapter_given_a_chapter_number() {
-        let chapter_to_search = Chapters {
-            chapter: "2".to_string(),
-            id: "some_id_other".to_string(),
-            ..Default::default()
-        };
-
-        let chapters_vol_1: HashMap<String, Chapters> = HashMap::from([
-            ("1".to_string(), Chapters {
-                chapter: "1".to_string(),
-                id: "some_id".to_string(),
-                ..Default::default()
-            }),
-            ("2".to_string(), chapter_to_search.clone()),
-        ]);
-
-        let chapters_vol_2: HashMap<String, Chapters> = HashMap::from([("3".to_string(), Chapters {
-            chapter: "3".to_string(),
-            id: "chapter_3".to_string(),
-            ..Default::default()
-        })]);
-
-        let volumes: HashMap<String, Volumes> = HashMap::from([
-            ("1".to_string(), Volumes {
-                volume: "1".to_string(),
-                count: 1,
-                chapters: chapters_vol_1.clone(),
-            }),
-            ("2".to_string(), Volumes {
-                volume: "2".to_string(),
-                count: 1,
-                chapters: chapters_vol_2.clone(),
-            }),
-        ]);
-
-        let response = AggregateChapterResponse {
-            result: "ok".to_string(),
-            volumes: volumes.clone(),
-        };
-
-        let chapter_found = response.search_chapter("1", "2").expect("should not be none");
-
-        let chapter_not_found = response.search_chapter("1", "10");
-
-        assert_eq!(chapter_to_search, chapter_found);
-        assert!(chapter_not_found.is_none());
-    }
-
-    #[test]
-    fn it_searches_chapter_in_next_volume() {
-        let chapters_vol_1: HashMap<String, Chapters> = HashMap::from([
-            ("1".to_string(), Chapters {
-                chapter: "1".to_string(),
-                id: "some_id".to_string(),
-                ..Default::default()
-            }),
-            ("2".to_string(), Chapters {
-                chapter: "2".to_string(),
-                id: "some_id_other".to_string(),
-                ..Default::default()
-            }),
-        ]);
-
-        let chapter_to_search = Chapters {
-            chapter: "3".to_string(),
-            id: "chapter_expected_to_be_found".to_string(),
-            ..Default::default()
-        };
-
-        let chapters_vol_2: HashMap<String, Chapters> = HashMap::from([
-            ("3".to_string(), chapter_to_search.clone()),
-            ("4".to_string(), Chapters {
-                chapter: "4".to_string(),
-                ..Default::default()
-            }),
-        ]);
-
-        let volumes: HashMap<String, Volumes> = HashMap::from([
-            ("1".to_string(), Volumes {
-                volume: "1".to_string(),
-                count: 1,
-                chapters: chapters_vol_1.clone(),
-            }),
-            ("2".to_string(), Volumes {
-                volume: "2".to_string(),
-                count: 1,
-                chapters: chapters_vol_2.clone(),
-            }),
-        ]);
-
-        let response = AggregateChapterResponse {
-            result: "ok".to_string(),
-            volumes: volumes.clone(),
-        };
-
-        let chapter_found = response.search_chapter_in_next_volume("1", "3").expect("should be found");
-        let chapter_found_not_found = response.search_chapter_in_next_volume("3", "5");
-
-        assert_eq!(chapter_found, chapter_to_search);
-        assert!(chapter_found_not_found.is_none());
     }
 }

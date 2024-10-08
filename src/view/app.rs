@@ -10,7 +10,7 @@ use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use self::feed::Feed;
 use self::home::Home;
 use self::manga::MangaPage;
-use self::reader::{Chapter, MangaReader, SearchChapter, SearchMangaPanel};
+use self::reader::{CurrentChapter, ListOfChapters, MangaReader, SearchChapter, SearchMangaPanel};
 use self::search::{InputMode, SearchPage};
 use super::widgets::search::MangaItem;
 use super::widgets::Component;
@@ -23,6 +23,13 @@ use crate::view::pages::*;
 pub enum AppState {
     Runnning,
     Done,
+}
+
+#[derive(PartialEq, Eq, Debug, Clone)]
+pub struct MangaToRead {
+    pub title: String,
+    pub manga_id: String,
+    pub list: ListOfChapters,
 }
 
 pub struct App<T: ApiClient + SearchChapter + SearchMangaPanel> {
@@ -65,7 +72,7 @@ impl<T: ApiClient + SearchChapter + SearchMangaPanel> Component for App<T> {
         match events {
             Events::Key(key_event) => self.handle_key_events(key_event),
             Events::GoToMangaPage(manga) => self.go_to_manga_page(manga),
-            Events::ReadChapter(chapter_response, manga_id) => self.go_to_read_chapter(chapter_response, manga_id),
+            Events::ReadChapter(chapter_response, manga_to_read) => self.go_to_read_chapter(chapter_response, manga_to_read),
             Events::GoSearchPage => {
                 self.go_search_page();
             },
@@ -233,14 +240,20 @@ impl<T: ApiClient + SearchChapter + SearchMangaPanel> App<T> {
         self.manga_page = Some(MangaPage::new(manga.manga, self.picker).with_global_sender(self.global_event_tx.clone()));
     }
 
-    fn go_to_read_chapter(&mut self, chapter_to_read: Chapter, manga_id: String) {
+    fn go_to_read_chapter(&mut self, chapter_to_read: CurrentChapter, manga_to_read: MangaToRead) {
         self.home_page.clean_up();
         self.feed_page.clean_up();
         self.current_tab = SelectedPage::ReaderTab;
 
-        let manga_reader =
-            MangaReader::new(chapter_to_read, manga_id, self.picker.as_ref().cloned().unwrap(), self.api_client.clone())
-                .with_global_sender(self.global_event_tx.clone());
+        let manga_reader = MangaReader::new(
+            chapter_to_read,
+            manga_to_read.manga_id,
+            self.picker.as_ref().cloned().unwrap(),
+            self.api_client.clone(),
+        )
+        .with_global_sender(self.global_event_tx.clone())
+        .with_list_of_chapters(manga_to_read.list)
+        .with_manga_title(manga_to_read.title);
 
         manga_reader.init_fetching_pages();
 

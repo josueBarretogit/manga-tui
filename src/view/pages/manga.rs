@@ -1,8 +1,10 @@
 use std::io::Cursor;
+use std::path::Path;
 
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent, MouseEventKind};
 use image::io::Reader;
 use image::DynamicImage;
+use manga_tui::Log;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Style, Stylize};
@@ -16,8 +18,10 @@ use strum::{Display, EnumIs};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
-use super::reader::Chapter;
-use crate::backend::api_responses::{ChapterPagesResponse, ChapterResponse, MangaStatisticsResponse, Statistics};
+use super::reader::{CurrentChapter, ListOfChapters};
+use crate::backend::api_responses::{
+    AggregateChapterResponse, ChapterPagesResponse, ChapterResponse, MangaStatisticsResponse, Statistics,
+};
 use crate::backend::database::{
     get_chapters_history_status, save_history, set_chapter_downloaded, MangaReadingHistorySave, SetChapterDownloaded, DBCONN,
 };
@@ -31,6 +35,7 @@ use crate::common::Manga;
 use crate::config::MangaTuiConfig;
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
 use crate::utils::{set_status_style, set_tags_style};
+use crate::view::app::MangaToRead;
 use crate::view::tasks::manga::{download_all_chapters, download_chapter_task, search_chapters_operation, DownloadAllChapters};
 use crate::view::widgets::manga::{
     ChapterItem, ChaptersListWidget, DownloadAllChaptersState, DownloadAllChaptersWidget, DownloadPhase,
@@ -537,8 +542,9 @@ impl MangaPage {
                 let id_chapter = chapter_selected.id.clone();
                 let chapter_title = chapter_selected.title.clone();
                 let is_already_reading = chapter_selected.is_read;
-                let number: u32 = chapter_selected.chapter_number.parse().unwrap_or_default();
-                let volume_number: Option<u32> = chapter_selected.volume_number.as_ref().map(|num| num.parse().unwrap_or_default());
+                let number: f64 = chapter_selected.chapter_number.parse().unwrap_or_default();
+                let volume_number = chapter_selected.volume_number.clone();
+                let language = self.get_current_selected_language();
                 let manga_id = self.manga.id.clone();
                 let title = self.manga.title.clone();
                 let img_url = self.manga.img_url.clone();
@@ -547,6 +553,15 @@ impl MangaPage {
 
                 tokio::spawn(async move {
                     let chapter_response = MangadexClient::global().get_chapter_pages(&id_chapter).await;
+
+                    let aggregate_res: AggregateChapterResponse = MangadexClient::global()
+                        .search_chapters_aggregate(&manga_id, language)
+                        .await
+                        .unwrap()
+                        .json()
+                        .await
+                        .unwrap();
+
                     match chapter_response {
                         Ok(response) => {
                             if let Ok(response) = response.json::<ChapterPagesResponse>().await {
@@ -567,17 +582,24 @@ impl MangaPage {
                                 if let Err(e) = save_response {
                                     write_to_error_log(error_log::ErrorType::FromError(Box::new(e)));
                                 }
+
                                 let config = MangaTuiConfig::get();
 
-                                let chapter: Chapter = Chapter {
-                                    id: response.chapter.hash.clone(),
+                                let chapter: CurrentChapter = CurrentChapter {
+                                    id: id_chapter,
+                                    title: chapter_title,
                                     number,
                                     volume_number,
                                     pages_url: response.get_files_based_on_quality_as_url(config.image_quality),
-                                    language: Languages::default(),
                                 };
 
-                                tx.send(Events::ReadChapter(chapter, manga_id)).ok();
+                                let manga_to_read: MangaToRead = MangaToRead {
+                                    title,
+                                    manga_id,
+                                    list: ListOfChapters::from(aggregate_res),
+                                };
+
+                                tx.send(Events::ReadChapter(chapter, manga_to_read)).ok();
                                 local_tx.send(MangaPageEvents::CheckChapterStatus).ok();
                                 local_tx.send(MangaPageEvents::ReadSuccesful).ok();
                             }

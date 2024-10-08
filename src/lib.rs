@@ -1,4 +1,7 @@
-use std::fmt::Display;
+use std::cmp::Ordering;
+use std::fmt::{Debug, Display};
+use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 /// Shortcut for: Path::new($path).try_exists().is_ok_and(|is_true| is_true)
@@ -70,6 +73,43 @@ impl<T: AsRef<Path>> From<T> for SanitizedFilename {
     }
 }
 
+/// A `Vec` that is guaranteed to be sorted
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct SortedVec<T: Debug>(Vec<T>);
+
+impl<T: Debug> SortedVec<T> {
+    pub fn sorted_by<F>(mut vec: Vec<T>, by: F) -> Self
+    where
+        F: FnMut(&T, &T) -> Ordering,
+    {
+        vec.sort_by(by);
+
+        Self(vec)
+    }
+
+    pub fn new(mut vec: Vec<T>) -> Self
+    where
+        T: Ord,
+    {
+        vec.sort();
+        Self(vec)
+    }
+
+    pub fn as_slice(&self) -> &[T] {
+        &self.0
+    }
+}
+
+pub struct Log;
+
+impl Log {
+    pub fn debug<T: Debug>(val: &T, _path: &Path) {
+        let mut data_file = fs::File::create("debug.txt").expect("creation failed");
+
+        data_file.write_all(format!("{:#?}", val).as_bytes()).expect("write failed");
+    }
+}
+
 #[cfg(test)]
 mod test {
     use pretty_assertions::assert_eq;
@@ -114,5 +154,59 @@ mod test {
         let file_name = SanitizedFilename::new("some / name / which contains ");
 
         assert_eq!(Path::new("some _ name _ which contains"), file_name.as_path())
+    }
+
+    #[test]
+    fn sorted_vec_is_constructed_correctly() {
+        let vec: Vec<u32> = [3, 10, 4].to_vec();
+
+        let expected = [3, 4, 10];
+        let sorted_vec = SortedVec::new(vec);
+
+        assert_eq!(expected, sorted_vec.as_slice())
+    }
+
+    #[derive(PartialEq, PartialOrd, Clone, Debug)]
+    struct Sort<'a> {
+        number: f64,
+        val: &'a str,
+    }
+
+    #[test]
+    fn sorted_vec_by_closure() {
+        let vec: Vec<Sort> = [
+            Sort {
+                number: 2.3,
+                val: "",
+            },
+            Sort {
+                number: 1.0,
+                val: "",
+            },
+            Sort {
+                number: 5.3,
+                val: "",
+            },
+        ]
+        .to_vec();
+
+        let expected = [
+            Sort {
+                number: 1.0,
+                val: "",
+            },
+            Sort {
+                number: 2.3,
+                val: "",
+            },
+            Sort {
+                number: 5.3,
+                val: "",
+            },
+        ];
+
+        let sorted_vec = SortedVec::sorted_by(vec, |a, b| a.number.total_cmp(&b.number));
+
+        assert_eq!(expected, sorted_vec.as_slice())
     }
 }

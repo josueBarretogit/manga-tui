@@ -557,6 +557,8 @@ impl Database {
                 is_read BOOLEAN NOT NULL DEFAULT 0,
                 is_downloaded BOOLEAN NOT NULL DEFAULT 0,
                 is_bookmarked BOOLEAN NOT NULL DEFAULT false,
+                translated_language TEXT NULL,
+                number_page_bookmarked INT NULL,
                 FOREIGN KEY (manga_id) REFERENCES mangas (id)
             )",
             (),

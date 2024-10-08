@@ -12,10 +12,11 @@ use reqwest::{Client, Response, Url};
 
 use super::api_responses::{AggregateChapterResponse, ChapterPagesResponse};
 use super::filter::Languages;
+use crate::backend::api_responses::OneChapterResponse;
 use crate::backend::filter::{Filters, IntoParam};
 use crate::config::ImageQuality;
 use crate::view::pages::manga::ChapterOrder;
-use crate::view::pages::reader::{Chapter, MangaPanel, SearchChapter, SearchMangaPanel};
+use crate::view::pages::reader::{CurrentChapter, MangaPanel, SearchChapter, SearchMangaPanel};
 
 // Todo! this trait should be split 💀💀
 pub trait ApiClient: Clone + Send + 'static {
@@ -139,6 +140,11 @@ impl MangadexClient {
     pub async fn search_chapters_aggregate(&self, manga_id: &str, language: Languages) -> Result<Response, reqwest::Error> {
         let endpoint =
             format!("{}/manga/{}/aggregate?translatedLanguage[]={}", self.api_url_base, manga_id, language.as_iso_code());
+        self.client.get(endpoint).send().await
+    }
+
+    pub async fn search_chapters_by_id(&self, chapter_id: &str) -> Result<Response, reqwest::Error> {
+        let endpoint = format!("{}/chapter/{chapter_id}", self.api_url_base);
         self.client.get(endpoint).send().await
     }
 }
@@ -323,10 +329,7 @@ pub mod fake_api_client {
         async fn search_chapter(
             &self,
             _manga_id: &str,
-            _volume_number: &str,
-            _chapter_number: &str,
-            _language: Languages,
-        ) -> Result<Option<crate::view::pages::reader::Chapter>, Box<dyn std::error::Error>> {
+        ) -> Result<crate::view::pages::reader::CurrentChapter, Box<dyn std::error::Error>> {
             unimplemented!()
         }
     }
@@ -469,31 +472,22 @@ pub mod fake_api_client {
 }
 
 impl SearchChapter for MangadexClient {
-    async fn search_chapter(
-        &self,
-        manga_id: &str,
-        volume_number: &str,
-        chapter_number: &str,
-        language: Languages,
-    ) -> Result<Option<Chapter>, Box<dyn std::error::Error>> {
-        let chapters_reponse: AggregateChapterResponse = self.search_chapters_aggregate(manga_id, language).await?.json().await?;
+    async fn search_chapter(&self, chapter_id: &str) -> Result<CurrentChapter, Box<dyn std::error::Error>> {
+        let response: OneChapterResponse = self.search_chapters_by_id(chapter_id).await?.json().await?;
+        let pages_response: ChapterPagesResponse = self.get_chapter_pages(chapter_id).await?.json().await?;
 
-        let chapter = chapters_reponse.search_chapter_in_next_volume(volume_number, chapter_number);
-
-        match chapter {
-            Some(found) => {
-                let res: ChapterPagesResponse = self.get_chapter_pages(&found.id).await?.json().await?;
-
-                Ok(Some(Chapter {
-                    id: res.chapter.hash.clone(),
-                    number: found.chapter.parse().unwrap_or_default(),
-                    volume_number: Some(volume_number.parse().unwrap_or_default()),
-                    language,
-                    pages_url: res.get_files_based_on_quality_as_url(self.image_quality),
-                }))
-            },
-            None => Ok(None),
-        }
+        Ok(CurrentChapter {
+            id: response.data.id,
+            title: response.data.attributes.title.unwrap_or_default(),
+            number: response
+                .data
+                .attributes
+                .chapter
+                .map(|num| num.parse().unwrap_or_default())
+                .unwrap_or_default(),
+            volume_number: response.data.attributes.volume,
+            pages_url: pages_response.get_files_based_on_quality_as_url(self.image_quality),
+        })
     }
 }
 
@@ -524,7 +518,8 @@ mod test {
     use self::api_responses::feed::OneMangaResponse;
     use self::api_responses::tags::TagsResponse;
     use self::api_responses::{
-        AggregateChapterResponse, ChapterPagesResponse, ChapterResponse, MangaStatisticsResponse, SearchMangaResponse,
+        AggregateChapterResponse, ChapterPagesResponse, ChapterResponse, MangaStatisticsResponse, OneChapterResponse,
+        SearchMangaResponse,
     };
     use super::*;
     use crate::backend::*;
@@ -1037,6 +1032,35 @@ mod test {
         request.assert_async().await;
 
         let data_sent: AggregateChapterResponse = response.json().await.expect("error deserializing response");
+
+        assert_eq!(expected_response, data_sent);
+    }
+
+    #[tokio::test]
+    async fn mangadex_client_searches_chapter_by_id() {
+        let server = MockServer::start_async().await;
+        let client = MangadexClient::new(server.base_url().parse().unwrap(), server.base_url().parse().unwrap());
+
+        let chapter_id = Uuid::new_v4().to_string();
+
+        let expected_response = OneChapterResponse::default();
+
+        let request = server
+            .mock_async(|when, then| {
+                when.method(GET)
+                    .header_exists("User-Agent")
+                    .path_contains("/chapter")
+                    .path_contains(&chapter_id);
+
+                then.status(200).json_body_obj(&expected_response);
+            })
+            .await;
+
+        let response = client.search_chapters_by_id(&chapter_id).await.expect("error sending request");
+
+        request.assert_async().await;
+
+        let data_sent: OneChapterResponse = response.json().await.expect("error deserializing response");
 
         assert_eq!(expected_response, data_sent);
     }
