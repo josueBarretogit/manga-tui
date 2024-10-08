@@ -1,6 +1,6 @@
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Rect};
-use ratatui::style::{Color, Style};
+use ratatui::style::{Color, Style, Stylize};
 use ratatui::widgets::{Block, Paragraph, StatefulWidget, Widget, Wrap};
 use throbber_widgets_tui::{Throbber, ThrobberState};
 use tui_widget_list::PreRender;
@@ -11,7 +11,8 @@ use crate::global::CURRENT_LIST_ITEM_STYLE;
 pub enum PageItemState {
     Loading,
     FinishedLoad,
-    _NotFound,
+    FailedLoad,
+    Waiting,
 }
 
 #[derive(Clone)]
@@ -33,18 +34,29 @@ impl Widget for PagesItem {
         Block::default().style(self.style).render(area, buf);
         let page = Paragraph::new(format!("Page {}", self.number)).wrap(Wrap { trim: true });
 
-        if self.state == PageItemState::Loading {
-            let loader = Throbber::default()
-                .label("Loading")
-                .style(Style::default().fg(Color::Yellow))
-                .throbber_set(throbber_widgets_tui::BRAILLE_SIX)
-                .use_type(throbber_widgets_tui::WhichUse::Spin);
+        match self.state {
+            PageItemState::Loading => {
+                let loader = Throbber::default()
+                    .label("Loading")
+                    .style(Style::default().fg(Color::Yellow))
+                    .throbber_set(throbber_widgets_tui::BRAILLE_SIX)
+                    .use_type(throbber_widgets_tui::WhichUse::Spin);
 
-            page.render(chapter_number_area, buf);
+                page.render(chapter_number_area, buf);
 
-            StatefulWidget::render(loader, loader_area, buf, &mut self.loading_state);
-        } else {
-            page.render(area, buf);
+                StatefulWidget::render(loader, loader_area, buf, &mut self.loading_state);
+            },
+            PageItemState::FinishedLoad => {
+                page.render(area, buf);
+            },
+            PageItemState::FailedLoad => {
+                page.render(chapter_number_area, buf);
+                Paragraph::new("⚠").wrap(Wrap { trim: true }).red().bold().render(loader_area, buf);
+            },
+            PageItemState::Waiting => {
+                page.render(chapter_number_area, buf);
+                Paragraph::new("💤").wrap(Wrap { trim: true }).bold().render(loader_area, buf);
+            },
         }
     }
 }
@@ -62,14 +74,16 @@ impl PagesItem {
     pub fn new(number: usize) -> Self {
         Self {
             number,
-            state: PageItemState::Loading,
+            state: PageItemState::Waiting,
             loading_state: ThrobberState::default(),
             style: Style::default(),
         }
     }
 
     pub fn on_tick(&mut self) {
-        self.loading_state.calc_next();
+        if self.state == PageItemState::Loading {
+            self.loading_state.calc_next();
+        }
     }
 }
 

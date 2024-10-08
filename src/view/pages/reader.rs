@@ -1,9 +1,12 @@
+use std::error::Error;
+use std::fmt::Display;
+
 use crossterm::event::KeyCode;
 use image::DynamicImage;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Margin, Rect};
-use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Paragraph, StatefulWidget, Widget};
+use ratatui::text::{Line, Span, Text};
+use ratatui::widgets::{Block, StatefulWidget, Widget};
 use ratatui::Frame;
 use ratatui_image::picker::Picker;
 use ratatui_image::protocol::StatefulProtocol;
@@ -11,6 +14,7 @@ use ratatui_image::{Resize, StatefulImage};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
+use crate::backend::error_log::{write_to_error_log, ErrorType};
 #[cfg(test)]
 use crate::backend::fetch::fake_api_client::MockMangadexClient;
 #[cfg(not(test))]
@@ -22,10 +26,30 @@ use crate::view::tasks::reader::get_manga_panel;
 use crate::view::widgets::reader::{PageItemState, PagesItem, PagesList};
 use crate::view::widgets::Component;
 
+#[derive(Debug)]
+struct StateError {
+    message: &'static str,
+}
+
+impl StateError {
+    fn new(message: &'static str) -> Self {
+        Self { message }
+    }
+}
+
+impl Display for StateError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "State Error: {}", self.message)
+    }
+}
+
+impl Error for StateError {}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum MangaReaderActions {
     NextPage,
     PreviousPage,
+    Reload,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -42,6 +66,7 @@ pub struct PageData {
 
 #[derive(Debug, PartialEq)]
 pub enum MangaReaderEvents {
+    FailedPage(usize),
     FetchPages,
     LoadPage(Option<PageData>),
 }
@@ -96,35 +121,47 @@ impl Component for MangaReader {
         Block::bordered().render(left, buf);
         self.render_page_list(left, buf);
 
-        Paragraph::new(Line::from(vec!["Go back: ".into(), Span::raw("<Backspace>").style(*INSTRUCTIONS_STYLE)]))
-            .render(right, buf);
+        let mut instructions = vec![vec!["Go back: ".into(), Span::raw("<Backspace>").style(*INSTRUCTIONS_STYLE)]];
 
-        match self.pages.get_mut(self.page_list_state.selected.unwrap_or(0)) {
-            Some(page) => match page.image_state.as_mut() {
-                Some(img_state) => {
-                    let (width, height) = page.dimensions.unwrap();
-                    if width > height {
-                        if width - height > 250 {
-                            self.current_page_size = 5;
-                        }
-                    } else {
-                        self.current_page_size = 2;
-                    }
-                    let image = StatefulImage::new(None).resize(Resize::Fit(None));
-                    StatefulWidget::render(image, center, buf, img_state);
-                },
-                None => {
-                    Block::bordered().title("Loading page").render(center, frame.buffer_mut());
-                },
-            },
-            None => Block::bordered().title("Loading page").render(center, frame.buffer_mut()),
-        };
+        let index = self.page_list_state.selected.unwrap_or(0);
+        if let Some(((width, height), img_state)) = self
+            .pages
+            .get_mut(index)
+            .and_then(|page| page.image_state.as_mut().map(|img_state| (page.dimensions.unwrap(), img_state)))
+        {
+            if width > height {
+                if width - height > 250 {
+                    self.current_page_size = 5;
+                }
+            } else {
+                self.current_page_size = 2;
+            }
+            let image = StatefulImage::new(None).resize(Resize::Fit(None));
+            StatefulWidget::render(image, center, buf, img_state);
+        } else {
+            let show_failed = self
+                .pages_list
+                .pages
+                .get(index)
+                .map(|page| page.state == PageItemState::FailedLoad)
+                .unwrap_or(false);
+
+            if show_failed {
+                Block::bordered().title("Failed to load page").render(center, buf);
+                instructions.push(vec!["Reload: ".into(), Span::raw("<r>").style(*INSTRUCTIONS_STYLE)]);
+            } else {
+                Block::bordered().title("Loading page").render(center, buf);
+            }
+        }
+
+        Text::from(instructions.iter().map(|instruction| Line::from(instruction.clone())).collect::<Vec<_>>()).render(right, buf);
     }
 
     fn update(&mut self, action: Self::Actions) {
         match action {
             MangaReaderActions::NextPage => self.next_page(),
             MangaReaderActions::PreviousPage => self.previous_page(),
+            MangaReaderActions::Reload => self.reload_page(),
         }
     }
 
@@ -137,7 +174,9 @@ impl Component for MangaReader {
                 KeyCode::Up | KeyCode::Char('k') => {
                     self.local_action_tx.send(MangaReaderActions::PreviousPage).ok();
                 },
-
+                KeyCode::Char('r') => {
+                    self.local_action_tx.send(MangaReaderActions::Reload).ok();
+                },
                 _ => {},
             },
             Events::Mouse(mouse_event) => match mouse_event.kind {
@@ -167,7 +206,7 @@ impl MangaReader {
         chapter_id: String,
         base_url: String,
         url_imgs: Vec<String>,
-        url_imgs_high_quality: Vec<String>,
+        _url_imgs_high_quality: Vec<String>,
         picker: Picker,
     ) -> Self {
         let set: JoinSet<()> = JoinSet::new();
@@ -175,13 +214,12 @@ impl MangaReader {
         let (local_event_tx, local_event_rx) = mpsc::unbounded_channel::<MangaReaderEvents>();
 
         let mut pages: Vec<Page> = vec![];
+        let mut pages_list: Vec<PagesItem> = vec![];
 
-        for url in url_imgs.iter().take(5) {
+        // TODO: High quality
+        for (index, url) in url_imgs.iter().enumerate() {
             pages.push(Page::new(url.to_string(), PageType::LowQuality));
-        }
-
-        for url in url_imgs_high_quality.iter().skip(5) {
-            pages.push(Page::new(url.to_string(), PageType::HighQuality));
+            pages_list.push(PagesItem::new(index));
         }
 
         local_event_tx.send(MangaReaderEvents::FetchPages).ok();
@@ -199,17 +237,45 @@ impl MangaReader {
             local_event_rx,
             _state: State::SearchingPages,
             current_page_size: 2,
-            pages_list: PagesList::default(),
+            pages_list: PagesList::new(pages_list),
             picker,
         }
     }
 
     fn next_page(&mut self) {
-        self.page_list_state.next()
+        self.page_list_state.next();
+        self.maybe_load_more_pages();
     }
 
     fn previous_page(&mut self) {
         self.page_list_state.previous();
+        self.maybe_load_more_pages();
+    }
+
+    fn maybe_load_more_pages(&mut self) {
+        let index = self.page_list_state.selected.unwrap_or(0);
+
+        let next_needed_index = self
+            .pages
+            .iter()
+            .enumerate()
+            .filter_map(|(index, page)| match page.image_state {
+                Some(_) => None,
+                None => Some(index),
+            })
+            .next();
+
+        // TODO: Variable padding size
+        if let Some(next) = next_needed_index {
+            if next <= index + 3 {
+                self.fetch_pages();
+            }
+        }
+    }
+
+    fn reload_page(&mut self) {
+        let index = self.page_list_state.selected.unwrap_or(0);
+        self.fetch_page(index);
     }
 
     fn render_page_list(&mut self, area: Rect, buf: &mut Buffer) {
@@ -241,10 +307,31 @@ impl MangaReader {
         }
     }
 
-    fn fech_pages(&mut self) {
-        let mut pages_list: Vec<PagesItem> = vec![];
+    fn failed_page(&mut self, index: usize) {
+        match self.pages_list.pages.get_mut(index) {
+            Some(page_item) => page_item.state = PageItemState::FailedLoad,
+            None => {
+                // Todo! indicate that the page does not exist?
+            },
+        }
+    }
 
-        for (index, page) in self.pages.iter().enumerate() {
+    fn get_pages_to_fetch(&self) -> Vec<usize> {
+        // TODO: Choose how many to load
+        self.pages
+            .iter()
+            .enumerate()
+            .filter_map(|(index, page)| match page.image_state {
+                Some(_) => None,
+                None => Some(index),
+            })
+            .take(5)
+            .collect::<Vec<_>>()
+    }
+
+    fn fetch_page(&mut self, index: usize) {
+        let page = self.pages.get_mut(index);
+        if let Some((page, item)) = page.and_then(|page| self.pages_list.pages.get_mut(index).map(|item| (page, item))) {
             #[cfg(not(test))]
             let api_client = MangadexClient::global().clone();
 
@@ -255,18 +342,26 @@ impl MangaReader {
             let endpoint = format!("{}/{}/{}", self.base_url, page.page_type, self.chapter_id);
             let tx = self.local_event_tx.clone();
 
-            pages_list.push(PagesItem::new(index));
-
             self.image_tasks.spawn(get_manga_panel(api_client, endpoint, file_name, tx, index));
+            item.state = PageItemState::Loading;
+        } else {
+            write_to_error_log(ErrorType::FromError(Box::new(StateError::new("Index doesn't exist"))));
         }
-        self.pages_list = PagesList::new(pages_list);
+    }
+
+    fn fetch_pages(&mut self) {
+        let indices = self.get_pages_to_fetch();
+        for index in indices {
+            self.fetch_page(index);
+        }
     }
 
     fn tick(&mut self) {
         self.pages_list.on_tick();
         if let Ok(background_event) = self.local_event_rx.try_recv() {
             match background_event {
-                MangaReaderEvents::FetchPages => self.fech_pages(),
+                MangaReaderEvents::FailedPage(index) => self.failed_page(index),
+                MangaReaderEvents::FetchPages => self.fetch_pages(),
                 MangaReaderEvents::LoadPage(maybe_data) => self.load_page(maybe_data),
             }
         }
