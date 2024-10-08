@@ -358,7 +358,7 @@ impl MangaReader {
 
     fn tick(&mut self) {
         self.pages_list.on_tick();
-        if let Ok(background_event) = self.local_event_rx.try_recv() {
+        while let Ok(background_event) = self.local_event_rx.try_recv() {
             match background_event {
                 MangaReaderEvents::FailedPage(index) => self.failed_page(index),
                 MangaReaderEvents::FetchPages => self.fetch_pages(),
