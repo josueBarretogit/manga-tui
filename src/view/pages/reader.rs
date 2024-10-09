@@ -244,33 +244,12 @@ impl MangaReader {
 
     fn next_page(&mut self) {
         self.page_list_state.next();
-        self.maybe_load_more_pages();
+        self.fetch_pages();
     }
 
     fn previous_page(&mut self) {
         self.page_list_state.previous();
-        self.maybe_load_more_pages();
-    }
-
-    fn maybe_load_more_pages(&mut self) {
-        let index = self.page_list_state.selected.unwrap_or(0);
-
-        let next_needed_index = self
-            .pages
-            .iter()
-            .enumerate()
-            .filter_map(|(index, page)| match page.image_state {
-                Some(_) => None,
-                None => Some(index),
-            })
-            .next();
-
-        // TODO: Variable padding size
-        if let Some(next) = next_needed_index {
-            if next <= index + 3 {
-                self.fetch_pages();
-            }
-        }
+        self.fetch_pages();
     }
 
     fn reload_page(&mut self) {
@@ -318,15 +297,19 @@ impl MangaReader {
 
     fn get_pages_to_fetch(&self) -> Vec<usize> {
         // TODO: Choose how many to load
-        self.pages
-            .iter()
-            .enumerate()
-            .filter_map(|(index, page)| match page.image_state {
-                Some(_) => None,
-                None => Some(index),
-            })
-            .take(5)
-            .collect::<Vec<_>>()
+        let pages = 5;
+
+        // Collect `pages` pages before and after index that are not yet loaded
+        let mut indices = Vec::with_capacity(pages * 2 + 1);
+        let curr = self.page_list_state.selected.unwrap_or(0);
+        for index in curr.saturating_sub(pages)..=curr.saturating_add(pages).min(self.pages.len() - 1) {
+            match self.pages[index].image_state {
+                Some(_) => (),
+                None => indices.push(index),
+            }
+        }
+
+        indices
     }
 
     fn fetch_page(&mut self, index: usize) {
