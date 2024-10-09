@@ -114,7 +114,7 @@ impl Component for MangaReader {
         let buf = frame.buffer_mut();
 
         let layout =
-            Layout::horizontal([Constraint::Fill(1), Constraint::Fill(self.current_page_size), Constraint::Fill(1)]).spacing(1);
+            Layout::horizontal([Constraint::Fill(1), Constraint::Min(self.current_page_size), Constraint::Fill(1)]).spacing(1);
 
         let [left, center, right] = layout.areas(area);
 
