@@ -21,6 +21,7 @@ use crate::backend::fetch::fake_api_client::MockMangadexClient;
 use crate::backend::fetch::MangadexClient;
 use crate::backend::tui::Events;
 use crate::common::PageType;
+use crate::config::MangaTuiConfig;
 use crate::global::INSTRUCTIONS_STYLE;
 use crate::view::tasks::reader::get_manga_panel;
 use crate::view::widgets::reader::{PageItemState, PagesItem, PagesList};
@@ -114,7 +115,7 @@ impl Component for MangaReader {
         let buf = frame.buffer_mut();
 
         let layout =
-            Layout::horizontal([Constraint::Fill(1), Constraint::Min(self.current_page_size), Constraint::Fill(1)]).spacing(1);
+            Layout::horizontal([Constraint::Fill(1), Constraint::Fill(self.current_page_size), Constraint::Fill(1)]).spacing(1);
 
         let [left, center, right] = layout.areas(area);
 
@@ -296,8 +297,7 @@ impl MangaReader {
     }
 
     fn get_pages_to_fetch(&self) -> Vec<usize> {
-        // TODO: Choose how many to load
-        let pages = 5;
+        let pages = MangaTuiConfig::get().amount_pages as usize;
 
         // Collect `pages` pages before and after index that are not yet loaded
         let mut indices = Vec::with_capacity(pages * 2 + 1);
