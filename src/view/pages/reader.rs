@@ -315,18 +315,21 @@ impl MangaReader {
     fn fetch_page(&mut self, index: usize) {
         let page = self.pages.get_mut(index);
         if let Some((page, item)) = page.and_then(|page| self.pages_list.pages.get_mut(index).map(|item| (page, item))) {
-            #[cfg(not(test))]
-            let api_client = MangadexClient::global().clone();
+            //NOTE:  This will need to become async atomic if this becomes an async function
+            if item.state != PageItemState::Loading {
+                #[cfg(not(test))]
+                let api_client = MangadexClient::global().clone();
 
-            #[cfg(test)]
-            let api_client = MockMangadexClient::new().with_amount_returning_items(1);
+                #[cfg(test)]
+                let api_client = MockMangadexClient::new().with_amount_returning_items(1);
 
-            let file_name = page.url.clone();
-            let endpoint = format!("{}/{}/{}", self.base_url, page.page_type, self.chapter_id);
-            let tx = self.local_event_tx.clone();
+                let file_name = page.url.clone();
+                let endpoint = format!("{}/{}/{}", self.base_url, page.page_type, self.chapter_id);
+                let tx = self.local_event_tx.clone();
 
-            self.image_tasks.spawn(get_manga_panel(api_client, endpoint, file_name, tx, index));
-            item.state = PageItemState::Loading;
+                self.image_tasks.spawn(get_manga_panel(api_client, endpoint, file_name, tx, index));
+                item.state = PageItemState::Loading;
+            }
         } else {
             write_to_error_log(ErrorType::FromError(Box::new(StateError::new("Index doesn't exist"))));
         }
