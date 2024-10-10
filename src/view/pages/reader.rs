@@ -115,7 +115,7 @@ impl Component for MangaReader {
         let buf = frame.buffer_mut();
 
         let layout =
-            Layout::horizontal([Constraint::Fill(1), Constraint::Fill(self.current_page_size), Constraint::Fill(1)]).spacing(1);
+            Layout::horizontal([Constraint::Fill(1), Constraint::Min(self.current_page_size), Constraint::Fill(1)]).spacing(1);
 
         let [left, center, right] = layout.areas(area);
 
@@ -124,7 +124,7 @@ impl Component for MangaReader {
 
         let mut instructions = vec![vec!["Go back: ".into(), Span::raw("<Backspace>").style(*INSTRUCTIONS_STYLE)]];
 
-        let index = self.page_list_state.selected.unwrap_or(0);
+        let index = self.current_page_index();
         if let Some(((width, height), img_state)) = self
             .pages
             .get_mut(index)
@@ -243,6 +243,10 @@ impl MangaReader {
         }
     }
 
+    fn current_page_index(&self) -> usize {
+        self.page_list_state.selected.unwrap_or(0)
+    }
+
     fn next_page(&mut self) {
         self.page_list_state.next();
         self.fetch_pages();
@@ -254,8 +258,7 @@ impl MangaReader {
     }
 
     fn reload_page(&mut self) {
-        let index = self.page_list_state.selected.unwrap_or(0);
-        self.fetch_page(index);
+        self.fetch_page(self.current_page_index());
     }
 
     fn render_page_list(&mut self, area: Rect, buf: &mut Buffer) {
@@ -300,16 +303,18 @@ impl MangaReader {
         let pages = MangaTuiConfig::get().amount_pages as usize;
 
         // Collect `pages` pages before and after index that are not yet loaded
-        let mut indices = Vec::with_capacity(pages * 2 + 1);
-        let curr = self.page_list_state.selected.unwrap_or(0);
-        for index in curr.saturating_sub(pages)..=curr.saturating_add(pages).min(self.pages.len() - 1) {
-            match self.pages[index].image_state {
-                Some(_) => (),
-                None => indices.push(index),
-            }
-        }
+        let curr = self.current_page_index();
+        let start_index = curr.saturating_sub(pages);
+        let end_index = curr.saturating_add(pages).min(self.pages.len() - 1);
 
-        indices
+        self.pages[start_index..=end_index]
+            .iter()
+            .enumerate()
+            .filter_map(|(base_index, page)| match page.image_state {
+                Some(_) => None,
+                None => Some(base_index + start_index),
+            })
+            .collect()
     }
 
     fn fetch_page(&mut self, index: usize) {
