@@ -18,16 +18,27 @@ pub async fn get_manga_panel(
 ) {
     let image_response = client.get_chapter_page(&endpoint, &file_name).await;
     match image_response {
-        Ok(response) => {
-            if let Ok(bytes) = response.bytes().await {
+        Ok(response) => match response.bytes().await {
+            Ok(bytes) => {
                 let procces_image_task = convert_bytes_to_manga_panel(bytes, page_index);
 
-                if let Ok(page_data) = procces_image_task {
-                    tx.send(MangaReaderEvents::LoadPage(Some(page_data))).ok();
+                match procces_image_task {
+                    Ok(page_data) => {
+                        tx.send(MangaReaderEvents::LoadPage(Some(page_data))).ok();
+                    },
+                    Err(e) => {
+                        tx.send(MangaReaderEvents::FailedPage(page_index)).ok();
+                        write_to_error_log(ErrorType::FromError(e));
+                    },
                 }
-            }
+            },
+            Err(e) => {
+                tx.send(MangaReaderEvents::FailedPage(page_index)).ok();
+                write_to_error_log(ErrorType::FromError(Box::new(e)));
+            },
         },
         Err(e) => {
+            tx.send(MangaReaderEvents::FailedPage(page_index)).ok();
             write_to_error_log(ErrorType::FromError(Box::new(e)));
         },
     };
@@ -91,6 +102,7 @@ mod test {
         let event = rx.recv().await.expect("could not get manga panel");
 
         let page_data = match event {
+            MangaReaderEvents::FailedPage(_) => panic!("wrong event was sent"),
             MangaReaderEvents::FetchPages => panic!("wrong event was sent"),
             MangaReaderEvents::LoadPage(page_data) => page_data.expect("should load a page"),
         };
