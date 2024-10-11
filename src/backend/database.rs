@@ -3,10 +3,11 @@ use std::sync::Mutex;
 use chrono::Utc;
 use manga_tui::SearchTerm;
 use once_cell::sync::Lazy;
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, DatabaseName};
 use strum::{Display, EnumIter};
 
 use super::AppDirectories;
+use crate::view::pages::manga::Bookmark;
 use crate::view::widgets::feed::FeedTabs;
 
 #[derive(Display, Debug, Clone, Copy)]
@@ -36,6 +37,7 @@ pub enum Table {
     MangaHistoryUnion,
 }
 
+#[deprecated(since = "0.3.2", note = "Prefer to use `Database` struct instead")]
 pub static DBCONN: Lazy<Mutex<Option<Connection>>> = Lazy::new(|| {
     #[cfg(not(test))]
     let conn = Connection::open(AppDirectories::History.get_full_path());
@@ -213,13 +215,14 @@ pub struct MangaReadingHistorySave<'a> {
     pub img_url: Option<&'a str>,
     pub chapter_id: &'a str,
     pub chapter_title: &'a str,
-    pub is_already_reading: bool,
 }
 
 /// This function creates a manga in the database if it does not exists and saves it in the reading
 /// history section
 pub fn save_history(chapter: MangaReadingHistorySave<'_>, conn: &Connection) -> rusqlite::Result<()> {
-    if chapter.is_already_reading {
+    let database = Database::new(conn);
+
+    if database.check_chapter_is_already_reading(chapter.chapter_id)? {
         return Ok(());
     }
 
@@ -511,24 +514,31 @@ pub fn set_chapter_downloaded(chapter: SetChapterDownloaded<'_>, conn: &Connecti
     }
 }
 
-pub struct Database {}
+pub struct Database<'a> {
+    connection: &'a Connection,
+}
 
-impl Database {
-    pub fn setup(conn: &mut Connection) -> rusqlite::Result<()> {
-        conn.execute(
+impl<'a> Database<'a> {
+    pub fn new(conn: &'a Connection) -> Self {
+        Self { connection: conn }
+    }
+
+    pub fn setup(&self) -> rusqlite::Result<()> {
+        self.connection.execute(
             "CREATE TABLE if not exists app_version (
                 version TEXT PRIMARY KEY
              )",
             (),
         )?;
 
-        let already_has_data: i32 = conn.query_row("SELECT COUNT(*) from app_version", [], |row| row.get(0))?;
+        let already_has_data: i32 = self.connection.query_row("SELECT COUNT(*) from app_version", [], |row| row.get(0))?;
 
         if already_has_data == 0 {
-            conn.execute("INSERT INTO app_version(version) VALUES (?1) ", [env!("CARGO_PKG_VERSION")])?;
+            self.connection
+                .execute("INSERT INTO app_version(version) VALUES (?1) ", [env!("CARGO_PKG_VERSION")])?;
         }
 
-        conn.execute(
+        self.connection.execute(
             "CREATE TABLE if not exists history_types (
                 id    INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL UNIQUE
@@ -536,7 +546,7 @@ impl Database {
             (),
         )?;
 
-        conn.execute(
+        self.connection.execute(
             "CREATE TABLE if not exists mangas (
                 id    TEXT  PRIMARY KEY,
                 title TEXT  NOT NULL,
@@ -549,7 +559,7 @@ impl Database {
             (),
         )?;
 
-        conn.execute(
+        self.connection.execute(
             "CREATE TABLE if not exists chapters (
                 id    TEXT  PRIMARY KEY,
                 title TEXT  NOT NULL,
@@ -564,7 +574,7 @@ impl Database {
             (),
         )?;
 
-        conn.execute(
+        self.connection.execute(
             "CREATE TABLE if not exists manga_history_union (
                 manga_id TEXT, 
                 type_id INTEGER, 
@@ -575,12 +585,14 @@ impl Database {
             (),
         )?;
 
-        let already_has_data: i32 = conn.query_row("SELECT COUNT(*) from history_types", [], |row| row.get(0))?;
+        let already_has_data: i32 = self.connection.query_row("SELECT COUNT(*) from history_types", [], |row| row.get(0))?;
 
         if already_has_data < 2 {
-            conn.execute("INSERT INTO history_types(name) VALUES (?1) ", [MangaHistoryType::ReadingHistory.to_string()])?;
+            self.connection
+                .execute("INSERT INTO history_types(name) VALUES (?1) ", [MangaHistoryType::ReadingHistory.to_string()])?;
 
-            conn.execute("INSERT INTO history_types(name) VALUES (?1) ", [MangaHistoryType::PlanToRead.to_string()])?;
+            self.connection
+                .execute("INSERT INTO history_types(name) VALUES (?1) ", [MangaHistoryType::PlanToRead.to_string()])?;
         }
 
         Ok(())
@@ -588,6 +600,36 @@ impl Database {
 
     pub fn get_connection() -> rusqlite::Result<Connection> {
         if cfg!(test) { Connection::open_in_memory() } else { Connection::open(AppDirectories::History.get_full_path()) }
+    }
+
+    pub fn check_chapter_is_already_reading(&self, id: &str) -> rusqlite::Result<bool> {
+        let exists = check_exists(id, self.connection, Table::Chapters)?;
+
+        if !exists {
+            return Ok(false);
+        }
+
+        let is_read: bool = self
+            .connection
+            .query_row("SELECT is_read FROM chapters WHERE id = ?1", params![id], |row| row.get(0))?;
+
+        Ok(is_read)
+    }
+
+    fn bookmark_chapter(&mut self, chapter_id: &str, page_number: Option<u32>) -> rusqlite::Result<()> {
+        self.connection
+            .execute("UPDATE chapters SET is_bookmarked = true, number_page_bookmarked = ?1 WHERE id = ?2", params![
+                page_number.unwrap_or(1),
+                chapter_id
+            ])?;
+
+        Ok(())
+    }
+}
+
+impl<'a> Bookmark for Database<'a> {
+    fn bookmark(&mut self, chapter_id: &str, page_number: Option<u32>) -> Result<(), Box<dyn std::error::Error>> {
+        Ok(self.bookmark_chapter(chapter_id, page_number)?)
     }
 }
 
@@ -650,9 +692,11 @@ mod test {
 
     #[test]
     fn database_is_initialized() -> Result<()> {
-        let mut connection = Database::get_connection()?;
+        let connection = Connection::open_in_memory()?;
 
-        Database::setup(&mut connection).expect("could not setup the database");
+        let database = Database::new(&connection);
+
+        database.setup().expect("could not setup the database");
 
         check_tables_exist(&connection)?;
 
@@ -687,6 +731,52 @@ mod test {
             },
             connection,
         )?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn check_chapter_is_already_reading() -> Result<()> {
+        let conn = Connection::open_in_memory()?;
+
+        let database = Database::new(&conn);
+
+        database.setup()?;
+
+        let manga_id = Uuid::new_v4().to_string();
+
+        let chapter_id_not_read = Uuid::new_v4().to_string();
+        let chapter_id_is_read = Uuid::new_v4().to_string();
+
+        insert_manga(
+            MangaInsert {
+                id: &manga_id,
+                title: "some_title",
+                img_url: None,
+            },
+            &conn,
+        )?;
+
+        conn.execute("INSERT INTO chapters(id, title, manga_id) VALUES(?1, ?2, ?3)", params![
+            chapter_id_not_read.clone(),
+            "some_title",
+            manga_id.clone(),
+        ])?;
+
+        conn.execute("INSERT INTO chapters(id, is_read, title, manga_id) VALUES(?1, ?2, ?3, ?4)", params![
+            chapter_id_is_read.clone(),
+            true,
+            "some_title",
+            manga_id,
+        ])?;
+
+        let non_existent = database.check_chapter_is_already_reading("non_existent")?;
+        let is_already_reading = database.check_chapter_is_already_reading(&chapter_id_is_read)?;
+        let not_reading = database.check_chapter_is_already_reading(&chapter_id_not_read)?;
+
+        assert!(is_already_reading);
+        assert!(!non_existent);
+        assert!(!not_reading);
 
         Ok(())
     }
@@ -768,7 +858,6 @@ mod test {
                 img_url: None,
                 chapter_id: &chapter_id,
                 chapter_title: "some_chapter_title",
-                is_already_reading: false,
             },
             connection,
         )?;
@@ -808,7 +897,6 @@ mod test {
                 img_url: None,
                 chapter_id: &chapter_id,
                 chapter_title: "some_chapter_title",
-                is_already_reading: false,
             },
             connection,
         )?;
@@ -859,10 +947,10 @@ mod test {
                 img_url: None,
                 chapter_id: chapter_which_is_already_reading.id,
                 chapter_title: chapter_which_is_already_reading.title,
-                is_already_reading: chapter_which_is_already_reading.is_read,
             },
             connection,
-        )?;
+        )
+        .expect("could not save chapter history");
 
         let chapters = get_all_chapters(connection)?;
 
@@ -1234,6 +1322,46 @@ mod test {
         assert!(chapter_downloaded.is_read);
         assert!(chapter_downloaded.is_downloaded);
 
+        Ok(())
+    }
+
+    #[test]
+    fn database_bookmarks_chapter() -> Result<()> {
+        let connection = Database::get_connection()?;
+        let mut database = Database::new(&connection);
+
+        database.setup()?;
+
+        let chapter_id = Uuid::new_v4().to_string();
+        let manga_id = Uuid::new_v4().to_string();
+
+        connection.execute("INSERT INTO mangas(id, title) VALUES(?1,?2)", params![manga_id.clone(), "some_title"])?;
+
+        connection.execute("INSERT INTO chapters(id, title, manga_id) VALUES(?1,?2,?3)", params![
+            chapter_id.clone(),
+            "some_title",
+            manga_id
+        ])?;
+
+        database.bookmark(&chapter_id, Some(3)).expect("failed to bookmark chapter");
+
+        let was_bookmarked: bool =
+            connection.query_row("SELECT is_bookmarked FROM chapters WHERE id = ?1", params![chapter_id], |row| row.get(0))?;
+
+        let page_set: Option<u32> =
+            connection
+                .query_row("SELECT number_page_bookmarked FROM chapters WHERE id = ?1", params![chapter_id], |row| row.get(0))?;
+
+        assert!(was_bookmarked);
+        assert_eq!(page_set.expect("should not be null"), 3);
+
+        database.bookmark(&chapter_id, None).expect("failed to bookmark chapter");
+
+        let page_set_to_one: Option<u32> =
+            connection
+                .query_row("SELECT number_page_bookmarked FROM chapters WHERE id = ?1", params![chapter_id], |row| row.get(0))?;
+
+        assert_eq!(page_set_to_one.expect("should not be null"), 1);
         Ok(())
     }
 }

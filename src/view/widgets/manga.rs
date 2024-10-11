@@ -16,8 +16,9 @@ use crate::global::{CURRENT_LIST_ITEM_STYLE, ERROR_STYLE, INSTRUCTIONS_STYLE};
 use crate::utils::display_dates_since_publication;
 use crate::view::pages::manga::MangaPageEvents;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub enum ChapterItemState {
+    #[default]
     Normal,
     /// When the user tried to download a chapter and there was an error
     DownloadError,
@@ -25,7 +26,7 @@ pub enum ChapterItemState {
     ReadError,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct ChapterItem {
     pub id: String,
     pub title: String,
@@ -38,7 +39,7 @@ pub struct ChapterItem {
     pub state: ChapterItemState,
     pub download_loading_state: Option<f64>,
     pub translated_language: Languages,
-    style: Style,
+    pub style: Style,
 }
 
 impl Widget for ChapterItem {
@@ -63,10 +64,13 @@ impl Widget for ChapterItem {
         Line::from(is_read_icon).style(self.style).render(is_read_area, buf);
         Line::from(is_downloaded_icon).style(self.style).render(is_downloaded_area, buf);
 
-        Paragraph::new(Line::from(vec![format!(" Ch. {} ", self.chapter_number).into(), self.title.into()]))
-            .wrap(Wrap { trim: true })
-            .style(self.style)
-            .render(title_area, buf);
+        Paragraph::new(Line::from(vec![
+            format!("Vol. {} Ch. {} ", self.volume_number.unwrap_or_default(), self.chapter_number).into(),
+            self.title.into(),
+        ]))
+        .wrap(Wrap { trim: true })
+        .style(self.style)
+        .render(title_area, buf);
 
         match self.download_loading_state.as_ref() {
             Some(progress) => {

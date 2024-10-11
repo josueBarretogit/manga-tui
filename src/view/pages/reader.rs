@@ -7,8 +7,7 @@ use image::DynamicImage;
 use manga_tui::SortedVec;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Margin, Rect};
-use ratatui::style::Styled;
-use ratatui::text::{Line, Span, ToSpan};
+use ratatui::text::{Line, ToSpan};
 use ratatui::widgets::{Block, List, Paragraph, StatefulWidget, Widget, Wrap};
 use ratatui::Frame;
 use ratatui_image::picker::Picker;
@@ -258,7 +257,10 @@ impl ListOfChapters {
             let previous_volume = self.volumes.search_previous_volume(volume_number)?;
             previous_volume.chapters.search_previous_chapter(&chapter_number.to_string())
         } else {
-            volume.chapters.search_previous_chapter(&chapter_number.to_string())
+            volume
+                .chapters
+                .search_previous_chapter(&chapter_number.to_string())
+                .filter(|chapter| chapter.number != chapter_number.to_string())
         }
     }
 }
@@ -621,7 +623,6 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
                 img_url: None,
                 chapter_id: &self.current_chapter.id,
                 chapter_title: &self.current_chapter.title,
-                is_already_reading: false,
             },
             connection,
         )?;
@@ -969,9 +970,11 @@ mod test {
 
         let previous = list.get_previous_chapter(Some("1"), 2.0).expect("should get previous chapter");
         let not_found = list.get_previous_chapter(Some("1"), 5.0);
+        let from_first_chapter = list.get_previous_chapter(Some("1"), 1.0);
 
         assert_eq!(chapter_to_search, previous);
         assert!(not_found.is_none());
+        assert!(from_first_chapter.is_none());
     }
 
     #[test]
@@ -1324,9 +1327,11 @@ mod test {
 
     #[test]
     fn it_save_reading_history() -> Result<(), rusqlite::Error> {
-        let mut test_database = Database::get_connection()?;
+        let mut conn = Connection::open_in_memory()?;
 
-        Database::setup(&mut test_database)?;
+        let test_database = Database::new(&conn);
+
+        test_database.setup()?;
 
         let chapter: CurrentChapter = CurrentChapter {
             id: "chapter_to_save".to_string(),
@@ -1335,10 +1340,10 @@ mod test {
 
         let manga_reader = MangaReader::new(chapter, "".to_string(), Picker::new((8, 8)), TestApiClient::new());
 
-        let id_chapter_saved = manga_reader.save_reading_history(&mut test_database)?;
+        let id_chapter_saved = manga_reader.save_reading_history(&mut conn)?;
 
         let has_been_saved: bool =
-            test_database.query_row("SELECT is_read FROM chapters WHERE id = ?1", [id_chapter_saved], |row| row.get(0))?;
+            conn.query_row("SELECT is_read FROM chapters WHERE id = ?1", [id_chapter_saved], |row| row.get(0))?;
 
         assert!(has_been_saved);
 

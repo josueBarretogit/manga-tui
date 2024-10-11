@@ -1,10 +1,8 @@
 use std::io::Cursor;
-use std::path::Path;
 
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent, MouseEventKind};
 use image::io::Reader;
 use image::DynamicImage;
-use manga_tui::Log;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Style, Stylize};
@@ -41,6 +39,10 @@ use crate::view::widgets::manga::{
     ChapterItem, ChaptersListWidget, DownloadAllChaptersState, DownloadAllChaptersWidget, DownloadPhase,
 };
 use crate::view::widgets::Component;
+
+pub trait Bookmark {
+    fn bookmark(&mut self, chapter_id: &str, page_number: Option<u32>) -> Result<(), Box<dyn std::error::Error>>;
+}
 
 #[derive(PartialEq, Eq, Debug)]
 pub enum PageState {
@@ -541,7 +543,6 @@ impl MangaPage {
 
                 let id_chapter = chapter_selected.id.clone();
                 let chapter_title = chapter_selected.title.clone();
-                let is_already_reading = chapter_selected.is_read;
                 let number: f64 = chapter_selected.chapter_number.parse().unwrap_or_default();
                 let volume_number = chapter_selected.volume_number.clone();
                 let language = self.get_current_selected_language();
@@ -574,7 +575,6 @@ impl MangaPage {
                                         img_url: img_url.as_deref(),
                                         chapter_id: &id_chapter,
                                         chapter_title: &chapter_title,
-                                        is_already_reading,
                                     },
                                     conn,
                                 );
@@ -692,6 +692,10 @@ impl MangaPage {
                 write_to_error_log(error_log::ErrorType::FromError(Box::new(e)));
             },
         }
+    }
+
+    fn bookmark_chapter(&self, chapter_to_bookmark: ChapterItem, database: &mut dyn Bookmark) {
+        database.bookmark(&chapter_to_bookmark.id, None).ok();
     }
 
     fn download_chapter_selected(&mut self) {
@@ -1404,5 +1408,54 @@ mod test {
         let mut manga_page = MangaPage::new(Manga::default(), None);
 
         manga_page.search_cover();
+    }
+
+    #[derive(Default, Clone)]
+    struct ChapterTest {
+        id: String,
+        was_bookmarked: bool,
+    }
+
+    #[derive(Default, Clone)]
+    struct TestDatabase {
+        should_fail: bool,
+        chapter: ChapterTest,
+    }
+
+    impl TestDatabase {
+        fn new() -> Self {
+            Self {
+                should_fail: false,
+                chapter: ChapterTest::default(),
+            }
+        }
+
+        fn was_bookmarked(&self) -> bool {
+            self.chapter.was_bookmarked
+        }
+    }
+
+    impl Bookmark for TestDatabase {
+        fn bookmark(&mut self, _chapter_id: &str, _page_number: Option<u32>) -> Result<(), Box<dyn std::error::Error>> {
+            self.chapter.was_bookmarked = true;
+
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn it_bookmarks_given_chapter() {
+        let manga_page = MangaPage::new(Manga::default(), None);
+
+        let mut test_database = TestDatabase::new();
+
+        let chapter_to_bookmark: ChapterItem = ChapterItem {
+            id: "chapter_id".to_string(),
+            ..Default::default()
+        };
+
+        manga_page.bookmark_chapter(chapter_to_bookmark, &mut test_database);
+
+        assert!(test_database.was_bookmarked())
     }
 }

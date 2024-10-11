@@ -102,8 +102,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     MANGADEX_CLIENT_INSTANCE.set(mangadex_client).unwrap();
 
     let mut connection = Database::get_connection()?;
-    Database::setup(&mut connection)?;
+    let database = Database::new(&connection);
+
+    database.setup()?;
     migrate_version(&mut connection)?;
+
+    drop(connection);
 
     init_error_hooks()?;
     init()?;
