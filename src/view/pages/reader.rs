@@ -115,6 +115,7 @@ impl Default for CurrentChapter {
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct SortedChapters(SortedVec<Chapter>);
 
+/// Volumes will have this order : "none" , "0", "1", "2" ...
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct SortedVolumes(SortedVec<Volumes>);
 
@@ -164,18 +165,6 @@ impl SortedChapters {
             Some(index) => chapters.get(index + 1).cloned(),
             None => chapters.iter().next().cloned(),
         }
-    }
-
-    pub fn search_previous_chapter(&self, current: &str) -> Option<Chapter> {
-        let chapters = self.as_slice();
-
-        if chapters.len() == 1 {
-            return chapters.first().cloned();
-        }
-
-        let position = chapters.iter().position(|chap| chap.number == current);
-
-        position.and_then(|index| chapters.get(index.saturating_sub(1)).cloned())
     }
 
     pub fn as_slice(&self) -> &[Chapter] {
@@ -248,19 +237,36 @@ impl ListOfChapters {
         }
     }
 
+    fn get_previous_chapter_in_previous_volume(&self, volume: &str, chapter_number: f64) -> Option<Chapter> {
+        let previous_volume = self.volumes.search_previous_volume(volume).filter(|vol| vol.volume != volume)?;
+
+        previous_volume
+            .chapters
+            .as_slice()
+            .last()
+            .cloned()
+            .filter(|chapter| chapter.number != chapter_number.to_string())
+    }
+
     pub fn get_previous_chapter(&self, volume: Option<&str>, chapter_number: f64) -> Option<Chapter> {
         let volume_number = volume.unwrap_or("none");
 
-        let volume = self.volumes.as_slice().iter().find(|vol| vol.volume == volume_number)?;
+        let volumes = self.volumes.as_slice().iter().find(|vol| vol.volume == volume_number)?;
 
-        if volume.chapters.as_slice().len() == 1 {
-            let previous_volume = self.volumes.search_previous_volume(volume_number)?;
-            previous_volume.chapters.search_previous_chapter(&chapter_number.to_string())
-        } else {
-            volume
-                .chapters
-                .search_previous_chapter(&chapter_number.to_string())
-                .filter(|chapter| chapter.number != chapter_number.to_string())
+        let chapters = volumes.chapters.as_slice();
+
+        let current_index = chapters.iter().position(|chap| chap.number == chapter_number.to_string());
+
+        match current_index {
+            Some(index) => {
+                let previous_chapter = chapters
+                    .get(index.saturating_sub(1))
+                    .cloned()
+                    .filter(|chap| chap.number != chapter_number.to_string());
+
+                previous_chapter.or_else(|| self.get_previous_chapter_in_previous_volume(volume_number, chapter_number))
+            },
+            None => self.get_previous_chapter_in_previous_volume(volume_number, chapter_number),
         }
     }
 }
@@ -738,30 +744,6 @@ mod test {
     }
 
     #[test]
-    fn sorted_chapters_searches_previous_chapter() {
-        let chapter_to_search: Chapter = Chapter {
-            id: "previous_chapter".to_string(),
-            number: "1".to_string(),
-            volume: "1".to_string(),
-        };
-
-        let chapters = SortedChapters::new(vec![
-            Chapter {
-                number: "2".to_string(),
-                volume: "1".to_string(),
-                ..Default::default()
-            },
-            chapter_to_search.clone(),
-        ]);
-
-        let result = chapters.search_previous_chapter("2").expect("should find preiovus chapter");
-        let not_found = chapters.search_previous_chapter("4");
-
-        assert_eq!(chapter_to_search, result);
-        assert!(not_found.is_none());
-    }
-
-    #[test]
     fn sorted_volumes_searches_next_volume() {
         let volume_to_search: Volumes = Volumes {
             volume: "2".to_string(),
@@ -969,11 +951,9 @@ mod test {
         let list = dbg!(list);
 
         let previous = list.get_previous_chapter(Some("1"), 2.0).expect("should get previous chapter");
-        let not_found = list.get_previous_chapter(Some("1"), 5.0);
         let from_first_chapter = list.get_previous_chapter(Some("1"), 1.0);
 
         assert_eq!(chapter_to_search, previous);
-        assert!(not_found.is_none());
         assert!(from_first_chapter.is_none());
     }
 
@@ -982,21 +962,38 @@ mod test {
         let mut list_of_volumes: Vec<Volumes> = vec![];
         let mut list_of_chapters: Vec<Chapter> = vec![];
 
-        let chapter_to_search = Chapter {
+        let chapter_to_search_1 = Chapter {
             number: "1".to_string(),
             volume: "1".to_string(),
             ..Default::default()
         };
 
-        list_of_chapters.push(Chapter {
+        let chapter_to_search_2 = Chapter {
             number: "2".to_string(),
+            volume: "1".to_string(),
+            ..Default::default()
+        };
+
+        list_of_chapters.push(Chapter {
+            number: "3".to_string(),
+            volume: "2".to_string(),
+            ..Default::default()
+        });
+
+        list_of_chapters.push(Chapter {
+            number: "3.2".to_string(),
+            volume: "2".to_string(),
+            ..Default::default()
+        });
+        list_of_chapters.push(Chapter {
+            number: "4".to_string(),
             volume: "2".to_string(),
             ..Default::default()
         });
 
         list_of_volumes.push(Volumes {
             volume: "1".to_string(),
-            chapters: SortedChapters::new(vec![chapter_to_search.clone()]),
+            chapters: SortedChapters::new(vec![chapter_to_search_1.clone(), chapter_to_search_2.clone()]),
         });
 
         list_of_volumes.push(Volumes {
@@ -1008,12 +1005,18 @@ mod test {
             volumes: SortedVolumes::new(list_of_volumes),
         });
 
-        let previous = list
-            .get_previous_chapter(Some("2"), 2.0)
+        let previous_2 = list
+            .get_previous_chapter(Some("2"), 3.0)
             .expect("should get previous chapter in previous volume");
+
+        let previous_1 = list
+            .get_previous_chapter(Some("1"), 2.0)
+            .expect("should get previous chapter in previous volume");
+
         let not_found = list.get_previous_chapter(Some("3"), 1.0);
 
-        assert_eq!(chapter_to_search, previous);
+        assert_eq!(chapter_to_search_2, previous_2);
+        assert_eq!(chapter_to_search_1, previous_1);
         assert!(not_found.is_none());
     }
 

@@ -694,8 +694,11 @@ impl MangaPage {
         }
     }
 
-    fn bookmark_chapter(&self, chapter_to_bookmark: ChapterItem, database: &mut dyn Bookmark) {
-        database.bookmark(&chapter_to_bookmark.id, None).ok();
+    fn bookmark_chapter(&self, chapter_to_bookmark: &mut ChapterItem, database: &mut dyn Bookmark) {
+        match database.bookmark(&chapter_to_bookmark.id, None) {
+            Ok(()) => chapter_to_bookmark.is_bookmarked = true,
+            Err(_e) => {},
+        };
     }
 
     fn download_chapter_selected(&mut self) {
@@ -1449,13 +1452,32 @@ mod test {
 
         let mut test_database = TestDatabase::new();
 
-        let chapter_to_bookmark: ChapterItem = ChapterItem {
+        let mut chapter_to_bookmark: ChapterItem = ChapterItem {
             id: "chapter_id".to_string(),
+            is_bookmarked: false,
             ..Default::default()
         };
 
-        manga_page.bookmark_chapter(chapter_to_bookmark, &mut test_database);
+        manga_page.bookmark_chapter(&mut chapter_to_bookmark, &mut test_database);
 
-        assert!(test_database.was_bookmarked())
+        assert!(test_database.was_bookmarked());
+        assert!(chapter_to_bookmark.is_bookmarked);
+    }
+
+    #[test]
+    fn it_bookmarks_current_selected_chapter() {
+        let mut manga_page = MangaPage::new(Manga::default(), None);
+
+        let chapter_to_bookmark: ChapterItem = ChapterItem {
+            id: "chapter_to_bookmark".to_string(),
+            is_bookmarked: false,
+            ..Default::default()
+        };
+
+        manga_page.load_chapters(Some(get_chapters_response()));
+
+        let chapters = manga_page.chapters.as_mut().unwrap();
+
+        manga_page.book_mark_currently_selected_chapter();
     }
 }
