@@ -10,7 +10,7 @@ use manga_tui::SearchTerm;
 use once_cell::sync::OnceCell;
 use reqwest::{Client, Response, Url};
 
-use super::api_responses::{AggregateChapterResponse, ChapterPagesResponse};
+use super::api_responses::ChapterPagesResponse;
 use super::filter::Languages;
 use crate::backend::api_responses::OneChapterResponse;
 use crate::backend::filter::{Filters, IntoParam};

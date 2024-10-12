@@ -3,11 +3,10 @@ use std::sync::Mutex;
 use chrono::Utc;
 use manga_tui::SearchTerm;
 use once_cell::sync::Lazy;
-use rusqlite::{params, Connection, DatabaseName};
+use rusqlite::{params, Connection};
 use strum::{Display, EnumIter};
 
 use super::AppDirectories;
-use crate::view::pages::manga::Bookmark;
 use crate::view::widgets::feed::FeedTabs;
 
 #[derive(Display, Debug, Clone, Copy)]
@@ -616,7 +615,10 @@ impl<'a> Database<'a> {
         Ok(is_read)
     }
 
-    fn bookmark_chapter(&mut self, chapter_id: &str, page_number: Option<u32>) -> rusqlite::Result<()> {
+    fn bookmark_chapter(&mut self, chapter_id: &str, manga_id: &str, page_number: Option<u32>) -> rusqlite::Result<()> {
+        self.connection
+            .execute("UPDATE chapters SET is_bookmarked = false WHERE manga_id = ?1", [manga_id])?;
+
         self.connection
             .execute("UPDATE chapters SET is_bookmarked = true, number_page_bookmarked = ?1 WHERE id = ?2", params![
                 page_number.unwrap_or(1),
@@ -627,9 +629,13 @@ impl<'a> Database<'a> {
     }
 }
 
+pub trait Bookmark {
+    fn bookmark(&mut self, chapter_id: &str, manga_id: &str, page_number: Option<u32>) -> Result<(), Box<dyn std::error::Error>>;
+}
+
 impl<'a> Bookmark for Database<'a> {
-    fn bookmark(&mut self, chapter_id: &str, page_number: Option<u32>) -> Result<(), Box<dyn std::error::Error>> {
-        Ok(self.bookmark_chapter(chapter_id, page_number)?)
+    fn bookmark(&mut self, chapter_id: &str, manga_id: &str, page_number: Option<u32>) -> Result<(), Box<dyn std::error::Error>> {
+        Ok(self.bookmark_chapter(chapter_id, manga_id, page_number)?)
     }
 }
 
@@ -1327,7 +1333,7 @@ mod test {
 
     #[test]
     fn database_bookmarks_chapter() -> Result<()> {
-        let connection = Database::get_connection()?;
+        let connection = Connection::open_in_memory()?;
         let mut database = Database::new(&connection);
 
         database.setup()?;
@@ -1343,7 +1349,7 @@ mod test {
             manga_id
         ])?;
 
-        database.bookmark(&chapter_id, Some(3)).expect("failed to bookmark chapter");
+        database.bookmark(&chapter_id, &manga_id, Some(3)).expect("failed to bookmark chapter");
 
         let was_bookmarked: bool =
             connection.query_row("SELECT is_bookmarked FROM chapters WHERE id = ?1", params![chapter_id], |row| row.get(0))?;
@@ -1355,13 +1361,78 @@ mod test {
         assert!(was_bookmarked);
         assert_eq!(page_set.expect("should not be null"), 3);
 
-        database.bookmark(&chapter_id, None).expect("failed to bookmark chapter");
+        database.bookmark(&chapter_id, &manga_id, None).expect("failed to bookmark chapter");
 
         let page_set_to_one: Option<u32> =
             connection
                 .query_row("SELECT number_page_bookmarked FROM chapters WHERE id = ?1", params![chapter_id], |row| row.get(0))?;
 
         assert_eq!(page_set_to_one.expect("should not be null"), 1);
+        Ok(())
+    }
+
+    #[test]
+    fn database_only_bookmarks_one_chapter_at_a_time_per_manga() -> Result<()> {
+        let connection = Connection::open_in_memory()?;
+        let mut database = Database::new(&connection);
+
+        database.setup()?;
+
+        let chapter_id = Uuid::new_v4().to_string();
+        let chapter_id_2 = Uuid::new_v4().to_string();
+        let chapter_id_should_stay_bookmarked = Uuid::new_v4().to_string();
+        let manga_id = Uuid::new_v4().to_string();
+        let manga_id_2 = Uuid::new_v4().to_string();
+
+        connection.execute("INSERT INTO mangas(id, title) VALUES(?1,?2)", params![manga_id.clone(), "some_title"])?;
+        connection.execute("INSERT INTO mangas(id, title) VALUES(?1,?2)", params![manga_id_2.clone(), "some_title2"])?;
+
+        connection.execute("INSERT INTO chapters(id, title, manga_id) VALUES(?1,?2,?3)", params![
+            chapter_id.clone(),
+            "some_title",
+            manga_id
+        ])?;
+
+        connection.execute("INSERT INTO chapters(id, title, manga_id) VALUES(?1,?2,?3)", params![
+            chapter_id_2.clone(),
+            "some_title",
+            manga_id
+        ])?;
+
+        connection.execute("INSERT INTO chapters(id, title, manga_id) VALUES(?1,?2,?3)", params![
+            chapter_id_should_stay_bookmarked.clone(),
+            "some_title",
+            manga_id_2
+        ])?;
+
+        database
+            .bookmark_chapter(&chapter_id, &manga_id, None)
+            .expect("failed to bookmark chapter1");
+
+        database
+            .bookmark_chapter(&chapter_id_should_stay_bookmarked, &manga_id_2, None)
+            .expect("failed to bookmark chapter_id_should_stay_bookmarked");
+
+        database
+            .bookmark_chapter(&chapter_id_2, &manga_id, None)
+            .expect("failed to bookmark chapter2");
+
+        let was_bookmarked_1: bool =
+            connection.query_row("SELECT is_bookmarked FROM chapters WHERE id = ?1", params![chapter_id], |row| row.get(0))?;
+
+        let was_bookmarked_2: bool =
+            connection.query_row("SELECT is_bookmarked FROM chapters WHERE id = ?1", params![chapter_id_2], |row| row.get(0))?;
+
+        let should_stay_bookmarked: bool = connection.query_row(
+            "SELECT is_bookmarked FROM chapters WHERE id = ?1",
+            params![chapter_id_should_stay_bookmarked],
+            |row| row.get(0),
+        )?;
+
+        assert!(!was_bookmarked_1);
+        assert!(was_bookmarked_2);
+        assert!(should_stay_bookmarked);
+
         Ok(())
     }
 }

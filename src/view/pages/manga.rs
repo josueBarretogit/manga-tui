@@ -21,7 +21,8 @@ use crate::backend::api_responses::{
     AggregateChapterResponse, ChapterPagesResponse, ChapterResponse, MangaStatisticsResponse, Statistics,
 };
 use crate::backend::database::{
-    get_chapters_history_status, save_history, set_chapter_downloaded, MangaReadingHistorySave, SetChapterDownloaded, DBCONN,
+    get_chapters_history_status, save_history, set_chapter_downloaded, Bookmark, Database, MangaReadingHistorySave,
+    SetChapterDownloaded, DBCONN,
 };
 use crate::backend::download::DownloadChapter;
 use crate::backend::error_log::{self, write_to_error_log, ErrorType};
@@ -39,10 +40,6 @@ use crate::view::widgets::manga::{
     ChapterItem, ChaptersListWidget, DownloadAllChaptersState, DownloadAllChaptersWidget, DownloadPhase,
 };
 use crate::view::widgets::Component;
-
-pub trait Bookmark {
-    fn bookmark(&mut self, chapter_id: &str, page_number: Option<u32>) -> Result<(), Box<dyn std::error::Error>>;
-}
 
 #[derive(PartialEq, Eq, Debug)]
 pub enum PageState {
@@ -73,6 +70,7 @@ pub enum MangaPageActions {
     GoMangasArtist,
     SearchNextChapterPage,
     SearchPreviousChapterPage,
+    BookMarkChapterSelected,
 }
 
 #[derive(Debug, PartialEq, EnumIs)]
@@ -149,7 +147,7 @@ impl MangaStatistics {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 struct ChaptersData {
     state: tui_widget_list::ListState,
     widget: ChaptersListWidget,
@@ -472,6 +470,9 @@ impl MangaPage {
                     KeyCode::Char('b') => {
                         self.local_action_tx.send(MangaPageActions::SearchPreviousChapterPage).ok();
                     },
+                    KeyCode::Char('m') => {
+                        self.local_action_tx.send(MangaPageActions::BookMarkChapterSelected).ok();
+                    },
 
                     _ => {},
                 }
@@ -522,7 +523,7 @@ impl MangaPage {
         }
     }
 
-    fn _get_current_selected_chapter(&self) -> Option<&ChapterItem> {
+    fn get_current_selected_chapter(&self) -> Option<&ChapterItem> {
         match self.chapters.as_ref() {
             Some(chapters_data) => match chapters_data.state.selected {
                 Some(selected_chapter_index) => return chapters_data.widget.chapters.get(selected_chapter_index),
@@ -694,11 +695,21 @@ impl MangaPage {
         }
     }
 
-    fn bookmark_chapter(&self, chapter_to_bookmark: &mut ChapterItem, database: &mut dyn Bookmark) {
-        match database.bookmark(&chapter_to_bookmark.id, None) {
-            Ok(()) => chapter_to_bookmark.is_bookmarked = true,
-            Err(_e) => {},
-        };
+    fn clear_chapters_as_bookmarked(&mut self) {
+        if let Some(chapters) = self.chapters.as_mut() {
+            chapters.widget.chapters.iter_mut().for_each(|chap| chap.is_bookmarked = false);
+        }
+    }
+
+    fn bookmark_current_chapter_selected(&mut self, database: &mut dyn Bookmark) {
+        self.clear_chapters_as_bookmarked();
+        let manga_id = self.manga.id.clone();
+        if let Some(chapter_selected) = self.get_current_selected_chapter_mut() {
+            match database.bookmark(&chapter_selected.id, &manga_id, None) {
+                Ok(()) => chapter_selected.is_bookmarked = true,
+                Err(e) => write_to_error_log(ErrorType::FromError(e)),
+            }
+        }
     }
 
     fn download_chapter_selected(&mut self) {
@@ -1058,6 +1069,15 @@ impl Component for MangaPage {
 
     fn update(&mut self, action: Self::Actions) {
         match action {
+            MangaPageActions::BookMarkChapterSelected => {
+                let connection = Database::get_connection();
+
+                if let Ok(conn) = connection {
+                    let mut database = Database::new(&conn);
+
+                    self.bookmark_current_chapter_selected(&mut database);
+                }
+            },
             MangaPageActions::AbortDownloadAllChapters => self.abort_download_all_chapters(),
             MangaPageActions::AskAbortProcces => self.ask_abort_download_chapters(),
             MangaPageActions::SearchByLanguage => self.search_by_language(),
@@ -1107,6 +1127,10 @@ impl Component for MangaPage {
 // struct / widge
 #[cfg(test)]
 mod test {
+
+    use std::time::Duration;
+
+    use tokio::time::timeout;
 
     use super::*;
     use crate::backend::api_responses::ChapterData;
@@ -1439,45 +1463,101 @@ mod test {
     }
 
     impl Bookmark for TestDatabase {
-        fn bookmark(&mut self, _chapter_id: &str, _page_number: Option<u32>) -> Result<(), Box<dyn std::error::Error>> {
+        fn bookmark(
+            &mut self,
+            _chapter_id: &str,
+            _manga_id: &str,
+            _page_number: Option<u32>,
+        ) -> Result<(), Box<dyn std::error::Error>> {
             self.chapter.was_bookmarked = true;
-
             Ok(())
         }
     }
 
-    #[test]
-    fn it_bookmarks_given_chapter() {
-        let manga_page = MangaPage::new(Manga::default(), None);
+    #[tokio::test]
+    async fn it_sends_event_to_bookmark_currently_selected_chapter_on_key_press() {
+        let mut manga_page = MangaPage::new(Manga::default(), None);
 
-        let mut test_database = TestDatabase::new();
+        press_key(&mut manga_page, KeyCode::Char('m'));
 
-        let mut chapter_to_bookmark: ChapterItem = ChapterItem {
-            id: "chapter_id".to_string(),
-            is_bookmarked: false,
-            ..Default::default()
-        };
+        let result = timeout(Duration::from_millis(250), manga_page.local_action_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
 
-        manga_page.bookmark_chapter(&mut chapter_to_bookmark, &mut test_database);
-
-        assert!(test_database.was_bookmarked());
-        assert!(chapter_to_bookmark.is_bookmarked);
+        assert_eq!(MangaPageActions::BookMarkChapterSelected, result)
     }
 
     #[test]
-    fn it_bookmarks_current_selected_chapter() {
+    fn it_bookmarks_currently_selected_chapter() {
         let mut manga_page = MangaPage::new(Manga::default(), None);
 
         let chapter_to_bookmark: ChapterItem = ChapterItem {
-            id: "chapter_to_bookmark".to_string(),
-            is_bookmarked: false,
+            id: "id_chapter_bookmarked".to_string(),
             ..Default::default()
         };
 
-        manga_page.load_chapters(Some(get_chapters_response()));
+        let mut list_state = tui_widget_list::ListState::default();
 
-        let chapters = manga_page.chapters.as_mut().unwrap();
+        list_state.select(Some(0));
 
-        manga_page.book_mark_currently_selected_chapter();
+        manga_page.chapters = Some(ChaptersData {
+            widget: ChaptersListWidget {
+                chapters: vec![chapter_to_bookmark, ChapterItem::default()],
+            },
+            state: list_state,
+            ..Default::default()
+        });
+
+        let mut test_database = TestDatabase::new();
+
+        manga_page.bookmark_current_chapter_selected(&mut test_database);
+
+        let bookmarked_chapter = manga_page
+            .chapters
+            .as_ref()
+            .unwrap()
+            .widget
+            .chapters
+            .iter()
+            .find(|chap| chap.id == "id_chapter_bookmarked")
+            .unwrap();
+
+        assert!(bookmarked_chapter.is_bookmarked);
+    }
+
+    #[test]
+    fn it_only_bookmarks_one_chapter_at_a_time() {
+        let mut manga_page = MangaPage::new(Manga::default(), None);
+
+        let mut list_state = tui_widget_list::ListState::default();
+
+        list_state.select(Some(0));
+
+        manga_page.chapters = Some(ChaptersData {
+            widget: ChaptersListWidget {
+                chapters: vec![
+                    ChapterItem {
+                        is_bookmarked: true,
+                        ..Default::default()
+                    },
+                    ChapterItem {
+                        is_bookmarked: true,
+                        ..Default::default()
+                    },
+                ],
+            },
+            state: list_state,
+            ..Default::default()
+        });
+
+        let mut test_database = TestDatabase::new();
+
+        manga_page.bookmark_current_chapter_selected(&mut test_database);
+
+        let chapters = manga_page.get_chapter_data();
+
+        assert!(chapters.widget.chapters[0].is_bookmarked);
+        assert!(!chapters.widget.chapters[1].is_bookmarked);
     }
 }

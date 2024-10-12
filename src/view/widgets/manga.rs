@@ -65,13 +65,16 @@ impl Widget for ChapterItem {
         Line::from(is_read_icon).style(self.style).render(is_read_area, buf);
         Line::from(is_downloaded_icon).style(self.style).render(is_downloaded_area, buf);
 
-        Paragraph::new(Line::from(vec![
-            format!("Vol. {} Ch. {} ", self.volume_number.unwrap_or_default(), self.chapter_number).into(),
-            self.title.into(),
-        ]))
-        .wrap(Wrap { trim: true })
-        .style(self.style)
-        .render(title_area, buf);
+        let information = if self.is_bookmarked {
+            "Bookmarked | ".to_string()
+        } else {
+            format!("Vol. {} Ch. {} | ", self.volume_number.unwrap_or_default(), self.chapter_number)
+        };
+
+        Paragraph::new(Line::from(vec![information.into(), self.title.into()]))
+            .wrap(Wrap { trim: true })
+            .style(self.style)
+            .render(title_area, buf);
 
         match self.download_loading_state.as_ref() {
             Some(progress) => {
@@ -178,7 +181,7 @@ impl ChapterItem {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct ChaptersListWidget {
     pub chapters: Vec<ChapterItem>,
 }
