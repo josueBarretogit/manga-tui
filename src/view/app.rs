@@ -10,7 +10,7 @@ use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use self::feed::Feed;
 use self::home::Home;
 use self::manga::MangaPage;
-use self::reader::{CurrentChapter, ListOfChapters, MangaReader, SearchChapter, SearchMangaPanel};
+use self::reader::{ChapterToRead, ListOfChapters, MangaReader, SearchChapter, SearchMangaPanel};
 use self::search::{InputMode, SearchPage};
 use super::widgets::search::MangaItem;
 use super::widgets::Component;
@@ -25,7 +25,7 @@ pub enum AppState {
     Done,
 }
 
-#[derive(PartialEq, Eq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone, Default)]
 pub struct MangaToRead {
     pub title: String,
     pub manga_id: String,
@@ -240,7 +240,7 @@ impl<T: ApiClient + SearchChapter + SearchMangaPanel> App<T> {
         self.manga_page = Some(MangaPage::new(manga.manga, self.picker).with_global_sender(self.global_event_tx.clone()));
     }
 
-    fn go_to_read_chapter(&mut self, chapter_to_read: CurrentChapter, manga_to_read: MangaToRead) {
+    fn go_to_read_chapter(&mut self, chapter_to_read: ChapterToRead, manga_to_read: MangaToRead) {
         self.home_page.clean_up();
         self.feed_page.clean_up();
         self.current_tab = SelectedPage::ReaderTab;

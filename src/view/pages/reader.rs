@@ -29,7 +29,7 @@ use crate::view::widgets::reader::{PageItemState, PagesItem, PagesList};
 use crate::view::widgets::Component;
 
 pub trait SearchChapter: Send + Clone + 'static {
-    fn search_chapter(&self, chapter_id: &str) -> impl Future<Output = Result<CurrentChapter, Box<dyn Error>>> + Send;
+    fn search_chapter(&self, chapter_id: &str) -> impl Future<Output = Result<ChapterToRead, Box<dyn Error>>> + Send;
 }
 
 pub trait SearchMangaPanel: Send + Clone + 'static {
@@ -69,7 +69,7 @@ pub enum MangaReaderEvents {
     SaveReadingToDatabase,
     ErrorSearchingChapter,
     ChapterNotFound,
-    LoadChapter(CurrentChapter),
+    LoadChapter(ChapterToRead),
     SearchNextChapter(String),
     SearchPreviousChapter(String),
     FetchPages,
@@ -91,7 +91,7 @@ impl Page {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct CurrentChapter {
+pub struct ChapterToRead {
     pub id: String,
     pub title: String,
     pub number: f64,
@@ -100,7 +100,7 @@ pub struct CurrentChapter {
     pub pages_url: Vec<Url>,
 }
 
-impl Default for CurrentChapter {
+impl Default for ChapterToRead {
     fn default() -> Self {
         Self {
             id: String::default(),
@@ -275,7 +275,7 @@ pub struct MangaReader<T: SearchChapter + SearchMangaPanel> {
     manga_title: String,
     manga_id: String,
     list_of_chapters: ListOfChapters,
-    current_chapter: CurrentChapter,
+    current_chapter: ChapterToRead,
     pages: Vec<Page>,
     pages_list: PagesList,
     current_page_size: u16,
@@ -365,7 +365,7 @@ impl<T: SearchChapter + SearchMangaPanel> Component for MangaReader<T> {
 }
 
 impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
-    pub fn new(chapter: CurrentChapter, manga_id: String, picker: Picker, api_client: T) -> Self {
+    pub fn new(chapter: ChapterToRead, manga_id: String, picker: Picker, api_client: T) -> Self {
         let set: JoinSet<()> = JoinSet::new();
         let (local_action_tx, local_action_rx) = mpsc::unbounded_channel::<MangaReaderActions>();
         let (local_event_tx, local_event_rx) = mpsc::unbounded_channel::<MangaReaderEvents>();
@@ -444,7 +444,7 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
         }
     }
 
-    fn load_chapter(&mut self, chapter: CurrentChapter) {
+    fn load_chapter(&mut self, chapter: ChapterToRead) {
         self.clean_up();
 
         self.current_chapter = chapter;
@@ -651,7 +651,7 @@ mod test {
     #[derive(Clone)]
     struct TestApiClient {
         should_fail: bool,
-        response: CurrentChapter,
+        response: ChapterToRead,
         panel_response: MangaPanel,
     }
 
@@ -659,12 +659,12 @@ mod test {
         pub fn new() -> Self {
             Self {
                 should_fail: false,
-                response: CurrentChapter::default(),
+                response: ChapterToRead::default(),
                 panel_response: MangaPanel::default(),
             }
         }
 
-        pub fn with_response(response: CurrentChapter) -> Self {
+        pub fn with_response(response: ChapterToRead) -> Self {
             Self {
                 should_fail: false,
                 response,
@@ -675,7 +675,7 @@ mod test {
         pub fn with_failing_request() -> Self {
             Self {
                 should_fail: true,
-                response: CurrentChapter::default(),
+                response: ChapterToRead::default(),
                 panel_response: MangaPanel::default(),
             }
         }
@@ -683,14 +683,14 @@ mod test {
         pub fn with_page_response(response: MangaPanel) -> Self {
             Self {
                 should_fail: true,
-                response: CurrentChapter::default(),
+                response: ChapterToRead::default(),
                 panel_response: response,
             }
         }
     }
 
     impl SearchChapter for TestApiClient {
-        async fn search_chapter(&self, _chapter_id: &str) -> Result<CurrentChapter, Box<dyn Error>> {
+        async fn search_chapter(&self, _chapter_id: &str) -> Result<ChapterToRead, Box<dyn Error>> {
             if self.should_fail { Err("should_fail".into()) } else { Ok(self.response.clone()) }
         }
     }
@@ -706,7 +706,7 @@ mod test {
         let chapter_id = "some_id".to_string();
         let url_imgs = vec!["http://localhost".parse().unwrap(), "http://localhost".parse().unwrap()];
         MangaReader::new(
-            CurrentChapter {
+            ChapterToRead {
                 id: chapter_id,
                 title: String::default(),
                 number: 1.0,
@@ -1064,7 +1064,7 @@ mod test {
 
     #[tokio::test]
     async fn it_collects_pages() {
-        let chapter: CurrentChapter = CurrentChapter {
+        let chapter: ChapterToRead = ChapterToRead {
             pages_url: vec!["http://localhost".parse().unwrap(), "http://localhost".parse().unwrap()],
             ..Default::default()
         };
@@ -1081,7 +1081,7 @@ mod test {
     fn it_does_not_initiate_search_next_chapter_if_there_is_no_next_chapter() {
         let list_of_chapters = ListOfChapters::default();
         let mut manga_reader =
-            MangaReader::new(CurrentChapter::default(), "".to_string(), Picker::new((8, 8)), TestApiClient::new())
+            MangaReader::new(ChapterToRead::default(), "".to_string(), Picker::new((8, 8)), TestApiClient::new())
                 .with_list_of_chapters(list_of_chapters);
 
         manga_reader.initiate_search_next_chapter();
@@ -1093,7 +1093,7 @@ mod test {
     fn it_does_not_initiate_search_previous_chapter_if_there_is_no_previous_chapter() {
         let list_of_chapters = ListOfChapters::default();
         let mut manga_reader =
-            MangaReader::new(CurrentChapter::default(), "".to_string(), Picker::new((8, 8)), TestApiClient::new())
+            MangaReader::new(ChapterToRead::default(), "".to_string(), Picker::new((8, 8)), TestApiClient::new())
                 .with_list_of_chapters(list_of_chapters);
 
         manga_reader.initiate_search_previous_chapter();
@@ -1120,7 +1120,7 @@ mod test {
             }]),
         };
 
-        let current_chapter: CurrentChapter = CurrentChapter {
+        let current_chapter: ChapterToRead = ChapterToRead {
             number: 1.0,
             volume_number: Some("1".to_string()),
             ..Default::default()
@@ -1160,7 +1160,7 @@ mod test {
             }]),
         };
 
-        let current_chapter: CurrentChapter = CurrentChapter {
+        let current_chapter: ChapterToRead = ChapterToRead {
             number: 2.0,
             volume_number: Some("1".to_string()),
             ..Default::default()
@@ -1183,7 +1183,7 @@ mod test {
     #[tokio::test]
     async fn it_sends_search_next_chapter_action_on_w_key_press() {
         let mut manga_reader =
-            MangaReader::new(CurrentChapter::default(), "".to_string(), Picker::new((8, 8)), TestApiClient::new());
+            MangaReader::new(ChapterToRead::default(), "".to_string(), Picker::new((8, 8)), TestApiClient::new());
 
         press_key(&mut manga_reader, KeyCode::Char('w'));
 
@@ -1198,7 +1198,7 @@ mod test {
     #[tokio::test]
     async fn it_sends_search_previous_chapter_event_on_b_key_press() {
         let mut manga_reader =
-            MangaReader::new(CurrentChapter::default(), "".to_string(), Picker::new((8, 8)), TestApiClient::new());
+            MangaReader::new(ChapterToRead::default(), "".to_string(), Picker::new((8, 8)), TestApiClient::new());
 
         press_key(&mut manga_reader, KeyCode::Char('b'));
 
@@ -1212,7 +1212,7 @@ mod test {
 
     #[tokio::test]
     async fn it_searches_chapter_and_sends_successful_result() {
-        let expected = CurrentChapter {
+        let expected = ChapterToRead {
             id: "next_chapter_id".to_string(),
             title: "some_title".to_string(),
             number: 2.0,
@@ -1222,7 +1222,7 @@ mod test {
 
         let api_client = TestApiClient::with_response(expected.clone());
 
-        let mut manga_reader = MangaReader::new(CurrentChapter::default(), "some_id".to_string(), Picker::new((8, 8)), api_client);
+        let mut manga_reader = MangaReader::new(ChapterToRead::default(), "some_id".to_string(), Picker::new((8, 8)), api_client);
 
         manga_reader.search_chapter("some_id".to_string());
 
@@ -1238,7 +1238,7 @@ mod test {
     async fn it_searches_chapter_and_sends_error_event() {
         let api_client = TestApiClient::with_failing_request();
 
-        let mut manga_reader = MangaReader::new(CurrentChapter::default(), "some_id".to_string(), Picker::new((8, 8)), api_client);
+        let mut manga_reader = MangaReader::new(ChapterToRead::default(), "some_id".to_string(), Picker::new((8, 8)), api_client);
 
         manga_reader.search_chapter("some_id".to_string());
 
@@ -1252,7 +1252,7 @@ mod test {
 
     #[test]
     fn it_loads_chapter_found_and_sets_state_as_searching_pages() {
-        let expected = CurrentChapter {
+        let expected = ChapterToRead {
             id: "id_before".to_string(),
             title: "some_title".to_string(),
             number: 1.0,
@@ -1262,7 +1262,7 @@ mod test {
 
         let api_client = TestApiClient::with_response(expected.clone());
 
-        let mut manga_reader = MangaReader::new(CurrentChapter::default(), "some_id".to_string(), Picker::new((8, 8)), api_client);
+        let mut manga_reader = MangaReader::new(ChapterToRead::default(), "some_id".to_string(), Picker::new((8, 8)), api_client);
 
         manga_reader.state = State::SearchingChapter;
 
@@ -1276,13 +1276,13 @@ mod test {
     fn it_resets_pages_after_chapter_was_found() {
         let api_client = TestApiClient::new();
 
-        let mut manga_reader = MangaReader::new(CurrentChapter::default(), "some_id".to_string(), Picker::new((8, 8)), api_client);
+        let mut manga_reader = MangaReader::new(ChapterToRead::default(), "some_id".to_string(), Picker::new((8, 8)), api_client);
 
         manga_reader.pages = vec![Page::new(), Page::new()];
         manga_reader.pages_list.pages = vec![PagesItem::new(1), PagesItem::new(1)];
         manga_reader.page_list_state.select(Some(1));
 
-        manga_reader.load_chapter(CurrentChapter::default());
+        manga_reader.load_chapter(ChapterToRead::default());
 
         assert!(manga_reader.pages.is_empty());
         assert!(manga_reader.pages_list.pages.is_empty());
@@ -1292,9 +1292,9 @@ mod test {
     #[tokio::test]
     async fn it_send_event_to_search_pages_after_chapter_was_loaded() {
         let api_client = TestApiClient::new();
-        let mut manga_reader = MangaReader::new(CurrentChapter::default(), "".to_string(), Picker::new((8, 8)), api_client);
+        let mut manga_reader = MangaReader::new(ChapterToRead::default(), "".to_string(), Picker::new((8, 8)), api_client);
 
-        manga_reader.load_chapter(CurrentChapter::default());
+        manga_reader.load_chapter(ChapterToRead::default());
 
         let expected = MangaReaderEvents::FetchPages;
 
@@ -1310,9 +1310,9 @@ mod test {
     async fn it_send_event_to_save_reading_status_to_database_after_chapter_was_loaded() {
         let api_client = TestApiClient::new();
 
-        let mut manga_reader = MangaReader::new(CurrentChapter::default(), "".to_string(), Picker::new((8, 8)), api_client);
+        let mut manga_reader = MangaReader::new(ChapterToRead::default(), "".to_string(), Picker::new((8, 8)), api_client);
 
-        let new_chapter: CurrentChapter = CurrentChapter {
+        let new_chapter: ChapterToRead = ChapterToRead {
             id: "chapter_to_save".to_string(),
             ..Default::default()
         };
@@ -1336,7 +1336,7 @@ mod test {
 
         test_database.setup()?;
 
-        let chapter: CurrentChapter = CurrentChapter {
+        let chapter: ChapterToRead = ChapterToRead {
             id: "chapter_to_save".to_string(),
             ..Default::default()
         };
@@ -1355,14 +1355,14 @@ mod test {
 
     #[test]
     fn it_loads_chapter_on_event() {
-        let chapter_to_load = CurrentChapter {
+        let chapter_to_load = ChapterToRead {
             id: "new_chapter_id".to_string(),
             ..Default::default()
         };
 
         let api_client = TestApiClient::new();
 
-        let mut manga_reader = MangaReader::new(CurrentChapter::default(), "some_id".to_string(), Picker::new((8, 8)), api_client);
+        let mut manga_reader = MangaReader::new(ChapterToRead::default(), "some_id".to_string(), Picker::new((8, 8)), api_client);
 
         manga_reader
             .local_event_tx
@@ -1378,7 +1378,7 @@ mod test {
     fn it_is_set_as_error_searching_chapter_on_event() {
         let api_client = TestApiClient::new();
 
-        let mut manga_reader = MangaReader::new(CurrentChapter::default(), "some_id".to_string(), Picker::new((8, 8)), api_client);
+        let mut manga_reader = MangaReader::new(ChapterToRead::default(), "some_id".to_string(), Picker::new((8, 8)), api_client);
 
         manga_reader.local_event_tx.send(MangaReaderEvents::ErrorSearchingChapter).ok();
 

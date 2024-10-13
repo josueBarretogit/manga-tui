@@ -14,7 +14,7 @@ use tokio::task::JoinHandle;
 use super::fetch::ApiClient;
 use crate::common::{Artist, Author};
 use crate::view::app::{App, AppState, MangaToRead};
-use crate::view::pages::reader::{CurrentChapter, SearchChapter, SearchMangaPanel};
+use crate::view::pages::reader::{ChapterToRead, SearchChapter, SearchMangaPanel};
 use crate::view::widgets::search::MangaItem;
 use crate::view::widgets::Component;
 
@@ -34,7 +34,7 @@ pub enum Events {
     GoSearchMangasAuthor(Author),
     GoSearchMangasArtist(Artist),
     GoFeedPage,
-    ReadChapter(CurrentChapter, MangaToRead),
+    ReadChapter(ChapterToRead, MangaToRead),
 }
 
 /// Initialize the terminal

@@ -10,13 +10,14 @@ use manga_tui::SearchTerm;
 use once_cell::sync::OnceCell;
 use reqwest::{Client, Response, Url};
 
-use super::api_responses::ChapterPagesResponse;
+use super::api_responses::{AggregateChapterResponse, ChapterPagesResponse};
 use super::filter::Languages;
 use crate::backend::api_responses::OneChapterResponse;
 use crate::backend::filter::{Filters, IntoParam};
 use crate::config::ImageQuality;
-use crate::view::pages::manga::ChapterOrder;
-use crate::view::pages::reader::{CurrentChapter, MangaPanel, SearchChapter, SearchMangaPanel};
+use crate::view::app::MangaToRead;
+use crate::view::pages::manga::{ChapterOrder, FetchChapterBookmarked};
+use crate::view::pages::reader::{ChapterToRead, ListOfChapters, MangaPanel, SearchChapter, SearchMangaPanel};
 
 // Todo! this trait should be split 💀💀
 pub trait ApiClient: Clone + Send + 'static {
@@ -329,7 +330,7 @@ pub mod fake_api_client {
         async fn search_chapter(
             &self,
             _manga_id: &str,
-        ) -> Result<crate::view::pages::reader::CurrentChapter, Box<dyn std::error::Error>> {
+        ) -> Result<crate::view::pages::reader::ChapterToRead, Box<dyn std::error::Error>> {
             unimplemented!()
         }
     }
@@ -472,11 +473,11 @@ pub mod fake_api_client {
 }
 
 impl SearchChapter for MangadexClient {
-    async fn search_chapter(&self, chapter_id: &str) -> Result<CurrentChapter, Box<dyn std::error::Error>> {
+    async fn search_chapter(&self, chapter_id: &str) -> Result<ChapterToRead, Box<dyn std::error::Error>> {
         let response: OneChapterResponse = self.search_chapters_by_id(chapter_id).await?.json().await?;
         let pages_response: ChapterPagesResponse = self.get_chapter_pages(chapter_id).await?.json().await?;
 
-        Ok(CurrentChapter {
+        Ok(ChapterToRead {
             id: response.data.id,
             title: response.data.attributes.title.unwrap_or_default(),
             number: response
@@ -503,6 +504,44 @@ impl SearchMangaPanel for MangadexClient {
             image_decoded,
             dimensions,
         })
+    }
+}
+
+impl FetchChapterBookmarked for MangadexClient {
+    async fn fetch_chapter_bookmarked(
+        &self,
+        chapter: super::database::ChapterBookmarked,
+    ) -> Result<(ChapterToRead, MangaToRead), Box<dyn Error>> {
+        let response: OneChapterResponse = self.search_chapters_by_id(&chapter.id).await?.json().await?;
+        let pages_response: ChapterPagesResponse = self.get_chapter_pages(&chapter.id).await?.json().await?;
+
+        let list_of_chapters: AggregateChapterResponse = self
+            .search_chapters_aggregate(
+                &chapter.manga_id,
+                Languages::try_from_iso_code(response.data.attributes.translated_language.as_str()).unwrap(),
+            )
+            .await?
+            .json()
+            .await?;
+
+        let number: f64 = response.data.attributes.chapter.unwrap_or("0".to_string()).parse().unwrap();
+        let volume_number = response.data.attributes.volume;
+
+        let chapter_to_read: ChapterToRead = ChapterToRead {
+            id: chapter.id,
+            title: response.data.attributes.title.unwrap_or_default(),
+            number,
+            volume_number,
+            pages_url: pages_response.get_files_based_on_quality_as_url(self.image_quality),
+        };
+
+        let manga_to_read: MangaToRead = MangaToRead {
+            title: chapter.manga_title,
+            manga_id: chapter.manga_id,
+            list: ListOfChapters::from(list_of_chapters),
+        };
+
+        Ok((chapter_to_read, manga_to_read))
     }
 }
 
