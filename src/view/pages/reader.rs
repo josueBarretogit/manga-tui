@@ -20,7 +20,7 @@ use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
 use crate::backend::api_responses::AggregateChapterResponse;
-use crate::backend::database::{save_history, Database, MangaReadingHistorySave};
+use crate::backend::database::{save_history, ChapterToSaveHistory, Database, MangaReadingHistorySave};
 use crate::backend::error_log::{write_to_error_log, ErrorType};
 use crate::backend::tui::Events;
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
@@ -627,8 +627,11 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
                 id: &self.manga_id,
                 title: &self.manga_title,
                 img_url: None,
-                chapter_id: &self.current_chapter.id,
-                chapter_title: &self.current_chapter.title,
+                chapter: ChapterToSaveHistory {
+                    id: &self.current_chapter.id,
+                    title: &self.current_chapter.title,
+                    translated_language: "en",
+                },
             },
             connection,
         )?;

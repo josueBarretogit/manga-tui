@@ -209,66 +209,54 @@ fn update_or_insert_manga_most_recent_read(manga_id: &str, conn: &Connection) ->
     }
 }
 
+#[derive(Debug, Default)]
+pub struct ChapterToSaveHistory<'a> {
+    pub id: &'a str,
+    pub title: &'a str,
+    pub translated_language: &'a str,
+}
+
 pub struct MangaReadingHistorySave<'a> {
     pub id: &'a str,
     pub title: &'a str,
     pub img_url: Option<&'a str>,
-    pub chapter_id: &'a str,
-    pub chapter_title: &'a str,
+    pub chapter: ChapterToSaveHistory<'a>,
 }
 
 /// This function creates a manga in the database if it does not exists and saves it in the reading
 /// history section
-pub fn save_history(chapter: MangaReadingHistorySave<'_>, conn: &Connection) -> rusqlite::Result<()> {
+pub fn save_history(data: MangaReadingHistorySave<'_>, conn: &Connection) -> rusqlite::Result<()> {
     let database = Database::new(conn);
 
-    if database.check_chapter_is_already_reading(chapter.chapter_id)? {
+    if database.check_chapter_is_already_reading(data.chapter.id)? {
         return Ok(());
     }
 
-    if check_exists(chapter.id, conn, Table::Mangas)? {
-        insert_chapter(
-            ChapterInsert {
-                id: chapter.chapter_id,
-                title: chapter.chapter_title,
-                is_downloaded: false,
-                is_read: true,
-                manga_id: chapter.id,
-            },
-            conn,
-        )?;
+    database.create_manga_if_not_exists(MangaInsert {
+        id: data.id,
+        title: data.title,
+        img_url: data.img_url,
+    })?;
 
-        if !manga_is_reading(chapter.id, conn)? {
-            insert_manga_in_reading_history(chapter.id, conn)?;
-        } else {
-            let now = Utc::now().naive_utc();
-            conn.execute("UPDATE mangas SET last_read = ?1 WHERE id = ?2", params![now.to_string(), chapter.id])?;
-        }
-        return Ok(());
+    database.create_chapter_if_not_exists(ChapterToInsert {
+        id: data.chapter.id,
+        title: data.chapter.title,
+        manga_id: data.id,
+        is_read: false,
+        is_downloaded: false,
+        is_bookmarked: false,
+        translated_language: data.chapter.translated_language,
+        number_page_bookmarked: None,
+    })?;
+
+    if !manga_is_reading(data.id, conn)? {
+        insert_manga_in_reading_history(data.id, conn)?;
+    } else {
+        let now = Utc::now().naive_utc();
+        conn.execute("UPDATE mangas SET last_read = ?1 WHERE id = ?2", params![now.to_string(), data.id])?;
     }
 
-    insert_manga(
-        MangaInsert {
-            id: chapter.id,
-            title: chapter.title,
-            img_url: chapter.img_url,
-        },
-        conn,
-    )?;
-
-    insert_manga_in_reading_history(chapter.id, conn)?;
-
-    insert_chapter(
-        ChapterInsert {
-            id: chapter.chapter_id,
-            title: chapter.chapter_title,
-            is_read: true,
-            is_downloaded: false,
-            manga_id: chapter.id,
-        },
-        conn,
-    )?;
-
+    conn.execute("UPDATE chapters SET is_read = true WHERE id = ?1", params![data.chapter.id])?;
     Ok(())
 }
 
@@ -633,7 +621,7 @@ impl<'a> Database<'a> {
         }
 
         self.connection
-            .execute("INSERT INTO chapters(id, title, manga_id) VALUES(?1, ?2, ?3)", params![chap.id, chap.title, chap.manga_id])?;
+            .execute("INSERT INTO chapters(id, title, manga_id, is_read, translated_language, number_page_bookmarked, is_downloaded, is_bookmarked) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)", params![chap.id, chap.title, chap.manga_id, chap.is_read, chap.translated_language, chap.number_page_bookmarked, chap.is_downloaded, chap.is_bookmarked])?;
 
         Ok(())
     }
@@ -649,6 +637,11 @@ impl<'a> Database<'a> {
             id: chapter_to_bookmark.chapter_id,
             title: chapter_to_bookmark.chapter_title,
             manga_id: chapter_to_bookmark.manga_id,
+            is_read: false,
+            is_downloaded: false,
+            is_bookmarked: true,
+            number_page_bookmarked: chapter_to_bookmark.page_number,
+            translated_language: chapter_to_bookmark.translated_language.as_iso_code(),
         })?;
 
         self.connection
@@ -688,10 +681,16 @@ impl<'a> Database<'a> {
     }
 }
 
+#[derive(Default, Debug)]
 pub struct ChapterToInsert<'a> {
     pub id: &'a str,
     pub title: &'a str,
     pub manga_id: &'a str,
+    pub is_read: bool,
+    pub is_downloaded: bool,
+    pub is_bookmarked: bool,
+    pub translated_language: &'a str,
+    pub number_page_bookmarked: Option<u32>,
 }
 
 #[derive(Default, Debug)]
@@ -946,8 +945,11 @@ mod test {
     // Both manga and chapter are not in the database
     #[test]
     fn save_manga_reading_status_which_does_not_exist() -> Result<()> {
-        let binding = DBCONN.lock().expect("could not get db conn");
-        let connection = binding.as_ref().unwrap();
+        let connection = Connection::open_in_memory()?;
+
+        let database = Database::new(&connection);
+
+        database.setup()?;
 
         let manga_id = Uuid::new_v4().to_string();
         let chapter_id = Uuid::new_v4().to_string();
@@ -957,14 +959,16 @@ mod test {
                 id: &manga_id,
                 title: "some_title",
                 img_url: None,
-                chapter_id: &chapter_id,
-                chapter_title: "some_chapter_title",
+                chapter: ChapterToSaveHistory {
+                    id: &chapter_id,
+                    ..Default::default()
+                },
             },
-            connection,
+            &connection,
         )?;
 
-        let manga_was_created = check_exists(&manga_id, connection, Table::Mangas)?;
-        let chapter_was_created = check_exists(&chapter_id, connection, Table::Chapters)?;
+        let manga_was_created = check_exists(&manga_id, &connection, Table::Mangas)?;
+        let chapter_was_created = check_exists(&chapter_id, &connection, Table::Chapters)?;
 
         assert!(manga_was_created);
 
@@ -976,8 +980,11 @@ mod test {
     // manga is already in database, chapter isnt
     #[test]
     fn save_manga_reading_status_which_already_exists() -> Result<()> {
-        let binding = DBCONN.lock().expect("could not get db conn");
-        let connection = binding.as_ref().unwrap();
+        let connection = Connection::open_in_memory()?;
+
+        let database = Database::new(&connection);
+
+        database.setup()?;
 
         let manga_id = Uuid::new_v4().to_string();
         let chapter_id = Uuid::new_v4().to_string();
@@ -988,7 +995,7 @@ mod test {
                 title: "some_title",
                 img_url: None,
             },
-            connection,
+            &connection,
         )?;
 
         save_history(
@@ -996,13 +1003,15 @@ mod test {
                 id: &manga_id,
                 title: "some_title",
                 img_url: None,
-                chapter_id: &chapter_id,
-                chapter_title: "some_chapter_title",
+                chapter: ChapterToSaveHistory {
+                    id: &chapter_id,
+                    ..Default::default()
+                },
             },
-            connection,
+            &connection,
         )?;
 
-        let chapters = get_all_chapters(connection)?;
+        let chapters = get_all_chapters(&connection)?;
 
         let saved_chapter = chapters
             .iter()
@@ -1046,8 +1055,10 @@ mod test {
                 id: &manga_id,
                 title: chapter_which_is_already_reading.title,
                 img_url: None,
-                chapter_id: chapter_which_is_already_reading.id,
-                chapter_title: chapter_which_is_already_reading.title,
+                chapter: ChapterToSaveHistory {
+                    id: &chapter_id,
+                    ..Default::default()
+                },
             },
             connection,
         )
@@ -1597,6 +1608,7 @@ mod test {
                 id: &chapter_id,
                 title: "some_title",
                 manga_id: &id_manga,
+                ..Default::default()
             })
             .expect("should create chapter");
 
@@ -1611,6 +1623,7 @@ mod test {
                 id: &chapter_id,
                 title: "some_title",
                 manga_id: &id_manga,
+                ..Default::default()
             })
             .expect("should try to create chapter already existing");
 
