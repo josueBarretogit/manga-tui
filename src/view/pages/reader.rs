@@ -587,6 +587,7 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
         if self.state == State::SearchingChapter {
             self.search_next_chapter_loader.calc_next();
         }
+
         while let Ok(background_event) = self.local_event_rx.try_recv() {
             match background_event {
                 MangaReaderEvents::SaveReadingToDatabase => {
