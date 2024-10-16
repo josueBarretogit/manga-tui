@@ -14,6 +14,7 @@ use super::AppDirectories;
 pub enum ErrorType<'a> {
     FromPanic(&'a PanicInfo<'a>),
     FromError(Box<dyn Error>),
+    String(&'a str),
 }
 
 fn get_error_logs_path() -> PathBuf {
@@ -34,6 +35,7 @@ pub fn write_to_error_log(e: ErrorType<'_>) {
     let error_format = match e {
         ErrorType::FromPanic(panic_info) => format!("{} | {} | {} \n \n", now, panic_info, panic_info.location().unwrap()),
         ErrorType::FromError(boxed_err) => format!("{} | {} \n \n", now, boxed_err),
+        ErrorType::String(str) => format!("{} | {} \n \n", now, str),
     };
 
     let error_format_bytes = error_format.as_bytes();

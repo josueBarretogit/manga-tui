@@ -18,11 +18,10 @@ pub async fn get_manga_panel(
                 panel,
                 index: page_index,
             };
-
-            tx.send(MangaReaderEvents::LoadPage(Some(page))).ok();
+            tx.send(MangaReaderEvents::LoadPage(page)).ok();
         },
         Err(e) => {
-            tx.send(MangaReaderEvents::LoadPage(None)).ok();
+            tx.send(MangaReaderEvents::FailedPage(page_index)).ok();
             write_to_error_log(ErrorType::FromError(e));
         },
     }
@@ -61,7 +60,9 @@ mod test {
         let event = rx.recv().await.expect("could not get manga panel");
 
         let page_data = match event {
-            MangaReaderEvents::LoadPage(page_data) => page_data.expect("should load a page"),
+            MangaReaderEvents::FailedPage(_) => panic!("wrong event was sent"),
+            MangaReaderEvents::FetchPages => panic!("wrong event was sent"),
+            MangaReaderEvents::LoadPage(page_data) => page_data,
             _ => panic!("wrong event was sent"),
         };
 

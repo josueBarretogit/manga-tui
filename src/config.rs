@@ -39,6 +39,7 @@ impl ImageQuality {
 pub struct MangaTuiConfig {
     pub download_type: DownloadType,
     pub image_quality: ImageQuality,
+    pub amount_pages: u8,
 }
 
 pub static CONFIG: OnceCell<MangaTuiConfig> = OnceCell::new();
