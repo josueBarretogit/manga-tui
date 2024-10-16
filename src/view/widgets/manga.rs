@@ -16,8 +16,9 @@ use crate::global::{CURRENT_LIST_ITEM_STYLE, ERROR_STYLE, INSTRUCTIONS_STYLE};
 use crate::utils::display_dates_since_publication;
 use crate::view::pages::manga::MangaPageEvents;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub enum ChapterItemState {
+    #[default]
     Normal,
     /// When the user tried to download a chapter and there was an error
     DownloadError,
@@ -25,19 +26,21 @@ pub enum ChapterItemState {
     ReadError,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct ChapterItem {
     pub id: String,
     pub title: String,
     pub readable_at: String,
     pub scanlator: String,
     pub chapter_number: String,
+    pub volume_number: Option<String>,
     pub is_read: bool,
     pub is_downloaded: bool,
+    pub is_bookmarked: bool,
     pub state: ChapterItemState,
     pub download_loading_state: Option<f64>,
     pub translated_language: Languages,
-    style: Style,
+    pub style: Style,
 }
 
 impl Widget for ChapterItem {
@@ -62,7 +65,13 @@ impl Widget for ChapterItem {
         Line::from(is_read_icon).style(self.style).render(is_read_area, buf);
         Line::from(is_downloaded_icon).style(self.style).render(is_downloaded_area, buf);
 
-        Paragraph::new(Line::from(vec![format!(" Ch. {} ", self.chapter_number).into(), self.title.into()]))
+        let information = if self.is_bookmarked {
+            "Bookmarked | ".to_string()
+        } else {
+            format!("Vol. {} Ch. {} | ", self.volume_number.unwrap_or_default(), self.chapter_number)
+        };
+
+        Paragraph::new(Line::from(vec![information.into(), self.title.into()]))
             .wrap(Wrap { trim: true })
             .style(self.style)
             .render(title_area, buf);
@@ -136,6 +145,7 @@ impl ChapterItem {
         id: String,
         title: String,
         chapter_number: String,
+        volume_number: Option<String>,
         readable_at: String,
         scanlator: String,
         translated_language: Languages,
@@ -146,8 +156,10 @@ impl ChapterItem {
             readable_at,
             scanlator,
             chapter_number,
+            volume_number,
             is_read: false,
             is_downloaded: false,
+            is_bookmarked: false,
             download_loading_state: None,
             translated_language,
             style: Style::default(),
@@ -169,7 +181,7 @@ impl ChapterItem {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct ChaptersListWidget {
     pub chapters: Vec<ChapterItem>,
 }
@@ -198,10 +210,13 @@ impl ChaptersListWidget {
                 .find(|rel| rel.type_field == "scanlation_group")
                 .map(|rel| rel.attributes.as_ref().unwrap().name.to_string());
 
+            let volume = chapter.attributes.volume.clone();
+
             chapters.push(ChapterItem::new(
                 id,
                 title,
                 chapter_number,
+                volume,
                 display_dates_since_publication(difference.num_days()),
                 scanlator.unwrap_or_default(),
                 translated_language,
