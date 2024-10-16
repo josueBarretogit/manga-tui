@@ -679,7 +679,7 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
                     sender.send(MangaReaderEvents::LoadChapter(res)).ok();
                 },
                 Err(e) => {
-                    write_to_error_log(ErrorType::FromError(e));
+                    write_to_error_log(ErrorType::Error(e));
                     sender.send(MangaReaderEvents::ErrorSearchingChapter).ok();
                 },
             };

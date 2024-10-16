@@ -620,7 +620,7 @@ impl MangaPage {
                                 );
 
                                 if let Err(e) = save_response {
-                                    write_to_error_log(error_log::ErrorType::FromError(Box::new(e)));
+                                    write_to_error_log(error_log::ErrorType::Error(Box::new(e)));
                                 }
 
                                 let config = MangaTuiConfig::get();
@@ -645,7 +645,7 @@ impl MangaPage {
                             }
                         },
                         Err(e) => {
-                            write_to_error_log(error_log::ErrorType::FromError(Box::new(e)));
+                            write_to_error_log(error_log::ErrorType::Error(Box::new(e)));
                             local_tx.send(MangaPageEvents::ReadError(id_chapter)).ok();
                         },
                     }
@@ -705,7 +705,7 @@ impl MangaPage {
                     }
                 },
                 Err(e) => {
-                    write_to_error_log(error_log::ErrorType::FromError(Box::new(e)));
+                    write_to_error_log(error_log::ErrorType::Error(Box::new(e)));
                     tx.send(MangaPageEvents::LoadStatistics(None)).ok();
                 },
             };
@@ -729,7 +729,7 @@ impl MangaPage {
                 }
             },
             Err(e) => {
-                write_to_error_log(error_log::ErrorType::FromError(Box::new(e)));
+                write_to_error_log(error_log::ErrorType::Error(Box::new(e)));
             },
         }
     }
@@ -759,7 +759,7 @@ impl MangaPage {
 
             match database.bookmark(chapter_to_bookmark) {
                 Ok(()) => chapter_selected.is_bookmarked = true,
-                Err(e) => write_to_error_log(ErrorType::FromError(e)),
+                Err(e) => write_to_error_log(ErrorType::Error(e)),
             }
         }
     }
@@ -774,7 +774,7 @@ impl MangaPage {
                     self.bookmark_state = BookMarkState::NotFoundDatabase;
                 },
             },
-            Err(e) => write_to_error_log(ErrorType::FromError(e)),
+            Err(e) => write_to_error_log(ErrorType::Error(e)),
         };
     }
 
@@ -790,7 +790,7 @@ impl MangaPage {
                     sender.send(MangaPageEvents::ReadChapterBookmarked(response.0, response.1)).ok();
                 },
                 Err(e) => {
-                    write_to_error_log(ErrorType::FromError(e));
+                    write_to_error_log(ErrorType::Error(e));
                     sender.send(MangaPageEvents::FetchBookmarkFailed).ok();
                 },
             }
@@ -846,7 +846,7 @@ impl MangaPage {
                         tx.send(MangaPageEvents::ChapterFinishedDownloading(chapter_id)).ok();
                     },
                     Err(e) => {
-                        write_to_error_log(ErrorType::FromError(e));
+                        write_to_error_log(ErrorType::Error(e));
                         tx.send(MangaPageEvents::DownloadError(chapter_id)).ok();
                     },
                 }
@@ -879,7 +879,7 @@ impl MangaPage {
         );
 
         if let Err(e) = save_download_operation {
-            write_to_error_log(error_log::ErrorType::FromError(Box::new(e)));
+            write_to_error_log(error_log::ErrorType::Error(Box::new(e)));
         }
     }
 
@@ -988,7 +988,7 @@ impl MangaPage {
 
             if let Err(e) = download_all_chapters_process {
                 tx.send(MangaPageEvents::DownloadAllChaptersError).ok();
-                write_to_error_log(ErrorType::FromError(e));
+                write_to_error_log(ErrorType::Error(e));
             }
         });
     }

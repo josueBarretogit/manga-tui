@@ -22,7 +22,7 @@ pub async fn get_manga_panel(
         },
         Err(e) => {
             tx.send(MangaReaderEvents::FailedPage(page_index)).ok();
-            write_to_error_log(ErrorType::FromError(e));
+            write_to_error_log(ErrorType::Error(e));
         },
     }
 }

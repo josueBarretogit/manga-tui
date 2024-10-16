@@ -24,7 +24,7 @@ pub async fn search_manga<T: ApiClient>(
             }
         },
         Err(e) => {
-            write_to_error_log(ErrorType::FromError(Box::new(e)));
+            write_to_error_log(ErrorType::Error(Box::new(e)));
             feed_page_sender.send(FeedEvents::ErrorSearchingMangaData).ok();
         },
     }
@@ -39,7 +39,7 @@ pub async fn search_latest_chapters<T: ApiClient>(api_client: T, manga_id: Strin
             }
         },
         Err(e) => {
-            write_to_error_log(ErrorType::FromError(Box::new(e)));
+            write_to_error_log(ErrorType::Error(Box::new(e)));
             sender.send(FeedEvents::LoadRecentChapters(manga_id, None)).ok();
         },
     }
