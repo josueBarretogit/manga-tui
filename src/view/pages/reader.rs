@@ -26,9 +26,7 @@ use crate::backend::tui::Events;
 use crate::config::MangaTuiConfig;
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
 use crate::view::tasks::reader::get_manga_panel;
-#[cfg(test)]
-use crate::view::widgets::reader::PagesItem;
-use crate::view::widgets::reader::{PageItemState, PagesList};
+use crate::view::widgets::reader::{PageItemState, PagesItem, PagesList};
 use crate::view::widgets::Component;
 
 pub trait SearchChapter: Send + Clone + 'static {
@@ -487,16 +485,20 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
         // Collect `pages` pages before and after index that are not yet loaded
         let curr = self.current_page_index();
         let start_index = curr.saturating_sub(pages);
-        let end_index = curr.saturating_add(pages).min(self.pages.len() - 1);
+        let end_index = curr.saturating_add(pages).min(self.pages.len().saturating_sub(1));
 
-        self.pages[start_index..=end_index]
-            .iter()
-            .enumerate()
-            .filter_map(|(base_index, page)| match page.image_state {
-                Some(_) => None,
-                None => Some(base_index + start_index),
-            })
-            .collect()
+        if end_index > 0 {
+            self.pages[start_index..=end_index]
+                .iter()
+                .enumerate()
+                .filter_map(|(base_index, page)| match page.image_state {
+                    Some(_) => None,
+                    None => Some(base_index + start_index),
+                })
+                .collect()
+        } else {
+            vec![]
+        }
     }
 
     fn fetch_page(&mut self, index: usize) {
@@ -629,7 +631,13 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
         }
     }
 
-    pub fn init_fetching_pages(&self) {
+    pub fn init_fetching_pages(&mut self) {
+        let page_count = self.current_chapter.pages_url.len();
+        for index in 0..page_count {
+            self.pages.push(Page::new());
+            self.pages_list.pages.push(PagesItem::new(index));
+        }
+
         self.local_event_tx.send(MangaReaderEvents::FetchPages).ok();
     }
 
