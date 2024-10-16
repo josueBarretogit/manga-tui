@@ -1103,8 +1103,18 @@ mod test {
         assert_eq!(MangaReaderActions::PreviousPage, action);
     }
 
-    #[test]
-    fn handle_key_events() {
+    #[tokio::test]
+    async fn correct_initialization() {
+        let mut reader_page = initialize_reader_page(TestApiClient::new());
+
+        let fetch_pages_event = reader_page.local_event_rx.recv().await.expect("the event to fetch pages is not sent");
+
+        assert_eq!(MangaReaderEvents::FetchPages, fetch_pages_event);
+        assert!(!reader_page.pages.is_empty());
+    }
+
+    #[tokio::test]
+    async fn handle_key_events() {
         let mut reader_page = initialize_reader_page(TestApiClient::new());
 
         reader_page.pages_list = PagesList::new(vec![PagesItem::new(0), PagesItem::new(1), PagesItem::new(2)]);
