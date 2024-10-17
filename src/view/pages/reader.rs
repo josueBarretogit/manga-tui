@@ -722,6 +722,7 @@ mod test {
 
     use super::*;
     use crate::backend::database::Database;
+    use crate::view::widgets::manga::ChapterItemState;
     use crate::view::widgets::press_key;
 
     #[derive(Clone)]
@@ -1112,16 +1113,6 @@ mod test {
     }
 
     #[tokio::test]
-    async fn correct_initialization() {
-        let mut reader_page = initialize_reader_page(TestApiClient::new());
-
-        let fetch_pages_event = reader_page.local_event_rx.recv().await.expect("the event to fetch pages is not sent");
-
-        assert_eq!(MangaReaderEvents::FetchPages, fetch_pages_event);
-        assert!(!reader_page.pages.is_empty());
-    }
-
-    #[tokio::test]
     async fn handle_key_events() {
         let mut reader_page = initialize_reader_page(TestApiClient::new());
 
@@ -1149,7 +1140,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn it_collects_pages() {
+    async fn init_fetching_and_fetch_pages_should_set_correct_page_count_and_first_page_state_to_loading() {
         let chapter: ChapterToRead = ChapterToRead {
             pages_url: vec!["http://localhost".parse().unwrap(), "http://localhost".parse().unwrap()],
             ..Default::default()
@@ -1157,10 +1148,13 @@ mod test {
 
         let mut manga_reader = MangaReader::new(chapter, "some_id".to_string(), Picker::new((8, 8)), TestApiClient::new());
 
+        manga_reader.init_fetching_pages();
         manga_reader.fetch_pages();
 
-        assert!(!manga_reader.pages.is_empty());
-        assert!(!manga_reader.pages_list.pages.is_empty());
+        assert_eq!(2, manga_reader.pages.len());
+        assert_eq!(2, manga_reader.pages_list.pages.len());
+
+        assert_eq!(PageItemState::Loading, manga_reader.pages_list.pages[0].state);
     }
 
     #[test]

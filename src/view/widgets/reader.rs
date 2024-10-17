@@ -7,7 +7,7 @@ use tui_widget_list::PreRender;
 
 use crate::global::CURRENT_LIST_ITEM_STYLE;
 
-#[derive(PartialEq, Eq, Clone)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub enum PageItemState {
     Loading,
     FinishedLoad,
