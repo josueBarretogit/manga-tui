@@ -23,6 +23,7 @@ use crate::backend::api_responses::AggregateChapterResponse;
 use crate::backend::database::{save_history, ChapterToSaveHistory, Database, MangaReadingHistorySave};
 use crate::backend::error_log::{write_to_error_log, ErrorType};
 use crate::backend::tui::Events;
+use crate::config::MangaTuiConfig;
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
 use crate::view::tasks::reader::get_manga_panel;
 use crate::view::widgets::reader::{PageItemState, PagesItem, PagesList};
@@ -48,6 +49,7 @@ pub enum MangaReaderActions {
     SearchPreviousChapter,
     NextPage,
     PreviousPage,
+    ReloadPage,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -73,7 +75,8 @@ pub enum MangaReaderEvents {
     SearchNextChapter(String),
     SearchPreviousChapter(String),
     FetchPages,
-    LoadPage(Option<PageData>),
+    LoadPage(PageData),
+    FailedPage(usize),
 }
 
 pub struct Page {
@@ -298,36 +301,36 @@ impl<T: SearchChapter + SearchMangaPanel> Component for MangaReader<T> {
     fn render(&mut self, area: Rect, frame: &mut Frame<'_>) {
         let buf = frame.buffer_mut();
 
-        let layout =
-            Layout::horizontal([Constraint::Fill(1), Constraint::Fill(self.current_page_size), Constraint::Fill(1)]).spacing(1);
+        let layout = Layout::horizontal([Constraint::Min(20), Constraint::Fill(1), Constraint::Min(20)]).spacing(1);
 
         let [left, center, right] = layout.areas(area);
 
         Block::bordered().render(left, buf);
-        self.render_page_list(left, buf);
 
-        self.render_right_panel(buf, right);
+        let index = self.current_page_index();
+        let show_reload = if let Some(img_state) = self.pages.get_mut(index).and_then(|page| page.image_state.as_mut()) {
+            let image = StatefulImage::new(None).resize(Resize::Fit(None));
+            StatefulWidget::render(image, center, buf, img_state);
+            false
+        } else {
+            let show_failed = self
+                .pages_list
+                .pages
+                .get(index)
+                .map(|page| page.state == PageItemState::FailedLoad)
+                .unwrap_or(false);
 
-        match self.pages.get_mut(self.page_list_state.selected.unwrap_or(0)) {
-            Some(page) => match page.image_state.as_mut() {
-                Some(img_state) => {
-                    let (width, height) = page.dimensions.unwrap();
-                    if width > height {
-                        if width - height > 250 {
-                            self.current_page_size = 5;
-                        }
-                    } else {
-                        self.current_page_size = 2;
-                    }
-                    let image = StatefulImage::new(None).resize(Resize::Fit(None));
-                    StatefulWidget::render(image, center, buf, img_state);
-                },
-                None => {
-                    Block::bordered().title("Loading page").render(center, frame.buffer_mut());
-                },
-            },
-            None => Block::bordered().title("Loading page").render(center, frame.buffer_mut()),
+            if show_failed {
+                Block::bordered().title("Failed to load page").render(center, buf);
+            } else {
+                Block::bordered().title("Loading page").render(center, buf);
+            }
+
+            show_failed
         };
+
+        self.render_page_list(left, buf);
+        self.render_right_panel(buf, right, show_reload);
     }
 
     fn update(&mut self, action: Self::Actions) {
@@ -336,6 +339,7 @@ impl<T: SearchChapter + SearchMangaPanel> Component for MangaReader<T> {
             MangaReaderActions::SearchNextChapter => self.initiate_search_next_chapter(),
             MangaReaderActions::NextPage => self.next_page(),
             MangaReaderActions::PreviousPage => self.previous_page(),
+            MangaReaderActions::ReloadPage => self.reload_page(),
         }
     }
 
@@ -408,11 +412,17 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
     }
 
     fn next_page(&mut self) {
-        self.page_list_state.next()
+        self.page_list_state.next();
+        self.fetch_pages();
     }
 
     fn previous_page(&mut self) {
         self.page_list_state.previous();
+        self.fetch_pages();
+    }
+
+    fn reload_page(&mut self) {
+        self.fetch_page(self.current_page_index());
     }
 
     fn render_page_list(&mut self, area: Rect, buf: &mut Buffer) {
@@ -423,24 +433,22 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
         StatefulWidget::render(self.pages_list.clone(), inner_area, buf, &mut self.page_list_state);
     }
 
-    fn load_page(&mut self, maybe_data: Option<PageData>) {
-        if let Some(data) = maybe_data {
-            match self.pages.get_mut(data.index) {
-                Some(page) => {
-                    let protocol = self.picker.new_resize_protocol(data.panel.image_decoded);
-                    page.image_state = Some(protocol);
-                    page.dimensions = Some(data.panel.dimensions);
-                },
-                None => {
-                    // Todo! indicate that the page couldnot be loaded
-                },
-            };
-            match self.pages_list.pages.get_mut(data.index) {
-                Some(page_item) => page_item.state = PageItemState::FinishedLoad,
-                None => {
-                    // Todo! indicate with an x that some page didnt load
-                },
-            }
+    fn load_page(&mut self, data: PageData) {
+        match self.pages.get_mut(data.index) {
+            Some(page) => {
+                let protocol = self.picker.new_resize_protocol(data.panel.image_decoded);
+                page.image_state = Some(protocol);
+                page.dimensions = Some(data.panel.dimensions);
+            },
+            None => {
+                // Todo! indicate that the page couldnot be loaded
+            },
+        };
+        match self.pages_list.pages.get_mut(data.index) {
+            Some(page_item) => page_item.state = PageItemState::FinishedLoad,
+            None => {
+                // Todo! indicate with an x that some page didnt load
+            },
         }
     }
 
@@ -458,15 +466,65 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
         self.local_event_tx.send(MangaReaderEvents::SaveReadingToDatabase).ok();
     }
 
-    fn fecht_pages(&mut self) {
-        for (index, url) in self.current_chapter.pages_url.iter_mut().enumerate() {
-            self.pages.push(Page::new());
-            self.pages_list.pages.push(PagesItem::new(index));
+    fn current_page_index(&self) -> usize {
+        self.page_list_state.selected.unwrap_or(0)
+    }
 
-            let tx = self.local_event_tx.clone();
-            let api_client = self.api_client.clone();
+    fn failed_page(&mut self, index: usize) {
+        match self.pages_list.pages.get_mut(index) {
+            Some(page_item) => page_item.state = PageItemState::FailedLoad,
+            None => {
+                // Todo! indicate that the page does not exist?
+            },
+        }
+    }
 
-            self.image_tasks.spawn(get_manga_panel(api_client, url.clone(), tx, index));
+    fn get_pages_to_fetch(&self) -> Vec<usize> {
+        let pages = MangaTuiConfig::get().amount_pages as usize;
+
+        // Collect `pages` pages before and after index that are not yet loaded
+        let curr = self.current_page_index();
+        let start_index = curr.saturating_sub(pages);
+        let end_index = curr.saturating_add(pages).min(self.pages.len().saturating_sub(1));
+
+        if end_index > 0 {
+            self.pages[start_index..=end_index]
+                .iter()
+                .enumerate()
+                .filter_map(|(base_index, page)| match page.image_state {
+                    Some(_) => None,
+                    None => Some(base_index + start_index),
+                })
+                .collect()
+        } else {
+            vec![]
+        }
+    }
+
+    fn fetch_page(&mut self, index: usize) {
+        if let Some((url, item)) = self
+            .current_chapter
+            .pages_url
+            .get(index)
+            .and_then(|page| self.pages_list.pages.get_mut(index).map(|item| (page, item)))
+        {
+            //NOTE:  This will need to become async atomic if this becomes an async function
+            if item.state != PageItemState::Loading && item.state != PageItemState::FailedLoad {
+                let tx = self.local_event_tx.clone();
+                let api_client = self.api_client.clone();
+
+                self.image_tasks.spawn(get_manga_panel(api_client, url.clone(), tx, index));
+
+                item.state = PageItemState::Loading;
+            }
+        } else {
+            write_to_error_log(ErrorType::String(&format!("Index {} doesn't exist", index)));
+        }
+    }
+
+    fn fetch_pages(&mut self) {
+        for index in self.get_pages_to_fetch() {
+            self.fetch_page(index);
         }
     }
 
@@ -478,15 +536,19 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
         self.state = State::ErrorSearchingChapter;
     }
 
-    fn render_right_panel(&mut self, buf: &mut Buffer, area: Rect) {
+    fn render_right_panel(&mut self, buf: &mut Buffer, area: Rect, show_reload: bool) {
         let [instructions_area, information_era, status_area] =
             Layout::vertical([Constraint::Percentage(20), Constraint::Percentage(20), Constraint::Percentage(20)]).areas(area);
 
-        let instructions = vec![
+        let mut instructions = vec![
             Line::from(vec!["Go back: ".into(), "<Backspace>".to_span().style(*INSTRUCTIONS_STYLE)]),
             Line::from(vec!["Next chapter: ".into(), "<w>".to_span().style(*INSTRUCTIONS_STYLE)]),
             Line::from(vec!["Previous chapter : ".into(), "<b>".to_span().style(*INSTRUCTIONS_STYLE)]),
         ];
+
+        if show_reload {
+            instructions.push(Line::from(vec!["Reload: ".into(), "<r>".to_span().style(*INSTRUCTIONS_STYLE)]));
+        }
 
         Widget::render(List::new(instructions), instructions_area, buf);
 
@@ -527,7 +589,8 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
         if self.state == State::SearchingChapter {
             self.search_next_chapter_loader.calc_next();
         }
-        if let Ok(background_event) = self.local_event_rx.try_recv() {
+
+        while let Ok(background_event) = self.local_event_rx.try_recv() {
             match background_event {
                 MangaReaderEvents::SaveReadingToDatabase => {
                     let connection = Database::get_connection();
@@ -540,8 +603,9 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
                 MangaReaderEvents::ChapterNotFound => self.set_chapter_not_found(),
                 MangaReaderEvents::LoadChapter(chapter_found) => self.load_chapter(chapter_found),
                 MangaReaderEvents::SearchNextChapter(id_chapter) => self.search_chapter(id_chapter),
-                MangaReaderEvents::FetchPages => self.fecht_pages(),
+                MangaReaderEvents::FetchPages => self.fetch_pages(),
                 MangaReaderEvents::LoadPage(maybe_data) => self.load_page(maybe_data),
+                MangaReaderEvents::FailedPage(index) => self.failed_page(index),
             }
         }
     }
@@ -560,11 +624,20 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
             KeyCode::Char('b') => {
                 self.local_action_tx.send(MangaReaderActions::SearchPreviousChapter).ok();
             },
+            KeyCode::Char('r') => {
+                self.local_action_tx.send(MangaReaderActions::ReloadPage).ok();
+            },
             _ => {},
         }
     }
 
-    pub fn init_fetching_pages(&self) {
+    pub fn init_fetching_pages(&mut self) {
+        let page_count = self.current_chapter.pages_url.len();
+        for index in 0..page_count {
+            self.pages.push(Page::new());
+            self.pages_list.pages.push(PagesItem::new(index));
+        }
+
         self.local_event_tx.send(MangaReaderEvents::FetchPages).ok();
     }
 
@@ -614,7 +687,7 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
                     sender.send(MangaReaderEvents::LoadChapter(res)).ok();
                 },
                 Err(e) => {
-                    write_to_error_log(ErrorType::FromError(e));
+                    write_to_error_log(ErrorType::Error(e));
                     sender.send(MangaReaderEvents::ErrorSearchingChapter).ok();
                 },
             };
@@ -1038,8 +1111,18 @@ mod test {
         assert_eq!(MangaReaderActions::PreviousPage, action);
     }
 
-    #[test]
-    fn handle_key_events() {
+    #[tokio::test]
+    async fn correct_initialization() {
+        let mut reader_page = initialize_reader_page(TestApiClient::new());
+
+        let fetch_pages_event = reader_page.local_event_rx.recv().await.expect("the event to fetch pages is not sent");
+
+        assert_eq!(MangaReaderEvents::FetchPages, fetch_pages_event);
+        assert!(!reader_page.pages.is_empty());
+    }
+
+    #[tokio::test]
+    async fn handle_key_events() {
         let mut reader_page = initialize_reader_page(TestApiClient::new());
 
         reader_page.pages_list = PagesList::new(vec![PagesItem::new(0), PagesItem::new(1), PagesItem::new(2)]);
@@ -1074,7 +1157,7 @@ mod test {
 
         let mut manga_reader = MangaReader::new(chapter, "some_id".to_string(), Picker::new((8, 8)), TestApiClient::new());
 
-        manga_reader.fecht_pages();
+        manga_reader.fetch_pages();
 
         assert!(!manga_reader.pages.is_empty());
         assert!(!manga_reader.pages_list.pages.is_empty());

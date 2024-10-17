@@ -12,8 +12,9 @@ use super::tui::restore;
 use super::AppDirectories;
 
 pub enum ErrorType<'a> {
-    FromPanic(&'a PanicInfo<'a>),
-    FromError(Box<dyn Error>),
+    Panic(&'a PanicInfo<'a>),
+    Error(Box<dyn Error>),
+    String(&'a str),
 }
 
 fn get_error_logs_path() -> PathBuf {
@@ -32,8 +33,9 @@ pub fn write_to_error_log(e: ErrorType<'_>) {
     let now = offset::Local::now();
 
     let error_format = match e {
-        ErrorType::FromPanic(panic_info) => format!("{} | {} | {} \n \n", now, panic_info, panic_info.location().unwrap()),
-        ErrorType::FromError(boxed_err) => format!("{} | {} \n \n", now, boxed_err),
+        ErrorType::Panic(panic_info) => format!("{} | {} | {} \n \n", now, panic_info, panic_info.location().unwrap()),
+        ErrorType::Error(boxed_err) => format!("{} | {} \n \n", now, boxed_err),
+        ErrorType::String(str) => format!("{} | {} \n \n", now, str),
     };
 
     let error_format_bytes = error_format.as_bytes();
@@ -69,7 +71,7 @@ pub fn init_error_hooks() -> color_eyre::Result<()> {
 
     std::panic::set_hook(Box::new(move |info| {
         let _ = restore();
-        write_to_error_log(ErrorType::FromPanic(info));
+        write_to_error_log(ErrorType::Panic(info));
         panic(info);
     }));
 

@@ -245,7 +245,7 @@ impl<T: ApiClient + SearchChapter + SearchMangaPanel> App<T> {
         self.feed_page.clean_up();
         self.current_tab = SelectedPage::ReaderTab;
 
-        let manga_reader = MangaReader::new(
+        let mut manga_reader = MangaReader::new(
             chapter_to_read,
             manga_to_read.manga_id,
             self.picker.as_ref().cloned().unwrap(),

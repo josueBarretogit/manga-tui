@@ -35,10 +35,21 @@ impl ImageQuality {
     }
 }
 
-#[derive(Default, Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct MangaTuiConfig {
     pub download_type: DownloadType,
     pub image_quality: ImageQuality,
+    pub amount_pages: u8,
+}
+
+impl Default for MangaTuiConfig {
+    fn default() -> Self {
+        Self {
+            amount_pages: 5,
+            download_type: DownloadType::default(),
+            image_quality: ImageQuality::default(),
+        }
+    }
 }
 
 pub static CONFIG: OnceCell<MangaTuiConfig> = OnceCell::new();

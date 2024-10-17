@@ -41,7 +41,7 @@ pub async fn search_chapters_operation(
             }
         },
         Err(e) => {
-            write_to_error_log(ErrorType::FromError(Box::new(e)));
+            write_to_error_log(ErrorType::Error(Box::new(e)));
             tx.send(MangaPageEvents::LoadChapters(None)).ok();
         },
     }
@@ -326,7 +326,7 @@ pub async fn download_all_chapters(
             .await;
 
             if let Err(e) = download_proccess {
-                write_to_error_log(ErrorType::FromError(e));
+                write_to_error_log(ErrorType::Error(e));
             }
 
             download_data.sender.send(MangaPageEvents::SetDownloadAllChaptersProgress).ok();
