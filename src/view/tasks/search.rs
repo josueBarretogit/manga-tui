@@ -23,7 +23,7 @@ pub async fn search_mangas_operation(
             }
         },
         Err(e) => {
-            write_to_error_log(ErrorType::FromError(Box::new(e)));
+            write_to_error_log(ErrorType::Error(Box::new(e)));
             tx.send(SearchPageEvents::LoadMangasFound(None)).ok();
         },
     }

@@ -313,7 +313,7 @@ impl<T: ApiClient> Feed<T> {
                     tx.send(FeedEvents::LoadHistory(Some(history))).ok();
                 },
                 Err(e) => {
-                    write_to_error_log(ErrorType::FromError(Box::new(e)));
+                    write_to_error_log(ErrorType::Error(Box::new(e)));
                     tx.send(FeedEvents::LoadHistory(None)).ok();
                 },
             }
