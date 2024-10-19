@@ -20,13 +20,16 @@ use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
 use crate::backend::api_responses::AggregateChapterResponse;
-use crate::backend::database::{save_history, ChapterToSaveHistory, Database, MangaReadingHistorySave};
+use crate::backend::database::{
+    save_history, Bookmark, ChapterToBookmark, ChapterToSaveHistory, Database, MangaReadingHistorySave,
+};
 use crate::backend::error_log::{write_to_error_log, ErrorType};
+use crate::backend::filter::Languages;
 use crate::backend::tui::Events;
 use crate::config::MangaTuiConfig;
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
 use crate::view::tasks::reader::get_manga_panel;
-use crate::view::widgets::reader::{PageItemState, PagesItem, PagesList};
+use crate::view::widgets::reader::{PageItemState, PagesItem, PagesList, PagesListState};
 use crate::view::widgets::Component;
 
 pub trait SearchChapter: Send + Clone + 'static {
@@ -45,6 +48,7 @@ pub struct MangaPanel {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum MangaReaderActions {
+    BookMarkCurrentChapter,
     SearchNextChapter,
     SearchPreviousChapter,
     NextPage,
@@ -100,6 +104,8 @@ pub struct ChapterToRead {
     pub number: f64,
     /// This is string because it could also be "none" for chapters with no volume associated
     pub volume_number: Option<String>,
+    pub num_page_bookmarked: Option<u32>,
+    pub language: Languages,
     pub pages_url: Vec<Url>,
 }
 
@@ -111,6 +117,8 @@ impl Default for ChapterToRead {
             title: String::default(),
             volume_number: Some("1".to_string()),
             pages_url: vec![],
+            language: Languages::default(),
+            num_page_bookmarked: None,
         }
     }
 }
@@ -282,7 +290,7 @@ pub struct MangaReader<T: SearchChapter + SearchMangaPanel> {
     pages: Vec<Page>,
     pages_list: PagesList,
     current_page_size: u16,
-    page_list_state: tui_widget_list::ListState,
+    page_list_state: PagesListState,
     state: State,
     image_tasks: JoinSet<()>,
     picker: Picker,
@@ -335,6 +343,7 @@ impl<T: SearchChapter + SearchMangaPanel> Component for MangaReader<T> {
 
     fn update(&mut self, action: Self::Actions) {
         match action {
+            MangaReaderActions::BookMarkCurrentChapter => self.bookmark_current_chapter(),
             MangaReaderActions::SearchPreviousChapter => self.initiate_search_previous_chapter(),
             MangaReaderActions::SearchNextChapter => self.initiate_search_next_chapter(),
             MangaReaderActions::NextPage => self.next_page(),
@@ -364,7 +373,7 @@ impl<T: SearchChapter + SearchMangaPanel> Component for MangaReader<T> {
         self.image_tasks.abort_all();
         self.pages = vec![];
         self.pages_list.pages = vec![];
-        self.page_list_state = tui_widget_list::ListState::default();
+        self.page_list_state = PagesListState::default();
     }
 }
 
@@ -374,6 +383,8 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
         let (local_action_tx, local_action_rx) = mpsc::unbounded_channel::<MangaReaderActions>();
         let (local_event_tx, local_event_rx) = mpsc::unbounded_channel::<MangaReaderEvents>();
 
+        let num_page_bookmarked = chapter.num_page_bookmarked;
+
         Self {
             _global_event_tx: None,
             current_chapter: chapter,
@@ -381,7 +392,7 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
             pages: vec![],
             manga_id,
             list_of_chapters: ListOfChapters::default(),
-            page_list_state: tui_widget_list::ListState::default(),
+            page_list_state: PagesListState::new(num_page_bookmarked),
             image_tasks: set,
             local_action_tx,
             local_action_rx,
@@ -412,12 +423,12 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
     }
 
     fn next_page(&mut self) {
-        self.page_list_state.next();
+        self.page_list_state.list_state.next();
         self.fetch_pages();
     }
 
     fn previous_page(&mut self) {
-        self.page_list_state.previous();
+        self.page_list_state.list_state.previous();
         self.fetch_pages();
     }
 
@@ -467,7 +478,7 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
     }
 
     fn current_page_index(&self) -> usize {
-        self.page_list_state.selected.unwrap_or(0)
+        self.page_list_state.list_state.selected.unwrap_or(0)
     }
 
     fn failed_page(&mut self, index: usize) {
@@ -534,6 +545,35 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
 
     fn set_error_searching_chapter(&mut self) {
         self.state = State::ErrorSearchingChapter;
+    }
+
+    fn set_current_chapter_bookmarked(&mut self, num_page: Option<u32>, database: &mut dyn Bookmark) {
+        let chapter_to_bookmark = ChapterToBookmark {
+            chapter_id: &self.current_chapter.id,
+            manga_id: &self.manga_id,
+            chapter_title: &self.current_chapter.title,
+            manga_title: &self.manga_title,
+            manga_cover_url: None,
+            translated_language: self.current_chapter.language,
+            page_number: num_page,
+        };
+
+        match database.bookmark(chapter_to_bookmark) {
+            Ok(()) => {
+                self.current_chapter.num_page_bookmarked = num_page;
+            },
+            Err(e) => {
+                write_to_error_log(ErrorType::String(format!("Could not mark chapter as bookmarked: more details : {e}").as_str()))
+            },
+        }
+    }
+
+    fn bookmark_current_chapter(&mut self) {
+        let connection = Database::get_connection();
+        if let Ok(conn) = connection {
+            let mut database = Database::new(&conn);
+            self.set_current_chapter_bookmarked(self.page_list_state.list_state.selected.map(|index| index as u32), &mut database);
+        }
     }
 
     fn render_right_panel(&mut self, buf: &mut Buffer, area: Rect, show_reload: bool) {
@@ -627,6 +667,9 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
             KeyCode::Char('r') => {
                 self.local_action_tx.send(MangaReaderActions::ReloadPage).ok();
             },
+            KeyCode::Char('m') => {
+                self.local_action_tx.send(MangaReaderActions::BookMarkCurrentChapter).ok();
+            },
             _ => {},
         }
     }
@@ -717,12 +760,12 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
 mod test {
     use std::time::Duration;
 
+    use chrono::DurationRound;
     use pretty_assertions::assert_eq;
     use tokio::time::timeout;
 
     use super::*;
-    use crate::backend::database::Database;
-    use crate::view::widgets::manga::ChapterItemState;
+    use crate::backend::database::{ChapterToBookmark, Database};
     use crate::view::widgets::press_key;
 
     #[derive(Clone)]
@@ -788,6 +831,8 @@ mod test {
                 title: String::default(),
                 number: 1.0,
                 pages_url: url_imgs,
+                language: Languages::default(),
+                num_page_bookmarked: None,
                 volume_number: Some("2".to_string()),
             },
             "some_manga_id".to_string(),
@@ -1116,7 +1161,7 @@ mod test {
     async fn handle_key_events() {
         let mut reader_page = initialize_reader_page(TestApiClient::new());
 
-        reader_page.pages_list = PagesList::new(vec![PagesItem::new(0), PagesItem::new(1), PagesItem::new(2)]);
+        reader_page.pages_list = PagesList::new(vec![PagesItem::new(0), PagesItem::new(1), PagesItem::new(2)], None);
 
         let area = Rect::new(0, 0, 20, 20);
         let mut buf = Buffer::empty(area);
@@ -1126,17 +1171,17 @@ mod test {
         let action = MangaReaderActions::NextPage;
         reader_page.update(action);
 
-        assert_eq!(0, reader_page.page_list_state.selected.expect("no page is selected"));
+        assert_eq!(0, reader_page.page_list_state.list_state.selected.expect("no page is selected"));
 
         let action = MangaReaderActions::NextPage;
         reader_page.update(action);
 
-        assert_eq!(1, reader_page.page_list_state.selected.expect("no page is selected"));
+        assert_eq!(1, reader_page.page_list_state.list_state.selected.expect("no page is selected"));
 
         let action = MangaReaderActions::PreviousPage;
         reader_page.update(action);
 
-        assert_eq!(0, reader_page.page_list_state.selected.expect("no page is selected"));
+        assert_eq!(0, reader_page.page_list_state.list_state.selected.expect("no page is selected"));
     }
 
     #[tokio::test]
@@ -1296,7 +1341,9 @@ mod test {
             id: "next_chapter_id".to_string(),
             title: "some_title".to_string(),
             number: 2.0,
+            language: Languages::default(),
             volume_number: Some("1".to_string()),
+            num_page_bookmarked: None,
             pages_url: vec!["http://localhost".parse().unwrap()],
         };
 
@@ -1335,7 +1382,9 @@ mod test {
         let expected = ChapterToRead {
             id: "id_before".to_string(),
             title: "some_title".to_string(),
+            language: Languages::default(),
             number: 1.0,
+            num_page_bookmarked: None,
             volume_number: Some("1".to_string()),
             pages_url: vec![],
         };
@@ -1360,13 +1409,13 @@ mod test {
 
         manga_reader.pages = vec![Page::new(), Page::new()];
         manga_reader.pages_list.pages = vec![PagesItem::new(1), PagesItem::new(1)];
-        manga_reader.page_list_state.select(Some(1));
+        manga_reader.page_list_state.list_state.select(Some(1));
 
         manga_reader.load_chapter(ChapterToRead::default());
 
         assert!(manga_reader.pages.is_empty());
         assert!(manga_reader.pages_list.pages.is_empty());
-        assert!(manga_reader.page_list_state.selected.is_none());
+        assert!(manga_reader.page_list_state.list_state.selected.is_none());
     }
 
     #[tokio::test]
@@ -1465,5 +1514,83 @@ mod test {
         manga_reader.tick();
 
         assert_eq!(manga_reader.state, State::ErrorSearchingChapter);
+    }
+
+    #[derive(Default, Debug)]
+    struct TestDatabase {
+        should_fail: bool,
+        bookmarked: bool,
+    }
+
+    impl TestDatabase {
+        pub fn new() -> Self {
+            Self {
+                should_fail: false,
+                bookmarked: false,
+            }
+        }
+
+        pub fn was_bookmarked(self) -> bool {
+            self.bookmarked
+        }
+    }
+
+    impl Bookmark for TestDatabase {
+        fn bookmark(&mut self, _chapter_to_bookmark: ChapterToBookmark<'_>) -> Result<(), Box<dyn std::error::Error>> {
+            if self.should_fail {
+                return Err("cannot bookmark chapter".into());
+            }
+            self.bookmarked = true;
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn it_sets_current_chapter_as_bookmarked() {
+        let mut manga_reader =
+            MangaReader::new(ChapterToRead::default(), "".to_string(), Picker::new((8, 8)), TestApiClient::new());
+
+        let mut database = TestDatabase::new();
+
+        manga_reader.set_current_chapter_bookmarked(Some(2), &mut database);
+
+        assert!(database.was_bookmarked());
+        assert_eq!(Some(2), manga_reader.current_chapter.num_page_bookmarked);
+    }
+
+    #[test]
+    fn when_pages_are_rendered_it_selects_page_with_num_page_bookmarked() {
+        let chapter_to_read: ChapterToRead = ChapterToRead {
+            num_page_bookmarked: Some(1),
+            ..Default::default()
+        };
+
+        let mut manga_reader = MangaReader::new(chapter_to_read, "".to_string(), Picker::new((8, 8)), TestApiClient::new());
+
+        manga_reader.pages_list = PagesList::new(vec![PagesItem::new(0), PagesItem::new(1)], None);
+
+        let area = Rect::new(0, 0, 10, 10);
+        let mut buf = Buffer::empty(area);
+
+        StatefulWidget::render(manga_reader.pages_list, area, &mut buf, &mut manga_reader.page_list_state);
+
+        assert_eq!(1, manga_reader.page_list_state.list_state.selected.expect("should not be none"));
+    }
+
+    #[tokio::test]
+    async fn it_sends_event_to_bookmark_chapter_on_m_key_press() {
+        let mut manga_reader =
+            MangaReader::new(ChapterToRead::default(), "".to_string(), Picker::new((8, 8)), TestApiClient::new());
+
+        press_key(&mut manga_reader, KeyCode::Char('m'));
+
+        let expected = MangaReaderActions::BookMarkCurrentChapter;
+
+        let result = timeout(Duration::from_millis(250), manga_reader.local_action_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(expected, result)
     }
 }

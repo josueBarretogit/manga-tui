@@ -477,9 +477,11 @@ impl SearchChapter for MangadexClient {
         let response: OneChapterResponse = self.search_chapters_by_id(chapter_id).await?.json().await?;
         let pages_response: ChapterPagesResponse = self.get_chapter_pages(chapter_id).await?.json().await?;
 
+        let language = Languages::try_from_iso_code(response.data.attributes.translated_language.as_str()).unwrap_or_default();
+
         Ok(ChapterToRead {
             id: response.data.id,
-            title: response.data.attributes.title.unwrap_or_default(),
+            title: response.data.attributes.title.unwrap_or("No title".to_string()),
             number: response
                 .data
                 .attributes
@@ -487,6 +489,8 @@ impl SearchChapter for MangadexClient {
                 .map(|num| num.parse().unwrap_or_default())
                 .unwrap_or_default(),
             volume_number: response.data.attributes.volume,
+            num_page_bookmarked: None,
+            language,
             pages_url: pages_response.get_files_based_on_quality_as_url(self.image_quality),
         })
     }
@@ -526,12 +530,15 @@ impl FetchChapterBookmarked for MangadexClient {
 
         let number: f64 = response.data.attributes.chapter.unwrap_or("0".to_string()).parse().unwrap();
         let volume_number = response.data.attributes.volume;
+        let language = Languages::try_from_iso_code(&response.data.attributes.translated_language).unwrap_or_default();
 
         let chapter_to_read: ChapterToRead = ChapterToRead {
             id: chapter.id,
             title: response.data.attributes.title.unwrap_or_default(),
             number,
             volume_number,
+            num_page_bookmarked: chapter.number_page_bookmarked,
+            language,
             pages_url: pages_response.get_files_based_on_quality_as_url(self.image_quality),
         };
 

@@ -630,6 +630,8 @@ impl MangaPage {
                                     title: chapter_title,
                                     number,
                                     volume_number,
+                                    language,
+                                    num_page_bookmarked: None,
                                     pages_url: response.get_files_based_on_quality_as_url(config.image_quality),
                                 };
 
