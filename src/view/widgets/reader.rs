@@ -8,7 +8,7 @@ use tui_widget_list::PreRender;
 
 use crate::global::CURRENT_LIST_ITEM_STYLE;
 
-static STYLE_PAGE_BOOKMARKED: Lazy<Style> = Lazy::new(|| Style::new().on_green());
+pub static STYLE_PAGE_BOOKMARKED: Lazy<Style> = Lazy::new(|| Style::new().on_green().black());
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum PageItemState {
@@ -99,14 +99,8 @@ pub struct PagesList {
 }
 
 impl PagesList {
-    pub fn new(pages: Vec<PagesItem>, page_bookmarked: Option<u32>) -> Self {
-        let mut list = Self { pages };
-
-        if let Some(page) = page_bookmarked {
-            list.highlight_page_as_bookmarked(page as usize)
-        }
-
-        list
+    pub fn new(pages: Vec<PagesItem>) -> Self {
+        Self { pages }
     }
 
     pub fn on_tick(&mut self) {
@@ -115,7 +109,12 @@ impl PagesList {
         }
     }
 
-    fn highlight_page_as_bookmarked(&mut self, page_index: usize) {
+    fn reset_style(&mut self) {
+        self.pages.iter_mut().for_each(|page| page.style = Style::default())
+    }
+
+    pub fn highlight_page_as_bookmarked(&mut self, page_index: usize) {
+        self.reset_style();
         if let Some(page) = self.pages.get_mut(page_index) {
             page.style = *STYLE_PAGE_BOOKMARKED;
         }
@@ -125,26 +124,31 @@ impl PagesList {
 #[derive(Debug, Default)]
 pub struct PagesListState {
     pub list_state: tui_widget_list::ListState,
-    pub page_bookmarked: Option<u32>,
+    pub page_bookmarked: Option<usize>,
 }
 
 impl PagesListState {
-    pub fn new(page_bookmarked: Option<u32>) -> Self {
+    pub fn new(page_bookmarked: Option<usize>) -> Self {
         Self {
             list_state: tui_widget_list::ListState::default(),
             page_bookmarked,
         }
+    }
+
+    pub fn set_page_bookmarked(&mut self, page_bookmarked: usize) {
+        self.page_bookmarked = Some(page_bookmarked);
     }
 }
 
 impl StatefulWidget for PagesList {
     type State = PagesListState;
 
-    fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+    fn render(mut self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         if let Some(page) = state.page_bookmarked {
             if state.list_state.selected.is_none() {
-                state.list_state.select(Some(page as usize));
+                state.list_state.select(Some(page));
             }
+            self.highlight_page_as_bookmarked(page);
         }
 
         let items = tui_widget_list::List::new(self.pages);
@@ -161,7 +165,7 @@ mod tests {
 
     #[test]
     fn it_highlights_page_item_which_is_bookmarked() {
-        let mut page_list = PagesList::new(vec![PagesItem::new(0), PagesItem::new(1)], Some(1));
+        let mut page_list = PagesList::new(vec![PagesItem::new(0), PagesItem::new(1)]);
 
         page_list.highlight_page_as_bookmarked(1);
 
@@ -171,11 +175,19 @@ mod tests {
     }
 
     #[test]
-    fn it_highlights_page_item_which_is_bookmarked_on_instantiation() {
-        let page_list = PagesList::new(vec![PagesItem::new(0), PagesItem::new(1)], Some(1));
+    fn it_keeps_only_one_item_bookmarked_at_a_time() {
+        let mut page1 = PagesItem::new(0);
 
-        let page_item = page_list.pages[1].clone();
+        page1.style = *STYLE_PAGE_BOOKMARKED;
 
-        assert_eq!(*STYLE_PAGE_BOOKMARKED, page_item.style);
+        let mut page_list = PagesList::new(vec![page1, PagesItem::new(1)]);
+
+        page_list.highlight_page_as_bookmarked(1);
+
+        let page_item_with_no_highlight = page_list.pages[0].clone();
+        let page_item_highlighet = page_list.pages[1].clone();
+
+        assert_eq!(*STYLE_PAGE_BOOKMARKED, page_item_highlighet.style);
+        assert_eq!(Style::default(), page_item_with_no_highlight.style);
     }
 }

@@ -46,6 +46,13 @@ pub struct MangaPanel {
     pub dimensions: (u32, u32),
 }
 
+#[derive(Debug, PartialEq, Clone, Default)]
+pub enum PageSize {
+    #[default]
+    Normal,
+    Wide,
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum MangaReaderActions {
     BookMarkCurrentChapter,
@@ -56,11 +63,13 @@ pub enum MangaReaderActions {
     ReloadPage,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Default)]
 pub enum State {
+    ManualBookmark,
     ErrorSearchingChapter,
     DisplayingChapterNotFound,
     SearchingChapter,
+    #[default]
     SearchingPages,
 }
 
@@ -289,7 +298,7 @@ pub struct MangaReader<T: SearchChapter + SearchMangaPanel> {
     current_chapter: ChapterToRead,
     pages: Vec<Page>,
     pages_list: PagesList,
-    current_page_size: u16,
+    current_page_size: PageSize,
     page_list_state: PagesListState,
     state: State,
     image_tasks: JoinSet<()>,
@@ -309,16 +318,22 @@ impl<T: SearchChapter + SearchMangaPanel> Component for MangaReader<T> {
     fn render(&mut self, area: Rect, frame: &mut Frame<'_>) {
         let buf = frame.buffer_mut();
 
-        let layout = Layout::horizontal([Constraint::Min(20), Constraint::Fill(1), Constraint::Min(20)]).spacing(1);
+        let layout = match self.current_page_size {
+            PageSize::Normal => [Constraint::Percentage(30), Constraint::Percentage(40), Constraint::Percentage(30)],
+            PageSize::Wide => [Constraint::Percentage(20), Constraint::Percentage(60), Constraint::Percentage(20)],
+        };
 
-        let [left, center, right] = layout.areas(area);
+        let [left, center, right] = Layout::horizontal(layout).areas(area);
 
         Block::bordered().render(left, buf);
 
         let index = self.current_page_index();
-        let show_reload = if let Some(img_state) = self.pages.get_mut(index).and_then(|page| page.image_state.as_mut()) {
+        let show_reload = if let Some(page) = self.pages.get_mut(index).filter(|page| page.image_state.is_some()) {
             let image = StatefulImage::new(None).resize(Resize::Fit(None));
-            StatefulWidget::render(image, center, buf, img_state);
+            StatefulWidget::render(image, center, buf, page.image_state.as_mut().unwrap());
+            let (width, height) = page.dimensions.unwrap();
+            self.resize_based_on_image_size(width, height);
+
             false
         } else {
             let show_failed = self
@@ -392,14 +407,14 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
             pages: vec![],
             manga_id,
             list_of_chapters: ListOfChapters::default(),
-            page_list_state: PagesListState::new(num_page_bookmarked),
+            page_list_state: PagesListState::new(num_page_bookmarked.map(|num| num as usize)),
             image_tasks: set,
             local_action_tx,
             local_action_rx,
             local_event_tx,
             local_event_rx,
-            state: State::SearchingPages,
-            current_page_size: 2,
+            state: State::default(),
+            current_page_size: PageSize::default(),
             pages_list: PagesList::default(),
             search_next_chapter_loader: ThrobberState::default(),
             picker,
@@ -463,6 +478,14 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
         }
     }
 
+    fn resize_based_on_image_size(&mut self, width: u32, height: u32) {
+        if width > height && width > 300 {
+            self.current_page_size = PageSize::Wide;
+        } else {
+            self.current_page_size = PageSize::Normal;
+        }
+    }
+
     fn load_chapter(&mut self, chapter: ChapterToRead) {
         self.clean_up();
 
@@ -492,6 +515,10 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
 
     fn get_pages_to_fetch(&self) -> Vec<usize> {
         let pages = MangaTuiConfig::get().amount_pages as usize;
+
+        if self.pages.len() == 1 {
+            return vec![0];
+        }
 
         // Collect `pages` pages before and after index that are not yet loaded
         let curr = self.current_page_index();
@@ -528,8 +555,6 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
 
                 item.state = PageItemState::Loading;
             }
-        } else {
-            write_to_error_log(ErrorType::String(&format!("Index {} doesn't exist", index)));
         }
     }
 
@@ -560,7 +585,10 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
 
         match database.bookmark(chapter_to_bookmark) {
             Ok(()) => {
-                self.current_chapter.num_page_bookmarked = num_page;
+                let page_index = num_page.unwrap_or(0) as usize;
+                self.state = State::ManualBookmark;
+                self.pages_list.highlight_page_as_bookmarked(page_index);
+                self.page_list_state.set_page_bookmarked(page_index);
             },
             Err(e) => {
                 write_to_error_log(ErrorType::String(format!("Could not mark chapter as bookmarked: more details : {e}").as_str()))
@@ -578,19 +606,22 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
 
     fn render_right_panel(&mut self, buf: &mut Buffer, area: Rect, show_reload: bool) {
         let [instructions_area, information_era, status_area] =
-            Layout::vertical([Constraint::Percentage(20), Constraint::Percentage(20), Constraint::Percentage(20)]).areas(area);
+            Layout::vertical([Constraint::Percentage(20), Constraint::Percentage(20), Constraint::Percentage(20)])
+                .margin(2)
+                .areas(area);
 
         let mut instructions = vec![
             Line::from(vec!["Go back: ".into(), "<Backspace>".to_span().style(*INSTRUCTIONS_STYLE)]),
             Line::from(vec!["Next chapter: ".into(), "<w>".to_span().style(*INSTRUCTIONS_STYLE)]),
-            Line::from(vec!["Previous chapter : ".into(), "<b>".to_span().style(*INSTRUCTIONS_STYLE)]),
+            Line::from(vec!["Previous chapter: ".into(), "<b>".to_span().style(*INSTRUCTIONS_STYLE)]),
+            Line::from(vec!["Bookmark: ".into(), "<m>".to_span().style(*INSTRUCTIONS_STYLE)]),
         ];
 
         if show_reload {
             instructions.push(Line::from(vec!["Reload: ".into(), "<r>".to_span().style(*INSTRUCTIONS_STYLE)]));
         }
 
-        Widget::render(List::new(instructions), instructions_area, buf);
+        Widget::render(List::new(instructions).block(Block::bordered()), instructions_area, buf);
 
         let current_chapter_title = format!(
             "Reading : Vol {} Ch. {} {}",
@@ -619,6 +650,13 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
                     .use_type(throbber_widgets_tui::WhichUse::Spin);
 
                 StatefulWidget::render(loader, status_area, buf, &mut self.search_next_chapter_loader)
+            },
+            State::ManualBookmark => {
+                let message = format!("Bookmarked at page: {}", self.page_list_state.page_bookmarked.unwrap_or(0));
+
+                Paragraph::new(message.to_span().style(*INSTRUCTIONS_STYLE))
+                    .wrap(Wrap { trim: true })
+                    .render(status_area, buf)
             },
             _ => {},
         };
@@ -760,7 +798,6 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
 mod test {
     use std::time::Duration;
 
-    use chrono::DurationRound;
     use pretty_assertions::assert_eq;
     use tokio::time::timeout;
 
@@ -1161,7 +1198,7 @@ mod test {
     async fn handle_key_events() {
         let mut reader_page = initialize_reader_page(TestApiClient::new());
 
-        reader_page.pages_list = PagesList::new(vec![PagesItem::new(0), PagesItem::new(1), PagesItem::new(2)], None);
+        reader_page.pages_list = PagesList::new(vec![PagesItem::new(0), PagesItem::new(1), PagesItem::new(2)]);
 
         let area = Rect::new(0, 0, 20, 20);
         let mut buf = Buffer::empty(area);
@@ -1200,6 +1237,25 @@ mod test {
         assert_eq!(2, manga_reader.pages_list.pages.len());
 
         assert_eq!(PageItemState::Loading, manga_reader.pages_list.pages[0].state);
+    }
+
+    #[test]
+    fn it_increases_page_size_based_on_manga_panel_dimesions() {
+        let mut manga_reader =
+            MangaReader::new(ChapterToRead::default(), "some_id".to_string(), Picker::new((8, 8)), TestApiClient::new());
+
+        manga_reader.resize_based_on_image_size(500, 200);
+
+        assert_eq!(PageSize::Wide, manga_reader.current_page_size);
+
+        manga_reader.resize_based_on_image_size(100, 200);
+
+        assert_eq!(PageSize::Normal, manga_reader.current_page_size);
+
+        // only resize if the image is big enough
+        manga_reader.resize_based_on_image_size(300, 200);
+
+        assert_eq!(PageSize::Normal, manga_reader.current_page_size);
     }
 
     #[test]
@@ -1378,7 +1434,7 @@ mod test {
     }
 
     #[test]
-    fn it_loads_chapter_found_and_sets_state_as_searching_pages() {
+    fn it_loads_chapter_found_and_sets_state_as_default() {
         let expected = ChapterToRead {
             id: "id_before".to_string(),
             title: "some_title".to_string(),
@@ -1398,7 +1454,7 @@ mod test {
         manga_reader.load_chapter(expected.clone());
 
         assert_eq!(expected, manga_reader.current_chapter);
-        assert_eq!(manga_reader.state, State::SearchingPages);
+        assert_eq!(manga_reader.state, State::default());
     }
 
     #[test]
@@ -1546,7 +1602,7 @@ mod test {
     }
 
     #[test]
-    fn it_sets_current_chapter_as_bookmarked() {
+    fn it_sets_current_chapter_as_bookmarked_and_sets_state_as_bookmarked() {
         let mut manga_reader =
             MangaReader::new(ChapterToRead::default(), "".to_string(), Picker::new((8, 8)), TestApiClient::new());
 
@@ -1555,11 +1611,12 @@ mod test {
         manga_reader.set_current_chapter_bookmarked(Some(2), &mut database);
 
         assert!(database.was_bookmarked());
-        assert_eq!(Some(2), manga_reader.current_chapter.num_page_bookmarked);
+        assert_eq!(Some(2), manga_reader.page_list_state.page_bookmarked);
+        assert_eq!(State::ManualBookmark, manga_reader.state)
     }
 
     #[test]
-    fn when_pages_are_rendered_it_selects_page_with_num_page_bookmarked() {
+    fn when_pages_list_is_rendered_it_selects_page_with_num_page_bookmarked_and_highlights_it() {
         let chapter_to_read: ChapterToRead = ChapterToRead {
             num_page_bookmarked: Some(1),
             ..Default::default()
@@ -1567,7 +1624,7 @@ mod test {
 
         let mut manga_reader = MangaReader::new(chapter_to_read, "".to_string(), Picker::new((8, 8)), TestApiClient::new());
 
-        manga_reader.pages_list = PagesList::new(vec![PagesItem::new(0), PagesItem::new(1)], None);
+        manga_reader.pages_list = PagesList::new(vec![PagesItem::new(0), PagesItem::new(1)]);
 
         let area = Rect::new(0, 0, 10, 10);
         let mut buf = Buffer::empty(area);

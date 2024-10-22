@@ -15,6 +15,7 @@ use ratatui_image::picker::Picker;
 use ratatui_image::protocol::Protocol;
 use ratatui_image::{Image, Resize};
 use strum::{Display, EnumIs};
+use throbber_widgets_tui::{Throbber, ThrobberState};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
@@ -44,13 +45,19 @@ use crate::view::widgets::manga::{
 use crate::view::widgets::Component;
 
 #[derive(Debug, PartialEq, Eq, Default)]
-pub enum BookMarkState {
+pub enum BookmarkPhase {
     SearchingFromApi,
     FailedToFetch,
     NotFoundDatabase,
     Found,
     #[default]
     NotSearching,
+}
+
+#[derive(Debug, Default)]
+pub struct BookMarkState {
+    phase: BookmarkPhase,
+    loader: ThrobberState,
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -228,15 +235,28 @@ impl MangaPage {
         let [cover_area, more_details_area] =
             Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)]).areas(area);
 
-        let message = match self.bookmark_state {
-            BookMarkState::Found => "",
-            BookMarkState::NotSearching => "",
-            BookMarkState::SearchingFromApi => "Searchin chapter",
-            BookMarkState::FailedToFetch => "Failed to retrieve chapter please try again",
-            BookMarkState::NotFoundDatabase => "there is no bookmarked chapter",
-        };
+        match self.bookmark_state.phase {
+            BookmarkPhase::Found => {},
+            BookmarkPhase::NotSearching => {},
+            BookmarkPhase::SearchingFromApi => {
+                let loader = Throbber::default()
+                    .label("Searching chapter bookmarked".to_span().style(*INSTRUCTIONS_STYLE))
+                    .throbber_set(throbber_widgets_tui::BRAILLE_SIX)
+                    .use_type(throbber_widgets_tui::WhichUse::Spin);
 
-        Paragraph::new(message).wrap(Wrap { trim: true }).render(more_details_area, buf);
+                StatefulWidget::render(loader, more_details_area, buf, &mut self.bookmark_state.loader);
+            },
+            BookmarkPhase::FailedToFetch => {
+                Paragraph::new("Failed to get chapter please try again".to_span().style(*ERROR_STYLE))
+                    .wrap(Wrap { trim: true })
+                    .render(more_details_area, buf);
+            },
+            BookmarkPhase::NotFoundDatabase => {
+                Paragraph::new("There is no bookmarked chapter".to_span().style(Style::new().underlined()))
+                    .wrap(Wrap { trim: true })
+                    .render(more_details_area, buf);
+            },
+        };
 
         match self.image_state.as_ref() {
             Some(state) => {
@@ -329,21 +349,26 @@ impl MangaPage {
                 if self.picker.is_some() {
                     chapter_instructions.push(" Read chapter ".into());
                     chapter_instructions.push(Span::raw(" <r> ").style(*INSTRUCTIONS_STYLE));
+
+                    chapter_instructions.push(" Read bookmark ".into());
+                    chapter_instructions.push(Span::raw(" <Tab> ").style(*INSTRUCTIONS_STYLE));
                 }
 
-                let pagination_instructions: Vec<Span<'_>> = vec![
+                let bottom_instructions: Vec<Span<'_>> = vec![
                     page.into(),
                     " | ".into(),
                     total.into(),
                     " Next ".into(),
-                    Span::raw("<w>").style(*INSTRUCTIONS_STYLE),
+                    "<w>".to_span().style(*INSTRUCTIONS_STYLE),
                     " Previous ".into(),
-                    Span::raw("<b>").style(*INSTRUCTIONS_STYLE),
+                    "<b>".to_span().style(*INSTRUCTIONS_STYLE),
+                    " Bookmark chapter ".into(),
+                    "<m>".to_span().style(*INSTRUCTIONS_STYLE),
                 ];
 
                 Block::bordered()
                     .title_top(Line::from(chapter_instructions))
-                    .title_bottom(Line::from(pagination_instructions))
+                    .title_bottom(Line::from(bottom_instructions))
                     .render(area, buf);
 
                 StatefulWidget::render(chapters.widget.clone(), chapters_area, buf, &mut chapters.state);
@@ -773,7 +798,7 @@ impl MangaPage {
                     self.local_event_tx.send(MangaPageEvents::FetchChapterBookmarked(chapter)).ok();
                 },
                 None => {
-                    self.bookmark_state = BookMarkState::NotFoundDatabase;
+                    self.bookmark_state.phase = BookmarkPhase::NotFoundDatabase;
                 },
             },
             Err(e) => write_to_error_log(ErrorType::Error(e)),
@@ -782,7 +807,7 @@ impl MangaPage {
 
     fn fetch_chapter_bookmarked(&mut self, bookmarked_chapter: ChapterBookmarked, api_client: impl FetchChapterBookmarked) {
         let sender = self.local_event_tx.clone();
-        self.bookmark_state = BookMarkState::SearchingFromApi;
+        self.bookmark_state.phase = BookmarkPhase::SearchingFromApi;
 
         self.tasks.spawn(async move {
             let response = api_client.fetch_chapter_bookmarked(bookmarked_chapter).await;
@@ -1084,11 +1109,11 @@ impl MangaPage {
     }
 
     fn fetch_bookmarked_chapter_failed(&mut self) {
-        self.bookmark_state = BookMarkState::FailedToFetch;
+        self.bookmark_state.phase = BookmarkPhase::FailedToFetch;
     }
 
     fn read_chapter_bookmarked(&mut self, chapter: ChapterToRead, manga_to_read: MangaToRead) {
-        self.bookmark_state = BookMarkState::default();
+        self.bookmark_state.phase = BookmarkPhase::default();
 
         let connection = Database::get_connection();
         let language = self.get_current_selected_language();
@@ -1120,8 +1145,11 @@ impl MangaPage {
     fn tick(&mut self) {
         if self.download_process_started() {
             self.download_all_chapters_state.tick();
+        } else if self.bookmark_state.phase == BookmarkPhase::SearchingFromApi {
+            self.bookmark_state.loader.calc_next();
         }
-        if let Ok(background_event) = self.local_event_rx.try_recv() {
+
+        while let Ok(background_event) = self.local_event_rx.try_recv() {
             match background_event {
                 MangaPageEvents::ReadChapterBookmarked(chapter, manga) => self.read_chapter_bookmarked(chapter, manga),
                 MangaPageEvents::FetchBookmarkFailed => self.fetch_bookmarked_chapter_failed(),
@@ -1751,7 +1779,7 @@ mod test {
 
         manga_page.get_chapter_bookmarked_from_db(test_database);
 
-        assert_eq!(manga_page.bookmark_state, BookMarkState::NotFoundDatabase);
+        assert_eq!(manga_page.bookmark_state.phase, BookmarkPhase::NotFoundDatabase);
     }
 
     #[derive(Clone)]
@@ -1834,7 +1862,7 @@ mod test {
             .unwrap()
             .unwrap();
 
-        assert_eq!(manga_page.bookmark_state, BookMarkState::SearchingFromApi);
+        assert_eq!(manga_page.bookmark_state.phase, BookmarkPhase::SearchingFromApi);
         assert_eq!(expected, result)
     }
 

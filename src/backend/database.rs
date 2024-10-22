@@ -649,7 +649,7 @@ impl<'a> Database<'a> {
 
         self.connection
             .execute("UPDATE chapters SET is_bookmarked = true, number_page_bookmarked = ?1 WHERE id = ?2", params![
-                chapter_to_bookmark.page_number.unwrap_or(1),
+                chapter_to_bookmark.page_number,
                 chapter_to_bookmark.chapter_id
             ])?;
 
@@ -1483,11 +1483,11 @@ mod test {
 
         database.bookmark(chapter_to_bookmark1).expect("failed to bookmark chapter");
 
-        let page_set_to_one: Option<u32> =
+        let page_set_to_none: Option<u32> =
             connection
                 .query_row("SELECT number_page_bookmarked FROM chapters WHERE id = ?1", params![chapter_id], |row| row.get(0))?;
 
-        assert_eq!(page_set_to_one.expect("should not be null"), 1);
+        assert!(page_set_to_none.is_none());
         Ok(())
     }
 
@@ -1653,12 +1653,7 @@ mod test {
             .query_row("SELECT is_bookmarked FROM chapters WHERE id = ?1", params![chapter_id], |row| row.get(0))
             .expect("chapter was not created");
 
-        //let translated_language: String = connection
-        //    .query_row("SELECT translated_language FROM chapters WHERE id = ?1", params![chapter_id], |row| row.get(0))
-        //    .expect("chapter was not created");
-
         assert!(was_bookmarked);
-        //assert_eq!(translated_language, Languages::default().as_iso_code());
 
         Ok(())
     }
