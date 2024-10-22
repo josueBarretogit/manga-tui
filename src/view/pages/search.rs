@@ -394,7 +394,7 @@ impl SearchPage {
                 Ok(()) => {
                     self.manga_added_to_plan_to_read = Some(item.manga.title.clone());
                 },
-                Err(e) => write_to_error_log(ErrorType::FromError(Box::new(e))),
+                Err(e) => write_to_error_log(ErrorType::Error(Box::new(e))),
             }
         }
     }

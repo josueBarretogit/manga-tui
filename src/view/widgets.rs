@@ -1,3 +1,4 @@
+#[cfg(test)]
 use crossterm::event::KeyCode;
 use image::DynamicImage;
 use ratatui::layout::Rect;
@@ -33,7 +34,7 @@ pub trait ImageHandler: Send + 'static {
     fn not_found(id: String) -> Self;
 }
 
-#[allow(dead_code)]
+#[cfg(test)]
 // Use in testing
 pub fn press_key<T>(page: &mut dyn Component<Actions = T>, key: KeyCode) {
     page.handle_events(Events::Key(key.into()));
