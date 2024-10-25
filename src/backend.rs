@@ -80,7 +80,7 @@ pub static APP_DATA_DIR: Lazy<Option<PathBuf>> = Lazy::new(|| {
 #[cfg(test)]
 pub static APP_DATA_DIR: Lazy<Option<PathBuf>> = Lazy::new(|| Some(PathBuf::from("./test_results/data-directory")));
 
-pub fn build_data_dir() -> Result<PathBuf, std::io::Error> {
+pub fn build_data_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
     let data_dir = APP_DATA_DIR.as_ref();
     match data_dir {
         Some(dir) => {
@@ -96,13 +96,13 @@ pub fn build_data_dir() -> Result<PathBuf, std::io::Error> {
 
             let config_contents = MangaTuiConfig::read_raw_config(dir)?;
 
-            let config_contents: MangaTuiConfig = toml::from_str(&config_contents).unwrap_or_default();
+            let config = MangaTuiConfig::update_existing_config(&config_contents, dir)?;
 
-            CONFIG.get_or_init(|| config_contents);
+            CONFIG.get_or_init(|| config);
 
             Ok(dir.to_path_buf())
         },
-        None => Err(std::io::Error::other("data dir could not be found")),
+        None => Err("data dir could not be found".into()),
     }
 }
 
