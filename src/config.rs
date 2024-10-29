@@ -42,7 +42,7 @@ impl ImageQuality {
 pub struct MangaTuiConfig {
     pub download_type: DownloadType,
     pub image_quality: ImageQuality,
-    pub auto_formatting: bool,
+    pub auto_bookmark: bool,
     pub amount_pages: u8,
 }
 
@@ -50,7 +50,7 @@ impl Default for MangaTuiConfig {
     fn default() -> Self {
         Self {
             amount_pages: 5,
-            auto_formatting: true,
+            auto_bookmark: true,
             download_type: DownloadType::default(),
             image_quality: ImageQuality::default(),
         }
@@ -67,9 +67,7 @@ impl MangaTuiConfig {
     }
 
     pub fn read_raw_config(base_directory: &Path) -> Result<String, std::io::Error> {
-        let config_file = base_directory.join(Self::get_config_file_path());
-
-        let mut config_file = File::open(config_file)?;
+        let mut config_file = Self::get_config_file(base_directory)?;
 
         let mut contents = String::new();
         config_file.read_to_string(&mut contents)?;
@@ -99,11 +97,10 @@ impl MangaTuiConfig {
     }
 
     // refactor this function to make it more dynamic, at the moment the fields are hardcoded
-    fn add_missing_keys(mut file: impl Write, existing_config: Table) -> Result<Self, std::io::Error> {
+    fn add_missing_fields(mut file: impl Write + Read, existing_config: Table) -> Result<Self, std::io::Error> {
         if !existing_config.contains_key("amount_pages") {
             file.write_all(
                 "
-\n
 # Pages around the currently selected page to try to prefetch
 # values : 0-255
 # default : 5
@@ -116,8 +113,7 @@ amount_pages = 5
         if !existing_config.contains_key("auto_bookmark") {
             file.write_all(
                 "
-\n
-# Whether or not bookmarking is done automatically
+# Whether or not bookmarking is done automatically, if false you decide which chapter to bookmark
 # values : true, false
 # default : true
 auto_bookmark = true
@@ -126,97 +122,83 @@ auto_bookmark = true
             )?;
         }
 
-        Ok(Self::default())
+        let mut contents = String::new();
+
+        file.read_to_string(&mut contents)?;
+
+        let config = toml::from_str(&contents).unwrap_or_default();
+
+        Ok(config)
     }
 
+    /// Returns the config with either the fields already existing or with the new ones
     pub fn update_existing_config(config: &str, base_directory: &Path) -> Result<Self, Box<dyn Error>> {
         let already_existing: Table = toml::Table::from_str(config)?;
 
         let mut config_file = Self::get_config_file(base_directory)?;
 
-        Ok(Self::add_missing_keys(&mut config_file, already_existing)?)
+        Ok(Self::add_missing_fields(&mut config_file, already_existing)?)
     }
 
     pub fn get_config_file(base_directory: &Path) -> Result<File, std::io::Error> {
-        OpenOptions::new().append(true).open(base_directory.join(Self::get_config_file_path()))
+        OpenOptions::new()
+            .append(true)
+            .read(true)
+            .open(base_directory.join(Self::get_config_file_path()))
     }
 }
 
 #[cfg(test)]
 mod tests {
 
+    use std::io::Cursor;
+
     use pretty_assertions::assert_eq;
 
     use super::*;
 
-    #[derive(Default)]
-    struct TestFile {
-        contents: Vec<u8>,
-    }
-
-    impl Write for TestFile {
-        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-            self.contents.extend(buf);
-
-            Ok(buf.len())
-        }
-
-        fn flush(&mut self) -> std::io::Result<()> {
-            Ok(())
-        }
-    }
-
-    impl TestFile {
-        fn inner_contents(&mut self) -> String {
-            let mut cont = String::new();
-            let mut contents = self.contents.as_slice();
-            contents.read_to_string(&mut cont).unwrap();
-            cont
-        }
-    }
-
     #[test]
     fn it_adds_missing_field_to_config() {
-        let mut test_file = TestFile::default();
+        let mut test_file = Cursor::new(Vec::new());
 
         let current_contents = r#"
-    # The format of the manga downloaded
-    # values : cbz , raw, epub
-    # default : cbz
-    download_type = "cbz"
+        # The format of the manga downloaded
+        # values : cbz , raw, epub
+        # default : cbz
+        download_type = "cbz"
 
-    # Download image quality, low quality means images are compressed and is recommended for slow internet connections
-    # values : low, high
-    # default : low
-    image_quality = "low"
-            "#;
+        # Download image quality, low quality means images are compressed and is recommended for slow internet connections
+        # values : low, high
+        # default : low
+        image_quality = "low"
+                "#;
 
         let expected = r#"
-# Whether or not bookmarking is done automatically
-# values : true, false
-# default : true
-auto_bookmark = true
+    # Whether or not bookmarking is done automatically, if false you decide which chapter to bookmark
+    # values : true, false
+    # default : true
+    auto_bookmark = true
 
-# Pages around the currently selected page to try to prefetch
-# values : 0-255
-#default : 5
-amount_pages = 5
-            "#;
+    # Pages around the currently selected page to try to prefetch
+    # values : 0-255
+    #default : 5
+    amount_pages = 5
+                "#;
 
-        MangaTuiConfig::add_missing_keys(&mut test_file, current_contents.parse::<Table>().unwrap()).unwrap();
+        MangaTuiConfig::add_missing_fields(&mut test_file, current_contents.parse::<Table>().unwrap()).unwrap();
 
         let expected_table = expected.parse::<Table>().unwrap();
-        let result = test_file.inner_contents().parse::<Table>().unwrap();
+        let result = test_file.into_inner();
+
+        let result: Table = String::from_utf8(result).unwrap().parse().unwrap();
 
         assert_eq!(expected_table, result);
     }
 
     #[test]
     fn it_does_not_add_already_existing_keys() {
-        let mut test_file = TestFile::default();
-
         let current_contents = r#"
-# Whether or not bookmarking is done automatically
+# Whether or not bookmarking is done automatically, if false you decide which chapter to bookmark
 # values : true, false
 # default : true
 auto_bookmark = true
@@ -226,11 +208,13 @@ auto_bookmark = true
 #default : 5
 amount_pages = 5
             "#;
+
+        let mut test_file = Cursor::new(Vec::new());
 
         test_file.write_all(current_contents.as_bytes()).unwrap();
 
         let expected = r#"
-# Whether or not bookmarking is done automatically
+# Whether or not bookmarking is done automatically, if false you decide which chapter to bookmark
 # values : true, false
 # default : true
 auto_bookmark = true
@@ -241,8 +225,10 @@ auto_bookmark = true
 amount_pages = 5
             "#;
 
-        MangaTuiConfig::add_missing_keys(&mut test_file, current_contents.parse::<Table>().unwrap()).unwrap();
+        MangaTuiConfig::add_missing_fields(&mut test_file, current_contents.parse::<Table>().unwrap()).unwrap();
 
-        assert_eq!(expected, test_file.inner_contents());
+        let result = test_file.into_inner();
+
+        assert_eq!(expected, String::from_utf8(result).unwrap());
     }
 }

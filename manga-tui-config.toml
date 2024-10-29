@@ -12,3 +12,8 @@ image_quality = "low"
 # values : 0-255
 # default : 5
 amount_pages = 5
+
+# Whether or not bookmarking is done automatically, if false you decide which chapter to bookmark
+# values : true, false
+# default : true
+auto_bookmark = true
