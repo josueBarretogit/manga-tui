@@ -534,6 +534,7 @@ impl SearchPage {
                 }
                 self.mangas_found_list.widget = ListMangasFoundWidget::from_response(response.data);
                 self.mangas_found_list.total_result = response.total;
+                self.mangas_found_list.state.select(Some(0));
                 self.state = PageState::DisplayingMangasFound;
                 self.init_search_manga_covers();
             },

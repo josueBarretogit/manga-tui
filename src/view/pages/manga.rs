@@ -19,10 +19,8 @@ use throbber_widgets_tui::{Throbber, ThrobberState};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
-use super::reader::{ChapterToRead, ListOfChapters};
-use crate::backend::api_responses::{
-    AggregateChapterResponse, ChapterPagesResponse, ChapterResponse, MangaStatisticsResponse, Statistics,
-};
+use super::reader::ChapterToRead;
+use crate::backend::api_responses::{ChapterResponse, MangaStatisticsResponse, Statistics};
 use crate::backend::database::{
     get_chapters_history_status, save_history, set_chapter_downloaded, Bookmark, ChapterBookmarked, ChapterToBookmark,
     ChapterToSaveHistory, Database, MangaReadingHistorySave, RetrieveBookmark, SetChapterDownloaded, DBCONN,
@@ -38,7 +36,9 @@ use crate::config::MangaTuiConfig;
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
 use crate::utils::{set_status_style, set_tags_style};
 use crate::view::app::MangaToRead;
-use crate::view::tasks::manga::{download_all_chapters, download_chapter_task, search_chapters_operation, DownloadAllChapters};
+use crate::view::tasks::manga::{
+    download_all_chapters, download_chapter_task, read_chapter, search_chapters_operation, ChapterArgs, DownloadAllChapters,
+};
 use crate::view::widgets::manga::{
     ChapterItem, ChaptersListWidget, DownloadAllChaptersState, DownloadAllChaptersWidget, DownloadPhase,
 };
@@ -56,6 +56,7 @@ pub enum BookmarkPhase {
 
 #[derive(Debug, Default)]
 pub struct BookMarkState {
+    auto_bookmark: bool,
     phase: BookmarkPhase,
     loader: ThrobberState,
 }
@@ -231,6 +232,11 @@ impl MangaPage {
         self
     }
 
+    pub fn auto_bookmark(mut self, auto_bookmark: bool) -> Self {
+        self.bookmark_state.auto_bookmark = auto_bookmark;
+        self
+    }
+
     fn render_cover(&mut self, area: Rect, buf: &mut Buffer) {
         let [cover_area, more_details_area] =
             Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)]).areas(area);
@@ -354,7 +360,7 @@ impl MangaPage {
                     chapter_instructions.push(Span::raw(" <Tab> ").style(*INSTRUCTIONS_STYLE));
                 }
 
-                let bottom_instructions: Vec<Span<'_>> = vec![
+                let mut bottom_instructions: Vec<Span<'_>> = vec![
                     page.into(),
                     " | ".into(),
                     total.into(),
@@ -362,9 +368,11 @@ impl MangaPage {
                     "<w>".to_span().style(*INSTRUCTIONS_STYLE),
                     " Previous ".into(),
                     "<b>".to_span().style(*INSTRUCTIONS_STYLE),
-                    " Bookmark chapter ".into(),
-                    "<m>".to_span().style(*INSTRUCTIONS_STYLE),
                 ];
+                if !self.bookmark_state.auto_bookmark {
+                    bottom_instructions.push(" Bookmark chapter ".into());
+                    bottom_instructions.push("<m>".to_span().style(*INSTRUCTIONS_STYLE));
+                }
 
                 Block::bordered()
                     .title_top(Line::from(chapter_instructions))
@@ -529,7 +537,9 @@ impl MangaPage {
                         self.local_action_tx.send(MangaPageActions::SearchPreviousChapterPage).ok();
                     },
                     KeyCode::Char('m') => {
-                        self.local_action_tx.send(MangaPageActions::BookMarkChapterSelected).ok();
+                        if !self.bookmark_state.auto_bookmark {
+                            self.local_action_tx.send(MangaPageActions::BookMarkChapterSelected).ok();
+                        }
                     },
                     KeyCode::Tab => {
                         self.local_action_tx.send(MangaPageActions::GoToReadBookmarkedChapter).ok();
@@ -614,66 +624,35 @@ impl MangaPage {
                 let tx = self.global_event_tx.as_ref().cloned().unwrap();
                 let local_tx = self.local_event_tx.clone();
 
+                let chapter_to_read: ChapterArgs = ChapterArgs {
+                    id_chapter,
+                    manga_id,
+                    title,
+                    chapter_title,
+                    language,
+                    number,
+                    volume_number,
+                    img_url,
+                };
+
                 tokio::spawn(async move {
-                    let chapter_response = MangadexClient::global().get_chapter_pages(&id_chapter).await;
+                    let search_chapter_response = read_chapter(&chapter_to_read).await;
 
-                    let aggregate_res: AggregateChapterResponse = MangadexClient::global()
-                        .search_chapters_aggregate(&manga_id, language)
-                        .await
-                        .unwrap()
-                        .json()
-                        .await
-                        .unwrap();
-
-                    match chapter_response {
-                        Ok(response) => {
-                            if let Ok(response) = response.json::<ChapterPagesResponse>().await {
-                                let binding = DBCONN.lock().unwrap();
-                                let conn = binding.as_ref().unwrap();
-                                let save_response = save_history(
-                                    MangaReadingHistorySave {
-                                        id: &manga_id,
-                                        title: &title,
-                                        img_url: img_url.as_deref(),
-                                        chapter: ChapterToSaveHistory {
-                                            id: &id_chapter,
-                                            title: &chapter_title,
-                                            translated_language: language.as_iso_code(),
-                                        },
-                                    },
-                                    conn,
-                                );
-
-                                if let Err(e) = save_response {
-                                    write_to_error_log(error_log::ErrorType::Error(Box::new(e)));
-                                }
-
-                                let config = MangaTuiConfig::get();
-
-                                let chapter: ChapterToRead = ChapterToRead {
-                                    id: id_chapter,
-                                    title: chapter_title,
-                                    number,
-                                    volume_number,
-                                    language,
-                                    num_page_bookmarked: None,
-                                    pages_url: response.get_files_based_on_quality_as_url(config.image_quality),
-                                };
-
-                                let manga_to_read: MangaToRead = MangaToRead {
-                                    title,
-                                    manga_id,
-                                    list: ListOfChapters::from(aggregate_res),
-                                };
-
-                                tx.send(Events::ReadChapter(chapter, manga_to_read)).ok();
-                                local_tx.send(MangaPageEvents::CheckChapterStatus).ok();
-                                local_tx.send(MangaPageEvents::ReadSuccesful).ok();
-                            }
+                    match search_chapter_response {
+                        Ok((chapter, manga_to_read)) => {
+                            tx.send(Events::ReadChapter(chapter, manga_to_read)).ok();
+                            local_tx.send(MangaPageEvents::CheckChapterStatus).ok();
+                            local_tx.send(MangaPageEvents::ReadSuccesful).ok();
                         },
                         Err(e) => {
-                            write_to_error_log(error_log::ErrorType::Error(Box::new(e)));
-                            local_tx.send(MangaPageEvents::ReadError(id_chapter)).ok();
+                            write_to_error_log(error_log::ErrorType::Error(
+                                format!(
+                                    "cannot read chapter with id {} of manga with id {}, more details : {e}",
+                                    chapter_to_read.id_chapter, chapter_to_read.manga_id
+                                )
+                                .into(),
+                            ));
+                            local_tx.send(MangaPageEvents::ReadError(chapter_to_read.id_chapter)).ok();
                         },
                     }
                 });
@@ -1653,7 +1632,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn it_sends_event_to_bookmark_currently_selected_chapter_on_key_press() {
+    async fn it_sends_event_to_bookmark_currently_selected_chapter_on_key_press_if_auto_bookmark_is_false() {
         let mut manga_page = MangaPage::new(Manga::default(), None);
 
         press_key(&mut manga_page, KeyCode::Char('m'));
@@ -1664,6 +1643,15 @@ mod test {
             .unwrap();
 
         assert_eq!(MangaPageActions::BookMarkChapterSelected, result)
+    }
+
+    #[tokio::test]
+    async fn it_does_not_send_event_bookmark_chapter_selected_if_auto_bookmark_is_true() {
+        let mut manga_page = MangaPage::new(Manga::default(), None).auto_bookmark(true);
+
+        press_key(&mut manga_page, KeyCode::Char('m'));
+
+        assert!(manga_page.local_action_rx.is_empty());
     }
 
     #[test]

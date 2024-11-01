@@ -16,6 +16,7 @@ use super::widgets::search::MangaItem;
 use super::widgets::Component;
 use crate::backend::fetch::ApiClient;
 use crate::backend::tui::{Action, Events};
+use crate::config::MangaTuiConfig;
 use crate::global::INSTRUCTIONS_STYLE;
 use crate::view::pages::*;
 
@@ -86,6 +87,12 @@ impl<T: ApiClient + SearchChapter + SearchMangaPanel> Component for App<T> {
             Events::GoSearchMangasArtist(artist) => {
                 self.go_search_page();
                 self.search_page.search_mangas_of_artist(artist);
+            },
+            Events::GoBackMangaPage => {
+                if self.current_tab == SelectedPage::ReaderTab && self.manga_reader_page.is_some() {
+                    self.manga_reader_page.as_mut().unwrap().clean_up();
+                    self.current_tab = SelectedPage::MangaTab;
+                }
             },
             _ => {},
         }
@@ -207,12 +214,6 @@ impl<T: ApiClient + SearchChapter + SearchMangaPanel> App<T> {
                         self.global_event_tx.send(Events::GoFeedPage).ok();
                     }
                 },
-                KeyCode::Backspace => {
-                    if self.current_tab == SelectedPage::ReaderTab && self.manga_reader_page.is_some() {
-                        self.manga_reader_page.as_mut().unwrap().clean_up();
-                        self.current_tab = SelectedPage::MangaTab;
-                    }
-                },
 
                 _ => {},
             }
@@ -237,7 +238,14 @@ impl<T: ApiClient + SearchChapter + SearchMangaPanel> App<T> {
         self.feed_page.clean_up();
 
         self.current_tab = SelectedPage::MangaTab;
-        self.manga_page = Some(MangaPage::new(manga.manga, self.picker).with_global_sender(self.global_event_tx.clone()));
+
+        let config = MangaTuiConfig::get();
+
+        let manga_page = MangaPage::new(manga.manga, self.picker)
+            .with_global_sender(self.global_event_tx.clone())
+            .auto_bookmark(config.auto_bookmark);
+
+        self.manga_page = Some(manga_page);
     }
 
     fn go_to_read_chapter(&mut self, chapter_to_read: ChapterToRead, manga_to_read: MangaToRead) {
@@ -254,6 +262,12 @@ impl<T: ApiClient + SearchChapter + SearchMangaPanel> App<T> {
         .with_global_sender(self.global_event_tx.clone())
         .with_list_of_chapters(manga_to_read.list)
         .with_manga_title(manga_to_read.title);
+
+        let config = MangaTuiConfig::get();
+
+        if config.auto_bookmark {
+            manga_reader.set_auto_bookmark();
+        }
 
         manga_reader.init_fetching_pages();
 
@@ -358,8 +372,10 @@ mod tests {
 
     use pretty_assertions::assert_eq;
 
+    use self::reader::{SortedVolumes, Volumes};
     use super::*;
     use crate::backend::fetch::fake_api_client::MockMangadexClient;
+    use crate::backend::filter::Languages;
     use crate::view::widgets::press_key;
 
     fn tick<T: ApiClient + SearchChapter + SearchMangaPanel>(app: &mut App<T>) {
@@ -436,5 +452,39 @@ mod tests {
         tick(&mut app);
 
         assert_eq!(app.current_tab, SelectedPage::Home)
+    }
+
+    #[test]
+    fn reader_page_is_initialized_corectly() {
+        let mut app = App::new(MockMangadexClient::new(), Some(Picker::new((8, 8))));
+
+        let chapter_to_read = ChapterToRead {
+            id: "some_id".to_string(),
+            title: "some_title".to_string(),
+            number: 1.0,
+            volume_number: Some("1".to_string()),
+            num_page_bookmarked: None,
+            language: Languages::default(),
+            pages_url: vec!["http://localhost:3000".parse().unwrap()],
+        };
+
+        let list_of_chapter: ListOfChapters = ListOfChapters {
+            volumes: SortedVolumes::new(vec![Volumes {
+                volume: "1".to_string(),
+                ..Default::default()
+            }]),
+        };
+
+        app.go_to_read_chapter(chapter_to_read, MangaToRead {
+            title: "some_title".to_string(),
+            manga_id: "some_manga_id".to_string(),
+            list: list_of_chapter.clone(),
+        });
+
+        let reader_page = app.manga_reader_page.unwrap();
+
+        assert!(reader_page.global_event_tx.is_some());
+        assert_eq!(reader_page.list_of_chapters, list_of_chapter);
+        assert_eq!(SelectedPage::ReaderTab, app.current_tab)
     }
 }

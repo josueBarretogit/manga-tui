@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use reqwest::Url;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::config::ImageQuality;
 
@@ -231,7 +231,33 @@ pub struct AggregateChapterResponse {
 pub struct Volumes {
     pub volume: String,
     pub count: i32,
+    #[serde(deserialize_with = "deserialize_aggregate_chapters")]
     pub chapters: HashMap<String, Chapters>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+enum VecOrHashMap {
+    Hash(HashMap<String, Chapters>),
+    Vec(Vec<Chapters>),
+}
+
+/// Sometimes when the manga has volume 0 the field `chapters` is not a `HashMap` but a `Vec<Chapters>`
+pub fn deserialize_aggregate_chapters<'de, D: Deserializer<'de>>(deserializer: D) -> Result<HashMap<String, Chapters>, D::Error> {
+    let mut chapters = HashMap::new();
+
+    let deserialized = VecOrHashMap::deserialize(deserializer)?;
+
+    match deserialized {
+        VecOrHashMap::Vec(chap) => {
+            for (index, chapter) in chap.into_iter().enumerate() {
+                chapters.insert(index.to_string(), chapter);
+            }
+        },
+        VecOrHashMap::Hash(hash) => chapters = hash,
+    }
+
+    Ok(chapters)
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -385,5 +411,60 @@ mod tests {
 
         let image_quality = ImageQuality::Low;
         assert_eq!(format!("http://some_url/data-saver/{}", response.chapter.hash), response.get_image_url_endpoint(image_quality));
+    }
+
+    // These case happens when a manga has volume "0", the `chapters` field is and array instead of
+    // a HashMap
+    #[test]
+    fn aggregate_response_deserializes_manga_with_volume_0() -> Result<(), Box<dyn std::error::Error>> {
+        let example = r#"
+{
+"result": "ok",
+  "volumes": {
+    "0": {
+      "volume": "0",
+      "count": 1,
+      "chapters": [
+        {
+          "chapter": "0",
+          "id": "6676ffdf-ed39-4627-8cc2-643f761a79c7",
+          "others": [],
+          "count": 1
+        }
+      ]
+    },
+    "1": {
+      "volume": "1",
+      "count": 10,
+      "chapters": {
+        "1": {
+          "chapter": "1",
+          "id": "de7e7d14-6a13-427c-9438-feeec0f9ea96",
+          "others": [
+            "fa4059e4-3c0d-4d14-8f29-e82db74357d8"
+          ],
+          "count": 2
+        },
+        "2": {
+          "chapter": "2",
+          "id": "829e8d36-e243-4a4f-9fed-7a6bbdaa029d",
+          "others": [
+            "cbcd85a3-6fde-4ce9-8d2f-67041ae7aabf"
+          ],
+          "count": 2
+        }
+        
+      }
+    }
+  }
+}
+        "#;
+
+        let response: AggregateChapterResponse = serde_json::from_str(example)?;
+
+        assert!(response.volumes.contains_key("0"));
+        assert!(response.volumes.contains_key("1"));
+
+        Ok(())
     }
 }

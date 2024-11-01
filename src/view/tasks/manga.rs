@@ -6,17 +6,20 @@ use std::time::{Duration, Instant};
 use reqwest::Url;
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::backend::api_responses::{ChapterPagesResponse, ChapterResponse};
+use crate::backend::api_responses::{AggregateChapterResponse, ChapterPagesResponse, ChapterResponse};
+use crate::backend::database::{save_history, ChapterToSaveHistory, Database, MangaReadingHistorySave};
 use crate::backend::download::DownloadChapter;
-use crate::backend::error_log::{write_to_error_log, ErrorType};
+use crate::backend::error_log::{self, write_to_error_log, ErrorType};
 #[cfg(test)]
 use crate::backend::fetch::fake_api_client::MockMangadexClient;
 use crate::backend::fetch::ApiClient;
 #[cfg(not(test))]
 use crate::backend::fetch::MangadexClient;
 use crate::backend::filter::Languages;
-use crate::config::{DownloadType, ImageQuality};
+use crate::config::{DownloadType, ImageQuality, MangaTuiConfig};
+use crate::view::app::MangaToRead;
 use crate::view::pages::manga::{ChapterOrder, MangaPageEvents};
+use crate::view::pages::reader::{ChapterToRead, ListOfChapters};
 
 pub async fn search_chapters_operation(
     manga_id: String,
@@ -342,6 +345,67 @@ pub async fn download_all_chapters(
     }
 
     Ok(())
+}
+
+pub struct ChapterArgs {
+    pub id_chapter: String,
+    pub manga_id: String,
+    pub title: String,
+    pub chapter_title: String,
+    pub language: Languages,
+    pub number: f64,
+    pub volume_number: Option<String>,
+    pub img_url: Option<String>,
+}
+
+/// These function looks very similar  to the implementation `impl FetchChapterBookmarked for MangadexClient` but where it is called
+/// provides with data that reduce one api call
+pub async fn read_chapter(chapter: &ChapterArgs) -> Result<(ChapterToRead, MangaToRead), Box<dyn std::error::Error>> {
+    use crate::backend::fetch::MangadexClient;
+
+    let chapter_response: ChapterPagesResponse =
+        MangadexClient::global().get_chapter_pages(&chapter.id_chapter).await?.json().await?;
+
+    let aggregate_res: AggregateChapterResponse = MangadexClient::global()
+        .search_chapters_aggregate(&chapter.manga_id, chapter.language)
+        .await?
+        .json()
+        .await?;
+
+    let connection = Database::get_connection()?;
+    save_history(
+        MangaReadingHistorySave {
+            id: &chapter.manga_id,
+            title: &chapter.title,
+            img_url: chapter.img_url.as_deref(),
+            chapter: ChapterToSaveHistory {
+                id: &chapter.id_chapter,
+                title: &chapter.chapter_title,
+                translated_language: chapter.language.as_iso_code(),
+            },
+        },
+        &connection,
+    )?;
+
+    let config = MangaTuiConfig::get();
+
+    let chapter_to_read: ChapterToRead = ChapterToRead {
+        id: chapter.id_chapter.clone(),
+        title: chapter.chapter_title.clone(),
+        number: chapter.number,
+        volume_number: chapter.volume_number.clone(),
+        language: chapter.language,
+        num_page_bookmarked: None,
+        pages_url: chapter_response.get_files_based_on_quality_as_url(config.image_quality),
+    };
+
+    let manga_to_read: MangaToRead = MangaToRead {
+        title: chapter.title.clone(),
+        manga_id: chapter.manga_id.clone(),
+        list: ListOfChapters::from(aggregate_res),
+    };
+
+    Ok((chapter_to_read, manga_to_read))
 }
 
 #[cfg(test)]

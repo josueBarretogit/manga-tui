@@ -61,6 +61,7 @@ pub enum MangaReaderActions {
     NextPage,
     PreviousPage,
     ReloadPage,
+    ExitReaderPage,
 }
 
 #[derive(Debug, PartialEq, Eq, Default)]
@@ -135,14 +136,17 @@ impl Default for ChapterToRead {
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct SortedChapters(SortedVec<Chapter>);
 
-/// Volumes will have this order : "none" , "0", "1", "2" ...
+/// Volumes will have this order : "0", "1", "2" ... up until "none" which is chapter with no
+/// volume
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct SortedVolumes(SortedVec<Volumes>);
 
 impl SortedVolumes {
     pub fn new(volumes: Vec<Volumes>) -> Self {
         Self(SortedVec::sorted_by(volumes, |a, b| {
-            if a.volume == "none" {
+            if a.volume == "none" && b.volume.parse::<u32>().is_ok() {
+                Ordering::Greater
+            } else if a.volume.parse::<u32>().is_ok() && b.volume == "none" {
                 Ordering::Less
             } else {
                 a.volume.parse::<u32>().unwrap_or(0).cmp(&b.volume.parse().unwrap_or(0))
@@ -294,7 +298,7 @@ impl ListOfChapters {
 pub struct MangaReader<T: SearchChapter + SearchMangaPanel> {
     manga_title: String,
     manga_id: String,
-    list_of_chapters: ListOfChapters,
+    pub list_of_chapters: ListOfChapters,
     current_chapter: ChapterToRead,
     pages: Vec<Page>,
     pages_list: PagesList,
@@ -305,7 +309,8 @@ pub struct MangaReader<T: SearchChapter + SearchMangaPanel> {
     picker: Picker,
     search_next_chapter_loader: ThrobberState,
     api_client: T,
-    pub _global_event_tx: Option<UnboundedSender<Events>>,
+    auto_bookmark: bool,
+    pub global_event_tx: Option<UnboundedSender<Events>>,
     pub local_action_tx: UnboundedSender<MangaReaderActions>,
     pub local_action_rx: UnboundedReceiver<MangaReaderActions>,
     pub local_event_tx: UnboundedSender<MangaReaderEvents>,
@@ -358,6 +363,7 @@ impl<T: SearchChapter + SearchMangaPanel> Component for MangaReader<T> {
 
     fn update(&mut self, action: Self::Actions) {
         match action {
+            MangaReaderActions::ExitReaderPage => self.exit(),
             MangaReaderActions::BookMarkCurrentChapter => self.bookmark_current_chapter(),
             MangaReaderActions::SearchPreviousChapter => self.initiate_search_previous_chapter(),
             MangaReaderActions::SearchNextChapter => self.initiate_search_next_chapter(),
@@ -401,7 +407,8 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
         let num_page_bookmarked = chapter.num_page_bookmarked;
 
         Self {
-            _global_event_tx: None,
+            global_event_tx: None,
+            auto_bookmark: false,
             current_chapter: chapter,
             manga_title: String::default(),
             pages: vec![],
@@ -423,8 +430,12 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
     }
 
     pub fn with_global_sender(mut self, sender: UnboundedSender<Events>) -> Self {
-        self._global_event_tx = Some(sender);
+        self.global_event_tx = Some(sender);
         self
+    }
+
+    pub fn set_auto_bookmark(&mut self) {
+        self.auto_bookmark = true;
     }
 
     pub fn with_list_of_chapters(mut self, list: ListOfChapters) -> Self {
@@ -604,6 +615,13 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
         }
     }
 
+    fn exit(&mut self) {
+        if self.auto_bookmark {
+            self.bookmark_current_chapter()
+        }
+        self.global_event_tx.as_ref().unwrap().send(Events::GoBackMangaPage).ok();
+    }
+
     fn render_right_panel(&mut self, buf: &mut Buffer, area: Rect, show_reload: bool) {
         let [instructions_area, information_era, status_area] =
             Layout::vertical([Constraint::Percentage(20), Constraint::Percentage(20), Constraint::Percentage(20)])
@@ -614,11 +632,14 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
             Line::from(vec!["Go back: ".into(), "<Backspace>".to_span().style(*INSTRUCTIONS_STYLE)]),
             Line::from(vec!["Next chapter: ".into(), "<w>".to_span().style(*INSTRUCTIONS_STYLE)]),
             Line::from(vec!["Previous chapter: ".into(), "<b>".to_span().style(*INSTRUCTIONS_STYLE)]),
-            Line::from(vec!["Bookmark: ".into(), "<m>".to_span().style(*INSTRUCTIONS_STYLE)]),
         ];
 
         if show_reload {
             instructions.push(Line::from(vec!["Reload: ".into(), "<r>".to_span().style(*INSTRUCTIONS_STYLE)]));
+        }
+
+        if !self.auto_bookmark {
+            instructions.push(Line::from(vec!["Bookmark: ".into(), "<m>".to_span().style(*INSTRUCTIONS_STYLE)]));
         }
 
         Widget::render(List::new(instructions).block(Block::bordered()), instructions_area, buf);
@@ -706,7 +727,12 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
                 self.local_action_tx.send(MangaReaderActions::ReloadPage).ok();
             },
             KeyCode::Char('m') => {
-                self.local_action_tx.send(MangaReaderActions::BookMarkCurrentChapter).ok();
+                if !self.auto_bookmark {
+                    self.local_action_tx.send(MangaReaderActions::BookMarkCurrentChapter).ok();
+                }
+            },
+            KeyCode::Backspace => {
+                self.local_action_tx.send(MangaReaderActions::ExitReaderPage).ok();
             },
             _ => {},
         }
@@ -794,6 +820,14 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
     }
 }
 
+impl<T: SearchChapter + SearchMangaPanel> Drop for MangaReader<T> {
+    fn drop(&mut self) {
+        if self.auto_bookmark {
+            self.bookmark_current_chapter()
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::time::Duration;
@@ -801,6 +835,7 @@ mod test {
     use pretty_assertions::assert_eq;
     use tokio::time::timeout;
 
+    use self::mpsc::unbounded_channel;
     use super::*;
     use crate::backend::database::{ChapterToBookmark, Database};
     use crate::view::widgets::press_key;
@@ -914,12 +949,17 @@ mod test {
             chapters: SortedChapters::new(vec![Chapter::default()]),
         };
 
-        let volumes: Vec<Volumes> = vec![volume_to_search.clone(), other];
+        let no_volume: Volumes = Volumes {
+            volume: "none".to_string(),
+            chapters: SortedChapters::new(vec![Chapter::default()]),
+        };
 
-        let volumes = SortedVolumes::new(volumes);
+        let volumes: Vec<Volumes> = vec![volume_to_search.clone(), no_volume, other];
+
+        let volumes = dbg!(SortedVolumes::new(volumes));
 
         let result = volumes.search_next_volume("1").expect("should search next volume");
-        let not_found = volumes.search_next_volume("2");
+        let not_found = volumes.search_next_volume("none");
 
         assert_eq!(volume_to_search, result);
         assert!(not_found.is_none());
@@ -946,27 +986,6 @@ mod test {
 
         assert_eq!(volume_to_search, result);
         assert!(not_found.is_none());
-    }
-
-    #[test]
-    fn it_searches_next_volume_from_none() {
-        let volume_to_search: Volumes = Volumes {
-            volume: "1".to_string(),
-            chapters: SortedChapters::new(vec![Chapter::default()]),
-        };
-
-        let other: Volumes = Volumes {
-            volume: "none".to_string(),
-            chapters: SortedChapters::new(vec![Chapter::default()]),
-        };
-
-        let volumes: Vec<Volumes> = vec![volume_to_search.clone(), other];
-
-        let volumes = SortedVolumes::new(volumes);
-
-        let result = volumes.search_next_volume("none").expect("should search next volume");
-
-        assert_eq!(volume_to_search, result);
     }
 
     #[test]
@@ -1629,24 +1648,35 @@ mod test {
         let area = Rect::new(0, 0, 10, 10);
         let mut buf = Buffer::empty(area);
 
-        StatefulWidget::render(manga_reader.pages_list, area, &mut buf, &mut manga_reader.page_list_state);
+        StatefulWidget::render(manga_reader.pages_list.clone(), area, &mut buf, &mut manga_reader.page_list_state);
 
         assert_eq!(1, manga_reader.page_list_state.list_state.selected.expect("should not be none"));
     }
 
     #[tokio::test]
-    async fn it_sends_event_to_bookmark_chapter_on_m_key_press() {
+    async fn it_does_not_send_event_to_bookmark_chapter_on_m_key_press_if_autobookmarking_is_true() {
         let mut manga_reader =
             MangaReader::new(ChapterToRead::default(), "".to_string(), Picker::new((8, 8)), TestApiClient::new());
 
+        manga_reader.set_auto_bookmark();
+
         press_key(&mut manga_reader, KeyCode::Char('m'));
 
-        let expected = MangaReaderActions::BookMarkCurrentChapter;
+        assert!(manga_reader.local_action_rx.is_empty());
+    }
 
-        let result = timeout(Duration::from_millis(250), manga_reader.local_action_rx.recv())
-            .await
-            .unwrap()
-            .unwrap();
+    #[tokio::test]
+    async fn it_sends_event_go_manga_page_on_exit() {
+        let (tx, mut rx) = unbounded_channel::<Events>();
+        let mut manga_reader =
+            MangaReader::new(ChapterToRead::default(), "".to_string(), Picker::new((8, 8)), TestApiClient::new())
+                .with_global_sender(tx);
+
+        manga_reader.exit();
+
+        let expected = Events::GoBackMangaPage;
+
+        let result = timeout(Duration::from_millis(250), rx.recv()).await.unwrap().unwrap();
 
         assert_eq!(expected, result)
     }

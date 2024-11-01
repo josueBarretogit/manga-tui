@@ -29,6 +29,7 @@ pub enum Events {
     Key(KeyEvent),
     Mouse(MouseEvent),
     GoToMangaPage(MangaItem),
+    GoBackMangaPage,
     GoToHome,
     GoSearchPage,
     GoSearchMangasAuthor(Author),
