@@ -24,13 +24,18 @@
       let
         overlays = [ rust-overlay.overlays.default ];
         pkgs = import nixpkgs { inherit system overlays; };
+        inherit (pkgs.lib) cleanSource;
 
         rust = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
 
         craneLib = (crane.mkLib nixpkgs.legacyPackages.${system}).overrideToolchain rust;
 
         commonArgs = {
-          src = craneLib.cleanCargoSource self;
+          # src = craneLib.cleanCargoSource self;
+          #
+          # use regular nixpkgs lib.cleanSource so that `public` directory
+          # isn't removed, causing build failure
+          src = cleanSource self;
           strictDeps = true;
           nativeBuildInputs = with pkgs; [
             pkg-config
