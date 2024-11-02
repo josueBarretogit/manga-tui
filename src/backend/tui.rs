@@ -11,10 +11,10 @@ use ratatui_image::picker::{Picker, ProtocolType};
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::task::JoinHandle;
 
-use super::api_responses::ChapterPagesResponse;
-use super::fetch::MangadexClient;
+use super::fetch::ApiClient;
 use crate::common::{Artist, Author};
-use crate::view::app::{App, AppState};
+use crate::view::app::{App, AppState, MangaToRead};
+use crate::view::pages::reader::{ChapterToRead, SearchChapter, SearchMangaPanel};
 use crate::view::widgets::search::MangaItem;
 use crate::view::widgets::Component;
 
@@ -29,12 +29,13 @@ pub enum Events {
     Key(KeyEvent),
     Mouse(MouseEvent),
     GoToMangaPage(MangaItem),
+    GoBackMangaPage,
     GoToHome,
     GoSearchPage,
     GoSearchMangasAuthor(Author),
     GoSearchMangasArtist(Artist),
     GoFeedPage,
-    ReadChapter(ChapterPagesResponse),
+    ReadChapter(ChapterToRead, MangaToRead),
 }
 
 /// Initialize the terminal
@@ -106,10 +107,13 @@ fn get_picker() -> Option<Picker> {
 }
 
 ///Start app's main loop
-pub async fn run_app(backend: impl Backend) -> Result<(), Box<dyn Error>> {
+pub async fn run_app(
+    backend: impl Backend,
+    api_client: impl ApiClient + SearchChapter + SearchMangaPanel,
+) -> Result<(), Box<dyn Error>> {
     let mut terminal = Terminal::new(backend)?;
 
-    let mut app = App::new(MangadexClient::global().clone(), get_picker());
+    let mut app = App::new(api_client, get_picker());
 
     let tick_rate = std::time::Duration::from_millis(250);
 

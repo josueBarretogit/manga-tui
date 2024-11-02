@@ -1,9 +1,19 @@
 # The format of the manga downloaded 
 # values : cbz , raw, epub 
 # default : cbz 
-download_type = "cbz" 
- 
+download_type = "cbz"
+
 # Download image quality, low quality means images are compressed and is recommended for slow internet connections 
 # values : low, high 
 # default : low 
-image_quality = "low" 
+image_quality = "low"
+
+# Pages around the currently selected page to try to prefetch
+# values : 0-255
+# default : 5
+amount_pages = 5
+
+# Whether or not bookmarking is done automatically, if false you decide which chapter to bookmark
+# values : true, false
+# default : true
+auto_bookmark = true

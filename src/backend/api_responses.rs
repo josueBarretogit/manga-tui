@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
-use serde::{Deserialize, Serialize};
+use reqwest::Url;
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::config::ImageQuality;
 
@@ -169,6 +170,25 @@ impl ChapterPagesResponse {
             ImageQuality::High => self.chapter.data,
         }
     }
+
+    /// Based on the mangadex api the `data_saver` array is used when image quality is low and
+    /// `data` is used when ImageQuality is high
+    pub fn get_files_based_on_quality_as_url(self, quality: ImageQuality) -> Vec<Url> {
+        let base_endpoint = self.get_image_url_endpoint(quality);
+
+        let endpoint_formatted = |raw_url: String| format!("{base_endpoint}/{}", raw_url).parse::<Url>();
+
+        match quality {
+            ImageQuality::Low => self
+                .chapter
+                .data_saver
+                .into_iter()
+                .map(endpoint_formatted)
+                .filter_map(|res| res.ok())
+                .collect(),
+            ImageQuality::High => self.chapter.data.into_iter().map(endpoint_formatted).filter_map(|res| res.ok()).collect(),
+        }
+    }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -197,6 +217,56 @@ pub struct Statistics {
 #[serde(rename_all = "camelCase")]
 pub struct Rating {
     pub average: Option<f64>,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AggregateChapterResponse {
+    pub result: String,
+    pub volumes: HashMap<String, Volumes>,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Volumes {
+    pub volume: String,
+    pub count: i32,
+    #[serde(deserialize_with = "deserialize_aggregate_chapters")]
+    pub chapters: HashMap<String, Chapters>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+enum VecOrHashMap {
+    Hash(HashMap<String, Chapters>),
+    Vec(Vec<Chapters>),
+}
+
+/// Sometimes when the manga has volume 0 the field `chapters` is not a `HashMap` but a `Vec<Chapters>`
+pub fn deserialize_aggregate_chapters<'de, D: Deserializer<'de>>(deserializer: D) -> Result<HashMap<String, Chapters>, D::Error> {
+    let mut chapters = HashMap::new();
+
+    let deserialized = VecOrHashMap::deserialize(deserializer)?;
+
+    match deserialized {
+        VecOrHashMap::Vec(chap) => {
+            for (index, chapter) in chap.into_iter().enumerate() {
+                chapters.insert(index.to_string(), chapter);
+            }
+        },
+        VecOrHashMap::Hash(hash) => chapters = hash,
+    }
+
+    Ok(chapters)
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Chapters {
+    pub chapter: String,
+    pub id: String,
+    pub others: Vec<String>,
+    pub count: i32,
 }
 
 pub mod feed {
@@ -276,24 +346,53 @@ pub mod authors {
     }
 }
 
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OneChapterResponse {
+    pub data: OneChapterData,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OneChapterData {
+    pub id: String,
+    pub attributes: ChapterAttribute,
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
     use uuid::Uuid;
 
     use super::*;
+
     #[test]
-    fn the_array_containing_image_filenames() {
+    fn it_constructs_manga_panel_endpoint_based_on_image_quality() {
         let mut response = ChapterPagesResponse::default();
 
         response.chapter.data_saver = vec!["low_quality1.jpg".into(), "low_quality2.jpg".into()];
         response.chapter.data = vec!["high_quality1.jpg".into(), "high_quality2.jpg".into()];
 
-        let image_quality = ImageQuality::High;
-        assert_eq!(response.chapter.data, response.clone().get_files_based_on_quality(image_quality));
+        response.chapter.hash = "the_hash".to_string();
+        response.base_url = "http://localhost".to_string();
 
         let image_quality = ImageQuality::Low;
-        assert_eq!(response.chapter.data_saver, response.clone().get_files_based_on_quality(image_quality));
+
+        let expected: Url =
+            format!("{}/{}/{}/low_quality1.jpg", response.base_url, image_quality.as_param(), response.chapter.hash,)
+                .parse()
+                .unwrap();
+
+        assert_eq!(&expected, response.clone().get_files_based_on_quality_as_url(image_quality).first().unwrap());
+
+        let image_quality = ImageQuality::High;
+
+        let expected: Url =
+            format!("{}/{}/{}/high_quality1.jpg", response.base_url, image_quality.as_param(), response.chapter.hash)
+                .parse()
+                .unwrap();
+
+        assert_eq!(&expected, response.clone().get_files_based_on_quality_as_url(image_quality).first().unwrap());
     }
 
     #[test]
@@ -312,5 +411,60 @@ mod tests {
 
         let image_quality = ImageQuality::Low;
         assert_eq!(format!("http://some_url/data-saver/{}", response.chapter.hash), response.get_image_url_endpoint(image_quality));
+    }
+
+    // These case happens when a manga has volume "0", the `chapters` field is and array instead of
+    // a HashMap
+    #[test]
+    fn aggregate_response_deserializes_manga_with_volume_0() -> Result<(), Box<dyn std::error::Error>> {
+        let example = r#"
+{
+"result": "ok",
+  "volumes": {
+    "0": {
+      "volume": "0",
+      "count": 1,
+      "chapters": [
+        {
+          "chapter": "0",
+          "id": "6676ffdf-ed39-4627-8cc2-643f761a79c7",
+          "others": [],
+          "count": 1
+        }
+      ]
+    },
+    "1": {
+      "volume": "1",
+      "count": 10,
+      "chapters": {
+        "1": {
+          "chapter": "1",
+          "id": "de7e7d14-6a13-427c-9438-feeec0f9ea96",
+          "others": [
+            "fa4059e4-3c0d-4d14-8f29-e82db74357d8"
+          ],
+          "count": 2
+        },
+        "2": {
+          "chapter": "2",
+          "id": "829e8d36-e243-4a4f-9fed-7a6bbdaa029d",
+          "others": [
+            "cbcd85a3-6fde-4ce9-8d2f-67041ae7aabf"
+          ],
+          "count": 2
+        }
+        
+      }
+    }
+  }
+}
+        "#;
+
+        let response: AggregateChapterResponse = serde_json::from_str(example)?;
+
+        assert!(response.volumes.contains_key("0"));
+        assert!(response.volumes.contains_key("1"));
+
+        Ok(())
     }
 }

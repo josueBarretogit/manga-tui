@@ -3,9 +3,11 @@ use std::path::{Path, PathBuf};
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
+use reqwest::Url;
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::backend::api_responses::{ChapterPagesResponse, ChapterResponse};
+use crate::backend::api_responses::{AggregateChapterResponse, ChapterPagesResponse, ChapterResponse};
+use crate::backend::database::{save_history, ChapterToSaveHistory, Database, MangaReadingHistorySave};
 use crate::backend::download::DownloadChapter;
 use crate::backend::error_log::{write_to_error_log, ErrorType};
 #[cfg(test)]
@@ -14,8 +16,10 @@ use crate::backend::fetch::ApiClient;
 #[cfg(not(test))]
 use crate::backend::fetch::MangadexClient;
 use crate::backend::filter::Languages;
-use crate::config::{DownloadType, ImageQuality};
+use crate::config::{DownloadType, ImageQuality, MangaTuiConfig};
+use crate::view::app::MangaToRead;
 use crate::view::pages::manga::{ChapterOrder, MangaPageEvents};
+use crate::view::pages::reader::{ChapterToRead, ListOfChapters};
 
 pub async fn search_chapters_operation(
     manga_id: String,
@@ -40,7 +44,7 @@ pub async fn search_chapters_operation(
             }
         },
         Err(e) => {
-            write_to_error_log(ErrorType::FromError(Box::new(e)));
+            write_to_error_log(ErrorType::Error(Box::new(e)));
             tx.send(MangaPageEvents::LoadChapters(None)).ok();
         },
     }
@@ -86,7 +90,11 @@ async fn download_chapter_raw_images(
     for (index, chapter_page_file_name) in data.files.into_iter().enumerate() {
         let extension = Path::new(&chapter_page_file_name).extension().unwrap().to_str().unwrap();
 
-        if let Ok(response) = api_client.get_chapter_page(data.endpoint, &chapter_page_file_name).await {
+        let endpoint: Url = format!("{}/{}", data.endpoint, chapter_page_file_name)
+            .parse()
+            .unwrap_or("http://localhost".parse().unwrap());
+
+        if let Ok(response) = api_client.get_chapter_page(endpoint).await {
             if let Ok(bytes) = response.bytes().await {
                 data.chapter_to_download.create_image_file(
                     &bytes,
@@ -115,7 +123,12 @@ async fn download_chapter_cbz(
 
     for (index, file_name) in data.files.into_iter().enumerate() {
         let extension = Path::new(&file_name).extension().unwrap().to_str().unwrap();
-        if let Ok(response) = api_client.get_chapter_page(data.endpoint, &file_name).await {
+
+        let endpoint: Url = format!("{}/{}", data.endpoint, file_name)
+            .parse()
+            .unwrap_or("http://localhost".parse().unwrap());
+
+        if let Ok(response) = api_client.get_chapter_page(endpoint).await {
             if let Ok(bytes) = response.bytes().await {
                 let file_name = format!("{}.{}", index + 1, extension);
                 data.chapter_to_download.insert_into_cbz(&mut zip_writer, &file_name, &bytes);
@@ -144,7 +157,12 @@ async fn download_chapter_epub(
 
     for (index, file_name) in data.files.into_iter().enumerate() {
         let extension = Path::new(&file_name).extension().unwrap().to_str().unwrap();
-        if let Ok(response) = api_client.get_chapter_page(data.endpoint, &file_name).await {
+
+        let endpoint: Url = format!("{}/{}", data.endpoint, file_name)
+            .parse()
+            .unwrap_or("http://localhost".parse().unwrap());
+
+        if let Ok(response) = api_client.get_chapter_page(endpoint).await {
             if let Ok(bytes) = response.bytes().await {
                 let file_name = format!("{}.{}", index + 1, extension);
                 data.chapter_to_download
@@ -311,7 +329,7 @@ pub async fn download_all_chapters(
             .await;
 
             if let Err(e) = download_proccess {
-                write_to_error_log(ErrorType::FromError(e));
+                write_to_error_log(ErrorType::Error(e));
             }
 
             download_data.sender.send(MangaPageEvents::SetDownloadAllChaptersProgress).ok();
@@ -327,6 +345,67 @@ pub async fn download_all_chapters(
     }
 
     Ok(())
+}
+
+pub struct ChapterArgs {
+    pub id_chapter: String,
+    pub manga_id: String,
+    pub title: String,
+    pub chapter_title: String,
+    pub language: Languages,
+    pub number: f64,
+    pub volume_number: Option<String>,
+    pub img_url: Option<String>,
+}
+
+/// These function looks very similar  to the implementation `impl FetchChapterBookmarked for MangadexClient` but where it is called
+/// provides with data that reduce one api call
+pub async fn read_chapter(chapter: &ChapterArgs) -> Result<(ChapterToRead, MangaToRead), Box<dyn std::error::Error>> {
+    use crate::backend::fetch::MangadexClient;
+
+    let chapter_response: ChapterPagesResponse =
+        MangadexClient::global().get_chapter_pages(&chapter.id_chapter).await?.json().await?;
+
+    let aggregate_res: AggregateChapterResponse = MangadexClient::global()
+        .search_chapters_aggregate(&chapter.manga_id, chapter.language)
+        .await?
+        .json()
+        .await?;
+
+    let connection = Database::get_connection()?;
+    save_history(
+        MangaReadingHistorySave {
+            id: &chapter.manga_id,
+            title: &chapter.title,
+            img_url: chapter.img_url.as_deref(),
+            chapter: ChapterToSaveHistory {
+                id: &chapter.id_chapter,
+                title: &chapter.chapter_title,
+                translated_language: chapter.language.as_iso_code(),
+            },
+        },
+        &connection,
+    )?;
+
+    let config = MangaTuiConfig::get();
+
+    let chapter_to_read: ChapterToRead = ChapterToRead {
+        id: chapter.id_chapter.clone(),
+        title: chapter.chapter_title.clone(),
+        number: chapter.number,
+        volume_number: chapter.volume_number.clone(),
+        language: chapter.language,
+        num_page_bookmarked: None,
+        pages_url: chapter_response.get_files_based_on_quality_as_url(config.image_quality),
+    };
+
+    let manga_to_read: MangaToRead = MangaToRead {
+        title: chapter.title.clone(),
+        manga_id: chapter.manga_id.clone(),
+        list: ListOfChapters::from(aggregate_res),
+    };
+
+    Ok((chapter_to_read, manga_to_read))
 }
 
 #[cfg(test)]
@@ -500,6 +579,7 @@ mod tests {
 
         let response = ChapterResponse {
             data: chapters,
+
             ..Default::default()
         };
 

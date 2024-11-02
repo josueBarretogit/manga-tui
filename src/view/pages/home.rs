@@ -330,7 +330,7 @@ impl Home {
                     }
                 },
                 Err(e) => {
-                    write_to_error_log(ErrorType::FromError(Box::new(e)));
+                    write_to_error_log(ErrorType::Error(Box::new(e)));
                     tx.send(HomeEvents::LoadPopularMangas(None)).ok();
                 },
             }
@@ -379,7 +379,7 @@ impl Home {
                     }
                 },
                 Err(e) => {
-                    write_to_error_log(ErrorType::FromError(Box::new(e)));
+                    write_to_error_log(ErrorType::Error(Box::new(e)));
                     tx.send(HomeEvents::LoadRecentlyAddedMangas(None)).ok();
                 },
             }
