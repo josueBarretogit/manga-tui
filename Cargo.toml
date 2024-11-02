@@ -1,6 +1,6 @@
 [package]
 name = "manga-tui"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2021"
 authors = ["Josue <josuebarretogit@gmail.com>"]
 readme = "README.md"
@@ -16,11 +16,11 @@ exclude = [
 ]
 
 [dependencies]
-ratatui = { version = "0.28.0", features = ["all-widgets", "palette", "unstable-widget-ref"] }
+ratatui = { version = "0.29.0", features = ["all-widgets", "palette", "unstable-widget-ref"] }
 ratatui-image = {  version = "1.0.5", features = ["rustix"]}
-throbber-widgets-tui = "0.7.0"
-tui-input = "0.10.0"
-tui-widget-list = "0.12.0"
+throbber-widgets-tui = "0.8.0"
+tui-input = "0.11.0"
+tui-widget-list = "0.13.0"
 crossterm = { version = "0.28.1", features = ["event-stream"] }
 directories = "5.0.1"
 image = "0.25.1"

@@ -9,7 +9,7 @@ use tokio::sync::mpsc::UnboundedSender;
 use crate::backend::api_responses::{AggregateChapterResponse, ChapterPagesResponse, ChapterResponse};
 use crate::backend::database::{save_history, ChapterToSaveHistory, Database, MangaReadingHistorySave};
 use crate::backend::download::DownloadChapter;
-use crate::backend::error_log::{self, write_to_error_log, ErrorType};
+use crate::backend::error_log::{write_to_error_log, ErrorType};
 #[cfg(test)]
 use crate::backend::fetch::fake_api_client::MockMangadexClient;
 use crate::backend::fetch::ApiClient;
