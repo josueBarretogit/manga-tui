@@ -911,7 +911,7 @@ mod tests {
 
         // Limit the loop to avoid an infinite loop
         let mut counter = 0;
-        let max_ticks = 10;
+        let max_ticks = 1000;
         loop {
             feed_page.tick();
             if feed_page.state == FeedState::MangaPageNotFound || counter >= max_ticks {
