@@ -309,7 +309,7 @@ pub struct MangaReader<T: SearchChapter + SearchMangaPanel> {
     picker: Picker,
     search_next_chapter_loader: ThrobberState,
     api_client: T,
-    auto_bookmark: bool,
+    pub auto_bookmark: bool,
     pub global_event_tx: Option<UnboundedSender<Events>>,
     pub local_action_tx: UnboundedSender<MangaReaderActions>,
     pub local_action_rx: UnboundedReceiver<MangaReaderActions>,
@@ -607,7 +607,7 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
         }
     }
 
-    fn bookmark_current_chapter(&mut self) {
+    pub fn bookmark_current_chapter(&mut self) {
         let connection = Database::get_connection();
         if let Ok(conn) = connection {
             let mut database = Database::new(&conn);
@@ -615,7 +615,7 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
         }
     }
 
-    fn exit(&mut self) {
+    pub fn exit(&mut self) {
         if self.auto_bookmark {
             self.bookmark_current_chapter()
         }
@@ -817,14 +817,6 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
         )?;
 
         Ok(self.current_chapter.id.clone())
-    }
-}
-
-impl<T: SearchChapter + SearchMangaPanel> Drop for MangaReader<T> {
-    fn drop(&mut self) {
-        if self.auto_bookmark {
-            self.bookmark_current_chapter()
-        }
     }
 }
 

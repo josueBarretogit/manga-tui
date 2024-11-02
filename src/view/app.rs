@@ -189,6 +189,21 @@ impl<T: ApiClient + SearchChapter + SearchMangaPanel> App<T> {
         self.home_page.render(area, frame);
     }
 
+    /// This method ensures a chapter is bookmarked on quit as well
+    /// only if auto_bookmark = true
+    fn auto_bookmark_on_quit(&mut self) {
+        if let Some(reader_page) = self.manga_reader_page.as_mut() {
+            if reader_page.auto_bookmark {
+                reader_page.bookmark_current_chapter();
+            }
+        }
+    }
+
+    fn quit(&mut self) {
+        self.auto_bookmark_on_quit();
+        self.global_action_tx.send(Action::Quit).ok();
+    }
+
     fn handle_key_events(&mut self, key_event: KeyEvent) {
         if self.manga_page.as_ref().is_some_and(|page| page.is_downloading_all_chapters()) {
             return;
@@ -196,9 +211,7 @@ impl<T: ApiClient + SearchChapter + SearchMangaPanel> App<T> {
 
         if self.search_page.input_mode != InputMode::Typing && !self.search_page.is_typing_filter() && !self.feed_page.is_typing() {
             match key_event.code {
-                KeyCode::Char('c') if key_event.modifiers == KeyModifiers::CONTROL => {
-                    self.global_action_tx.send(Action::Quit).ok();
-                },
+                KeyCode::Char('c') if key_event.modifiers == KeyModifiers::CONTROL => self.quit(),
                 KeyCode::Char('u') | KeyCode::F(1) => {
                     if self.current_tab != SelectedPage::ReaderTab {
                         self.global_event_tx.send(Events::GoToHome).ok();

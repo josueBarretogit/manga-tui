@@ -11,11 +11,8 @@ keywords = ["cli", "command-line"]
 categories = ["command-line-interface"]
 license = "MIT"
 exclude = [
-  "public/*"
-]
-include = [
-    "**/*.rs",
-    "Cargo.toml",
+  "public/*",
+  "data_test/*"
 ]
 
 [dependencies]
