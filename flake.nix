@@ -15,49 +15,57 @@
   };
 
   outputs =
-    { self
-    , nixpkgs
-    , flake-utils
-    , rust-overlay
-    , crane
-    }:
-    flake-utils.lib.eachDefaultSystem (system:
-    let
-      overlays = [ rust-overlay.overlays.default ];
-      pkgs = import nixpkgs { inherit system overlays; };
-
-      rust = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
-
-      craneLib = (crane.mkLib nixpkgs.legacyPackages.${system}).overrideToolchain rust;
-
-      commonArgs = {
-        src = craneLib.cleanCargoSource self;
-        strictDeps = true;
-        nativeBuildInputs = with pkgs; [
-          pkg-config
-        ];
-        buildInputs = with pkgs; [
-          openssl
-        ];
-      };
-
-      cargoArtifacts = craneLib.buildDepsOnly commonArgs;
-    in
     {
-      packages = rec {
-        manga-tui = craneLib.buildPackage (commonArgs // {
-          inherit cargoArtifacts;
-        });
+      self,
+      nixpkgs,
+      flake-utils,
+      rust-overlay,
+      crane,
+    }:
+    flake-utils.lib.eachDefaultSystem (
+      system:
+      let
+        overlays = [ rust-overlay.overlays.default ];
+        pkgs = import nixpkgs { inherit system overlays; };
 
-        default = manga-tui;
-      };
+        rust = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
 
-      devShells.default = craneLib.devShell {
-        packages = with pkgs; [
-          git
-          openssl
-          pkg-config
-        ];
-      };
-    });
+        craneLib = (crane.mkLib nixpkgs.legacyPackages.${system}).overrideToolchain rust;
+
+        commonArgs = {
+          src = craneLib.cleanCargoSource self;
+          strictDeps = true;
+          nativeBuildInputs = with pkgs; [
+            pkg-config
+          ];
+          buildInputs = with pkgs; [
+            openssl
+          ];
+        };
+
+        cargoArtifacts = craneLib.buildDepsOnly commonArgs;
+      in
+      {
+        packages = rec {
+          manga-tui = craneLib.buildPackage (
+            commonArgs
+            // {
+              inherit cargoArtifacts;
+            }
+          );
+
+          default = manga-tui;
+        };
+
+        devShells.default = craneLib.devShell {
+          packages = with pkgs; [
+            git
+            openssl
+            pkg-config
+          ];
+        };
+
+        formatter = pkgs.nixfmt-rfc-style;
+      }
+    );
 }
