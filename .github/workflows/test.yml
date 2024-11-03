@@ -2,9 +2,9 @@ name: main
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 env:
   CARGO_TERM_COLOR: always
@@ -46,7 +46,7 @@ jobs:
         with:
           rust-version: nightly-2024-06-25
 
-      - name: check 
+      - name: check
         run: cargo check --locked
 
       - name: build
@@ -58,5 +58,25 @@ jobs:
       - name: test
         run: cargo nextest run --no-fail-fast
 
-      - name: run ignored tests 
+      - name: run ignored tests
         run: cargo nextest run -- --ignored
+
+  build_nix_targets:
+    name: Build Nix targets
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: "write"
+      contents: "read"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Nix flake inputs
+        uses: DeterminateSystems/flake-checker-action@v4
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v3
+      - name: Activate Magic Nix Cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+        with:
+          use-flakehub: false
+
+      - name: Build default package
+        run: nix build

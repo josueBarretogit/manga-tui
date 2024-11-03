@@ -901,24 +901,11 @@ mod tests {
 
         let failing_api_client = MockMangadexClient::new().with_returning_errors();
 
-        let mut feed_page: Feed<MockMangadexClient> = Feed::new().with_global_sender(tx).with_api_client(failing_api_client);
+        let mut feed_page: Feed<MockMangadexClient> = Feed::new();
 
-        render_history_and_select(&mut feed_page);
+        search_manga(failing_api_client, "".to_string(), tx, feed_page.local_event_tx.clone()).await;
 
-        feed_page.go_to_manga_page();
-
-        feed_page.tasks.join_next().await;
-
-        // Limit the loop to avoid an infinite loop
-        let mut counter = 0;
-        let max_ticks = 10;
-        loop {
-            feed_page.tick();
-            if feed_page.state == FeedState::MangaPageNotFound || counter >= max_ticks {
-                break;
-            }
-            counter += 1;
-        }
+        feed_page.tick();
 
         assert_eq!(feed_page.state, FeedState::MangaPageNotFound);
     }
