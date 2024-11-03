@@ -558,7 +558,7 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
             .and_then(|page| self.pages_list.pages.get_mut(index).map(|item| (page, item)))
         {
             //NOTE:  This will need to become async atomic if this becomes an async function
-            if item.state != PageItemState::Loading && item.state != PageItemState::FailedLoad {
+            if item.state != PageItemState::Loading && item.state != PageItemState::FinishedLoad {
                 let tx = self.local_event_tx.clone();
                 let api_client = self.api_client.clone();
 
