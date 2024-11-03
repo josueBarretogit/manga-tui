@@ -3,11 +3,12 @@
 </h1>
 
 <h3 align="center">
-    Terminal manga reader and downloader
+    Terminal-based manga reader and downloader written in rust 🦀
 </h3>
-
 <div align="center">
-    <img alt="top language" src="https://img.shields.io/github/languages/top/josuebarretogit/manga-tui">
+    <a href="https://github.com/josueBarretogit/manga-tui/actions/workflows/test.yml">
+        <img alt="test passing" src="https://img.shields.io/github/actions/workflow/status/josueBarretogit/manga-tui/test.yml?label=tests">
+    </a>
     <a href="https://crates.io/crates/manga-tui">
         <img alt="crates io downloads" src="https://img.shields.io/crates/d/manga-tui?logo=rust&label=crates.io downloads">
     </a>
@@ -133,7 +134,32 @@ On linux it will output something like: `~/.local/share/manga-tui` <br />
 
 On the `manga-tui` directory there will be 4 directories
 - `history`, which contains a sqlite database to store reading history
-- `config`, which contains a TOML file where you can define download format and image quality
+- `config`, which contains the `manga-tui-config.toml` config file with the following fields:
+
+```toml
+# The format of the manga downloaded 
+# values : cbz , raw, epub 
+# default : cbz 
+download_type = "cbz"
+
+# Download image quality, low quality means images are compressed and is recommended for slow internet connections 
+# values : low, high 
+# default : low 
+image_quality = "low"
+
+# Pages around the currently selected page to try to prefetch
+# values : 0-255
+# default : 5
+amount_pages = 5
+
+# Whether or not bookmarking is done automatically, if false you decide which chapter to bookmark
+# values : true, false
+# default : true
+auto_bookmark = true
+
+```
+if the `manga-tui-config.toml` cannot be read / parsed then the defaults will be used 
+
 - `mangaDownloads`, where manga will be downloaded 
 - `errorLogs`, for storing posible errors / bugs 
 
