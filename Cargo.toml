@@ -46,7 +46,7 @@ epub-builder = "0.7.4"
 httpmock = "0.7.0-rc.1"
 pretty_assertions = "1.4.0"
 rusty-hook = "0.11.2"
-uuid = { version = "1.10.0", features = ["v4", "fast-rng"] }
+uuid = { version = "1.11.0", features = ["v4", "fast-rng"] }
 fake = "2.10.0"
 http = "1.0"
 
