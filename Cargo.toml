@@ -23,7 +23,7 @@ tui-input = "0.11.0"
 tui-widget-list = "0.13.0"
 crossterm = { version = "0.28.1", features = ["event-stream"] }
 directories = "5.0.1"
-image = "0.25.1"
+image = "0.25.4"
 reqwest = { version = "0.12.4", features = ["json"] }
 tokio = { version = "1.40.0", features = ["full"] }
 serde = { version = "1.0.210", features = ["derive"] }
