@@ -42,6 +42,7 @@ zip = "2.1.6"
 toml = "0.8.19"
 epub-builder = "0.7.4"
 http = "1.0"
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
 
 [dev-dependencies]
 httpmock = "0.7.0-rc.1"

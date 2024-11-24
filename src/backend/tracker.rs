@@ -1,3 +1,5 @@
+use std::error::Error;
+
 use futures::Future;
 use manga_tui::SearchTerm;
 use serde::{Deserialize, Serialize};
@@ -26,5 +28,10 @@ pub trait MangaTracker {
     fn mark_manga_as_read_with_chapter_count(
         &self,
         manga: MarkAsRead<'_>,
-    ) -> impl Future<Output = Result<(), Box<dyn std::error::Error>>> + Send;
+    ) -> impl Future<Output = Result<(), Box<dyn Error>>> + Send;
+
+    /// Used for the user to check wether or not the api key  provided is valid
+    fn verify_authentication(&self) -> impl Future<Output = Result<bool, Box<dyn Error>>> + Send {
+        async { Ok(false) }
+    }
 }

@@ -16,12 +16,6 @@ use serde_json::json;
 use crate::backend::tracker::{MangaToTrack, MangaTracker, MarkAsRead};
 
 #[derive(Debug, Deserialize, Serialize)]
-struct Manga {
-    id: String,
-    title: String,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
 struct GetMangaByTitleQuery<'a> {
     title: &'a str,
 }
@@ -197,17 +191,16 @@ impl Anilist {
         self
     }
 
-    async fn request_access_token(&mut self, body: GetAnilistAccessTokenBody) -> Result<(), Box<dyn Error>> {
+    async fn request_access_token(&self, body: GetAnilistAccessTokenBody) -> Result<String, Box<dyn Error>> {
         let response = self.client.post(self.access_token_url.clone()).body(body).send().await?;
 
         if response.status() == StatusCode::OK {
             let response = dbg!(response);
             let access_token: AnilistAccessTokenResponse = response.json().await?;
-            self.access_token = access_token.access_token;
-            Ok(())
+            Ok(access_token.access_token)
         } else {
             let response = dbg!(response);
-            Err(format!("could not request anilist access_token, more request details \n  {:#?} ", response).into())
+            Err(format!("could not request anilist access token, more details about the request: \n  {:#?} ", response).into())
         }
     }
 }
@@ -410,7 +403,7 @@ mod tests {
         let server = MockServer::start_async().await;
         let token = Uuid::new_v4().to_string();
         let base_url: Url = server.base_url().parse().unwrap();
-        let mut anilist = Anilist::new(base_url.clone(), base_url);
+        let anilist = Anilist::new(base_url.clone(), base_url);
         //let mut anilist = Anilist::new(BASE_ANILIST_API_URL.parse().unwrap(), GET_ACCESS_TOKEN_URL.parse().unwrap());
 
         let expected_body_sent = GetAnilistAccessTokenBody::new("22248", "some_secret", "some_code");
@@ -424,12 +417,40 @@ mod tests {
             })
             .await;
 
-        anilist.request_access_token(expected_body_sent).await.expect("should not fail");
+        let token_requested = anilist.request_access_token(expected_body_sent).await.expect("should not fail");
 
         request.assert_async().await;
 
-        assert_eq!(token, anilist.access_token);
+        assert_eq!(token_requested, token);
     }
+
+    //#[tokio::test]
+    //async fn anilist_checks_its_access_token_is_valid() {
+    //    let server = MockServer::start_async().await;
+    //
+    //    let token = Uuid::new_v4().to_string();
+    //
+    //    let base_url: Url = server.base_url().parse().unwrap();
+    //    let anilist = Anilist::new(base_url.clone(), base_url);
+    //    //let mut anilist = Anilist::new(BASE_ANILIST_API_URL.parse().unwrap(), GET_ACCESS_TOKEN_URL.parse().unwrap());
+    //
+    //    let expected_body_sent = GetAnilistAccessTokenBody::new("22248", "some_secret", "some_code");
+    //
+    //    let request = server
+    //        .mock_async(|when, then| {
+    //            when.method(POST).json_body_obj(&expected_body_sent.clone().into_json());
+    //            then.status(200).json_body_obj(&AnilistAccessTokenResponse {
+    //                access_token: token.clone(),
+    //            });
+    //        })
+    //        .await;
+    //
+    //    anilist.request_access_token(expected_body_sent).await.expect("should not fail");
+    //
+    //    request.assert_async().await;
+    //
+    //    assert_eq!(token, anilist.access_token);
+    //}
 
     #[tokio::test]
     async fn anilist_marks_manga_as_reading_with_chapter_and_volume_count() {
