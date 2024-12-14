@@ -1,19 +1,35 @@
 use std::collections::HashMap;
 use std::error::Error;
-use std::io::{self, BufRead};
+use std::io::BufRead;
 
 use clap::{crate_version, Parser, Subcommand};
-use strum::IntoEnumIterator;
+use strum::{Display, IntoEnumIterator};
 
 use crate::backend::filter::Languages;
+use crate::backend::secrets::SecretStorage;
 use crate::backend::APP_DATA_DIR;
 use crate::global::PREFERRED_LANGUAGE;
+use crate::logger::ILogger;
 
-fn read_input(mut input_reader: impl BufRead, message: &str) -> Result<String, Box<dyn Error>> {
-    println!("{message}");
+fn read_input(mut input_reader: impl BufRead, logger: &impl ILogger, message: &str) -> Result<String, Box<dyn Error>> {
+    logger.inform(message);
     let mut input_provided = String::new();
     input_reader.read_line(&mut input_provided)?;
     Ok(input_provided)
+}
+
+#[derive(Debug)]
+pub enum AnilistStatus {
+    Setup,
+    MissigCredentials,
+}
+
+#[derive(Subcommand)]
+pub enum AnilistCommand {
+    /// setup anilist client to be able to sync reading progress
+    Init,
+    /// check wheter or not anilist is setup correctly
+    Status,
 }
 
 #[derive(Subcommand)]
@@ -26,9 +42,27 @@ pub enum Commands {
     },
 
     Anilist {
-        #[arg(short, long)]
-        init: bool,
+        #[command(subcommand)]
+        command: AnilistCommand,
     },
+}
+
+#[derive(Debug, Display)]
+enum AnilistCredentials {
+    #[strum(to_string = "anilist_client_id")]
+    ClientId,
+    #[strum(to_string = "anilist_secret")]
+    Secret,
+    #[strum(to_string = "anilist_code")]
+    Code,
+    #[strum(to_string = "anilist_access_token")]
+    AccessToken,
+}
+
+impl From<AnilistCredentials> for String {
+    fn from(value: AnilistCredentials) -> Self {
+        value.to_string()
+    }
 }
 
 #[derive(Parser)]
@@ -40,16 +74,7 @@ pub struct CliArgs {
     pub data_dir: bool,
 }
 
-/// Abstraction of the location where secrets will be stored
-pub trait SecretStorage {
-    fn save_secret(&mut self, secret_name: String, value: String) -> Result<(), Box<dyn Error>>;
-    fn save_multiple_secrets(&mut self, values: HashMap<String, String>) -> Result<(), Box<dyn Error>>;
-    fn get_secret(&self, _secret_name: &str) -> Result<String, Box<dyn Error>> {
-        Err("not implemented".into())
-    }
-}
-
-struct AnilistCredentialsProvided<'a> {
+pub struct AnilistCredentialsProvided<'a> {
     pub code: &'a str,
     pub secret: &'a str,
     pub client_id: &'a str,
@@ -78,21 +103,26 @@ impl CliArgs {
     fn save_anilist_credentials(
         &self,
         credentials: AnilistCredentialsProvided<'_>,
-        storage: &mut dyn SecretStorage,
+        storage: &mut impl SecretStorage,
     ) -> Result<(), Box<dyn Error>> {
         storage.save_multiple_secrets(HashMap::from([
-            ("anilist_client_id".to_string(), credentials.client_id.to_string()),
-            ("anilist_code".to_string(), credentials.code.to_string()),
-            ("anilist_secret".to_string(), credentials.secret.to_string()),
+            (AnilistCredentials::ClientId.to_string(), credentials.client_id.to_string()),
+            (AnilistCredentials::Code.to_string(), credentials.code.to_string()),
+            (AnilistCredentials::Secret.to_string(), credentials.secret.to_string()),
         ]))?;
 
         Ok(())
     }
 
-    pub fn init_anilist(self, mut input_reader: impl BufRead, storage: &mut dyn SecretStorage) -> Result<(), Box<dyn Error>> {
-        let client_id = read_input(&mut input_reader, "Provide the client id")?;
-        let secret = read_input(&mut input_reader, "Provide the secret")?;
-        let code = read_input(&mut input_reader, "Provide the code")?;
+    pub fn init_anilist(
+        self,
+        mut input_reader: impl BufRead,
+        storage: &mut impl SecretStorage,
+        logger: impl ILogger,
+    ) -> Result<(), Box<dyn Error>> {
+        let client_id = read_input(&mut input_reader, &logger, "Provide the client id")?;
+        let secret = read_input(&mut input_reader, &logger, "Provide the secret")?;
+        let code = read_input(&mut input_reader, &logger, "Provide the code")?;
 
         self.save_anilist_credentials(
             AnilistCredentialsProvided {
@@ -103,9 +133,25 @@ impl CliArgs {
             storage,
         )?;
 
-        println!("Anilist was correctly setup :D");
+        logger.inform("Anilist was correctly setup :D");
 
         Ok(())
+    }
+
+    fn anilist_status(&self, storage: &impl SecretStorage) -> Result<AnilistStatus, Box<dyn Error>> {
+        let credentials = [
+            storage.get_secret(AnilistCredentials::Code)?,
+            storage.get_secret(AnilistCredentials::Secret)?,
+            storage.get_secret(AnilistCredentials::ClientId)?,
+        ];
+
+        for credential in credentials {
+            if credential.is_none() {
+                return Ok(AnilistStatus::MissigCredentials);
+            }
+        }
+
+        Ok(AnilistStatus::Setup)
     }
 
     pub fn proccess_args(self) -> Result<(), Box<dyn Error>> {
@@ -120,7 +166,7 @@ impl CliArgs {
                 Commands::Lang { print, set } => {
                     if print {
                         Self::print_available_languages();
-                        return Ok(());
+                        std::process::exit(1)
                     }
 
                     match set {
@@ -134,7 +180,7 @@ impl CliArgs {
                                     env!("CARGO_BIN_NAME")
                                 );
 
-                                return Ok(());
+                                std::process::exit(1)
                             }
 
                             PREFERRED_LANGUAGE.set(try_lang.unwrap()).unwrap();
@@ -146,7 +192,7 @@ impl CliArgs {
                     Ok(())
                 },
 
-                Commands::Anilist { init } => todo!(),
+                Commands::Anilist { command } => todo!(),
             },
             None => {
                 PREFERRED_LANGUAGE.set(Languages::default()).unwrap();
@@ -160,7 +206,6 @@ impl CliArgs {
 mod tests {
     use std::collections::HashMap;
     use std::error::Error;
-    use std::io::{BufReader, Cursor};
 
     use pretty_assertions::assert_eq;
     use uuid::Uuid;
@@ -174,16 +219,20 @@ mod tests {
     }
 
     impl SecretStorage for MockStorage {
-        fn save_secret(&mut self, name: String, value: String) -> Result<(), Box<dyn Error>> {
-            self.secrets_stored.insert(name, value);
+        fn save_secret<T: Into<String>>(&mut self, name: T, value: T) -> Result<(), Box<dyn Error>> {
+            self.secrets_stored.insert(name.into(), value.into());
             Ok(())
         }
 
-        fn save_multiple_secrets(&mut self, values: HashMap<String, String>) -> Result<(), Box<dyn Error>> {
+        fn save_multiple_secrets<T: Into<String>>(&mut self, values: HashMap<T, T>) -> Result<(), Box<dyn Error>> {
             for (key, name) in values {
                 self.save_secret(key, name)?;
             }
             Ok(())
+        }
+
+        fn get_secret<T: Into<String>>(&self, secret_name: T) -> Result<Option<String>, Box<dyn Error>> {
+            Ok(self.secrets_stored.get(&secret_name.into()).cloned())
         }
     }
 
@@ -218,5 +267,35 @@ mod tests {
 
         assert_eq!("anilist_code", key_name3);
         assert_eq!(code_provided, *code);
+    }
+
+    #[test]
+    fn it_checks_anilist_is_setup() {
+        let cli = CliArgs::new();
+
+        let mut storage = MockStorage::default();
+
+        let not_setup = cli.anilist_status(&storage).unwrap();
+
+        assert!(!matches!(not_setup, AnilistStatus::Setup));
+
+        let client_id_provided = Uuid::new_v4().to_string();
+        let secret_provided = Uuid::new_v4().to_string();
+        let code_provided = Uuid::new_v4().to_string();
+
+        // after storing the credentials it should have a ok status
+        cli.save_anilist_credentials(
+            AnilistCredentialsProvided {
+                code: &code_provided,
+                secret: &secret_provided,
+                client_id: &client_id_provided,
+            },
+            &mut storage,
+        )
+        .expect("should not panic");
+
+        let is_setup = cli.anilist_status(&storage).unwrap();
+
+        assert!(matches!(is_setup, AnilistStatus::Setup));
     }
 }

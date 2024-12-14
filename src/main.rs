@@ -1,16 +1,17 @@
 #![allow(dead_code)]
 #![allow(deprecated)]
 
+use backend::fetch::ApiClient;
 use clap::Parser;
 use ratatui::backend::CrosstermBackend;
 use reqwest::StatusCode;
 
+use self::backend::build_data_dir;
 use self::backend::database::Database;
 use self::backend::error_log::init_error_hooks;
 use self::backend::fetch::{MangadexClient, API_URL_BASE, COVER_IMG_URL_BASE, MANGADEX_CLIENT_INSTANCE};
 use self::backend::migration::migrate_version;
 use self::backend::tui::{init, restore, run_app};
-use self::backend::{build_data_dir, APP_DATA_DIR};
 use self::cli::CliArgs;
 use self::config::MangaTuiConfig;
 
@@ -25,6 +26,7 @@ mod view;
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 7)]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    simple_logger::init()?;
     let cli_args = CliArgs::parse();
 
     cli_args.proccess_args()?;
