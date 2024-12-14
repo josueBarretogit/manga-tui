@@ -1,20 +1,19 @@
 #![allow(dead_code)]
 #![allow(deprecated)]
 
+use backend::fetch::ApiClient;
 use clap::Parser;
 use ratatui::backend::CrosstermBackend;
 use reqwest::StatusCode;
 
+use self::backend::build_data_dir;
 use self::backend::database::Database;
 use self::backend::error_log::init_error_hooks;
 use self::backend::fetch::{MangadexClient, API_URL_BASE, COVER_IMG_URL_BASE, MANGADEX_CLIENT_INSTANCE};
-use self::backend::filter::Languages;
 use self::backend::migration::migrate_version;
 use self::backend::tui::{init, restore, run_app};
-use self::backend::{build_data_dir, APP_DATA_DIR};
 use self::cli::CliArgs;
 use self::config::MangaTuiConfig;
-use self::global::PREFERRED_LANGUAGE;
 
 mod backend;
 mod cli;
@@ -27,44 +26,10 @@ mod view;
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 7)]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    simple_logger::init()?;
     let cli_args = CliArgs::parse();
 
-    if cli_args.data_dir {
-        let app_dir = APP_DATA_DIR.as_ref().unwrap();
-        println!("{}", app_dir.to_str().unwrap());
-        return Ok(());
-    }
-
-    match cli_args.command {
-        Some(command) => match command {
-            cli::Commands::Lang { print, set } => {
-                if print {
-                    CliArgs::print_available_languages();
-                    return Ok(());
-                }
-
-                match set {
-                    Some(lang) => {
-                        let try_lang = Languages::try_from_iso_code(lang.as_str());
-
-                        if try_lang.is_none() {
-                            println!(
-                                "`{}` is not a valid ISO language code, run `{} lang --print` to list available languages and their ISO codes",
-                                lang,
-                                env!("CARGO_BIN_NAME")
-                            );
-
-                            return Ok(());
-                        }
-
-                        PREFERRED_LANGUAGE.set(try_lang.unwrap()).unwrap()
-                    },
-                    None => PREFERRED_LANGUAGE.set(Languages::default()).unwrap(),
-                }
-            },
-        },
-        None => PREFERRED_LANGUAGE.set(Languages::default()).unwrap(),
-    }
+    cli_args.proccess_args()?;
 
     match build_data_dir() {
         Ok(_) => {},
