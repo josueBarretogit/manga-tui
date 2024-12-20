@@ -4,12 +4,12 @@ use keyring::Entry;
 use super::SecretStorage;
 
 #[derive(Debug)]
-struct AnilistStorage {
+pub struct AnilistStorage {
     service_name: &'static str,
 }
 
 impl AnilistStorage {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             service_name: crate_name!(),
         }
@@ -37,13 +37,11 @@ impl SecretStorage for AnilistStorage {
         }
     }
 
-    fn save_multiple_secrets<T: Into<String>>(
-        &mut self,
-        values: std::collections::HashMap<T, T>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        for (name, value) in values {
-            self.save_secret(name, value)?
-        }
+    fn remove_secret<T: AsRef<str>>(&mut self, secret_name: T) -> Result<(), Box<dyn std::error::Error>> {
+        let secret = Entry::new(self.service_name, secret_name.as_ref())?;
+
+        secret.delete_credential()?;
+
         Ok(())
     }
 }

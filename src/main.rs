@@ -1,10 +1,10 @@
 #![allow(dead_code)]
 #![allow(deprecated)]
 
-use backend::fetch::ApiClient;
 use clap::Parser;
+use http::StatusCode;
+use log::LevelFilter;
 use ratatui::backend::CrosstermBackend;
-use reqwest::StatusCode;
 
 use self::backend::build_data_dir;
 use self::backend::database::Database;
@@ -26,10 +26,14 @@ mod view;
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 7)]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    simple_logger::init()?;
+    pretty_env_logger::formatted_builder()
+        .format_module_path(false)
+        .filter_level(LevelFilter::Info)
+        .init();
+
     let cli_args = CliArgs::parse();
 
-    cli_args.proccess_args()?;
+    cli_args.proccess_args().await?;
 
     match build_data_dir() {
         Ok(_) => {},
@@ -78,5 +82,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     init()?;
     run_app(CrosstermBackend::new(std::io::stdout()), MangadexClient::global().clone()).await?;
     restore()?;
+
     Ok(())
 }

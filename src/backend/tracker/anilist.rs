@@ -1,4 +1,4 @@
-static BASE_ANILIST_API_URL: &str = "https://graphql.anilist.co";
+pub static BASE_ANILIST_API_URL: &str = "https://graphql.anilist.co";
 static REDIRECT_URI: &str = "https://anilist.co/api/v2/oauth/pin";
 static GET_ACCESS_TOKEN_URL: &str = "https://anilist.co/api/v2/oauth/token";
 //https://anilist.co/api/v2/oauth/authorize?client_id={client_id}&redirect_uri={redirect_uri}&response_type=code"
@@ -14,9 +14,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::backend::tracker::{MangaToTrack, MangaTracker, MarkAsRead};
+use crate::cli::AnilistTokenChecker;
 
 #[derive(Debug, Deserialize, Serialize)]
-struct GetMangaByTitleQuery<'a> {
+pub struct GetMangaByTitleQuery<'a> {
     title: &'a str,
 }
 
@@ -65,7 +66,7 @@ impl<'a> GraphqlBody for GetMangaByTitleQuery<'a> {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-struct MarkMangaAsReadQuery {
+pub struct MarkMangaAsReadQuery {
     id: u32,
     chapter_count: u32,
     volume_number: u32,
@@ -102,38 +103,83 @@ impl GraphqlBody for MarkMangaAsReadQuery {
 }
 
 #[derive(Debug, Deserialize, Serialize, Default)]
-struct GetMangaByTitleResponse {
+pub struct GetMangaByTitleResponse {
     data: GetMangaByTitleData,
 }
 
 #[derive(Debug, Deserialize, Serialize, Default)]
-struct GetMangaByTitleData {
+pub struct GetMangaByTitleData {
     #[serde(rename = "Media")]
     media: GetMangaByTitleMedia,
 }
 
 #[derive(Debug, Deserialize, Serialize, Default)]
-struct GetMangaByTitleMedia {
+pub struct GetMangaByTitleMedia {
     id: u32,
 }
 
+#[derive(Debug, Deserialize, Serialize, Default)]
+pub struct GetUserIdQueryResponse {
+    data: GetUserIdQueryData,
+}
+
+#[derive(Debug, Deserialize, Serialize, Default)]
+pub struct GetUserIdQueryData {
+    #[serde(rename = "User")]
+    user: UserId,
+}
+
+#[derive(Debug, Deserialize, Serialize, Default)]
+pub struct UserId {
+    id: u32,
+}
+
+#[derive(Debug, Deserialize, Serialize, Default, Clone)]
+pub struct GetUserIdBody {
+    id: String,
+}
+
+impl GetUserIdBody {
+    pub fn new(id: String) -> Self {
+        Self { id }
+    }
+}
+
+impl GraphqlBody for GetUserIdBody {
+    fn query(&self) -> &'static str {
+        r#"
+                query User($id: Int) {
+                  User(id: $id) {
+                    id
+                  }
+                }
+        "#
+    }
+
+    fn variables(&self) -> serde_json::Value {
+        json!({
+        "id" : self.id
+        })
+    }
+}
+
 #[derive(Debug)]
-struct Anilist {
+pub struct Anilist {
     base_url: Url,
-    access_token_url: Url,
     access_token: String,
+    client_id: String,
     client: Client,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct GetAnilistAccessTokenBody {
+pub struct GetAnilistAccessTokenBody {
     id: String,
     secret: String,
     code: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct AnilistAccessTokenResponse {
+pub struct AnilistAccessTokenResponse {
     access_token: String,
 }
 
@@ -166,7 +212,7 @@ impl From<GetAnilistAccessTokenBody> for Body {
 }
 
 impl Anilist {
-    pub fn new(base_url: Url, access_token_url: Url) -> Self {
+    pub fn new(base_url: Url) -> Self {
         let mut default_headers = HeaderMap::new();
 
         default_headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
@@ -181,7 +227,7 @@ impl Anilist {
         Self {
             base_url,
             client,
-            access_token_url,
+            client_id: String::default(),
             access_token: "".to_string(),
         }
     }
@@ -191,17 +237,29 @@ impl Anilist {
         self
     }
 
-    async fn request_access_token(&self, body: GetAnilistAccessTokenBody) -> Result<String, Box<dyn Error>> {
-        let response = self.client.post(self.access_token_url.clone()).body(body).send().await?;
+    pub fn with_client_id(mut self, client_id: String) -> Self {
+        self.client_id = client_id;
+        self
+    }
 
-        if response.status() == StatusCode::OK {
-            let response = dbg!(response);
-            let access_token: AnilistAccessTokenResponse = response.json().await?;
-            Ok(access_token.access_token)
-        } else {
-            let response = dbg!(response);
-            Err(format!("could not request anilist access token, more details about the request: \n  {:#?} ", response).into())
+    async fn check_credentials_are_valid(&self) -> Result<bool, Box<dyn Error>> {
+        let body = GetUserIdBody::new(self.client_id.clone());
+
+        let body = body.into_body();
+
+        let response = self
+            .client
+            .post(self.base_url.clone())
+            .body(body)
+            .header(AUTHORIZATION, self.access_token.clone())
+            .send()
+            .await?;
+
+        if response.status() == StatusCode::UNAUTHORIZED || response.status() == StatusCode::BAD_REQUEST {
+            return Ok(false);
         }
+
+        Ok(true)
     }
 }
 
@@ -250,6 +308,12 @@ impl MangaTracker for Anilist {
     }
 }
 
+impl AnilistTokenChecker for Anilist {
+    async fn verify_token(&self, token: String) -> Result<bool, Box<dyn Error>> {
+        self.check_credentials_are_valid().await
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use httpmock::Method::POST;
@@ -294,11 +358,34 @@ mod tests {
         assert_eq!(expected.get("variables"), as_json.get("variables"));
     }
 
+    #[test]
+    fn get_user_id_query_is_built_as_expected() {
+        let expected = json!({
+            "query" : r#"
+                query User($id: Int) {
+                  User(id: $id) {
+                    id
+                  }
+                }
+            "#,
+            "variables" : {
+                "id" : 123.to_string()
+            }
+        });
+
+        let query = GetUserIdBody::new("123".to_string());
+
+        let as_json = query.into_json();
+
+        assert_str_eq!(expected.get("query").unwrap().remove_whitespace(), as_json.get("query").unwrap().remove_whitespace());
+        assert_eq!(expected.get("variables"), as_json.get("variables"));
+    }
+
     #[tokio::test]
     async fn anilist_searches_a_manga_by_its_title() {
         let server = MockServer::start_async().await;
         let base_url: Url = server.base_url().parse().unwrap();
-        let anilist = Anilist::new(base_url.clone(), base_url);
+        let anilist = Anilist::new(base_url.clone());
 
         let expected_manga = MangaToTrack {
             id: "123123".to_string(),
@@ -336,7 +423,7 @@ mod tests {
     async fn anilist_searches_a_manga_by_its_title_and_returns_none_if_not_found() {
         let server = MockServer::start_async().await;
         let base_url: Url = server.base_url().parse().unwrap();
-        let anilist = Anilist::new(base_url.clone(), base_url);
+        let anilist = Anilist::new(base_url.clone());
 
         let expected_body_sent = GetMangaByTitleQuery::new("some_title").into_json();
 
@@ -399,58 +486,33 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn anilist_gets_authorization_token() {
+    async fn anilist_checks_its_access_token_is_valid() {
         let server = MockServer::start_async().await;
+
         let token = Uuid::new_v4().to_string();
+        let user_id = 123.to_string();
+
         let base_url: Url = server.base_url().parse().unwrap();
-        let anilist = Anilist::new(base_url.clone(), base_url);
+        let anilist = Anilist::new(base_url).with_token(token.clone()).with_client_id(user_id.clone());
         //let mut anilist = Anilist::new(BASE_ANILIST_API_URL.parse().unwrap(), GET_ACCESS_TOKEN_URL.parse().unwrap());
 
-        let expected_body_sent = GetAnilistAccessTokenBody::new("22248", "some_secret", "some_code");
+        let expected_body_sent = GetUserIdBody::new(user_id.clone());
 
         let request = server
             .mock_async(|when, then| {
-                when.method(POST).json_body_obj(&expected_body_sent.clone().into_json());
-                then.status(200).json_body_obj(&AnilistAccessTokenResponse {
-                    access_token: token.clone(),
-                });
+                when.method(POST)
+                    .header("Authorization", token)
+                    .json_body_obj(&expected_body_sent.clone().into_json());
+                then.status(200);
             })
             .await;
 
-        let token_requested = anilist.request_access_token(expected_body_sent).await.expect("should not fail");
+        let is_valid = anilist.check_credentials_are_valid().await.expect("should not fail");
 
         request.assert_async().await;
 
-        assert_eq!(token_requested, token);
+        assert!(is_valid);
     }
-
-    //#[tokio::test]
-    //async fn anilist_checks_its_access_token_is_valid() {
-    //    let server = MockServer::start_async().await;
-    //
-    //    let token = Uuid::new_v4().to_string();
-    //
-    //    let base_url: Url = server.base_url().parse().unwrap();
-    //    let anilist = Anilist::new(base_url.clone(), base_url);
-    //    //let mut anilist = Anilist::new(BASE_ANILIST_API_URL.parse().unwrap(), GET_ACCESS_TOKEN_URL.parse().unwrap());
-    //
-    //    let expected_body_sent = GetAnilistAccessTokenBody::new("22248", "some_secret", "some_code");
-    //
-    //    let request = server
-    //        .mock_async(|when, then| {
-    //            when.method(POST).json_body_obj(&expected_body_sent.clone().into_json());
-    //            then.status(200).json_body_obj(&AnilistAccessTokenResponse {
-    //                access_token: token.clone(),
-    //            });
-    //        })
-    //        .await;
-    //
-    //    anilist.request_access_token(expected_body_sent).await.expect("should not fail");
-    //
-    //    request.assert_async().await;
-    //
-    //    assert_eq!(token, anilist.access_token);
-    //}
 
     #[tokio::test]
     async fn anilist_marks_manga_as_reading_with_chapter_and_volume_count() {
@@ -458,7 +520,7 @@ mod tests {
 
         let access_token = Uuid::new_v4().to_string();
         let base_url: Url = server.base_url().parse().unwrap();
-        let anilist = Anilist::new(base_url.clone(), base_url).with_token(access_token.clone());
+        let anilist = Anilist::new(base_url.clone()).with_token(access_token.clone());
         //let anilist = Anilist::new(BASE_ANILIST_API_URL.parse().unwrap(), base_url).with_token(access_token.clone());
 
         let manga_id = 86635;
