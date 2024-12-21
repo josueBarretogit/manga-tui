@@ -12,6 +12,7 @@ use tokio::sync::mpsc::UnboundedSender;
 use tokio::task::JoinHandle;
 
 use super::fetch::ApiClient;
+use super::tracker::MangaTracker;
 use crate::common::{Artist, Author};
 use crate::view::app::{App, AppState, MangaToRead};
 use crate::view::pages::reader::{ChapterToRead, SearchChapter, SearchMangaPanel};
@@ -110,10 +111,11 @@ fn get_picker() -> Option<Picker> {
 pub async fn run_app(
     backend: impl Backend,
     api_client: impl ApiClient + SearchChapter + SearchMangaPanel,
+    manga_tracker: Option<impl MangaTracker>,
 ) -> Result<(), Box<dyn Error>> {
     let mut terminal = Terminal::new(backend)?;
 
-    let mut app = App::new(api_client, get_picker());
+    let mut app = App::new(api_client, manga_tracker, get_picker());
 
     let tick_rate = std::time::Duration::from_millis(250);
 

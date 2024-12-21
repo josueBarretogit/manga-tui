@@ -15,6 +15,7 @@ use self::search::{InputMode, SearchPage};
 use super::widgets::search::MangaItem;
 use super::widgets::Component;
 use crate::backend::fetch::ApiClient;
+use crate::backend::tracker::MangaTracker;
 use crate::backend::tui::{Action, Events};
 use crate::config::MangaTuiConfig;
 use crate::global::INSTRUCTIONS_STYLE;
@@ -33,26 +34,27 @@ pub struct MangaToRead {
     pub list: ListOfChapters,
 }
 
-pub struct App<T: ApiClient + SearchChapter + SearchMangaPanel> {
+pub struct App<T: ApiClient + SearchChapter + SearchMangaPanel, S: MangaTracker> {
     pub global_action_tx: UnboundedSender<Action>,
     pub global_action_rx: UnboundedReceiver<Action>,
     pub global_event_tx: UnboundedSender<Events>,
     pub global_event_rx: UnboundedReceiver<Events>,
     pub state: AppState,
     pub current_tab: SelectedPage,
-    pub manga_page: Option<MangaPage>,
+    pub manga_page: Option<MangaPage<S>>,
     pub manga_reader_page: Option<MangaReader<T>>,
     pub search_page: SearchPage,
     pub home_page: Home,
     pub feed_page: Feed<T>,
     api_client: T,
+    manga_tracker: Option<S>,
     // The picker is what decides how big a image needs to be rendered depending on the user's
     // terminal font size and the graphics it supports
     // if the terminal doesn't support any graphics protocol the picker is `None`
     picker: Option<Picker>,
 }
 
-impl<T: ApiClient + SearchChapter + SearchMangaPanel> Component for App<T> {
+impl<T: ApiClient + SearchChapter + SearchMangaPanel, S: MangaTracker> Component for App<T, S> {
     type Actions = Action;
 
     fn render(&mut self, area: Rect, frame: &mut Frame<'_>) {
@@ -109,8 +111,8 @@ impl<T: ApiClient + SearchChapter + SearchMangaPanel> Component for App<T> {
     fn clean_up(&mut self) {}
 }
 
-impl<T: ApiClient + SearchChapter + SearchMangaPanel> App<T> {
-    pub fn new(api_client: T, picker: Option<Picker>) -> Self {
+impl<T: ApiClient + SearchChapter + SearchMangaPanel, S: MangaTracker> App<T, S> {
+    pub fn new(api_client: T, manga_tracker: Option<S>, picker: Option<Picker>) -> Self {
         let (global_action_tx, global_action_rx) = unbounded_channel::<Action>();
         let (global_event_tx, global_event_rx) = unbounded_channel::<Events>();
 
@@ -130,6 +132,7 @@ impl<T: ApiClient + SearchChapter + SearchMangaPanel> App<T> {
             global_action_rx,
             global_event_tx,
             global_event_rx,
+            manga_tracker,
             state: AppState::Runnning,
             api_client,
         }
@@ -256,7 +259,8 @@ impl<T: ApiClient + SearchChapter + SearchMangaPanel> App<T> {
 
         let manga_page = MangaPage::new(manga.manga, self.picker)
             .with_global_sender(self.global_event_tx.clone())
-            .auto_bookmark(config.auto_bookmark);
+            .auto_bookmark(config.auto_bookmark)
+            .with_manga_tracker(self.manga_tracker.clone());
 
         self.manga_page = Some(manga_page);
     }
@@ -389,9 +393,29 @@ mod tests {
     use super::*;
     use crate::backend::fetch::fake_api_client::MockMangadexClient;
     use crate::backend::filter::Languages;
+    use crate::backend::tracker::MangaTracker;
     use crate::view::widgets::press_key;
 
-    fn tick<T: ApiClient + SearchChapter + SearchMangaPanel>(app: &mut App<T>) {
+    #[derive(Debug, Clone, Copy)]
+    struct TrackerTest;
+
+    impl MangaTracker for TrackerTest {
+        async fn mark_manga_as_read_with_chapter_count(
+            &self,
+            manga: crate::backend::tracker::MarkAsRead<'_>,
+        ) -> Result<(), Box<dyn std::error::Error>> {
+            unimplemented!()
+        }
+
+        async fn search_manga_by_title(
+            &self,
+            title: manga_tui::SearchTerm,
+        ) -> Result<Option<crate::backend::tracker::MangaToTrack>, Box<dyn std::error::Error>> {
+            unimplemented!()
+        }
+    }
+
+    fn tick<T: ApiClient + SearchChapter + SearchMangaPanel, S: MangaTracker>(app: &mut App<T, S>) {
         let max_amoun_ticks = 10;
         let mut count = 0;
 
@@ -409,7 +433,7 @@ mod tests {
 
     #[test]
     fn goes_to_home_page() {
-        let mut app = App::new(MockMangadexClient::new(), None);
+        let mut app: App<MockMangadexClient, TrackerTest> = App::new(MockMangadexClient::new(), None, None);
 
         let first_event = app.global_event_rx.blocking_recv().expect("no event was sent");
 
@@ -419,7 +443,7 @@ mod tests {
 
     #[test]
     fn can_go_to_search_page_by_pressing_i() {
-        let mut app = App::new(MockMangadexClient::new(), None);
+        let mut app: App<MockMangadexClient, TrackerTest> = App::new(MockMangadexClient::new(), None, None);
 
         press_key(&mut app, KeyCode::Char('i'));
 
@@ -430,7 +454,7 @@ mod tests {
 
     #[test]
     fn can_go_to_home_by_pressing_u() {
-        let mut app = App::new(MockMangadexClient::new(), None);
+        let mut app: App<MockMangadexClient, TrackerTest> = App::new(MockMangadexClient::new(), None, None);
 
         app.go_search_page();
 
@@ -443,7 +467,7 @@ mod tests {
 
     #[test]
     fn can_go_to_feed_by_pressing_o() {
-        let mut app = App::new(MockMangadexClient::new(), None);
+        let mut app: App<MockMangadexClient, TrackerTest> = App::new(MockMangadexClient::new(), None, None);
 
         press_key(&mut app, KeyCode::Char('o'));
 
@@ -454,7 +478,7 @@ mod tests {
 
     #[test]
     fn doesnt_listen_to_key_events_if_it_is_downloading_all_chapters() {
-        let mut app = App::new(MockMangadexClient::new(), None).with_manga_page();
+        let mut app: App<MockMangadexClient, TrackerTest> = App::new(MockMangadexClient::new(), None, None).with_manga_page();
 
         app.manga_page.as_mut().unwrap().start_downloading_all_chapters();
 
@@ -469,7 +493,7 @@ mod tests {
 
     #[test]
     fn reader_page_is_initialized_corectly() {
-        let mut app = App::new(MockMangadexClient::new(), Some(Picker::new((8, 8))));
+        let mut app: App<MockMangadexClient, TrackerTest> = App::new(MockMangadexClient::new(), None, Some(Picker::new((8, 8))));
 
         let chapter_to_read = ChapterToRead {
             id: "some_id".to_string(),

@@ -15,6 +15,8 @@ pub mod error_log;
 pub mod fetch;
 pub mod filter;
 pub mod migration;
+pub mod secrets;
+pub mod tracker;
 pub mod tui;
 
 #[derive(Display, EnumIter)]
