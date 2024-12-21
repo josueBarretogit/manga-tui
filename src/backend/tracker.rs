@@ -18,7 +18,7 @@ pub struct MarkAsRead<'a> {
     pub volume_number: Option<u32>,
 }
 
-pub trait MangaTracker {
+pub trait MangaTracker: Send + Clone + 'static {
     fn search_manga_by_title(
         &self,
         title: SearchTerm,
@@ -29,9 +29,4 @@ pub trait MangaTracker {
         &self,
         manga: MarkAsRead<'_>,
     ) -> impl Future<Output = Result<(), Box<dyn Error>>> + Send;
-
-    /// Used for the user to check wether or not the api key  provided is valid
-    fn verify_authentication(&self) -> impl Future<Output = Result<bool, Box<dyn Error>>> + Send {
-        async { Ok(false) }
-    }
 }

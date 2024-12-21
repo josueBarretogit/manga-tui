@@ -1,9 +1,12 @@
 #![allow(dead_code)]
 #![allow(deprecated)]
 
+use backend::fetch::ApiClient;
+use backend::secrets::anilist::AnilistStorage;
+use backend::tracker::anilist::{Anilist, BASE_ANILIST_API_URL};
 use clap::Parser;
 use http::StatusCode;
-use log::LevelFilter;
+use log::{info, LevelFilter};
 use ratatui::backend::CrosstermBackend;
 
 use self::backend::build_data_dir;
@@ -80,7 +83,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     init_error_hooks()?;
     init()?;
-    run_app(CrosstermBackend::new(std::io::stdout()), MangadexClient::global().clone()).await?;
+
+    let anilist_storage = AnilistStorage::new();
+
+    let anilist = match anilist_storage.anilist_check_credentials_stored()? {
+        Some(credentials) => Some(
+            Anilist::new(BASE_ANILIST_API_URL.parse().unwrap())
+                .with_token(credentials.access_token)
+                .with_client_id(credentials.client_id),
+        ),
+        None => None,
+    };
+
+    info!("{}", anilist.is_some());
+
+    run_app(CrosstermBackend::new(std::io::stdout()), MangadexClient::global().clone(), anilist).await?;
     restore()?;
 
     Ok(())

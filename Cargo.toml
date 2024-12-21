@@ -42,7 +42,7 @@ zip = "2.1.6"
 toml = "0.8.19"
 epub-builder = "0.7.4"
 http = "1.0"
-keyring = { version = "3", features = ["apple-native", "windows-native", "linux-native"] }
+keyring = { version = "3", features = ["apple-native", "windows-native",  "sync-secret-service"] }
 log = { version = "0.4", features = ["std", "serde"] }
 pretty_env_logger = "0.4" 
 

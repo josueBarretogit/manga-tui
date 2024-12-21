@@ -1,5 +1,8 @@
+use std::error::Error;
+
 use clap::crate_name;
 use keyring::Entry;
+use strum::Display;
 
 use super::SecretStorage;
 
@@ -8,10 +11,55 @@ pub struct AnilistStorage {
     service_name: &'static str,
 }
 
+#[derive(Debug, Display, Clone, Copy)]
+pub enum AnilistCredentials {
+    #[strum(to_string = "anilist_client_id")]
+    ClientId,
+    #[strum(to_string = "anilist_secret")]
+    Secret,
+    #[strum(to_string = "anilist_code")]
+    Code,
+    #[strum(to_string = "anilist_access_token")]
+    AccessToken,
+}
+
+impl From<AnilistCredentials> for String {
+    fn from(value: AnilistCredentials) -> Self {
+        value.to_string()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Credentials {
+    pub access_token: String,
+    pub client_id: String,
+}
+
 impl AnilistStorage {
     pub fn new() -> Self {
         Self {
             service_name: crate_name!(),
+        }
+    }
+
+    pub fn anilist_check_credentials_stored(&self) -> Result<Option<Credentials>, Box<dyn Error>> {
+        let credentials = self.get_multiple_secrets([AnilistCredentials::ClientId, AnilistCredentials::AccessToken].into_iter())?;
+
+        let client_id = credentials.get(&AnilistCredentials::ClientId.to_string()).cloned();
+        let access_token = credentials.get(&AnilistCredentials::AccessToken.to_string()).cloned();
+
+        match client_id.zip(access_token) {
+            Some((id, token)) => {
+                if id.is_empty() || token.is_empty() {
+                    return Ok(None);
+                }
+
+                Ok(Some(Credentials {
+                    access_token: token,
+                    client_id: id.parse().unwrap(),
+                }))
+            },
+            None => Ok(None),
         }
     }
 }
@@ -82,4 +130,37 @@ mod tests {
 
         Ok(())
     }
+
+    //#[test]
+    //fn it_checks_anilist_credentials_are_stored() -> Result<(), Box<dyn Error>> {
+    //    let cli = CliArgs::new();
+    //
+    //    let mut storage = MockStorage::default();
+    //
+    //    let not_stored = cli.anilist_check_credentials_stored(&storage)?;
+    //
+    //    assert!(not_stored.is_none());
+    //
+    //    storage.secrets_stored.insert(AnilistCredentials::AccessToken.to_string(), "".to_string());
+    //
+    //    storage.secrets_stored.insert(AnilistCredentials::ClientId.to_string(), "".to_string());
+    //
+    //    let stored_but_empty = cli.anilist_check_credentials_stored(&storage)?;
+    //
+    //    assert!(stored_but_empty.is_none());
+    //
+    //    storage
+    //        .secrets_stored
+    //        .insert(AnilistCredentials::AccessToken.to_string(), "some_access_token".to_string());
+    //
+    //    storage
+    //        .secrets_stored
+    //        .insert(AnilistCredentials::ClientId.to_string(), "some_client_id".to_string());
+    //
+    //    let stored = cli.anilist_check_credentials_stored(&storage)?;
+    //
+    //    assert!(stored.is_some_and(|credentials| credentials.access_token == "some_access_token"));
+    //
+    //    Ok(())
+    //}
 }

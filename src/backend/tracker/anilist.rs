@@ -163,7 +163,7 @@ impl GraphqlBody for GetUserIdBody {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Anilist {
     base_url: Url,
     access_token: String,

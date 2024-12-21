@@ -7,13 +7,14 @@ use std::process::exit;
 use clap::{crate_version, Parser, Subcommand};
 use strum::{Display, IntoEnumIterator};
 
+use crate::backend::error_log::write_to_error_log;
 use crate::backend::filter::Languages;
-use crate::backend::secrets::anilist::AnilistStorage;
+use crate::backend::secrets::anilist::{AnilistCredentials, AnilistStorage};
 use crate::backend::secrets::SecretStorage;
 use crate::backend::tracker::anilist::{self, BASE_ANILIST_API_URL};
 use crate::backend::APP_DATA_DIR;
 use crate::global::PREFERRED_LANGUAGE;
-use crate::logger::{self, ILogger, Logger};
+use crate::logger::{ILogger, Logger};
 
 fn read_input(mut input_reader: impl BufRead, logger: &impl ILogger, message: &str) -> Result<String, Box<dyn Error>> {
     logger.inform(message);
@@ -52,24 +53,6 @@ pub enum Commands {
     },
 }
 
-#[derive(Debug, Display, Clone, Copy)]
-enum AnilistCredentials {
-    #[strum(to_string = "anilist_client_id")]
-    ClientId,
-    #[strum(to_string = "anilist_secret")]
-    Secret,
-    #[strum(to_string = "anilist_code")]
-    Code,
-    #[strum(to_string = "anilist_access_token")]
-    AccessToken,
-}
-
-impl From<AnilistCredentials> for String {
-    fn from(value: AnilistCredentials) -> Self {
-        value.to_string()
-    }
-}
-
 #[derive(Parser, Clone)]
 #[command(version = crate_version!())]
 pub struct CliArgs {
@@ -82,12 +65,6 @@ pub struct CliArgs {
 pub struct AnilistCredentialsProvided<'a> {
     pub access_token: &'a str,
     pub client_id: &'a str,
-}
-
-#[derive(Debug, Clone)]
-pub struct Credentials {
-    pub access_token: String,
-    pub client_id: String,
 }
 
 impl CliArgs {
@@ -145,27 +122,6 @@ impl CliArgs {
     }
 
     /// This method must check if both client_id and access_token are stored and they are not empty
-    fn anilist_check_credentials_stored(&self, storage: &impl SecretStorage) -> Result<Option<Credentials>, Box<dyn Error>> {
-        let credentials =
-            storage.get_multiple_secrets([AnilistCredentials::ClientId, AnilistCredentials::AccessToken].into_iter())?;
-
-        let client_id = credentials.get(&AnilistCredentials::ClientId.to_string()).cloned();
-        let access_token = credentials.get(&AnilistCredentials::AccessToken.to_string()).cloned();
-
-        match client_id.zip(access_token) {
-            Some((id, token)) => {
-                if id.is_empty() || token.is_empty() {
-                    return Ok(None);
-                }
-
-                Ok(Some(Credentials {
-                    access_token: token,
-                    client_id: id.parse().unwrap(),
-                }))
-            },
-            None => Ok(None),
-        }
-    }
 
     fn save_anilist_credentials(
         &self,
@@ -187,20 +143,20 @@ impl CliArgs {
         let storage = AnilistStorage::new();
         logger.inform("Checking client id and access token are stored");
 
-        let credentials_are_stored = self.anilist_check_credentials_stored(&storage)?;
+        let credentials_are_stored = storage.anilist_check_credentials_stored()?;
         if credentials_are_stored.is_none() {
             logger.warn("The client id or the access token are empty, it is recommended you run `manga-tui anilist reset`");
             exit(0)
         }
 
-        let credentials_are_stored = credentials_are_stored.unwrap();
+        let credentials = credentials_are_stored.unwrap();
         logger.inform("Checking your access token is valid, this may take a while");
 
         let anilist = anilist::Anilist::new(BASE_ANILIST_API_URL.parse().unwrap())
-            .with_token(credentials_are_stored.access_token.clone())
-            .with_client_id(credentials_are_stored.client_id);
+            .with_token(credentials.access_token.clone())
+            .with_client_id(credentials.client_id);
 
-        let access_token_is_valid = self.check_anilist_token(&anilist, credentials_are_stored.access_token).await?;
+        let access_token_is_valid = self.check_anilist_token(&anilist, credentials.access_token).await?;
 
         if access_token_is_valid {
             logger.inform("Everything is setup correctly :D");
@@ -212,11 +168,12 @@ impl CliArgs {
         Ok(())
     }
 
+    /// This method should only return `Ok(())` it the app should keep running, otherwise `exit`
     pub async fn proccess_args(self) -> Result<(), Box<dyn Error>> {
         if self.data_dir {
             let app_dir = APP_DATA_DIR.as_ref().unwrap();
             println!("{}", app_dir.to_str().unwrap());
-            return Ok(());
+            exit(0)
         }
 
         match &self.command {
@@ -259,7 +216,8 @@ impl CliArgs {
                     AnilistCommand::Check => {
                         let logger = Logger;
                         if let Err(e) = self.check_anilist_status(&logger).await {
-                            logger.error(e);
+                            logger.error(format!("Some error ocurred, more details \n {}", e).into());
+                            write_to_error_log(e.into());
                             exit(1);
                         } else {
                             exit(0)
@@ -339,39 +297,6 @@ mod tests {
 
         assert_eq!("anilist_client_id", secret_name);
         assert_eq!(user_id.parse::<u32>().unwrap(), value.parse::<u32>().unwrap());
-    }
-
-    #[test]
-    fn it_checks_anilist_credentials_are_stored() -> Result<(), Box<dyn Error>> {
-        let cli = CliArgs::new();
-
-        let mut storage = MockStorage::default();
-
-        let not_stored = cli.anilist_check_credentials_stored(&storage)?;
-
-        assert!(not_stored.is_none());
-
-        storage.secrets_stored.insert(AnilistCredentials::AccessToken.to_string(), "".to_string());
-
-        storage.secrets_stored.insert(AnilistCredentials::ClientId.to_string(), "".to_string());
-
-        let stored_but_empty = cli.anilist_check_credentials_stored(&storage)?;
-
-        assert!(stored_but_empty.is_none());
-
-        storage
-            .secrets_stored
-            .insert(AnilistCredentials::AccessToken.to_string(), "some_access_token".to_string());
-
-        storage
-            .secrets_stored
-            .insert(AnilistCredentials::ClientId.to_string(), "some_client_id".to_string());
-
-        let stored = cli.anilist_check_credentials_stored(&storage)?;
-
-        assert!(stored.is_some_and(|credentials| credentials.access_token == "some_access_token"));
-
-        Ok(())
     }
 
     #[derive(Debug)]
