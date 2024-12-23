@@ -1,10 +1,14 @@
 use std::collections::HashMap;
+use std::error::Error;
+use std::fmt::Display;
 
+use manga_tui::SearchTerm;
 use ratatui::layout::Rect;
 use ratatui_image::protocol::Protocol;
 use strum::{Display, EnumIter};
 
 use crate::backend::filter::Languages;
+use crate::backend::tracker::{MangaTracker, MarkAsRead};
 
 #[derive(Default, Clone, Debug, PartialEq)]
 pub struct Author {
@@ -88,4 +92,15 @@ impl ImageState {
     pub fn is_empty(&self) -> bool {
         self.image_state.is_empty()
     }
+}
+
+pub fn format_error_message_tracking_reading_history<A: Display, B: Display, C: Display>(
+    chapter: A,
+    manga_title: B,
+    error: C,
+) -> String {
+    format!(
+        "Could not track reading progress of chapter : {} \n of manga : {}, more details about the error : \n ERROR | {}",
+        chapter, manga_title, error
+    )
 }

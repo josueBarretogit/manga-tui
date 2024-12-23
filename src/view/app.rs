@@ -34,7 +34,11 @@ pub struct MangaToRead {
     pub list: ListOfChapters,
 }
 
-pub struct App<T: ApiClient + SearchChapter + SearchMangaPanel, S: MangaTracker> {
+pub struct App<T, S>
+where
+    T: ApiClient + SearchChapter + SearchMangaPanel,
+    S: MangaTracker,
+{
     pub global_action_tx: UnboundedSender<Action>,
     pub global_action_rx: UnboundedReceiver<Action>,
     pub global_event_tx: UnboundedSender<Events>,
@@ -42,7 +46,7 @@ pub struct App<T: ApiClient + SearchChapter + SearchMangaPanel, S: MangaTracker>
     pub state: AppState,
     pub current_tab: SelectedPage,
     pub manga_page: Option<MangaPage<S>>,
-    pub manga_reader_page: Option<MangaReader<T>>,
+    pub manga_reader_page: Option<MangaReader<T, S>>,
     pub search_page: SearchPage,
     pub home_page: Home,
     pub feed_page: Feed<T>,
@@ -54,7 +58,11 @@ pub struct App<T: ApiClient + SearchChapter + SearchMangaPanel, S: MangaTracker>
     picker: Option<Picker>,
 }
 
-impl<T: ApiClient + SearchChapter + SearchMangaPanel, S: MangaTracker> Component for App<T, S> {
+impl<T, S> Component for App<T, S>
+where
+    T: ApiClient + SearchChapter + SearchMangaPanel,
+    S: MangaTracker,
+{
     type Actions = Action;
 
     fn render(&mut self, area: Rect, frame: &mut Frame<'_>) {
@@ -75,7 +83,9 @@ impl<T: ApiClient + SearchChapter + SearchMangaPanel, S: MangaTracker> Component
         match events {
             Events::Key(key_event) => self.handle_key_events(key_event),
             Events::GoToMangaPage(manga) => self.go_to_manga_page(manga),
-            Events::ReadChapter(chapter_response, manga_to_read) => self.go_to_read_chapter(chapter_response, manga_to_read),
+            Events::ReadChapter(chapter_response, manga_to_read) => {
+                self.go_to_read_chapter(chapter_response, manga_to_read, self.manga_tracker.clone())
+            },
             Events::GoSearchPage => {
                 self.go_search_page();
             },
@@ -265,7 +275,7 @@ impl<T: ApiClient + SearchChapter + SearchMangaPanel, S: MangaTracker> App<T, S>
         self.manga_page = Some(manga_page);
     }
 
-    fn go_to_read_chapter(&mut self, chapter_to_read: ChapterToRead, manga_to_read: MangaToRead) {
+    fn go_to_read_chapter(&mut self, chapter_to_read: ChapterToRead, manga_to_read: MangaToRead, manga_tracker: Option<S>) {
         self.home_page.clean_up();
         self.feed_page.clean_up();
         self.current_tab = SelectedPage::ReaderTab;
@@ -278,7 +288,8 @@ impl<T: ApiClient + SearchChapter + SearchMangaPanel, S: MangaTracker> App<T, S>
         )
         .with_global_sender(self.global_event_tx.clone())
         .with_list_of_chapters(manga_to_read.list)
-        .with_manga_title(manga_to_read.title);
+        .with_manga_title(manga_to_read.title)
+        .with_manga_tracker(manga_tracker);
 
         let config = MangaTuiConfig::get();
 
@@ -394,26 +405,8 @@ mod tests {
     use crate::backend::fetch::fake_api_client::MockMangadexClient;
     use crate::backend::filter::Languages;
     use crate::backend::tracker::MangaTracker;
+    use crate::global::test_utils::TrackerTest;
     use crate::view::widgets::press_key;
-
-    #[derive(Debug, Clone, Copy)]
-    struct TrackerTest;
-
-    impl MangaTracker for TrackerTest {
-        async fn mark_manga_as_read_with_chapter_count(
-            &self,
-            manga: crate::backend::tracker::MarkAsRead<'_>,
-        ) -> Result<(), Box<dyn std::error::Error>> {
-            unimplemented!()
-        }
-
-        async fn search_manga_by_title(
-            &self,
-            title: manga_tui::SearchTerm,
-        ) -> Result<Option<crate::backend::tracker::MangaToTrack>, Box<dyn std::error::Error>> {
-            unimplemented!()
-        }
-    }
 
     fn tick<T: ApiClient + SearchChapter + SearchMangaPanel, S: MangaTracker>(app: &mut App<T, S>) {
         let max_amoun_ticks = 10;
@@ -512,16 +505,23 @@ mod tests {
             }]),
         };
 
-        app.go_to_read_chapter(chapter_to_read, MangaToRead {
-            title: "some_title".to_string(),
-            manga_id: "some_manga_id".to_string(),
-            list: list_of_chapter.clone(),
-        });
+        let manga_tracker = TrackerTest::new();
+
+        app.go_to_read_chapter(
+            chapter_to_read,
+            MangaToRead {
+                title: "some_title".to_string(),
+                manga_id: "some_manga_id".to_string(),
+                list: list_of_chapter.clone(),
+            },
+            Some(manga_tracker),
+        );
 
         let reader_page = app.manga_reader_page.unwrap();
 
         assert!(reader_page.global_event_tx.is_some());
         assert_eq!(reader_page.list_of_chapters, list_of_chapter);
-        assert_eq!(SelectedPage::ReaderTab, app.current_tab)
+        assert_eq!(SelectedPage::ReaderTab, app.current_tab);
+        assert!(reader_page.manga_tracker.is_some());
     }
 }

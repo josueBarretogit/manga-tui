@@ -309,7 +309,7 @@ impl MangaTracker for Anilist {
 }
 
 impl AnilistTokenChecker for Anilist {
-    async fn verify_token(&self, token: String) -> Result<bool, Box<dyn Error>> {
+    async fn verify_token(&self, _token: String) -> Result<bool, Box<dyn Error>> {
         self.check_credentials_are_valid().await
     }
 }

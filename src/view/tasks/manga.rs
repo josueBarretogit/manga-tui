@@ -411,25 +411,6 @@ pub async fn read_chapter(chapter: &ChapterArgs) -> Result<(ChapterToRead, Manga
     Ok((chapter_to_read, manga_to_read))
 }
 
-pub async fn update_reading_progress(
-    manga_title: SearchTerm,
-    chapter_number: u32,
-    volume_number: Option<u32>,
-    tracker: impl MangaTracker + Send,
-) -> Result<(), Box<dyn Error>> {
-    let response = tracker.search_manga_by_title(manga_title).await?;
-    if let Some(manga) = response {
-        tracker
-            .mark_manga_as_read_with_chapter_count(MarkAsRead {
-                id: &manga.id,
-                chapter_number,
-                volume_number,
-            })
-            .await?;
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use std::fs;

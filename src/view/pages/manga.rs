@@ -1,12 +1,11 @@
 use std::error::Error;
 use std::future::Future;
-use std::io::{Cursor, Write};
+use std::io::Cursor;
 use std::u32;
 
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent, MouseEventKind};
 use image::io::Reader;
 use image::DynamicImage;
-use manga_tui::SearchTerm;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Style, Stylize};
@@ -21,7 +20,7 @@ use throbber_widgets_tui::{Throbber, ThrobberState};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
-use super::reader::{ChapterToRead, Volumes};
+use super::reader::ChapterToRead;
 use crate::backend::api_responses::{ChapterResponse, MangaStatisticsResponse, Statistics};
 use crate::backend::database::{
     get_chapters_history_status, save_history, set_chapter_downloaded, Bookmark, ChapterBookmarked, ChapterToBookmark,
@@ -31,17 +30,16 @@ use crate::backend::download::DownloadChapter;
 use crate::backend::error_log::{self, write_to_error_log, ErrorType};
 use crate::backend::fetch::{ApiClient, MangadexClient, ITEMS_PER_PAGE_CHAPTERS};
 use crate::backend::filter::Languages;
-use crate::backend::tracker::MangaTracker;
+use crate::backend::tracker::{track_manga, MangaTracker};
 use crate::backend::tui::Events;
 use crate::backend::AppDirectories;
-use crate::common::Manga;
+use crate::common::{format_error_message_tracking_reading_history, Manga};
 use crate::config::MangaTuiConfig;
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
 use crate::utils::{set_status_style, set_tags_style};
 use crate::view::app::MangaToRead;
 use crate::view::tasks::manga::{
-    download_all_chapters, download_chapter_task, read_chapter, search_chapters_operation, update_reading_progress, ChapterArgs,
-    DownloadAllChapters,
+    download_all_chapters, download_chapter_task, read_chapter, search_chapters_operation, ChapterArgs, DownloadAllChapters,
 };
 use crate::view::widgets::manga::{
     ChapterItem, ChaptersListWidget, DownloadAllChaptersState, DownloadAllChaptersWidget, DownloadPhase,
@@ -120,7 +118,8 @@ pub enum MangaPageEvents {
     /// id_chapter
     DownloadError(String),
     ReadError(String),
-    ReadSuccesful(String, u32, Option<String>),
+
+    ReadSuccesful(ChapterToRead, MangaToRead),
     LoadChapters(Option<ChapterResponse>),
     LoadStatistics(Option<MangaStatisticsResponse>),
     TrackingFailed(String),
@@ -633,7 +632,6 @@ impl<T: MangaTracker> MangaPage<T> {
                 let manga_id = self.manga.id.clone();
                 let title = self.manga.title.clone();
                 let img_url = self.manga.img_url.clone();
-                let tx = self.global_event_tx.as_ref().cloned().unwrap();
                 let local_tx = self.local_event_tx.clone();
 
                 let chapter_to_read: ChapterArgs = ChapterArgs {
@@ -652,15 +650,7 @@ impl<T: MangaTracker> MangaPage<T> {
 
                     match search_chapter_response {
                         Ok((chapter, manga_to_read)) => {
-                            local_tx
-                                .send(MangaPageEvents::ReadSuccesful(
-                                    manga_to_read.title.clone(),
-                                    chapter.number as u32,
-                                    chapter.volume_number.clone(),
-                                ))
-                                .ok();
-                            local_tx.send(MangaPageEvents::CheckChapterStatus).ok();
-                            tx.send(Events::ReadChapter(chapter, manga_to_read)).ok();
+                            local_tx.send(MangaPageEvents::ReadSuccesful(chapter.clone(), manga_to_read.clone())).ok();
                         },
                         Err(e) => {
                             write_to_error_log(error_log::ErrorType::Error(
@@ -1140,23 +1130,14 @@ impl<T: MangaTracker> MangaPage<T> {
     }
 
     fn track_manga(&self, tracker: Option<T>, manga_title: String, chapter_number: u32, volume_number: Option<u32>) {
-        if let Some(tracker) = tracker {
-            let local_sender = self.local_event_tx.clone();
-            tokio::spawn(async move {
-                let title = SearchTerm::trimmed(&manga_title);
-                if let Some(search_term) = title {
-                    let response = update_reading_progress(search_term, chapter_number, volume_number, tracker).await;
-                    if let Err(e) = response {
-                        let error_message = format!(
-                            "Failed to mark chapter {chapter_number} volume {} of manga {manga_title} more details of the error : {}",
-                            volume_number.unwrap_or(0),
-                            e
-                        );
-                        local_sender.send(MangaPageEvents::TrackingFailed(error_message)).ok();
-                    }
-                }
-            });
-        }
+        let tx = self.local_event_tx.clone();
+        track_manga(tracker, manga_title, chapter_number, volume_number, move |error| {
+            tx.send(MangaPageEvents::TrackingFailed(error)).ok();
+        });
+    }
+
+    fn log_tracking_manga_error(&self, message: String) {
+        write_to_error_log(format_error_message_tracking_reading_history("", self.manga.title.clone(), message).into());
     }
 
     fn tick(&mut self) {
@@ -1168,7 +1149,7 @@ impl<T: MangaTracker> MangaPage<T> {
 
         while let Ok(background_event) = self.local_event_rx.try_recv() {
             match background_event {
-                MangaPageEvents::TrackingFailed(error_message) => write_to_error_log(ErrorType::String(&error_message)),
+                MangaPageEvents::TrackingFailed(error_message) => self.log_tracking_manga_error(error_message),
                 MangaPageEvents::ReadChapterBookmarked(chapter, manga) => self.read_chapter_bookmarked(chapter, manga),
                 MangaPageEvents::FetchBookmarkFailed => self.fetch_bookmarked_chapter_failed(),
                 MangaPageEvents::FetchChapterBookmarked(chapter_bookmarked) => {
@@ -1206,10 +1187,18 @@ impl<T: MangaTracker> MangaPage<T> {
                         ));
                     }
                 },
-                MangaPageEvents::ReadSuccesful(manga_title, chapter_number, volume_number) => {
+                MangaPageEvents::ReadSuccesful(chapter_to_read, manga_to_read) => {
                     self.state = PageState::DisplayingChapters;
-                    let volume = volume_number.map(|vol| vol.parse::<u32>().ok()).flatten();
-                    self.track_manga(self.manga_tracker.clone(), manga_title, chapter_number, volume);
+                    let volume = chapter_to_read.clone().volume_number.map(|vol| vol.parse::<u32>().ok()).flatten();
+                    self.track_manga(self.manga_tracker.clone(), self.manga.title.clone(), chapter_to_read.number as u32, volume);
+
+                    self.local_event_tx.send(MangaPageEvents::CheckChapterStatus).ok();
+
+                    self.global_event_tx
+                        .as_ref()
+                        .unwrap()
+                        .send(Events::ReadChapter(chapter_to_read, manga_to_read))
+                        .ok();
                 },
             }
         }
@@ -1309,12 +1298,9 @@ impl<T: MangaTracker> Component for MangaPage<T> {
     }
 }
 
-// these tests still need improvements, maybe a lot of this logic can be separated to its own
-// struct / widge
 #[cfg(test)]
 mod test {
 
-    use std::borrow::BorrowMut;
     use std::time::Duration;
 
     use pretty_assertions::assert_eq;
@@ -1325,6 +1311,7 @@ mod test {
     use crate::backend::api_responses::ChapterData;
     use crate::backend::database::ChapterBookmarked;
     use crate::backend::tracker::MangaTracker;
+    use crate::global::test_utils::TrackerTest;
     use crate::view::widgets::press_key;
 
     fn get_chapters_response() -> ChapterResponse {
@@ -1349,53 +1336,6 @@ mod test {
         let list = List::new(languages);
 
         StatefulWidget::render(list, area, &mut buf, &mut manga_page.available_languages_state);
-    }
-    #[derive(Debug, Clone)]
-    struct TrackerTest {
-        should_fail: bool,
-        title_manga_tracked: Option<String>,
-    }
-
-    impl TrackerTest {
-        fn new() -> Self {
-            Self {
-                title_manga_tracked: None,
-                should_fail: false,
-            }
-        }
-
-        fn failing() -> Self {
-            Self {
-                should_fail: true,
-                title_manga_tracked: None,
-            }
-        }
-
-        fn get_manga_tracked(self) -> Option<String> {
-            self.title_manga_tracked
-        }
-    }
-
-    impl MangaTracker for TrackerTest {
-        async fn search_manga_by_title(
-            &self,
-            _title: manga_tui::SearchTerm,
-        ) -> Result<Option<crate::backend::tracker::MangaToTrack>, Box<dyn std::error::Error>> {
-            if self.should_fail {
-                return Err("".into());
-            }
-            Ok(None)
-        }
-
-        async fn mark_manga_as_read_with_chapter_count(
-            &self,
-            _manga: crate::backend::tracker::MarkAsRead<'_>,
-        ) -> Result<(), Box<dyn Error>> {
-            if self.should_fail {
-                return Err("".into());
-            }
-            Ok(())
-        }
     }
 
     #[tokio::test]
@@ -1967,7 +1907,8 @@ mod test {
 
     #[tokio::test]
     async fn if_manga_tracking_fails_it_sends_event_to_write_error_to_error_log_file() -> Result<(), Box<dyn Error>> {
-        let failing_tracker = TrackerTest::failing();
+        let expected_error_message = "some_error_message";
+        let failing_tracker = TrackerTest::failing_with_error_message(&expected_error_message);
 
         let mut manga_page: MangaPage<TrackerTest> = MangaPage::new(Manga::default(), Some(Picker::new((1, 2))));
 
@@ -1975,9 +1916,7 @@ mod test {
 
         manga_page.track_manga(Some(failing_tracker), "manga-test".to_string(), 1, Some(3));
 
-        let expected = MangaPageEvents::TrackingFailed(
-            "Failed to mark chapter 1 volume 3 of manga manga-test more details of the error : ".to_string(),
-        );
+        let expected = MangaPageEvents::TrackingFailed(expected_error_message.to_string());
 
         let result = timeout(Duration::from_millis(500), manga_page.local_event_rx.recv()).await?.unwrap();
 

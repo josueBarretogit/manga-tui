@@ -1,8 +1,9 @@
 #![allow(dead_code)]
 #![allow(deprecated)]
 
-use backend::fetch::ApiClient;
-use backend::secrets::anilist::AnilistStorage;
+use std::time::Duration;
+
+use backend::secrets::anilist::{self, AnilistStorage};
 use backend::tracker::anilist::{Anilist, BASE_ANILIST_API_URL};
 use clap::Parser;
 use http::StatusCode;
@@ -51,10 +52,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     }
 
+    let anilist_storage = AnilistStorage::new();
+
+    let anilist_client = match anilist_storage.anilist_check_credentials_stored()? {
+        Some(credentials) => Some(
+            Anilist::new(BASE_ANILIST_API_URL.parse().unwrap())
+                .with_token(credentials.access_token)
+                .with_client_id(credentials.client_id),
+        ),
+        None => None,
+    };
+
+    if anilist_client.is_some() {
+        info!("Anilist is setup, tracking reading history");
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+
     let mangadex_client = MangadexClient::new(API_URL_BASE.parse().unwrap(), COVER_IMG_URL_BASE.parse().unwrap())
         .with_image_quality(MangaTuiConfig::get().image_quality);
 
-    println!("Checking mangadex status...");
+    info!("Checking mangadex status...");
 
     let mangadex_status = mangadex_client.check_status().await;
 
@@ -84,20 +101,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     init_error_hooks()?;
     init()?;
 
-    let anilist_storage = AnilistStorage::new();
-
-    let anilist = match anilist_storage.anilist_check_credentials_stored()? {
-        Some(credentials) => Some(
-            Anilist::new(BASE_ANILIST_API_URL.parse().unwrap())
-                .with_token(credentials.access_token)
-                .with_client_id(credentials.client_id),
-        ),
-        None => None,
-    };
-
-    info!("{}", anilist.is_some());
-
-    run_app(CrosstermBackend::new(std::io::stdout()), MangadexClient::global().clone(), anilist).await?;
+    run_app(CrosstermBackend::new(std::io::stdout()), MangadexClient::global().clone(), anilist_client).await?;
     restore()?;
 
     Ok(())

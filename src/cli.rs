@@ -5,7 +5,7 @@ use std::io::BufRead;
 use std::process::exit;
 
 use clap::{crate_version, Parser, Subcommand};
-use strum::{Display, IntoEnumIterator};
+use strum::IntoEnumIterator;
 
 use crate::backend::error_log::write_to_error_log;
 use crate::backend::filter::Languages;
@@ -21,13 +21,6 @@ fn read_input(mut input_reader: impl BufRead, logger: &impl ILogger, message: &s
     let mut input_provided = String::new();
     input_reader.read_line(&mut input_provided)?;
     Ok(input_provided)
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AnilistStatus {
-    Setup,
-    MissigCredentials,
-    InvalidAccessToken,
 }
 
 #[derive(Subcommand, Clone, Copy)]
@@ -120,8 +113,6 @@ impl CliArgs {
 
         Ok(())
     }
-
-    /// This method must check if both client_id and access_token are stored and they are not empty
 
     fn save_anilist_credentials(
         &self,
@@ -244,7 +235,6 @@ mod tests {
 
     use pretty_assertions::assert_eq;
     use uuid::Uuid;
-    use Commands::*;
 
     use super::*;
 
