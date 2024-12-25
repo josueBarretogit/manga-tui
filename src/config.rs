@@ -44,6 +44,7 @@ pub struct MangaTuiConfig {
     pub image_quality: ImageQuality,
     pub auto_bookmark: bool,
     pub amount_pages: u8,
+    pub track_reading_when_download: bool,
 }
 
 impl Default for MangaTuiConfig {
@@ -53,6 +54,7 @@ impl Default for MangaTuiConfig {
             auto_bookmark: true,
             download_type: DownloadType::default(),
             image_quality: ImageQuality::default(),
+            track_reading_when_download: false,
         }
     }
 }
@@ -122,6 +124,18 @@ auto_bookmark = true
             )?;
         }
 
+        if !existing_config.contains_key("track_reading_when_download") {
+            file.write_all(
+                "
+# Whether or not downloading a manga counts as reading it on services like anilist
+# values : true, false
+# default : false
+track_reading_when_download = false
+"
+                .as_bytes(),
+            )?;
+        }
+
         let mut contents = String::new();
 
         file.read_to_string(&mut contents)?;
@@ -183,6 +197,11 @@ mod tests {
     # values : 0-255
     #default : 5
     amount_pages = 5
+
+# Whether or not downloading a manga counts as reading it on services like anilist
+# values : true, false
+# default : false
+track_reading_when_download = false
                 "#;
 
         MangaTuiConfig::add_missing_fields(&mut test_file, current_contents.parse::<Table>().unwrap()).unwrap();
@@ -207,6 +226,11 @@ auto_bookmark = true
 # values : 0-255
 #default : 5
 amount_pages = 5
+
+# Whether or not downloading a manga counts as reading it on services like anilist
+# values : true, false
+# default : false
+track_reading_when_download = false
             "#;
 
         let mut test_file = Cursor::new(Vec::new());
@@ -223,6 +247,11 @@ auto_bookmark = true
 # values : 0-255
 #default : 5
 amount_pages = 5
+
+# Whether or not downloading a manga counts as reading it on services like anilist
+# values : true, false
+# default : false
+track_reading_when_download = false
             "#;
 
         MangaTuiConfig::add_missing_fields(&mut test_file, current_contents.parse::<Table>().unwrap()).unwrap();

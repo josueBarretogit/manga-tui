@@ -3,11 +3,12 @@
 
 use std::time::Duration;
 
-use backend::secrets::anilist::{self, AnilistStorage};
+use backend::secrets::anilist::AnilistStorage;
 use backend::tracker::anilist::{Anilist, BASE_ANILIST_API_URL};
 use clap::Parser;
 use http::StatusCode;
-use log::{info, LevelFilter};
+use log::LevelFilter;
+use logger::{ILogger, Logger};
 use ratatui::backend::CrosstermBackend;
 
 use self::backend::build_data_dir;
@@ -30,6 +31,7 @@ mod view;
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 7)]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let logger = Logger;
     pretty_env_logger::formatted_builder()
         .format_module_path(false)
         .filter_level(LevelFilter::Info)
@@ -54,7 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let anilist_storage = AnilistStorage::new();
 
-    let anilist_client = match anilist_storage.anilist_check_credentials_stored()? {
+    let anilist_client = match anilist_storage.check_credentials_stored()? {
         Some(credentials) => Some(
             Anilist::new(BASE_ANILIST_API_URL.parse().unwrap())
                 .with_token(credentials.access_token)
@@ -64,26 +66,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     if anilist_client.is_some() {
-        info!("Anilist is setup, tracking reading history");
+        logger.inform("Anilist is setup, tracking reading history");
         tokio::time::sleep(Duration::from_secs(1)).await;
     }
 
     let mangadex_client = MangadexClient::new(API_URL_BASE.parse().unwrap(), COVER_IMG_URL_BASE.parse().unwrap())
         .with_image_quality(MangaTuiConfig::get().image_quality);
 
-    info!("Checking mangadex status...");
+    logger.inform("Checking mangadex status...");
 
     let mangadex_status = mangadex_client.check_status().await;
 
     match mangadex_status {
         Ok(response) => {
             if response.status() != StatusCode::OK {
-                println!("Mangadex appears to be in maintenance, please come back later");
+                logger.warn("Mangadex appears to be in maintenance, please come back later");
                 return Ok(());
             }
         },
         Err(e) => {
-            println!("Some error ocurred, more details : {e}");
+            logger.error(format!("Some error ocurred, more details : {e}").into());
             return Ok(());
         },
     }
@@ -100,7 +102,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     init_error_hooks()?;
     init()?;
-
     run_app(CrosstermBackend::new(std::io::stdout()), MangadexClient::global().clone(), anilist_client).await?;
     restore()?;
 

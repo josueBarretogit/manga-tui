@@ -51,7 +51,7 @@ impl<'a> GraphqlBody for GetMangaByTitleQuery<'a> {
     fn query(&self) -> &'static str {
         r#"
             query ($search: String) { 
-              Media (search: $search, type: MANGA) { 
+              Media (search: $search, type: MANGA, sort : SEARCH_MATCH) { 
                 id
               }
             }
@@ -340,7 +340,7 @@ mod tests {
         let expected = json!({
             "query" : r#"
                 query ($search: String) { 
-                  Media (search: $search, type: MANGA) { 
+                  Media (search: $search, type: MANGA, sort : SEARCH_MATCH) { 
                     id
                   }
                 }

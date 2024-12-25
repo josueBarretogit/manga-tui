@@ -814,6 +814,7 @@ impl<T: MangaTracker> MangaPage<T> {
     fn download_chapter_selected(&mut self) {
         let manga_id = self.manga.id.clone();
         let manga_title = self.manga.title.clone();
+        let tracker = self.manga_tracker.clone();
         let tx = self.local_event_tx.clone();
 
         self.state = PageState::DownloadingChapters;
@@ -824,6 +825,7 @@ impl<T: MangaTracker> MangaPage<T> {
             chapter.set_normal_state();
             let chapter_title = chapter.title.clone();
             let number = chapter.chapter_number.clone();
+            let volume_number = chapter.volume_number.clone();
             let scanlator = chapter.scanlator.clone();
             let chapter_id = chapter.id.clone();
             let lang = chapter.translated_language.as_human_readable().to_string();
@@ -855,6 +857,29 @@ impl<T: MangaTracker> MangaPage<T> {
 
                 match download_result {
                     Ok(_) => {
+                        if config.track_reading_when_download {
+                            // clone chapter title so that it can be used inside `track_manga` error
+                            // closure
+                            let chapter_title_error = chapter_title.clone();
+                            track_manga(
+                                tracker,
+                                manga_title.clone(),
+                                // This conversion is needed so that we take into account chapters
+                                // like 1.2, 10.1 etc
+                                number.parse::<f64>().unwrap_or(0.0) as u32,
+                                volume_number.map(|vol| vol.parse().ok()).flatten(),
+                                move |error| {
+                                    write_to_error_log(
+                                        format_error_message_tracking_reading_history(
+                                            chapter_title_error.clone(),
+                                            manga_title.clone(),
+                                            error,
+                                        )
+                                        .into(),
+                                    );
+                                },
+                            );
+                        }
                         tx.send(MangaPageEvents::SaveChapterDownloadStatus(chapter_id.clone(), chapter_title))
                             .ok();
                         tx.send(MangaPageEvents::ChapterFinishedDownloading(chapter_id)).ok();

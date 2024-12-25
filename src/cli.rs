@@ -134,7 +134,7 @@ impl CliArgs {
         let storage = AnilistStorage::new();
         logger.inform("Checking client id and access token are stored");
 
-        let credentials_are_stored = storage.anilist_check_credentials_stored()?;
+        let credentials_are_stored = storage.check_credentials_stored()?;
         if credentials_are_stored.is_none() {
             logger.warn("The client id or the access token are empty, it is recommended you run `manga-tui anilist reset`");
             exit(0)
