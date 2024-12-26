@@ -9,6 +9,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: full
+  RUST_TOOLCHAIN_VERSION : "nightly"
 
 jobs:
   check_code_format_and_lint:
@@ -21,13 +22,18 @@ jobs:
       - name: setup toolchain
         uses: hecrj/setup-rust-action@v1
         with:
-          rust-version: nightly-2024-06-25
+          rust-version: ${{ env.RUST_TOOLCHAIN_VERSION }}
+
+      - name: install_dependencies
+        run: sudo apt install libdbus-1-dev pkg-config
 
       - name: check-fmt
         run: cargo fmt --check
 
       - name: clippy
         run: cargo clippy -- -D warnings
+
+
 
   build_and_test:
     strategy:
@@ -44,7 +50,7 @@ jobs:
       - name: setup toolchain
         uses: hecrj/setup-rust-action@v1
         with:
-          rust-version: nightly-2024-06-25
+          rust-version: ${{ env.RUST_TOOLCHAIN_VERSION }}
 
       - name: check
         run: cargo check --locked
