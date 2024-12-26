@@ -59,7 +59,7 @@ jobs:
         run: cargo build --release --verbose
 
       - name: install cargo nextest
-        run: cargo install cargo-nextest
+        run: cargo install cargo-nextest@0.9.82
 
       - name: test
         run: cargo nextest run --no-fail-fast
@@ -83,6 +83,10 @@ jobs:
         uses: DeterminateSystems/magic-nix-cache-action@main
         with:
           use-flakehub: false
+
+      - name: install_dependencies
+        run: sudo apt install libdbus-1-dev pkg-config
+
 
       - name: Build default package
         run: nix build

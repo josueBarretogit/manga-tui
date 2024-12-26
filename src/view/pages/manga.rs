@@ -1,7 +1,6 @@
 use std::error::Error;
 use std::future::Future;
 use std::io::Cursor;
-use std::u32;
 
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent, MouseEventKind};
 use image::io::Reader;
@@ -867,7 +866,7 @@ impl<T: MangaTracker> MangaPage<T> {
                                 // This conversion is needed so that we take into account chapters
                                 // like 1.2, 10.1 etc
                                 number.parse::<f64>().unwrap_or(0.0) as u32,
-                                volume_number.map(|vol| vol.parse().ok()).flatten(),
+                                volume_number.and_then(|vol| vol.parse().ok()),
                                 move |error| {
                                     write_to_error_log(
                                         format_error_message_tracking_reading_history(
@@ -1214,7 +1213,7 @@ impl<T: MangaTracker> MangaPage<T> {
                 },
                 MangaPageEvents::ReadSuccesful(chapter_to_read, manga_to_read) => {
                     self.state = PageState::DisplayingChapters;
-                    let volume = chapter_to_read.clone().volume_number.map(|vol| vol.parse::<u32>().ok()).flatten();
+                    let volume = chapter_to_read.clone().volume_number.and_then(|vol| vol.parse::<u32>().ok());
                     self.track_manga(self.manga_tracker.clone(), self.manga.title.clone(), chapter_to_read.number as u32, volume);
 
                     self.local_event_tx.send(MangaPageEvents::CheckChapterStatus).ok();

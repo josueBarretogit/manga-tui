@@ -1,15 +1,11 @@
 use std::collections::HashMap;
-use std::error::Error;
 use std::fmt::Display;
 
-use manga_tui::SearchTerm;
 use ratatui::layout::Rect;
 use ratatui_image::protocol::Protocol;
 use strum::{Display, EnumIter};
 
 use crate::backend::filter::Languages;
-use crate::backend::tracker::{MangaTracker, MarkAsRead};
-
 #[derive(Default, Clone, Debug, PartialEq)]
 pub struct Author {
     pub id: String,

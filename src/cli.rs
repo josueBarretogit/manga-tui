@@ -103,8 +103,8 @@ impl CliArgs {
 
         self.save_anilist_credentials(
             AnilistCredentialsProvided {
-                access_token: &access_token,
-                client_id: &client_id,
+                access_token,
+                client_id,
             },
             storage,
         )?;

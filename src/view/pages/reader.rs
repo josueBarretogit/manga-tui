@@ -899,7 +899,6 @@ mod test {
     use self::mpsc::unbounded_channel;
     use super::*;
     use crate::backend::database::{ChapterToBookmark, Database};
-    use crate::common::format_error_message_tracking_reading_history;
     use crate::global::test_utils::TrackerTest;
     use crate::view::widgets::press_key;
 

@@ -35,7 +35,7 @@ pub async fn update_reading_progress(
     manga_title: SearchTerm,
     chapter_number: u32,
     volume_number: Option<u32>,
-    tracker: impl MangaTracker + Send,
+    tracker: impl MangaTracker,
 ) -> Result<(), Box<dyn Error>> {
     let response = tracker.search_manga_by_title(manga_title).await?;
     if let Some(manga) = response {
@@ -53,7 +53,7 @@ pub async fn update_reading_progress(
 pub fn track_manga<T, F>(tracker: Option<T>, manga_title: String, chapter_number: u32, volume_number: Option<u32>, on_error: F)
 where
     T: MangaTracker,
-    F: Fn(String) -> () + Send + 'static,
+    F: Fn(String) + Send + 'static,
 {
     if let Some(tracker) = tracker {
         tokio::spawn(async move {

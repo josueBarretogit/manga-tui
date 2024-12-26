@@ -3,7 +3,6 @@ use std::path::{Path, PathBuf};
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
-use manga_tui::SearchTerm;
 use reqwest::Url;
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -17,8 +16,6 @@ use crate::backend::fetch::ApiClient;
 #[cfg(not(test))]
 use crate::backend::fetch::MangadexClient;
 use crate::backend::filter::Languages;
-use crate::backend::tracker::anilist::MarkMangaAsReadQuery;
-use crate::backend::tracker::{MangaTracker, MarkAsRead};
 use crate::config::{DownloadType, ImageQuality, MangaTuiConfig};
 use crate::view::app::MangaToRead;
 use crate::view::pages::manga::{ChapterOrder, MangaPageEvents};
