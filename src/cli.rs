@@ -136,7 +136,7 @@ impl CliArgs {
 
         let credentials_are_stored = storage.check_credentials_stored()?;
         if credentials_are_stored.is_none() {
-            logger.warn("The client id or the access token are empty, it is recommended you run `manga-tui anilist reset`");
+            logger.warn("The client id or the access token are empty, run `manga-tui anilist init`");
             exit(0)
         }
 
@@ -152,7 +152,7 @@ impl CliArgs {
         if access_token_is_valid {
             logger.inform("Everything is setup correctly :D");
         } else {
-            logger.error("The anilist access token is not valid, please run `manga-tui anilist reset`".into());
+            logger.error("The anilist access token is not valid, please run `manga-tui anilist init`".into());
             exit(0)
         }
 
