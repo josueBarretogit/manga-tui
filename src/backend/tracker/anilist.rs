@@ -163,6 +163,33 @@ impl GraphqlBody for GetUserIdBody {
     }
 }
 
+struct MarkMangaAsPlanToRead(u32);
+
+impl MarkMangaAsPlanToRead {
+    pub fn new(id: u32) -> Self {
+        Self(id)
+    }
+}
+
+impl GraphqlBody for MarkMangaAsPlanToRead {
+    fn query(&self) -> &'static str {
+        r#"
+            mutation ($id: Int) {
+              SaveMediaListEntry(
+                mediaId: $id
+                status: PLANNING
+              ) {
+                id
+              }
+            }
+        "#
+    }
+
+    fn variables(&self) -> serde_json::Value {
+        json!({ "id" : self.0 })
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Anilist {
     base_url: Url,
@@ -306,6 +333,28 @@ impl MangaTracker for Anilist {
 
         Ok(())
     }
+
+    async fn mark_manga_as_plan_to_read(&self, manga_to_plan_to_read: super::PlanToReadArgs<'_>) -> Result<(), Box<dyn Error>> {
+        let query = MarkMangaAsPlanToRead::new(manga_to_plan_to_read.id.parse()?);
+
+        let response = self
+            .client
+            .post(self.base_url.clone())
+            .body(query.into_body())
+            .header(AUTHORIZATION, self.access_token.clone())
+            .send()
+            .await?;
+
+        if response.status() != StatusCode::OK {
+            return Err(format!(
+                "could not mark manga as plan to read in anilist, more details of the response : \n {:#?}  ",
+                response
+            )
+            .into());
+        }
+
+        Ok(())
+    }
 }
 
 impl AnilistTokenChecker for Anilist {
@@ -322,6 +371,7 @@ mod tests {
     use uuid::Uuid;
 
     use super::*;
+    use crate::backend::tracker::PlanToReadArgs;
 
     trait RemoveWhitespace {
         /// Util trait for comparing two string without taking into account whitespaces and tabs (don't know a
@@ -471,6 +521,33 @@ mod tests {
     }
 
     #[test]
+    fn mark_as_plan_to_read_query_is_built_as_expected() {
+        let expected = json!({
+            "query" : r#"
+                mutation ($id: Int) {
+                  SaveMediaListEntry(
+                    mediaId: $id
+                    status: PLANNING
+                  ) {
+                    id
+                  }
+                }
+            "#,
+            "variables" : {
+                 "id" : 123,
+            }
+        });
+
+        let mark_as_plan_to_read_query = MarkMangaAsPlanToRead::new(123);
+
+        let as_json = mark_as_plan_to_read_query.into_json();
+
+        assert_str_eq!(expected.get("query").unwrap().remove_whitespace(), as_json.get("query").unwrap().remove_whitespace());
+
+        assert_eq!(expected.get("variables"), as_json.get("variables"));
+    }
+
+    #[test]
     fn get_access_token_query_is_built_correctly() {
         let expected = json!({
             "grant_type": "authorization_code",
@@ -544,6 +621,32 @@ mod tests {
             })
             .await
             .expect("should be marked as read");
+
+        request.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn anilist_marks_manga_as_plan_to_read() {
+        let server = MockServer::start_async().await;
+
+        let access_token = Uuid::new_v4().to_string();
+        let base_url: Url = server.base_url().parse().unwrap();
+        let anilist = Anilist::new(base_url.clone()).with_token(access_token.clone());
+        let manga_id = "86635";
+
+        let expected_body_sent = MarkMangaAsPlanToRead::new(manga_id.parse().unwrap()).into_json();
+
+        let request = server
+            .mock_async(|when, then| {
+                when.method(POST).header("Authorization", access_token).json_body_obj(&expected_body_sent);
+                then.status(200);
+            })
+            .await;
+
+        anilist
+            .mark_manga_as_plan_to_read(PlanToReadArgs { id: &manga_id })
+            .await
+            .expect("should not error");
 
         request.assert_async().await;
     }

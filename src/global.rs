@@ -15,7 +15,7 @@ pub static CURRENT_LIST_ITEM_STYLE: Lazy<Style> = Lazy::new(|| Style::default().
 pub mod test_utils {
     use std::error::Error;
 
-    use crate::backend::tracker::MangaTracker;
+    use crate::backend::tracker::{MangaTracker, PlanToReadArgs};
 
     #[derive(Debug, Clone)]
     pub struct TrackerTest {
@@ -65,6 +65,13 @@ pub mod test_utils {
             &self,
             _manga: crate::backend::tracker::MarkAsRead<'_>,
         ) -> Result<(), Box<dyn Error>> {
+            if self.should_fail {
+                return Err(self.error_message.clone().unwrap_or("".to_string()).into());
+            }
+            Ok(())
+        }
+
+        async fn mark_manga_as_plan_to_read(&self, _manga_to_plan_to_read: PlanToReadArgs<'_>) -> Result<(), Box<dyn Error>> {
             if self.should_fail {
                 return Err(self.error_message.clone().unwrap_or("".to_string()).into());
             }

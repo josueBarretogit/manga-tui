@@ -47,7 +47,7 @@ where
     pub current_tab: SelectedPage,
     pub manga_page: Option<MangaPage<S>>,
     pub manga_reader_page: Option<MangaReader<T, S>>,
-    pub search_page: SearchPage,
+    pub search_page: SearchPage<T, S>,
     pub home_page: Home,
     pub feed_page: Feed<T>,
     api_client: T,
@@ -131,7 +131,8 @@ impl<T: ApiClient + SearchChapter + SearchMangaPanel, S: MangaTracker> App<T, S>
         App {
             picker,
             current_tab: SelectedPage::default(),
-            search_page: SearchPage::new(picker).with_global_sender(global_event_tx.clone()),
+            search_page: SearchPage::new(picker, api_client.clone(), manga_tracker.clone())
+                .with_global_sender(global_event_tx.clone()),
             feed_page: Feed::new()
                 .with_global_sender(global_event_tx.clone())
                 .with_api_client(api_client.clone()),
