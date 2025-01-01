@@ -3,6 +3,7 @@
 
 use std::time::Duration;
 
+use backend::release_notifier::{ReleaseNotifier, GITHUB_URL};
 use backend::secrets::anilist::AnilistStorage;
 use backend::tracker::anilist::{Anilist, BASE_ANILIST_API_URL};
 use clap::Parser;
@@ -40,6 +41,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli_args = CliArgs::parse();
 
     cli_args.proccess_args().await?;
+
+    let notifier = ReleaseNotifier::new(GITHUB_URL.parse().unwrap());
+
+    if let Err(e) = notifier.check_new_releases(&logger).await {
+        logger.error(e.into());
+    }
 
     match build_data_dir() {
         Ok(_) => {},

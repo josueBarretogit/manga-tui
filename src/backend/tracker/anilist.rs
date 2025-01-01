@@ -15,6 +15,7 @@ use serde_json::json;
 
 use crate::backend::tracker::{MangaToTrack, MangaTracker, MarkAsRead};
 use crate::cli::AnilistTokenChecker;
+use crate::global::USER_AGENT;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct GetMangaByTitleQuery<'a> {
@@ -248,6 +249,7 @@ impl Anilist {
         let client = Client::builder()
             .default_headers(default_headers)
             .timeout(Duration::from_secs(10))
+            .user_agent(&*USER_AGENT)
             .build()
             .unwrap();
 

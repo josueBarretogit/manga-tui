@@ -1,3 +1,5 @@
+use std::sync::LazyLock;
+
 use once_cell::sync::{Lazy, OnceCell};
 use ratatui::style::{Style, Stylize};
 
@@ -10,6 +12,16 @@ pub static INSTRUCTIONS_STYLE: Lazy<Style> = Lazy::new(|| Style::default().bold(
 pub static ERROR_STYLE: Lazy<Style> = Lazy::new(|| Style::default().bold().underlined().red().on_black());
 
 pub static CURRENT_LIST_ITEM_STYLE: Lazy<Style> = Lazy::new(|| Style::default().on_blue());
+
+pub static USER_AGENT: LazyLock<String> = LazyLock::new(|| {
+    format!(
+        "manga-tui/{} ({}/{}/{})",
+        env!("CARGO_PKG_VERSION"),
+        std::env::consts::FAMILY,
+        std::env::consts::OS,
+        std::env::consts::ARCH
+    )
+});
 
 #[cfg(test)]
 pub mod test_utils {
