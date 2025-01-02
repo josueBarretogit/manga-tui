@@ -29,9 +29,10 @@ use crate::backend::download::DownloadChapter;
 use crate::backend::error_log::{self, write_to_error_log, ErrorType};
 use crate::backend::fetch::{ApiClient, MangadexClient, ITEMS_PER_PAGE_CHAPTERS};
 use crate::backend::filter::Languages;
+use crate::backend::tracker::{track_manga, MangaTracker};
 use crate::backend::tui::Events;
 use crate::backend::AppDirectories;
-use crate::common::Manga;
+use crate::common::{format_error_message_tracking_reading_history, Manga};
 use crate::config::MangaTuiConfig;
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
 use crate::utils::{set_status_style, set_tags_style};
@@ -116,9 +117,11 @@ pub enum MangaPageEvents {
     /// id_chapter
     DownloadError(String),
     ReadError(String),
-    ReadSuccesful,
+
+    ReadSuccesful(ChapterToRead, MangaToRead),
     LoadChapters(Option<ChapterResponse>),
     LoadStatistics(Option<MangaStatisticsResponse>),
+    TrackingFailed(String),
 }
 
 #[derive(Display, Default, Clone, Copy, Debug, PartialEq, Eq)]
@@ -146,7 +149,7 @@ pub trait FetchChapterBookmarked: Send + Clone + 'static {
     ) -> impl Future<Output = Result<(ChapterToRead, MangaToRead), Box<dyn Error>>> + Send;
 }
 
-pub struct MangaPage {
+pub struct MangaPage<T: MangaTracker> {
     pub manga: Manga,
     image_state: Option<Box<dyn Protocol>>,
     cover_area: Rect,
@@ -166,6 +169,7 @@ pub struct MangaPage {
     available_languages_state: ListState,
     is_list_languages_open: bool,
     download_all_chapters_state: DownloadAllChaptersState,
+    manga_tracker: Option<T>,
 }
 
 struct MangaStatistics {
@@ -187,7 +191,7 @@ struct ChaptersData {
     total_result: u32,
 }
 
-impl MangaPage {
+impl<T: MangaTracker> MangaPage<T> {
     pub fn new(manga: Manga, picker: Option<Picker>) -> Self {
         let (local_action_tx, local_action_rx) = mpsc::unbounded_channel::<MangaPageActions>();
         let (local_event_tx, local_event_rx) = mpsc::unbounded_channel::<MangaPageEvents>();
@@ -224,6 +228,7 @@ impl MangaPage {
             download_all_chapters_state: DownloadAllChaptersState::new(local_event_tx),
             chapter_language: chapter_language.unwrap_or(Languages::default()),
             cover_area,
+            manga_tracker: None,
         }
     }
 
@@ -234,6 +239,11 @@ impl MangaPage {
 
     pub fn auto_bookmark(mut self, auto_bookmark: bool) -> Self {
         self.bookmark_state.auto_bookmark = auto_bookmark;
+        self
+    }
+
+    pub fn with_manga_tracker(mut self, tracker: Option<T>) -> Self {
+        self.manga_tracker = tracker;
         self
     }
 
@@ -621,7 +631,6 @@ impl MangaPage {
                 let manga_id = self.manga.id.clone();
                 let title = self.manga.title.clone();
                 let img_url = self.manga.img_url.clone();
-                let tx = self.global_event_tx.as_ref().cloned().unwrap();
                 let local_tx = self.local_event_tx.clone();
 
                 let chapter_to_read: ChapterArgs = ChapterArgs {
@@ -640,9 +649,7 @@ impl MangaPage {
 
                     match search_chapter_response {
                         Ok((chapter, manga_to_read)) => {
-                            tx.send(Events::ReadChapter(chapter, manga_to_read)).ok();
-                            local_tx.send(MangaPageEvents::CheckChapterStatus).ok();
-                            local_tx.send(MangaPageEvents::ReadSuccesful).ok();
+                            local_tx.send(MangaPageEvents::ReadSuccesful(chapter.clone(), manga_to_read.clone())).ok();
                         },
                         Err(e) => {
                             write_to_error_log(error_log::ErrorType::Error(
@@ -806,6 +813,7 @@ impl MangaPage {
     fn download_chapter_selected(&mut self) {
         let manga_id = self.manga.id.clone();
         let manga_title = self.manga.title.clone();
+        let tracker = self.manga_tracker.clone();
         let tx = self.local_event_tx.clone();
 
         self.state = PageState::DownloadingChapters;
@@ -816,6 +824,7 @@ impl MangaPage {
             chapter.set_normal_state();
             let chapter_title = chapter.title.clone();
             let number = chapter.chapter_number.clone();
+            let volume_number = chapter.volume_number.clone();
             let scanlator = chapter.scanlator.clone();
             let chapter_id = chapter.id.clone();
             let lang = chapter.translated_language.as_human_readable().to_string();
@@ -847,6 +856,29 @@ impl MangaPage {
 
                 match download_result {
                     Ok(_) => {
+                        if config.track_reading_when_download {
+                            // clone chapter title so that it can be used inside `track_manga` error
+                            // closure
+                            let chapter_title_error = chapter_title.clone();
+                            track_manga(
+                                tracker,
+                                manga_title.clone(),
+                                // This conversion is needed so that we take into account chapters
+                                // like 1.2, 10.1 etc
+                                number.parse::<f64>().unwrap_or(0.0) as u32,
+                                volume_number.and_then(|vol| vol.parse().ok()),
+                                move |error| {
+                                    write_to_error_log(
+                                        format_error_message_tracking_reading_history(
+                                            chapter_title_error.clone(),
+                                            manga_title.clone(),
+                                            error,
+                                        )
+                                        .into(),
+                                    );
+                                },
+                            );
+                        }
                         tx.send(MangaPageEvents::SaveChapterDownloadStatus(chapter_id.clone(), chapter_title))
                             .ok();
                         tx.send(MangaPageEvents::ChapterFinishedDownloading(chapter_id)).ok();
@@ -1121,6 +1153,17 @@ impl MangaPage {
         }
     }
 
+    fn track_manga(&self, tracker: Option<T>, manga_title: String, chapter_number: u32, volume_number: Option<u32>) {
+        let tx = self.local_event_tx.clone();
+        track_manga(tracker, manga_title, chapter_number, volume_number, move |error| {
+            tx.send(MangaPageEvents::TrackingFailed(error)).ok();
+        });
+    }
+
+    fn log_tracking_manga_error(&self, message: String) {
+        write_to_error_log(format_error_message_tracking_reading_history("", self.manga.title.clone(), message).into());
+    }
+
     fn tick(&mut self) {
         if self.download_process_started() {
             self.download_all_chapters_state.tick();
@@ -1130,6 +1173,7 @@ impl MangaPage {
 
         while let Ok(background_event) = self.local_event_rx.try_recv() {
             match background_event {
+                MangaPageEvents::TrackingFailed(error_message) => self.log_tracking_manga_error(error_message),
                 MangaPageEvents::ReadChapterBookmarked(chapter, manga) => self.read_chapter_bookmarked(chapter, manga),
                 MangaPageEvents::FetchBookmarkFailed => self.fetch_bookmarked_chapter_failed(),
                 MangaPageEvents::FetchChapterBookmarked(chapter_bookmarked) => {
@@ -1167,7 +1211,19 @@ impl MangaPage {
                         ));
                     }
                 },
-                MangaPageEvents::ReadSuccesful => self.state = PageState::DisplayingChapters,
+                MangaPageEvents::ReadSuccesful(chapter_to_read, manga_to_read) => {
+                    self.state = PageState::DisplayingChapters;
+                    let volume = chapter_to_read.clone().volume_number.and_then(|vol| vol.parse::<u32>().ok());
+                    self.track_manga(self.manga_tracker.clone(), self.manga.title.clone(), chapter_to_read.number as u32, volume);
+
+                    self.local_event_tx.send(MangaPageEvents::CheckChapterStatus).ok();
+
+                    self.global_event_tx
+                        .as_ref()
+                        .unwrap()
+                        .send(Events::ReadChapter(chapter_to_read, manga_to_read))
+                        .ok();
+                },
             }
         }
     }
@@ -1188,7 +1244,7 @@ impl MangaPage {
     }
 }
 
-impl Component for MangaPage {
+impl<T: MangaTracker> Component for MangaPage<T> {
     type Actions = MangaPageActions;
 
     fn render(&mut self, area: Rect, frame: &mut Frame<'_>) {
@@ -1266,8 +1322,6 @@ impl Component for MangaPage {
     }
 }
 
-// these tests still need improvements, maybe a lot of this logic can be separated to its own
-// struct / widge
 #[cfg(test)]
 mod test {
 
@@ -1280,6 +1334,8 @@ mod test {
     use super::*;
     use crate::backend::api_responses::ChapterData;
     use crate::backend::database::ChapterBookmarked;
+    use crate::backend::tracker::MangaTracker;
+    use crate::global::test_utils::TrackerTest;
     use crate::view::widgets::press_key;
 
     fn get_chapters_response() -> ChapterResponse {
@@ -1290,14 +1346,14 @@ mod test {
         }
     }
 
-    fn render_chapters(manga_page: &mut MangaPage) {
+    fn render_chapters<T: MangaTracker>(manga_page: &mut MangaPage<T>) {
         let area = Rect::new(0, 0, 50, 50);
         let mut buf = Buffer::empty(area);
         let chapters = manga_page.chapters.as_mut().unwrap();
         StatefulWidget::render(chapters.widget.clone(), area, &mut buf, &mut chapters.state);
     }
 
-    fn render_available_languages_list(manga_page: &mut MangaPage) {
+    fn render_available_languages_list<T: MangaTracker>(manga_page: &mut MangaPage<T>) {
         let area = Rect::new(0, 0, 50, 50);
         let mut buf = Buffer::empty(area);
         let languages: Vec<String> = manga_page.manga.available_languages.iter().map(|lang| lang.as_human_readable()).collect();
@@ -1308,7 +1364,7 @@ mod test {
 
     #[tokio::test]
     async fn key_events_trigger_expected_actions() {
-        let mut manga_page = MangaPage::new(Manga::default(), None);
+        let mut manga_page: MangaPage<TrackerTest> = MangaPage::new(Manga::default(), None);
 
         // Scroll down chapters list
         press_key(&mut manga_page, KeyCode::Char('j'));
@@ -1425,18 +1481,18 @@ mod test {
 
     #[tokio::test]
     async fn listen_to_key_events_based_on_conditions() {
-        let mut manga_page = MangaPage::new(Manga::default(), None);
+        let mut manga_page: MangaPage<TrackerTest> = MangaPage::new(Manga::default(), None);
 
         assert!(!manga_page.is_list_languages_open);
+        manga_page.handle_events(Events::Key(KeyCode::Char('j').into()));
 
-        press_key(&mut manga_page, KeyCode::Char('j'));
         let action = manga_page.local_action_rx.recv().await.unwrap();
 
         assert_eq!(MangaPageActions::ScrollChapterDown, action);
 
         manga_page.toggle_available_languages_list();
+        manga_page.handle_events(Events::Key(KeyCode::Char('j').into()));
 
-        press_key(&mut manga_page, KeyCode::Char('j'));
         let action = manga_page.local_action_rx.recv().await.unwrap();
 
         assert_eq!(MangaPageActions::ScrollDownAvailbleLanguages, action);
@@ -1444,13 +1500,14 @@ mod test {
         manga_page.toggle_available_languages_list();
         manga_page.ask_download_all_chapters();
 
-        press_key(&mut manga_page, KeyCode::Enter);
+        manga_page.handle_events(Events::Key(KeyCode::Enter.into()));
+
         let action = manga_page.local_action_rx.recv().await.unwrap();
 
         assert_eq!(MangaPageActions::ConfirmDownloadAll, action);
     }
 
-    async fn manga_page_initialized_correctly(manga_page: &mut MangaPage) {
+    async fn manga_page_initialized_correctly<T: MangaTracker>(manga_page: &mut MangaPage<T>) {
         assert_eq!(manga_page.chapter_language, Languages::default());
 
         assert_eq!(ChapterOrder::default(), manga_page.chapter_order);
@@ -1468,14 +1525,14 @@ mod test {
 
     #[tokio::test]
     async fn handle_events() {
-        let mut manga_page = MangaPage::new(Manga::default(), None);
+        let mut manga_page: MangaPage<TrackerTest> = MangaPage::new(Manga::default(), None);
 
         manga_page_initialized_correctly(&mut manga_page).await;
     }
 
     #[tokio::test]
     async fn handle_key_events() {
-        let mut manga_page = MangaPage::new(Manga::default(), None);
+        let mut manga_page: MangaPage<TrackerTest> = MangaPage::new(Manga::default(), None);
         manga_page.state = PageState::SearchingChapters;
         manga_page.manga.available_languages =
             vec![Languages::default(), Languages::Spanish, Languages::German, Languages::Japanese];
@@ -1565,7 +1622,7 @@ mod test {
 
     #[test]
     fn doesnt_go_to_reader_if_picker_is_none() {
-        let mut manga_page = MangaPage::new(Manga::default(), None);
+        let mut manga_page: MangaPage<TrackerTest> = MangaPage::new(Manga::default(), None);
 
         manga_page.load_chapters(Some(get_chapters_response()));
 
@@ -1578,7 +1635,7 @@ mod test {
 
     #[test]
     fn doesnt_search_manga_cover_if_picker_is_none() {
-        let mut manga_page = MangaPage::new(Manga::default(), None);
+        let mut manga_page: MangaPage<TrackerTest> = MangaPage::new(Manga::default(), None);
 
         manga_page.search_cover();
     }
@@ -1633,9 +1690,8 @@ mod test {
 
     #[tokio::test]
     async fn it_sends_event_to_bookmark_currently_selected_chapter_on_key_press_if_auto_bookmark_is_false() {
-        let mut manga_page = MangaPage::new(Manga::default(), None);
-
-        press_key(&mut manga_page, KeyCode::Char('m'));
+        let mut manga_page: MangaPage<TrackerTest> = MangaPage::new(Manga::default(), None);
+        manga_page.handle_events(Events::Key(KeyCode::Char('m').into()));
 
         let result = timeout(Duration::from_millis(250), manga_page.local_action_rx.recv())
             .await
@@ -1647,16 +1703,15 @@ mod test {
 
     #[tokio::test]
     async fn it_does_not_send_event_bookmark_chapter_selected_if_auto_bookmark_is_true() {
-        let mut manga_page = MangaPage::new(Manga::default(), None).auto_bookmark(true);
-
-        press_key(&mut manga_page, KeyCode::Char('m'));
+        let mut manga_page: MangaPage<TrackerTest> = MangaPage::new(Manga::default(), None).auto_bookmark(true);
+        manga_page.handle_events(Events::Key(KeyCode::Char('m').into()));
 
         assert!(manga_page.local_action_rx.is_empty());
     }
 
     #[test]
     fn it_bookmarks_currently_selected_chapter() {
-        let mut manga_page = MangaPage::new(Manga::default(), None);
+        let mut manga_page: MangaPage<TrackerTest> = MangaPage::new(Manga::default(), None);
 
         let chapter_to_bookmark: ChapterItem = ChapterItem {
             id: "id_chapter_bookmarked".to_string(),
@@ -1694,7 +1749,7 @@ mod test {
 
     #[test]
     fn it_only_bookmarks_one_chapter_at_a_time() {
-        let mut manga_page = MangaPage::new(Manga::default(), None);
+        let mut manga_page: MangaPage<TrackerTest> = MangaPage::new(Manga::default(), None);
 
         let mut list_state = tui_widget_list::ListState::default();
 
@@ -1728,13 +1783,13 @@ mod test {
     }
 
     // clear all the events from initialization
-    fn flush_events(manga_page: &mut MangaPage) {
+    fn flush_events<T: MangaTracker>(manga_page: &mut MangaPage<T>) {
         while manga_page.local_event_rx.try_recv().is_ok() {}
     }
 
     #[tokio::test]
     async fn it_sends_event_to_fetch_chapter_bookmarked_if_there_is_any() {
-        let mut manga_page = MangaPage::new(Manga::default(), None);
+        let mut manga_page: MangaPage<TrackerTest> = MangaPage::new(Manga::default(), None);
 
         flush_events(&mut manga_page);
 
@@ -1759,7 +1814,7 @@ mod test {
 
     #[test]
     fn it_is_set_as_bookmark_not_found_when_no_chapter_is_bookmarked() {
-        let mut manga_page = MangaPage::new(Manga::default(), None);
+        let mut manga_page: MangaPage<TrackerTest> = MangaPage::new(Manga::default(), None);
 
         flush_events(&mut manga_page);
 
@@ -1806,9 +1861,8 @@ mod test {
 
     #[tokio::test]
     async fn it_send_event_to_read_bookmark_chapter_by_pressing_tab() {
-        let mut manga_page = MangaPage::new(Manga::default(), None);
-
-        press_key(&mut manga_page, KeyCode::Tab);
+        let mut manga_page: MangaPage<TrackerTest> = MangaPage::new(Manga::default(), None);
+        manga_page.handle_events(Events::Key(KeyCode::Tab.into()));
 
         let expected = MangaPageActions::GoToReadBookmarkedChapter;
 
@@ -1823,7 +1877,7 @@ mod test {
     #[tokio::test]
     async fn it_sends_event_to_go_reader_page_from_bookmarked_chapter() {
         let (tx, _) = unbounded_channel();
-        let mut manga_page = MangaPage::new(Manga::default(), None).with_global_sender(tx);
+        let mut manga_page: MangaPage<TrackerTest> = MangaPage::new(Manga::default(), None).with_global_sender(tx);
 
         flush_events(&mut manga_page);
         let chapter_bookmarked: ChapterBookmarked = ChapterBookmarked {
@@ -1857,7 +1911,7 @@ mod test {
     #[tokio::test]
     async fn it_sends_event_chapter_bookmarked_failed_to_fetch() {
         let (tx, _) = unbounded_channel();
-        let mut manga_page = MangaPage::new(Manga::default(), None).with_global_sender(tx);
+        let mut manga_page: MangaPage<TrackerTest> = MangaPage::new(Manga::default(), None).with_global_sender(tx);
 
         flush_events(&mut manga_page);
 
@@ -1873,5 +1927,25 @@ mod test {
             .unwrap();
 
         assert_eq!(expected, result);
+    }
+
+    #[tokio::test]
+    async fn if_manga_tracking_fails_it_sends_event_to_write_error_to_error_log_file() -> Result<(), Box<dyn Error>> {
+        let expected_error_message = "some_error_message";
+        let failing_tracker = TrackerTest::failing_with_error_message(&expected_error_message);
+
+        let mut manga_page: MangaPage<TrackerTest> = MangaPage::new(Manga::default(), Some(Picker::new((1, 2))));
+
+        flush_events(&mut manga_page);
+
+        manga_page.track_manga(Some(failing_tracker), "manga-test".to_string(), 1, Some(3));
+
+        let expected = MangaPageEvents::TrackingFailed(expected_error_message.to_string());
+
+        let result = timeout(Duration::from_millis(500), manga_page.local_event_rx.recv()).await?.unwrap();
+
+        assert_eq!(expected, result);
+
+        Ok(())
     }
 }

@@ -29,6 +29,11 @@ impl SearchTerm {
         if search_term.is_empty() { None } else { Some(Self(search_term.to_lowercase())) }
     }
 
+    pub fn trimmed(search_term: &str) -> Option<Self> {
+        let search_term = search_term.trim();
+        if search_term.is_empty() { None } else { Some(Self(search_term.to_string())) }
+    }
+
     pub fn get(&self) -> &str {
         &self.0
     }
