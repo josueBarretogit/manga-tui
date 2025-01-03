@@ -1940,7 +1940,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e031e8e3d94711a9ccb5d6ea357439ef3dcbed361798bd4071dc4d9793fbe22f"
 dependencies = [
  "byteorder-lite",
- "thiserror 1.0.61",
+ "quick-error 2.0.1",
 ]
 
 [[package]]
@@ -3061,7 +3061,7 @@ dependencies = [
  "rand_chacha",
  "simd_helpers",
  "system-deps",
- "thiserror 1.0.61",
+ "thiserror 1.0.64",
  "v_frame",
  "wasm-bindgen",
 ]
@@ -3118,7 +3118,7 @@ checksum = "bd283d9651eeda4b2a83a43c1c91b266c40fd76ecd39a50a8c630ae69dc72891"
 dependencies = [
  "getrandom",
  "libredox",
- "thiserror 1.0.61",
+ "thiserror 1.0.64",
 ]
 
 [[package]]
@@ -3694,7 +3694,7 @@ version = "1.0.64"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d50af8abc119fb8bb6dbabcfa89656f46f84aa0ac7688088608076ad2b459a84"
 dependencies = [
- "thiserror-impl 1.0.61",
+ "thiserror-impl 1.0.64",
 ]
 
 [[package]]
