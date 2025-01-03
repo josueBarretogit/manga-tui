@@ -7,6 +7,7 @@ use strum::{Display, EnumIter, IntoEnumIterator};
 
 use self::error_log::create_error_logs_files;
 use crate::config::{MangaTuiConfig, CONFIG};
+use crate::logger::ILogger;
 
 pub mod api_responses;
 pub mod database;
@@ -83,19 +84,20 @@ pub static APP_DATA_DIR: Lazy<Option<PathBuf>> = Lazy::new(|| {
 #[cfg(test)]
 pub static APP_DATA_DIR: Lazy<Option<PathBuf>> = Lazy::new(|| Some(PathBuf::from("./test_results/data-directory")));
 
-pub fn build_data_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
+pub fn build_data_dir(logger: &impl ILogger) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let data_dir = APP_DATA_DIR.as_ref();
     match data_dir {
         Some(dir) => {
             if !exists!(dir) {
                 create_dir_all(dir)?;
+                logger.inform(format!("Creating directory: {}", dir.display()));
             }
 
             AppDirectories::build_if_not_exists(dir)?;
 
             create_error_logs_files(dir)?;
 
-            MangaTuiConfig::write_if_not_exists(dir)?;
+            MangaTuiConfig::write_if_not_exists(dir, logger)?;
 
             let config_contents = MangaTuiConfig::read_raw_config(dir)?;
 
@@ -119,12 +121,13 @@ mod test {
     use pretty_assertions::assert_eq;
 
     use super::*;
+    use crate::logger::DefaultLogger;
 
     #[test]
     #[ignore]
     fn test_config_file() -> Result<(), Box<dyn Error>> {
         sleep(Duration::from_millis(100));
-        let data_dir = build_data_dir().expect("Could not build data directory");
+        let data_dir = build_data_dir(&DefaultLogger).expect("Could not build data directory");
 
         let config_template = MangaTuiConfig::get_config_template();
 
@@ -143,7 +146,7 @@ mod test {
     #[ignore]
     fn data_directory_is_built() -> Result<(), Box<dyn Error>> {
         sleep(Duration::from_millis(1000));
-        dbg!(build_data_dir().expect("Could not build data directory"));
+        dbg!(build_data_dir(&DefaultLogger).expect("Could not build data directory"));
 
         let mut amount_directories = 0;
 

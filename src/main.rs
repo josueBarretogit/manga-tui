@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 #![allow(deprecated)]
 
+use std::process::exit;
 use std::time::Duration;
 
 use backend::release_notifier::{ReleaseNotifier, GITHUB_URL};
@@ -48,38 +49,39 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         logger.error(e);
     }
 
-    match build_data_dir() {
+    match build_data_dir(&logger) {
         Ok(_) => {},
         Err(e) => {
-            eprint!(
-            "Data directory could not be created, this is where your manga history and manga downloads is stored
+            logger.error(
+            format!(
+"Data directory could not be created, this is where your manga history and manga downloads is stored
              \n this could be for many reasons such as the application not having enough permissions
             \n Try setting the environment variable `MANGA_TUI_DATA_DIR` to some path pointing to a directory, example: /home/user/somedirectory 
             \n Error details : {e}"
+        ).into()
             );
-            return Ok(());
+            exit(1)
         },
     }
 
     let anilist_storage = AnilistStorage::new();
 
     let anilist_client = match anilist_storage.check_credentials_stored() {
-        Ok(Some(credentials)) => Some(
-            Anilist::new(BASE_ANILIST_API_URL.parse().unwrap())
-                .with_token(credentials.access_token)
-                .with_client_id(credentials.client_id),
-        ),
+        Ok(Some(credentials)) => {
+            logger.inform("Anilist is setup, tracking reading history");
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            Some(
+                Anilist::new(BASE_ANILIST_API_URL.parse().unwrap())
+                    .with_token(credentials.access_token)
+                    .with_client_id(credentials.client_id),
+            )
+        },
         Err(e) => {
             logger.warn(format!("There is an issue when trying to check for anilist, more details about the error : {e}"));
             None
         },
         _ => None,
     };
-
-    if anilist_client.is_some() {
-        logger.inform("Anilist is setup, tracking reading history");
-        tokio::time::sleep(Duration::from_secs(1)).await;
-    }
 
     let mangadex_client = MangadexClient::new(API_URL_BASE.parse().unwrap(), COVER_IMG_URL_BASE.parse().unwrap())
         .with_image_quality(MangaTuiConfig::get().image_quality);
@@ -92,12 +94,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok(response) => {
             if response.status() != StatusCode::OK {
                 logger.warn("Mangadex appears to be in maintenance, please come back later");
-                return Ok(());
+                exit(0)
             }
         },
         Err(e) => {
             logger.error(format!("Some error ocurred, more details : {e}").into());
-            return Ok(());
+            exit(1)
         },
     }
 
@@ -107,7 +109,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let database = Database::new(&connection);
 
     database.setup()?;
-    migrate_version(&mut connection)?;
+    migrate_version(&mut connection, &logger)?;
 
     drop(connection);
 
