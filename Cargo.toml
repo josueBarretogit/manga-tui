@@ -12,6 +12,7 @@ categories = ["command-line-interface"]
 license = "MIT"
 exclude = [
   "public/*",
+  "docs/*",
   "data_test/*"
 ]
 

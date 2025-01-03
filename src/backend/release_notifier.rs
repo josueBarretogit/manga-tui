@@ -93,7 +93,6 @@ mod tests {
 
         let release = "v0.4.0";
 
-        println!("{release}");
         let request = server
             .mock_async(|when, then| {
                 when.method(GET)

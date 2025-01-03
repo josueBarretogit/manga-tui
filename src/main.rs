@@ -45,7 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let notifier = ReleaseNotifier::new(GITHUB_URL.parse().unwrap());
 
     if let Err(e) = notifier.check_new_releases(&logger).await {
-        logger.error(e.into());
+        logger.error(e);
     }
 
     match build_data_dir() {
@@ -63,13 +63,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let anilist_storage = AnilistStorage::new();
 
-    let anilist_client = match anilist_storage.check_credentials_stored()? {
-        Some(credentials) => Some(
+    let anilist_client = match anilist_storage.check_credentials_stored() {
+        Ok(Some(credentials)) => Some(
             Anilist::new(BASE_ANILIST_API_URL.parse().unwrap())
                 .with_token(credentials.access_token)
                 .with_client_id(credentials.client_id),
         ),
-        None => None,
+        Err(e) => {
+            logger.warn(format!("There is an issue when trying to check for anilist, more details about the error : {e}"));
+            None
+        },
+        _ => None,
     };
 
     if anilist_client.is_some() {

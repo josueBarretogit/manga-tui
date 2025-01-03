@@ -803,7 +803,10 @@ impl<T: MangaTracker> MangaPage<T> {
                     sender.send(MangaPageEvents::ReadChapterBookmarked(response.0, response.1)).ok();
                 },
                 Err(e) => {
-                    write_to_error_log(ErrorType::Error(e));
+                    #[cfg(not(test))]
+                    {
+                        write_to_error_log(ErrorType::Error(e));
+                    }
                     sender.send(MangaPageEvents::FetchBookmarkFailed).ok();
                 },
             }

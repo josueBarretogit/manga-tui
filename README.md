@@ -30,6 +30,7 @@ https://github.com/user-attachments/assets/2b693bd3-ec30-4d6e-bcc4-6cf457a860b1
 ## Table of contents
 
 - [Features](#features)
+- [Dependencies](#Dependencies)
 - [Installation](#installation)
 - [Image rendering](#image-rendering)
 - [Usage](#usage)
@@ -44,7 +45,7 @@ https://github.com/user-attachments/assets/2b693bd3-ec30-4d6e-bcc4-6cf457a860b1
 
 https://github.com/user-attachments/assets/c1e21aa1-8a51-4c47-baea-9f56dcd0d6a4
 
-- Read manga in your terminal (Wezterm, iTerm2, or Kitty, any terminal that has support for graphics protocol) 
+- Read manga in your terminal (Wezterm, iTerm2, Kitty, Ghostty) 
   
 https://github.com/user-attachments/assets/70f321ff-13d1-4c4b-9c37-604271456ab2
 
@@ -60,6 +61,27 @@ https://github.com/user-attachments/assets/ba785668-7cf1-4367-93f9-6e6e1f72c12c
 
 https://github.com/user-attachments/assets/26ad493f-633c-41fc-9d09-49b316118923
 
+- [Anilist integration](./docs/anilist.md) 
+
+
+## Dependencies 
+
+On linux you may need to install the D-bus secret service library
+
+### Debian 
+```shell
+sudo apt install libdbus-1-dev pkg-config
+```
+
+### Fedora
+```shell
+sudo dnf install dbus-devel pkgconf-pkg-config
+```
+
+### Arch 
+```shell
+sudo pacman -S dbus pkgconf
+```
 
 ## Installation
 
@@ -99,7 +121,7 @@ Download a binary from the [releases page](https://github.com/josueBarretogit/ma
 
 ## Image rendering
 
-Use a terminal that can render images such as [Wezterm](https://wezfurlong.org/wezterm/index.html) (Personally I recommend using this one It's the one used in the videos), [iTerm2](https://iterm2.com/) or [Kitty](https://sw.kovidgoyal.net/kitty/) <br />
+Use a terminal that can render images such as [Wezterm](https://wezfurlong.org/wezterm/index.html) (Personally I recommend using this one It's the one used in the videos), [iTerm2](https://iterm2.com/), [Kitty](https://sw.kovidgoyal.net/kitty/) and [Ghostty](https://ghostty.org/download)  <br />
 For more information see: [image-support](https://github.com/benjajaja/ratatui-image?tab=readme-ov-file#compatibility-matrix)
 
 > [!WARNING]
@@ -157,6 +179,10 @@ amount_pages = 5
 # default : true
 auto_bookmark = true
 
+# Whether or not downloading a manga counts as reading it on services like anilist
+# values : true, false
+# default : false
+track_reading_when_download = false
 ```
 if the `manga-tui-config.toml` cannot be read / parsed then the defaults will be used 
 
