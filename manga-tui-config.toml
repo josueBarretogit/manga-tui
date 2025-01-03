@@ -17,3 +17,8 @@ amount_pages = 5
 # values : true, false
 # default : true
 auto_bookmark = true
+
+# Whether or not downloading a manga counts as reading it on services like anilist
+# values : true, false
+# default : false
+track_reading_when_download = false

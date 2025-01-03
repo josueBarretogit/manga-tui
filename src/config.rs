@@ -11,6 +11,7 @@ use strum::{Display, EnumIter};
 use toml::Table;
 
 use crate::backend::AppDirectories;
+use crate::logger::ILogger;
 
 #[derive(Default, Debug, Serialize, Deserialize, Display, EnumIter, Clone, Copy)]
 #[serde(rename_all = "snake_case")]
@@ -44,6 +45,7 @@ pub struct MangaTuiConfig {
     pub image_quality: ImageQuality,
     pub auto_bookmark: bool,
     pub amount_pages: u8,
+    pub track_reading_when_download: bool,
 }
 
 impl Default for MangaTuiConfig {
@@ -53,6 +55,7 @@ impl Default for MangaTuiConfig {
             auto_bookmark: true,
             download_type: DownloadType::default(),
             image_quality: ImageQuality::default(),
+            track_reading_when_download: false,
         }
     }
 }
@@ -83,13 +86,14 @@ impl MangaTuiConfig {
         CONFIG_TEMPLATE
     }
 
-    pub fn write_if_not_exists(base_directory: &Path) -> Result<(), std::io::Error> {
+    pub fn write_if_not_exists(base_directory: &Path, logger: &impl ILogger) -> Result<(), std::io::Error> {
         let config_file = base_directory.join(Self::get_config_file_path());
 
         if !exists!(&config_file) {
             let contents = Self::get_config_template();
+            logger.inform(format!("Creating config file at: {}", config_file.display()));
 
-            let mut config_file = File::create(config_file).expect("cannot create conf file");
+            let mut config_file = File::create(config_file)?;
             config_file.write_all(contents.as_bytes())?
         }
 
@@ -117,6 +121,18 @@ amount_pages = 5
 # values : true, false
 # default : true
 auto_bookmark = true
+"
+                .as_bytes(),
+            )?;
+        }
+
+        if !existing_config.contains_key("track_reading_when_download") {
+            file.write_all(
+                "
+# Whether or not downloading a manga counts as reading it on services like anilist
+# values : true, false
+# default : false
+track_reading_when_download = false
 "
                 .as_bytes(),
             )?;
@@ -156,9 +172,10 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use super::*;
+    use crate::logger::DefaultLogger;
 
     #[test]
-    fn it_adds_missing_field_to_config() {
+    fn it_adds_missing_field_to_config() -> Result<(), Box<dyn Error>> {
         let mut test_file = Cursor::new(Vec::new());
 
         let current_contents = r#"
@@ -183,20 +200,26 @@ mod tests {
     # values : 0-255
     #default : 5
     amount_pages = 5
+
+# Whether or not downloading a manga counts as reading it on services like anilist
+# values : true, false
+# default : false
+track_reading_when_download = false
                 "#;
 
-        MangaTuiConfig::add_missing_fields(&mut test_file, current_contents.parse::<Table>().unwrap()).unwrap();
+        MangaTuiConfig::add_missing_fields(&mut test_file, current_contents.parse::<Table>()?)?;
 
-        let expected_table = expected.parse::<Table>().unwrap();
+        let expected_table = expected.parse::<Table>()?;
         let result = test_file.into_inner();
 
-        let result: Table = String::from_utf8(result).unwrap().parse().unwrap();
+        let result: Table = String::from_utf8(result)?.parse()?;
 
         assert_eq!(expected_table, result);
+        Ok(())
     }
 
     #[test]
-    fn it_does_not_add_already_existing_keys() {
+    fn it_does_not_add_already_existing_keys() -> Result<(), Box<dyn Error>> {
         let current_contents = r#"
 # Whether or not bookmarking is done automatically, if false you decide which chapter to bookmark
 # values : true, false
@@ -207,11 +230,16 @@ auto_bookmark = true
 # values : 0-255
 #default : 5
 amount_pages = 5
+
+# Whether or not downloading a manga counts as reading it on services like anilist
+# values : true, false
+# default : false
+track_reading_when_download = false
             "#;
 
         let mut test_file = Cursor::new(Vec::new());
 
-        test_file.write_all(current_contents.as_bytes()).unwrap();
+        test_file.write_all(current_contents.as_bytes())?;
 
         let expected = r#"
 # Whether or not bookmarking is done automatically, if false you decide which chapter to bookmark
@@ -223,12 +251,18 @@ auto_bookmark = true
 # values : 0-255
 #default : 5
 amount_pages = 5
+
+# Whether or not downloading a manga counts as reading it on services like anilist
+# values : true, false
+# default : false
+track_reading_when_download = false
             "#;
 
-        MangaTuiConfig::add_missing_fields(&mut test_file, current_contents.parse::<Table>().unwrap()).unwrap();
+        MangaTuiConfig::add_missing_fields(&mut test_file, current_contents.parse::<Table>()?)?;
 
         let result = test_file.into_inner();
 
-        assert_eq!(expected, String::from_utf8(result).unwrap());
+        assert_eq!(expected, String::from_utf8(result)?);
+        Ok(())
     }
 }

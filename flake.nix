@@ -41,6 +41,7 @@
             pkg-config
           ];
           buildInputs = with pkgs; [
+            dbus
             openssl
           ];
         };
@@ -63,6 +64,7 @@
           packages = with pkgs; [
             git
             openssl
+            dbus
             pkg-config
           ];
         };

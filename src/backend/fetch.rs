@@ -15,6 +15,7 @@ use super::filter::Languages;
 use crate::backend::api_responses::OneChapterResponse;
 use crate::backend::filter::{Filters, IntoParam};
 use crate::config::ImageQuality;
+use crate::global::USER_AGENT;
 use crate::view::app::MangaToRead;
 use crate::view::pages::manga::{ChapterOrder, FetchChapterBookmarked};
 use crate::view::pages::reader::{ChapterToRead, ListOfChapters, MangaPanel, SearchChapter, SearchMangaPanel};
@@ -96,16 +97,9 @@ impl MangadexClient {
     }
 
     pub fn new(api_url_base: Url, cover_img_url_base: Url) -> Self {
-        let user_agent = format!(
-            "manga-tui/{} ({}/{}/{})",
-            env!("CARGO_PKG_VERSION"),
-            std::env::consts::FAMILY,
-            std::env::consts::OS,
-            std::env::consts::ARCH
-        );
         let client = Client::builder()
             .timeout(StdDuration::from_secs(10))
-            .user_agent(user_agent)
+            .user_agent(&*USER_AGENT)
             .build()
             .unwrap();
 

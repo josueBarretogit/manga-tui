@@ -1,20 +1,26 @@
 #![allow(dead_code)]
 #![allow(deprecated)]
 
-use clap::Parser;
-use ratatui::backend::CrosstermBackend;
-use reqwest::StatusCode;
+use std::process::exit;
+use std::time::Duration;
 
+use backend::release_notifier::{ReleaseNotifier, GITHUB_URL};
+use backend::secrets::anilist::AnilistStorage;
+use backend::tracker::anilist::{Anilist, BASE_ANILIST_API_URL};
+use clap::Parser;
+use http::StatusCode;
+use log::LevelFilter;
+use logger::{ILogger, Logger};
+use ratatui::backend::CrosstermBackend;
+
+use self::backend::build_data_dir;
 use self::backend::database::Database;
 use self::backend::error_log::init_error_hooks;
 use self::backend::fetch::{MangadexClient, API_URL_BASE, COVER_IMG_URL_BASE, MANGADEX_CLIENT_INSTANCE};
-use self::backend::filter::Languages;
 use self::backend::migration::migrate_version;
 use self::backend::tui::{init, restore, run_app};
-use self::backend::{build_data_dir, APP_DATA_DIR};
 use self::cli::CliArgs;
 use self::config::MangaTuiConfig;
-use self::global::PREFERRED_LANGUAGE;
 
 mod backend;
 mod cli;
@@ -27,75 +33,73 @@ mod view;
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 7)]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let logger = Logger;
+    pretty_env_logger::formatted_builder()
+        .format_module_path(false)
+        .filter_level(LevelFilter::Info)
+        .init();
+
     let cli_args = CliArgs::parse();
 
-    if cli_args.data_dir {
-        let app_dir = APP_DATA_DIR.as_ref().unwrap();
-        println!("{}", app_dir.to_str().unwrap());
-        return Ok(());
+    cli_args.proccess_args().await?;
+
+    let notifier = ReleaseNotifier::new(GITHUB_URL.parse().unwrap());
+
+    if let Err(e) = notifier.check_new_releases(&logger).await {
+        logger.error(e);
     }
 
-    match cli_args.command {
-        Some(command) => match command {
-            cli::Commands::Lang { print, set } => {
-                if print {
-                    CliArgs::print_available_languages();
-                    return Ok(());
-                }
-
-                match set {
-                    Some(lang) => {
-                        let try_lang = Languages::try_from_iso_code(lang.as_str());
-
-                        if try_lang.is_none() {
-                            println!(
-                                "`{}` is not a valid ISO language code, run `{} lang --print` to list available languages and their ISO codes",
-                                lang,
-                                env!("CARGO_BIN_NAME")
-                            );
-
-                            return Ok(());
-                        }
-
-                        PREFERRED_LANGUAGE.set(try_lang.unwrap()).unwrap()
-                    },
-                    None => PREFERRED_LANGUAGE.set(Languages::default()).unwrap(),
-                }
-            },
-        },
-        None => PREFERRED_LANGUAGE.set(Languages::default()).unwrap(),
-    }
-
-    match build_data_dir() {
+    match build_data_dir(&logger) {
         Ok(_) => {},
         Err(e) => {
-            eprint!(
-            "Data directory could not be created, this is where your manga history and manga downloads is stored
+            logger.error(
+            format!(
+"Data directory could not be created, this is where your manga history and manga downloads is stored
              \n this could be for many reasons such as the application not having enough permissions
             \n Try setting the environment variable `MANGA_TUI_DATA_DIR` to some path pointing to a directory, example: /home/user/somedirectory 
             \n Error details : {e}"
+        ).into()
             );
-            return Ok(());
+            exit(1)
         },
     }
+
+    let anilist_storage = AnilistStorage::new();
+
+    let anilist_client = match anilist_storage.check_credentials_stored() {
+        Ok(Some(credentials)) => {
+            logger.inform("Anilist is setup, tracking reading history");
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            Some(
+                Anilist::new(BASE_ANILIST_API_URL.parse().unwrap())
+                    .with_token(credentials.access_token)
+                    .with_client_id(credentials.client_id),
+            )
+        },
+        Err(e) => {
+            logger.warn(format!("There is an issue when trying to check for anilist, more details about the error : {e}"));
+            None
+        },
+        _ => None,
+    };
 
     let mangadex_client = MangadexClient::new(API_URL_BASE.parse().unwrap(), COVER_IMG_URL_BASE.parse().unwrap())
         .with_image_quality(MangaTuiConfig::get().image_quality);
 
-    println!("Checking mangadex status...");
+    logger.inform("Checking mangadex status...");
 
     let mangadex_status = mangadex_client.check_status().await;
 
     match mangadex_status {
         Ok(response) => {
             if response.status() != StatusCode::OK {
-                println!("Mangadex appears to be in maintenance, please come back later");
-                return Ok(());
+                logger.warn("Mangadex appears to be in maintenance, please come back later");
+                exit(0)
             }
         },
         Err(e) => {
-            println!("Some error ocurred, more details : {e}");
-            return Ok(());
+            logger.error(format!("Some error ocurred, more details : {e}").into());
+            exit(1)
         },
     }
 
@@ -105,13 +109,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let database = Database::new(&connection);
 
     database.setup()?;
-    migrate_version(&mut connection)?;
+    migrate_version(&mut connection, &logger)?;
 
     drop(connection);
 
     init_error_hooks()?;
     init()?;
-    run_app(CrosstermBackend::new(std::io::stdout()), MangadexClient::global().clone()).await?;
+    run_app(CrosstermBackend::new(std::io::stdout()), MangadexClient::global().clone(), anilist_client).await?;
     restore()?;
+
     Ok(())
 }

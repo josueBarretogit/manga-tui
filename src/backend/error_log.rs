@@ -17,6 +17,18 @@ pub enum ErrorType<'a> {
     String(&'a str),
 }
 
+impl<'a> From<Box<dyn Error>> for ErrorType<'a> {
+    fn from(value: Box<dyn Error>) -> Self {
+        Self::Error(value)
+    }
+}
+
+impl<'a> From<String> for ErrorType<'a> {
+    fn from(value: String) -> Self {
+        Self::Error(value.into())
+    }
+}
+
 fn get_error_logs_path() -> PathBuf {
     let path = AppDirectories::ErrorLogs.get_base_directory();
 

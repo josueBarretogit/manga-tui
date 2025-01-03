@@ -23,8 +23,10 @@ use crate::backend::database::{save_plan_to_read, MangaPlanToReadSave, DBCONN};
 use crate::backend::error_log::{write_to_error_log, ErrorType};
 #[cfg(test)]
 use crate::backend::fetch::fake_api_client::MockMangadexClient;
+use crate::backend::fetch::ApiClient;
 #[cfg(not(test))]
 use crate::backend::fetch::MangadexClient;
+use crate::backend::tracker::{track_manga_plan_to_read, MangaTracker};
 use crate::backend::tui::Events;
 use crate::common::{Artist, Author, ImageState};
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
@@ -77,7 +79,12 @@ pub enum InputMode {
     Idle,
 }
 
-pub struct SearchPage {
+pub struct SearchPage<T, S>
+where
+    // TODO replace this trait for one containing only search functionality
+    T: ApiClient,
+    S: MangaTracker,
+{
     /// This tx "talks" to the app
     global_event_tx: Option<UnboundedSender<Events>>,
     local_action_tx: UnboundedSender<SearchPageActions>,
@@ -94,6 +101,8 @@ pub struct SearchPage {
     picker: Option<Picker>,
     manga_cover_state: ImageState,
     tasks: JoinSet<()>,
+    api_client: T,
+    manga_tracker: Option<S>,
 }
 
 /// This contains the data the application gets when doing a search
@@ -105,7 +114,11 @@ struct MangasFoundList {
     page: u32,
 }
 
-impl Component for SearchPage {
+impl<T, S> Component for SearchPage<T, S>
+where
+    T: ApiClient,
+    S: MangaTracker,
+{
     type Actions = SearchPageActions;
 
     fn render(&mut self, area: Rect, frame: &mut Frame<'_>) {
@@ -171,8 +184,12 @@ impl Component for SearchPage {
     }
 }
 
-impl SearchPage {
-    pub fn new(picker: Option<Picker>) -> Self {
+impl<T, S> SearchPage<T, S>
+where
+    T: ApiClient,
+    S: MangaTracker,
+{
+    pub fn new(picker: Option<Picker>, api_client: T, manga_tracker: Option<S>) -> Self {
         let (action_tx, action_rx) = mpsc::unbounded_channel::<SearchPageActions>();
         let (local_event_tx, local_event) = mpsc::unbounded_channel::<SearchPageEvents>();
 
@@ -192,6 +209,8 @@ impl SearchPage {
             manga_added_to_plan_to_read: None,
             picker,
             manga_cover_state: ImageState::default(),
+            api_client,
+            manga_tracker,
         }
     }
 
@@ -379,6 +398,17 @@ impl SearchPage {
 
     fn plan_to_read(&mut self) {
         if let Some(item) = self.get_current_manga_selected() {
+            let manga_selected = item.clone();
+            track_manga_plan_to_read(self.manga_tracker.clone(), manga_selected.manga.title.clone(), move |error| {
+                write_to_error_log(
+                    format!(
+                        "Could not add manga {} as plan to read, more details about the error : \n {}",
+                        manga_selected.manga.title.clone(),
+                        error
+                    )
+                    .into(),
+                );
+            });
             let binding = DBCONN.lock().unwrap();
             let conn = binding.as_ref().unwrap();
             let plan_to_read_operation = save_plan_to_read(
@@ -607,11 +637,13 @@ mod test {
 
     use super::*;
     use crate::backend::api_responses::{Data, MangaSearchAttributes, MangaSearchRelationship};
+    use crate::global::test_utils::TrackerTest;
     use crate::view::widgets::press_key;
 
     #[tokio::test]
     async fn search_page_events() {
-        let mut search_page = SearchPage::new(Some(Picker::new((8, 9))));
+        let mut search_page: SearchPage<MockMangadexClient, TrackerTest> =
+            SearchPage::new(Some(Picker::new((8, 9))), MockMangadexClient::new(), None);
 
         let mock_search_result = SearchMangaResponse {
             data: vec![
@@ -670,7 +702,7 @@ mod test {
 
     #[tokio::test]
     async fn search_page_key_events() {
-        let mut search_page = SearchPage::new(None);
+        let mut search_page: SearchPage<MockMangadexClient, TrackerTest> = SearchPage::new(None, MockMangadexClient::new(), None);
 
         assert!(search_page.state == PageState::Normal);
         assert!(!search_page.filter_state.is_open);
@@ -787,7 +819,8 @@ mod test {
 
     #[test]
     fn search_manga_cover_if_picker_is_some_after_mangas_were_found() {
-        let mut search_page = SearchPage::new(Some(Picker::new((8, 9))));
+        let mut search_page: SearchPage<MockMangadexClient, TrackerTest> =
+            SearchPage::new(Some(Picker::new((8, 9))), MockMangadexClient::new(), None);
 
         search_page.load_mangas_found(Some(SearchMangaResponse {
             data: vec![Data::default()],
@@ -801,7 +834,7 @@ mod test {
 
     #[test]
     fn doesnt_search_cover_if_picker_is_none_after_mangas_were_found() {
-        let mut search_page = SearchPage::new(None);
+        let mut search_page: SearchPage<MockMangadexClient, TrackerTest> = SearchPage::new(None, MockMangadexClient::new(), None);
 
         search_page.load_mangas_found(Some(SearchMangaResponse {
             data: vec![Data::default()],
