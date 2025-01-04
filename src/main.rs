@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 #![allow(deprecated)]
 
+use std::io::stdout;
 use std::process::exit;
 use std::time::Duration;
 
@@ -8,17 +9,17 @@ use backend::release_notifier::{ReleaseNotifier, GITHUB_URL};
 use backend::secrets::anilist::AnilistStorage;
 use backend::tracker::anilist::{Anilist, BASE_ANILIST_API_URL};
 use clap::Parser;
+use crossterm::event::{DisableMouseCapture, EnableMouseCapture};
+use crossterm::ExecutableCommand;
 use http::StatusCode;
 use log::LevelFilter;
 use logger::{ILogger, Logger};
-use ratatui::backend::CrosstermBackend;
 
 use self::backend::build_data_dir;
 use self::backend::database::Database;
-use self::backend::error_log::init_error_hooks;
 use self::backend::fetch::{MangadexClient, API_URL_BASE, COVER_IMG_URL_BASE, MANGADEX_CLIENT_INSTANCE};
 use self::backend::migration::migrate_version;
-use self::backend::tui::{init, restore, run_app};
+use self::backend::tui::run_app;
 use self::cli::CliArgs;
 use self::config::MangaTuiConfig;
 
@@ -54,7 +55,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Err(e) => {
             logger.error(
             format!(
-"Data directory could not be created, this is where your manga history and manga downloads is stored
+            "Data directory could not be created, this is where your manga history and manga downloads is stored
              \n this could be for many reasons such as the application not having enough permissions
             \n Try setting the environment variable `MANGA_TUI_DATA_DIR` to some path pointing to a directory, example: /home/user/somedirectory 
             \n Error details : {e}"
@@ -113,10 +114,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     drop(connection);
 
-    init_error_hooks()?;
-    init()?;
-    run_app(CrosstermBackend::new(std::io::stdout()), MangadexClient::global().clone(), anilist_client).await?;
-    restore()?;
+    color_eyre::install()?;
+    stdout().execute(EnableMouseCapture)?;
+    run_app(ratatui::init(), MangadexClient::global().clone(), anilist_client).await?;
+    ratatui::restore();
+    stdout().execute(DisableMouseCapture)?;
 
     Ok(())
 }

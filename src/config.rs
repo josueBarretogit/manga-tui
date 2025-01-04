@@ -172,7 +172,6 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use super::*;
-    use crate::logger::DefaultLogger;
 
     #[test]
     fn it_adds_missing_field_to_config() -> Result<(), Box<dyn Error>> {
