@@ -21,7 +21,7 @@ ratatui = { version = "0.29.0", features = ["all-widgets", "palette", "unstable-
 ratatui-image = {  version = "1.0.5", features = ["rustix"]}
 throbber-widgets-tui = "0.8.0"
 tui-input = "0.11.0"
-tui-widget-list = "0.13.0"
+tui-widget-list = "0.13.2"
 crossterm = { version = "0.28.1", features = ["event-stream"] }
 directories = "5.0.1"
 image = "0.25.4"
