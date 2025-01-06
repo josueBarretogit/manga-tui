@@ -23,6 +23,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Install dependencies (Linux only)
+        if: runner.os == 'Linux'
+        run: sudo apt install libdbus-1-dev pkg-config
+
       - name: Setup
         run: rustup target add ${{ matrix.targets.target }}
       - name: Build
