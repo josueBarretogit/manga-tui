@@ -45,7 +45,7 @@ https://github.com/user-attachments/assets/2b693bd3-ec30-4d6e-bcc4-6cf457a860b1
 
 https://github.com/user-attachments/assets/c1e21aa1-8a51-4c47-baea-9f56dcd0d6a4
 
-- Read manga in your terminal (Wezterm, iTerm2, Kitty, Ghostty) 
+- Read manga in your terminal with terminals such as: Wezterm, iTerm2, Kitty, Ghostty 
   
 https://github.com/user-attachments/assets/70f321ff-13d1-4c4b-9c37-604271456ab2
 
@@ -61,8 +61,10 @@ https://github.com/user-attachments/assets/ba785668-7cf1-4367-93f9-6e6e1f72c12c
 
 https://github.com/user-attachments/assets/26ad493f-633c-41fc-9d09-49b316118923
 
-- [Anilist integration](./docs/anilist.md) 
+- Track your reading history with [anilist integration](./docs/anilist.md) 
 
+
+### Join the [discord](https://discord.gg/jNzuDCH3) server for further help, feature requests or to chat with contributors   
 
 ## Dependencies 
 
@@ -184,7 +186,6 @@ auto_bookmark = true
 # default : false
 track_reading_when_download = false
 ```
-if the `manga-tui-config.toml` cannot be read / parsed then the defaults will be used 
 
 - `mangaDownloads`, where manga will be downloaded 
 - `errorLogs`, for storing posible errors / bugs 
