@@ -49,7 +49,7 @@ pub struct Title {
     pub ko: Option<String>,
     #[serde(rename = "zh-ro")]
     pub zh_ro: Option<String>,
-    #[serde(rename = "zh-ro")]
+    #[serde(rename = "ko-ro")]
     pub ko_ro: Option<String>,
 }
 

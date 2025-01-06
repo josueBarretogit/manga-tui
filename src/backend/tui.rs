@@ -1,9 +1,7 @@
 use std::error::Error;
 use std::time::Duration;
 
-use crossterm::event::{DisableMouseCapture, EnableMouseCapture, KeyEvent, MouseEvent};
-use crossterm::execute;
-use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
+use crossterm::event::{KeyEvent, MouseEvent};
 use futures::{FutureExt, StreamExt};
 use ratatui::backend::Backend;
 use ratatui::Terminal;
@@ -12,6 +10,7 @@ use tokio::sync::mpsc::UnboundedSender;
 use tokio::task::JoinHandle;
 
 use super::fetch::ApiClient;
+use super::tracker::MangaTracker;
 use crate::common::{Artist, Author};
 use crate::view::app::{App, AppState, MangaToRead};
 use crate::view::pages::reader::{ChapterToRead, SearchChapter, SearchMangaPanel};
@@ -36,19 +35,6 @@ pub enum Events {
     GoSearchMangasArtist(Artist),
     GoFeedPage,
     ReadChapter(ChapterToRead, MangaToRead),
-}
-
-/// Initialize the terminal
-pub fn init() -> std::io::Result<()> {
-    execute!(std::io::stdout(), EnterAlternateScreen, EnableMouseCapture)?;
-    enable_raw_mode()?;
-    Ok(())
-}
-
-pub fn restore() -> std::io::Result<()> {
-    execute!(std::io::stdout(), LeaveAlternateScreen, DisableMouseCapture)?;
-    disable_raw_mode()?;
-    Ok(())
 }
 
 #[cfg(unix)]
@@ -108,12 +94,11 @@ fn get_picker() -> Option<Picker> {
 
 ///Start app's main loop
 pub async fn run_app(
-    backend: impl Backend,
+    mut terminal: Terminal<impl Backend>,
     api_client: impl ApiClient + SearchChapter + SearchMangaPanel,
+    manga_tracker: Option<impl MangaTracker>,
 ) -> Result<(), Box<dyn Error>> {
-    let mut terminal = Terminal::new(backend)?;
-
-    let mut app = App::new(api_client, get_picker());
+    let mut app = App::new(api_client, manga_tracker, get_picker());
 
     let tick_rate = std::time::Duration::from_millis(250);
 

@@ -3,6 +3,8 @@ use std::marker::PhantomData;
 
 use rusqlite::{Connection, Result, Transaction};
 
+use crate::logger::ILogger;
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct MigrationTable {
     id: u32,
@@ -224,7 +226,7 @@ impl<'a> Migration<'a, Down> {
 }
 
 /// migrate to version 0.4.0
-pub fn migrate_version(connection: &mut Connection) -> rusqlite::Result<Option<MigrationTable>> {
+pub fn migrate_version(connection: &mut Connection, logger: &impl ILogger) -> rusqlite::Result<Option<MigrationTable>> {
     let queries = [
         Query::AlterTable {
             table_name: "chapters",
@@ -255,7 +257,12 @@ pub fn migrate_version(connection: &mut Connection) -> rusqlite::Result<Option<M
         .up(connection)?;
 
     let migration_result = match migration {
-        Some(available_migration) => Some(available_migration.update(connection)?),
+        Some(available_migration) => {
+            logger.inform("Updating database");
+            let migration_result = available_migration.update(connection)?;
+            logger.inform("Database schema is up to date");
+            Some(migration_result)
+        },
         None => None,
     };
 
@@ -273,6 +280,7 @@ mod tests {
 
     use super::*;
     use crate::backend::filter::Languages;
+    use crate::logger::DefaultLogger;
 
     #[test]
     fn it_makes_alter_table_add_query() {
@@ -694,7 +702,9 @@ mod tests {
             manga_id.clone(),
         ])?;
 
-        let migration_result = migrate_version(&mut conn).expect("the update did not ran successfully").unwrap();
+        let migration_result = migrate_version(&mut conn, &DefaultLogger)
+            .expect("the update did not ran successfully")
+            .unwrap();
 
         assert_eq!(migration_result.version, "0.4.0");
 
@@ -708,7 +718,7 @@ mod tests {
         ])
         .expect("migration did not update table chapters");
 
-        let second_time = migrate_version(&mut conn).expect("should not run migration twice");
+        let second_time = migrate_version(&mut conn, &DefaultLogger).expect("should not run migration twice");
 
         assert!(second_time.is_none());
 

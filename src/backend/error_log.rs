@@ -5,16 +5,26 @@ use std::panic::PanicInfo;
 use std::path::{Path, PathBuf};
 
 use chrono::offset;
-use color_eyre::config::HookBuilder;
 use manga_tui::exists;
 
-use super::tui::restore;
 use super::AppDirectories;
 
 pub enum ErrorType<'a> {
     Panic(&'a PanicInfo<'a>),
     Error(Box<dyn Error>),
     String(&'a str),
+}
+
+impl<'a> From<Box<dyn Error>> for ErrorType<'a> {
+    fn from(value: Box<dyn Error>) -> Self {
+        Self::Error(value)
+    }
+}
+
+impl<'a> From<String> for ErrorType<'a> {
+    fn from(value: String) -> Self {
+        Self::Error(value.into())
+    }
 }
 
 fn get_error_logs_path() -> PathBuf {
@@ -56,24 +66,5 @@ pub fn create_error_logs_files(base_directory: &Path) -> std::io::Result<()> {
     if !exists!(&error_logs_path) {
         File::create(error_logs_path)?;
     }
-    Ok(())
-}
-
-pub fn init_error_hooks() -> color_eyre::Result<()> {
-    let (panic, error) = HookBuilder::default().into_hooks();
-    let panic = panic.into_panic_hook();
-    let error = error.into_eyre_hook();
-
-    color_eyre::eyre::set_hook(Box::new(move |e| {
-        let _ = restore();
-        error(e)
-    }))?;
-
-    std::panic::set_hook(Box::new(move |info| {
-        let _ = restore();
-        write_to_error_log(ErrorType::Panic(info));
-        panic(info);
-    }));
-
     Ok(())
 }

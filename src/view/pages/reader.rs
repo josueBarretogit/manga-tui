@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
 use std::error::Error;
+use std::fmt::Display;
 use std::future::Future;
 
 use crossterm::event::{KeyCode, KeyEvent};
@@ -25,7 +26,9 @@ use crate::backend::database::{
 };
 use crate::backend::error_log::{write_to_error_log, ErrorType};
 use crate::backend::filter::Languages;
+use crate::backend::tracker::{track_manga, MangaTracker};
 use crate::backend::tui::Events;
+use crate::common::format_error_message_tracking_reading_history;
 use crate::config::MangaTuiConfig;
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
 use crate::view::tasks::reader::get_manga_panel;
@@ -91,6 +94,7 @@ pub enum MangaReaderEvents {
     FetchPages,
     LoadPage(PageData),
     FailedPage(usize),
+    ErrorTrackingReadingProgress(String),
 }
 
 pub struct Page {
@@ -117,6 +121,28 @@ pub struct ChapterToRead {
     pub num_page_bookmarked: Option<u32>,
     pub language: Languages,
     pub pages_url: Vec<Url>,
+}
+
+impl Display for ChapterToRead {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            r#"
+     id: {},
+     title: {},
+     number: {},
+     volume: {}
+     Page bookmarked: {}
+     language: {},
+        "#,
+            self.id,
+            self.title,
+            self.number,
+            self.volume_number.clone().unwrap_or("none".to_string()),
+            self.num_page_bookmarked.unwrap_or(0),
+            self.language,
+        )
+    }
 }
 
 impl Default for ChapterToRead {
@@ -295,7 +321,11 @@ impl ListOfChapters {
     }
 }
 
-pub struct MangaReader<T: SearchChapter + SearchMangaPanel> {
+pub struct MangaReader<T, S>
+where
+    T: SearchChapter + SearchMangaPanel,
+    S: MangaTracker,
+{
     manga_title: String,
     manga_id: String,
     pub list_of_chapters: ListOfChapters,
@@ -309,6 +339,7 @@ pub struct MangaReader<T: SearchChapter + SearchMangaPanel> {
     picker: Picker,
     search_next_chapter_loader: ThrobberState,
     api_client: T,
+    pub manga_tracker: Option<S>,
     pub auto_bookmark: bool,
     pub global_event_tx: Option<UnboundedSender<Events>>,
     pub local_action_tx: UnboundedSender<MangaReaderActions>,
@@ -317,7 +348,11 @@ pub struct MangaReader<T: SearchChapter + SearchMangaPanel> {
     pub local_event_rx: UnboundedReceiver<MangaReaderEvents>,
 }
 
-impl<T: SearchChapter + SearchMangaPanel> Component for MangaReader<T> {
+impl<T, S> Component for MangaReader<T, S>
+where
+    T: SearchChapter + SearchMangaPanel,
+    S: MangaTracker,
+{
     type Actions = MangaReaderActions;
 
     fn render(&mut self, area: Rect, frame: &mut Frame<'_>) {
@@ -398,7 +433,11 @@ impl<T: SearchChapter + SearchMangaPanel> Component for MangaReader<T> {
     }
 }
 
-impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
+impl<T, S> MangaReader<T, S>
+where
+    T: SearchChapter + SearchMangaPanel,
+    S: MangaTracker,
+{
     pub fn new(chapter: ChapterToRead, manga_id: String, picker: Picker, api_client: T) -> Self {
         let set: JoinSet<()> = JoinSet::new();
         let (local_action_tx, local_action_rx) = mpsc::unbounded_channel::<MangaReaderActions>();
@@ -421,6 +460,7 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
             local_event_tx,
             local_event_rx,
             state: State::default(),
+            manga_tracker: None,
             current_page_size: PageSize::default(),
             pages_list: PagesList::default(),
             search_next_chapter_loader: ThrobberState::default(),
@@ -445,6 +485,11 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
 
     pub fn with_manga_title(mut self, title: String) -> Self {
         self.manga_title = title;
+        self
+    }
+
+    pub fn with_manga_tracker(mut self, manga_tracker: Option<S>) -> Self {
+        self.manga_tracker = manga_tracker;
         self
     }
 
@@ -505,6 +550,7 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
 
         self.init_fetching_pages();
         self.init_save_reading_history();
+        self.track_manga_reading_history(self.manga_tracker.clone());
     }
 
     fn init_save_reading_history(&self) {
@@ -615,6 +661,21 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
         }
     }
 
+    fn track_manga_reading_history(&self, manga_tracker: Option<S>) {
+        let chapter_to_track = self.current_chapter.clone();
+        let tx = self.local_event_tx.clone();
+
+        track_manga(
+            manga_tracker,
+            self.manga_title.clone(),
+            chapter_to_track.number as u32,
+            chapter_to_track.volume_number.clone().unwrap_or("0".to_string()).parse().ok(),
+            move |error| {
+                tx.send(MangaReaderEvents::ErrorTrackingReadingProgress(error)).ok();
+            },
+        );
+    }
+
     pub fn exit(&mut self) {
         if self.auto_bookmark {
             self.bookmark_current_chapter()
@@ -705,8 +766,16 @@ impl<T: SearchChapter + SearchMangaPanel> MangaReader<T> {
                 MangaReaderEvents::FetchPages => self.fetch_pages(),
                 MangaReaderEvents::LoadPage(maybe_data) => self.load_page(maybe_data),
                 MangaReaderEvents::FailedPage(index) => self.failed_page(index),
+                MangaReaderEvents::ErrorTrackingReadingProgress(error_message) => self.log_manga_tracking_error(error_message),
             }
         }
+    }
+
+    fn log_manga_tracking_error(&self, error_message: String) {
+        write_to_error_log(
+            format_error_message_tracking_reading_history(self.current_chapter.clone(), self.manga_title.clone(), error_message)
+                .into(),
+        );
     }
 
     fn handle_key_events(&mut self, key_event: KeyEvent) {
@@ -830,6 +899,7 @@ mod test {
     use self::mpsc::unbounded_channel;
     use super::*;
     use crate::backend::database::{ChapterToBookmark, Database};
+    use crate::global::test_utils::TrackerTest;
     use crate::view::widgets::press_key;
 
     #[derive(Clone)]
@@ -885,7 +955,11 @@ mod test {
         }
     }
 
-    fn initialize_reader_page<T: SearchChapter + SearchMangaPanel>(api_client: T) -> MangaReader<T> {
+    fn initialize_reader_page<T, S>(api_client: T) -> MangaReader<T, S>
+    where
+        T: SearchChapter + SearchMangaPanel,
+        S: MangaTracker,
+    {
         let picker = Picker::new((8, 19));
         let chapter_id = "some_id".to_string();
         let url_imgs = vec!["http://localhost".parse().unwrap(), "http://localhost".parse().unwrap()];
@@ -1192,7 +1266,7 @@ mod test {
 
     #[tokio::test]
     async fn trigget_key_events() {
-        let mut reader_page = initialize_reader_page(TestApiClient::new());
+        let mut reader_page: MangaReader<TestApiClient, TrackerTest> = initialize_reader_page(TestApiClient::new());
 
         press_key(&mut reader_page, KeyCode::Char('j'));
         let action = reader_page.local_action_rx.recv().await.unwrap();
@@ -1207,7 +1281,7 @@ mod test {
 
     #[tokio::test]
     async fn handle_key_events() {
-        let mut reader_page = initialize_reader_page(TestApiClient::new());
+        let mut reader_page: MangaReader<TestApiClient, TrackerTest> = initialize_reader_page(TestApiClient::new());
 
         reader_page.pages_list = PagesList::new(vec![PagesItem::new(0), PagesItem::new(1), PagesItem::new(2)]);
 
@@ -1239,7 +1313,8 @@ mod test {
             ..Default::default()
         };
 
-        let mut manga_reader = MangaReader::new(chapter, "some_id".to_string(), Picker::new((8, 8)), TestApiClient::new());
+        let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
+            MangaReader::new(chapter, "some_id".to_string(), Picker::new((8, 8)), TestApiClient::new());
 
         manga_reader.init_fetching_pages();
         manga_reader.fetch_pages();
@@ -1252,7 +1327,7 @@ mod test {
 
     #[test]
     fn it_increases_page_size_based_on_manga_panel_dimesions() {
-        let mut manga_reader =
+        let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
             MangaReader::new(ChapterToRead::default(), "some_id".to_string(), Picker::new((8, 8)), TestApiClient::new());
 
         manga_reader.resize_based_on_image_size(500, 200);
@@ -1272,7 +1347,7 @@ mod test {
     #[test]
     fn it_does_not_initiate_search_next_chapter_if_there_is_no_next_chapter() {
         let list_of_chapters = ListOfChapters::default();
-        let mut manga_reader =
+        let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
             MangaReader::new(ChapterToRead::default(), "".to_string(), Picker::new((8, 8)), TestApiClient::new())
                 .with_list_of_chapters(list_of_chapters);
 
@@ -1284,7 +1359,7 @@ mod test {
     #[test]
     fn it_does_not_initiate_search_previous_chapter_if_there_is_no_previous_chapter() {
         let list_of_chapters = ListOfChapters::default();
-        let mut manga_reader =
+        let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
             MangaReader::new(ChapterToRead::default(), "".to_string(), Picker::new((8, 8)), TestApiClient::new())
                 .with_list_of_chapters(list_of_chapters);
 
@@ -1318,8 +1393,9 @@ mod test {
             ..Default::default()
         };
 
-        let mut manga_reader = MangaReader::new(current_chapter, "".to_string(), Picker::new((8, 8)), TestApiClient::new())
-            .with_list_of_chapters(list_of_chapters);
+        let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
+            MangaReader::new(current_chapter, "".to_string(), Picker::new((8, 8)), TestApiClient::new())
+                .with_list_of_chapters(list_of_chapters);
 
         manga_reader.initiate_search_next_chapter();
 
@@ -1358,8 +1434,9 @@ mod test {
             ..Default::default()
         };
 
-        let mut manga_reader = MangaReader::new(current_chapter, "".to_string(), Picker::new((8, 8)), TestApiClient::new())
-            .with_list_of_chapters(list_of_chapters);
+        let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
+            MangaReader::new(current_chapter, "".to_string(), Picker::new((8, 8)), TestApiClient::new())
+                .with_list_of_chapters(list_of_chapters);
 
         manga_reader.initiate_search_previous_chapter();
 
@@ -1374,7 +1451,7 @@ mod test {
 
     #[tokio::test]
     async fn it_sends_search_next_chapter_action_on_w_key_press() {
-        let mut manga_reader =
+        let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
             MangaReader::new(ChapterToRead::default(), "".to_string(), Picker::new((8, 8)), TestApiClient::new());
 
         press_key(&mut manga_reader, KeyCode::Char('w'));
@@ -1389,7 +1466,7 @@ mod test {
 
     #[tokio::test]
     async fn it_sends_search_previous_chapter_event_on_b_key_press() {
-        let mut manga_reader =
+        let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
             MangaReader::new(ChapterToRead::default(), "".to_string(), Picker::new((8, 8)), TestApiClient::new());
 
         press_key(&mut manga_reader, KeyCode::Char('b'));
@@ -1416,7 +1493,8 @@ mod test {
 
         let api_client = TestApiClient::with_response(expected.clone());
 
-        let mut manga_reader = MangaReader::new(ChapterToRead::default(), "some_id".to_string(), Picker::new((8, 8)), api_client);
+        let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
+            MangaReader::new(ChapterToRead::default(), "some_id".to_string(), Picker::new((8, 8)), api_client);
 
         manga_reader.search_chapter("some_id".to_string());
 
@@ -1432,7 +1510,8 @@ mod test {
     async fn it_searches_chapter_and_sends_error_event() {
         let api_client = TestApiClient::with_failing_request();
 
-        let mut manga_reader = MangaReader::new(ChapterToRead::default(), "some_id".to_string(), Picker::new((8, 8)), api_client);
+        let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
+            MangaReader::new(ChapterToRead::default(), "some_id".to_string(), Picker::new((8, 8)), api_client);
 
         manga_reader.search_chapter("some_id".to_string());
 
@@ -1458,7 +1537,8 @@ mod test {
 
         let api_client = TestApiClient::with_response(expected.clone());
 
-        let mut manga_reader = MangaReader::new(ChapterToRead::default(), "some_id".to_string(), Picker::new((8, 8)), api_client);
+        let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
+            MangaReader::new(ChapterToRead::default(), "some_id".to_string(), Picker::new((8, 8)), api_client);
 
         manga_reader.state = State::SearchingChapter;
 
@@ -1472,7 +1552,8 @@ mod test {
     fn it_resets_pages_after_chapter_was_found() {
         let api_client = TestApiClient::new();
 
-        let mut manga_reader = MangaReader::new(ChapterToRead::default(), "some_id".to_string(), Picker::new((8, 8)), api_client);
+        let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
+            MangaReader::new(ChapterToRead::default(), "some_id".to_string(), Picker::new((8, 8)), api_client);
 
         manga_reader.pages = vec![Page::new(), Page::new()];
         manga_reader.pages_list.pages = vec![PagesItem::new(1), PagesItem::new(1)];
@@ -1488,7 +1569,8 @@ mod test {
     #[tokio::test]
     async fn it_send_event_to_search_pages_after_chapter_was_loaded() {
         let api_client = TestApiClient::new();
-        let mut manga_reader = MangaReader::new(ChapterToRead::default(), "".to_string(), Picker::new((8, 8)), api_client);
+        let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
+            MangaReader::new(ChapterToRead::default(), "".to_string(), Picker::new((8, 8)), api_client);
 
         manga_reader.load_chapter(ChapterToRead::default());
 
@@ -1506,7 +1588,8 @@ mod test {
     async fn it_send_event_to_save_reading_status_to_database_after_chapter_was_loaded() {
         let api_client = TestApiClient::new();
 
-        let mut manga_reader = MangaReader::new(ChapterToRead::default(), "".to_string(), Picker::new((8, 8)), api_client);
+        let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
+            MangaReader::new(ChapterToRead::default(), "".to_string(), Picker::new((8, 8)), api_client);
 
         let new_chapter: ChapterToRead = ChapterToRead {
             id: "chapter_to_save".to_string(),
@@ -1537,7 +1620,8 @@ mod test {
             ..Default::default()
         };
 
-        let manga_reader = MangaReader::new(chapter, "".to_string(), Picker::new((8, 8)), TestApiClient::new());
+        let manga_reader: MangaReader<TestApiClient, TrackerTest> =
+            MangaReader::new(chapter, "".to_string(), Picker::new((8, 8)), TestApiClient::new());
 
         let id_chapter_saved = manga_reader.save_reading_history(&mut conn)?;
 
@@ -1558,7 +1642,8 @@ mod test {
 
         let api_client = TestApiClient::new();
 
-        let mut manga_reader = MangaReader::new(ChapterToRead::default(), "some_id".to_string(), Picker::new((8, 8)), api_client);
+        let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
+            MangaReader::new(ChapterToRead::default(), "some_id".to_string(), Picker::new((8, 8)), api_client);
 
         manga_reader
             .local_event_tx
@@ -1574,7 +1659,8 @@ mod test {
     fn it_is_set_as_error_searching_chapter_on_event() {
         let api_client = TestApiClient::new();
 
-        let mut manga_reader = MangaReader::new(ChapterToRead::default(), "some_id".to_string(), Picker::new((8, 8)), api_client);
+        let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
+            MangaReader::new(ChapterToRead::default(), "some_id".to_string(), Picker::new((8, 8)), api_client);
 
         manga_reader.local_event_tx.send(MangaReaderEvents::ErrorSearchingChapter).ok();
 
@@ -1614,7 +1700,7 @@ mod test {
 
     #[test]
     fn it_sets_current_chapter_as_bookmarked_and_sets_state_as_bookmarked() {
-        let mut manga_reader =
+        let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
             MangaReader::new(ChapterToRead::default(), "".to_string(), Picker::new((8, 8)), TestApiClient::new());
 
         let mut database = TestDatabase::new();
@@ -1633,7 +1719,8 @@ mod test {
             ..Default::default()
         };
 
-        let mut manga_reader = MangaReader::new(chapter_to_read, "".to_string(), Picker::new((8, 8)), TestApiClient::new());
+        let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
+            MangaReader::new(chapter_to_read, "".to_string(), Picker::new((8, 8)), TestApiClient::new());
 
         manga_reader.pages_list = PagesList::new(vec![PagesItem::new(0), PagesItem::new(1)]);
 
@@ -1647,7 +1734,7 @@ mod test {
 
     #[tokio::test]
     async fn it_does_not_send_event_to_bookmark_chapter_on_m_key_press_if_autobookmarking_is_true() {
-        let mut manga_reader =
+        let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
             MangaReader::new(ChapterToRead::default(), "".to_string(), Picker::new((8, 8)), TestApiClient::new());
 
         manga_reader.set_auto_bookmark();
@@ -1660,7 +1747,7 @@ mod test {
     #[tokio::test]
     async fn it_sends_event_go_manga_page_on_exit() {
         let (tx, mut rx) = unbounded_channel::<Events>();
-        let mut manga_reader =
+        let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
             MangaReader::new(ChapterToRead::default(), "".to_string(), Picker::new((8, 8)), TestApiClient::new())
                 .with_global_sender(tx);
 
@@ -1671,5 +1758,36 @@ mod test {
         let result = timeout(Duration::from_millis(250), rx.recv()).await.unwrap().unwrap();
 
         assert_eq!(expected, result)
+    }
+
+    #[tokio::test]
+    async fn it_sends_event_to_log_manga_tracking_error() -> Result<(), Box<dyn Error>> {
+        let chapter: ChapterToRead = ChapterToRead {
+            id: "some_id".to_string(),
+            title: "some_title".to_string(),
+            number: 1.0,
+            volume_number: Some(2.to_string()),
+            ..Default::default()
+        };
+
+        let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
+            MangaReader::new(chapter.clone(), "".to_string(), Picker::new((8, 8)), TestApiClient::new())
+                .with_manga_title("some_title".to_string());
+
+        let expected_error_message = "some_error_message";
+
+        let tracker = TrackerTest::failing_with_error_message(expected_error_message);
+
+        manga_reader.track_manga_reading_history(Some(tracker));
+
+        let expected = MangaReaderEvents::ErrorTrackingReadingProgress(expected_error_message.to_string());
+
+        let result = timeout(Duration::from_millis(500), manga_reader.local_event_rx.recv())
+            .await?
+            .expect("should send event");
+
+        assert_eq!(expected, result);
+
+        Ok(())
     }
 }
