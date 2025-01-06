@@ -49,7 +49,7 @@ pretty_env_logger = "0.4"
 
 [dev-dependencies]
 httpmock = "0.7.0-rc.1"
-pretty_assertions = "1.4.0"
+pretty_assertions = "1.4.1"
 rusty-hook = "0.11.2"
 fake = "3.1.0"
 uuid = { version = "1.11.0", features = ["v4", "fast-rng"] }
