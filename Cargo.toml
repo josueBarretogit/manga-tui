@@ -20,8 +20,8 @@ exclude = [
 ratatui = { version = "0.29.0", features = ["all-widgets", "palette", "unstable-widget-ref"] }
 ratatui-image = {  version = "1.0.5", features = ["rustix"]}
 throbber-widgets-tui = "0.8.0"
-tui-input = "0.11.0"
 tui-widget-list = "0.13.2"
+tui-input = "0.11.1"
 crossterm = { version = "0.28.1", features = ["event-stream"] }
 directories = "5.0.1"
 image = "0.25.4"
@@ -49,7 +49,7 @@ pretty_env_logger = "0.4"
 
 [dev-dependencies]
 httpmock = "0.7.0-rc.1"
-pretty_assertions = "1.4.0"
+pretty_assertions = "1.4.1"
 rusty-hook = "0.11.2"
 fake = "3.1.0"
 uuid = { version = "1.11.0", features = ["v4", "fast-rng"] }
@@ -58,3 +58,7 @@ http = "1.0"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59.0", features = ["Win32_Foundation", "Win32_System_Console", "Win32_UI_HiDpi"]}
+
+[profile.release]
+codegen-units = 1
+lto = "fat"
