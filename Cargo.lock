@@ -3980,9 +3980,9 @@ dependencies = [
 
 [[package]]
 name = "tui-widget-list"
-version = "0.13.0"
+version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd80265ccaaad37d8e315c2ca1ba40dd30bced081ba4fbe22fa0584fd9c1ca3f"
+checksum = "8a417c8ac65119a0e5b8627d0ce492731b95affb29ec8602d9e72646bda5ecf6"
 dependencies = [
  "ratatui",
 ]
