@@ -20,12 +20,12 @@ use throbber_widgets_tui::{Throbber, ThrobberState};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
-use crate::backend::api_responses::AggregateChapterResponse;
 use crate::backend::database::{
     save_history, Bookmark, ChapterToBookmark, ChapterToSaveHistory, Database, MangaReadingHistorySave,
 };
 use crate::backend::error_log::{write_to_error_log, ErrorType};
 use crate::backend::filter::Languages;
+use crate::backend::manga_provider::mangadex::api_responses::AggregateChapterResponse;
 use crate::backend::tracker::{track_manga, MangaTracker};
 use crate::backend::tui::Events;
 use crate::common::format_error_message_tracking_reading_history;

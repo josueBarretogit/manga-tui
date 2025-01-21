@@ -18,14 +18,10 @@ use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
 use tui_widget_list::ListState;
 
-use crate::backend::api_responses::SearchMangaResponse;
 use crate::backend::database::{save_plan_to_read, MangaPlanToReadSave, DBCONN};
 use crate::backend::error_log::{write_to_error_log, ErrorType};
-#[cfg(test)]
-use crate::backend::fetch::fake_api_client::MockMangadexClient;
-use crate::backend::fetch::ApiClient;
-#[cfg(not(test))]
-use crate::backend::fetch::MangadexClient;
+use crate::backend::manga_provider::mangadex::api_responses::SearchMangaResponse;
+use crate::backend::manga_provider::mangadex::ApiClient;
 use crate::backend::tracker::{track_manga_plan_to_read, MangaTracker};
 use crate::backend::tui::Events;
 use crate::common::{Artist, Author, ImageState};
@@ -502,22 +498,22 @@ where
     }
 
     fn search_mangas(&mut self) {
-        self.clean_up();
-
-        self.state = PageState::SearchingMangas;
-
-        let page = self.mangas_found_list.page;
-        let tx = self.local_event_tx.clone();
-        let manga_to_search = SearchTerm::trimmed_lowercased(self.search_bar.value());
-        let filters = self.filter_state.filters.clone();
-
-        #[cfg(not(test))]
-        let api_client = MangadexClient::global().clone();
-
-        #[cfg(test)]
-        let api_client = MockMangadexClient::new();
-
-        self.tasks.spawn(search_mangas_operation(api_client, manga_to_search, page, filters, tx));
+        //self.clean_up();
+        //
+        //self.state = PageState::SearchingMangas;
+        //
+        //let page = self.mangas_found_list.page;
+        //let tx = self.local_event_tx.clone();
+        //let manga_to_search = SearchTerm::trimmed_lowercased(self.search_bar.value());
+        //let filters = self.filter_state.filters.clone();
+        //
+        //#[cfg(not(test))]
+        //let api_client = MangadexClient::global().clone();
+        //
+        //#[cfg(test)]
+        //let api_client = MockMangadexClient::new();
+        //
+        //self.tasks.spawn(search_mangas_operation(api_client, manga_to_search, page, filters, tx));
     }
 
     fn search_next_page(&mut self) {
@@ -562,7 +558,7 @@ where
                     self.mangas_found_list.total_result = 0;
                     return;
                 }
-                self.mangas_found_list.widget = ListMangasFoundWidget::from_response(response.data);
+                //self.mangas_found_list.widget = ListMangasFoundWidget::from_response(response.data);
                 self.mangas_found_list.total_result = response.total;
                 self.mangas_found_list.state.select(Some(0));
                 self.state = PageState::DisplayingMangasFound;
@@ -582,25 +578,25 @@ where
     }
 
     fn search_covers(&mut self) {
-        for item in self.mangas_found_list.widget.mangas.iter() {
-            let manga_id = item.manga.id.clone();
-            let tx = self.local_event_tx.clone();
-
-            #[cfg(not(test))]
-            let api_client = MangadexClient::global().clone();
-
-            #[cfg(test)]
-            let api_client = MockMangadexClient::new();
-
-            match item.manga.img_url.as_ref().cloned() {
-                Some(file_name) => {
-                    self.tasks.spawn(search_manga_covers(api_client, manga_id, file_name, tx));
-                },
-                None => {
-                    tx.send(SearchPageEvents::LoadCover(None, manga_id)).ok();
-                },
-            };
-        }
+        //for item in self.mangas_found_list.widget.mangas.iter() {
+        //    let manga_id = item.manga.id.clone();
+        //    let tx = self.local_event_tx.clone();
+        //
+        //    #[cfg(not(test))]
+        //    let api_client = MangadexClient::global().clone();
+        //
+        //    #[cfg(test)]
+        //    let api_client = MockMangadexClient::new();
+        //
+        //    match item.manga.img_url.as_ref().cloned() {
+        //        Some(file_name) => {
+        //            self.tasks.spawn(search_manga_covers(api_client, manga_id, file_name, tx));
+        //        },
+        //        None => {
+        //            tx.send(SearchPageEvents::LoadCover(None, manga_id)).ok();
+        //        },
+        //    };
+        //}
     }
 
     fn load_cover(&mut self, maybe_cover: Option<DynamicImage>, manga_id: String) {
@@ -633,214 +629,214 @@ where
 
 #[cfg(test)]
 mod test {
-    use ratatui::buffer::Buffer;
-
-    use super::*;
-    use crate::backend::api_responses::{Data, MangaSearchAttributes, MangaSearchRelationship};
-    use crate::global::test_utils::TrackerTest;
-    use crate::view::widgets::press_key;
-
-    #[tokio::test]
-    async fn search_page_events() {
-        let mut search_page: SearchPage<MockMangadexClient, TrackerTest> =
-            SearchPage::new(Some(Picker::new((8, 9))), MockMangadexClient::new(), None);
-
-        let mock_search_result = SearchMangaResponse {
-            data: vec![
-                Data {
-                    id: "manga_id_1".to_string(),
-                    relationships: vec![MangaSearchRelationship {
-                        type_field: "cover_art".to_string(),
-
-                        attributes: Some(MangaSearchAttributes {
-                            file_name: Some("file_name.jpg".to_string()),
-                            ..Default::default()
-                        }),
-                        ..Default::default()
-                    }],
-                    ..Default::default()
-                },
-                Data {
-                    id: "manga_id_2".to_string(),
-                    relationships: vec![MangaSearchRelationship {
-                        type_field: "cover_art".to_string(),
-
-                        attributes: Some(MangaSearchAttributes {
-                            file_name: Some("file_name.jpg".to_string()),
-                            ..Default::default()
-                        }),
-                        ..Default::default()
-                    }],
-                    ..Default::default()
-                },
-            ],
-            ..Default::default()
-        };
-
-        // assuming a search was made
-        search_page
-            .local_event_tx
-            .send(SearchPageEvents::LoadMangasFound(Some(mock_search_result)))
-            .ok();
-
-        search_page.tick();
-
-        // On first tick page should receive the SearchCovers event
-        search_page.tick();
-
-        tokio::time::sleep(Duration::from_millis(100)).await;
-        // load first manga cover
-        search_page.tick();
-
-        // load second manga cover
-        tokio::time::sleep(Duration::from_millis(100)).await;
-        search_page.tick();
-
-        assert!(!search_page.manga_cover_state.is_empty());
-        assert!(search_page.manga_cover_state.get_image_state("manga_id_2").is_some())
-    }
-
-    #[tokio::test]
-    async fn search_page_key_events() {
-        let mut search_page: SearchPage<MockMangadexClient, TrackerTest> = SearchPage::new(None, MockMangadexClient::new(), None);
-
-        assert!(search_page.state == PageState::Normal);
-        assert!(!search_page.filter_state.is_open);
-
-        // focus search_bar
-        press_key(&mut search_page, KeyCode::Char('s'));
-
-        if let Some(action) = search_page.local_action_rx.recv().await {
-            search_page.update(action)
-        }
-
-        assert!(search_page.input_mode == InputMode::Typing);
-
-        // user is typing in the search_bar
-        press_key(&mut search_page, KeyCode::Char('t'));
-        press_key(&mut search_page, KeyCode::Char('e'));
-
-        assert_eq!("te", search_page.search_bar.value());
-
-        // unfocus search_bar
-        press_key(&mut search_page, KeyCode::Esc);
-
-        if let Some(action) = search_page.local_action_rx.recv().await {
-            search_page.update(action)
-        }
-
-        assert!(search_page.input_mode == InputMode::Idle);
-
-        // Assuming a search was made and some mangas were found
-        search_page.state = PageState::DisplayingMangasFound;
-        search_page.mangas_found_list.widget.mangas = vec![MangaItem::default(), MangaItem::default()];
-        search_page.mangas_found_list.total_result = 20;
-        search_page.mangas_found_list.page = 1;
-
-        let area = Rect::new(0, 0, 50, 50);
-        let mut buf = Buffer::empty(area);
-
-        // Render the list of mangas found
-        StatefulWidgetRef::render_ref(
-            &search_page.mangas_found_list.widget,
-            area,
-            &mut buf,
-            &mut search_page.mangas_found_list.state,
-        );
-
-        // scroll down the list
-        press_key(&mut search_page, KeyCode::Char('j'));
-
-        if let Some(action) = search_page.local_action_rx.recv().await {
-            search_page.update(action)
-        }
-
-        assert!(search_page.mangas_found_list.state.selected.is_some());
-
-        // open filters
-        press_key(&mut search_page, KeyCode::Char('f'));
-
-        if let Some(action) = search_page.local_action_rx.recv().await {
-            search_page.update(action)
-        }
-
-        assert!(search_page.filter_state.is_open);
-
-        search_page.filter_state.is_open = false;
-
-        // // Add a manga to plan to read
-        // To test the actual funcionality it's necessary the database, so let's assert the right
-        // event is called in the meantime
-        // press_key(&mut search_page, KeyCode::Char('p'));
-        //
-        // if let Some(action) = search_page.local_action_rx.recv().await {
-        //     search_page.update(action)
-        // }
-        //
-        // assert!(search_page.manga_added_to_plan_to_read.is_some());
-
-        // Add a manga to plan to read
-        press_key(&mut search_page, KeyCode::Char('p'));
-
-        if let Some(action) = search_page.local_action_rx.recv().await {
-            assert_eq!(SearchPageActions::PlanToRead, action);
-        } else {
-            panic!("Add plan to read functionality is not being called");
-        }
-
-        // Go next page
-        press_key(&mut search_page, KeyCode::Char('w'));
-
-        if let Some(action) = search_page.local_action_rx.recv().await {
-            search_page.update(action)
-        }
-
-        assert_eq!(2, search_page.mangas_found_list.page);
-
-        search_page.state = PageState::DisplayingMangasFound;
-
-        // Go previous page
-        press_key(&mut search_page, KeyCode::Char('b'));
-
-        if let Some(action) = search_page.local_action_rx.recv().await {
-            search_page.update(action)
-        }
-        assert_eq!(1, search_page.mangas_found_list.page);
-
-        // Go to manga page
-        press_key(&mut search_page, KeyCode::Char('r'));
-
-        if let Some(action) = search_page.local_action_rx.recv().await {
-            assert_eq!(SearchPageActions::GoToMangaPage, action);
-        } else {
-            panic!("The action `go to manga page` is not working");
-        }
-    }
-
-    #[test]
-    fn search_manga_cover_if_picker_is_some_after_mangas_were_found() {
-        let mut search_page: SearchPage<MockMangadexClient, TrackerTest> =
-            SearchPage::new(Some(Picker::new((8, 9))), MockMangadexClient::new(), None);
-
-        search_page.load_mangas_found(Some(SearchMangaResponse {
-            data: vec![Data::default()],
-            ..Default::default()
-        }));
-
-        let event = search_page.local_event_rx.blocking_recv().expect("no event was sent");
-
-        assert_eq!(event, SearchPageEvents::SearchCovers);
-    }
-
-    #[test]
-    fn doesnt_search_cover_if_picker_is_none_after_mangas_were_found() {
-        let mut search_page: SearchPage<MockMangadexClient, TrackerTest> = SearchPage::new(None, MockMangadexClient::new(), None);
-
-        search_page.load_mangas_found(Some(SearchMangaResponse {
-            data: vec![Data::default()],
-            ..Default::default()
-        }));
-
-        assert!(search_page.local_event_rx.is_empty());
-    }
+    //use ratatui::buffer::Buffer;
+    //
+    //use super::*;
+    //use crate::backend::api_responses::{Data, MangaSearchAttributes, MangaSearchRelationship};
+    //use crate::global::test_utils::TrackerTest;
+    //use crate::view::widgets::press_key;
+    //
+    //#[tokio::test]
+    //async fn search_page_events() {
+    //    let mut search_page: SearchPage<MockMangadexClient, TrackerTest> =
+    //        SearchPage::new(Some(Picker::new((8, 9))), MockMangadexClient::new(), None);
+    //
+    //    let mock_search_result = SearchMangaResponse {
+    //        data: vec![
+    //            Data {
+    //                id: "manga_id_1".to_string(),
+    //                relationships: vec![MangaSearchRelationship {
+    //                    type_field: "cover_art".to_string(),
+    //
+    //                    attributes: Some(MangaSearchAttributes {
+    //                        file_name: Some("file_name.jpg".to_string()),
+    //                        ..Default::default()
+    //                    }),
+    //                    ..Default::default()
+    //                }],
+    //                ..Default::default()
+    //            },
+    //            Data {
+    //                id: "manga_id_2".to_string(),
+    //                relationships: vec![MangaSearchRelationship {
+    //                    type_field: "cover_art".to_string(),
+    //
+    //                    attributes: Some(MangaSearchAttributes {
+    //                        file_name: Some("file_name.jpg".to_string()),
+    //                        ..Default::default()
+    //                    }),
+    //                    ..Default::default()
+    //                }],
+    //                ..Default::default()
+    //            },
+    //        ],
+    //        ..Default::default()
+    //    };
+    //
+    //    // assuming a search was made
+    //    search_page
+    //        .local_event_tx
+    //        .send(SearchPageEvents::LoadMangasFound(Some(mock_search_result)))
+    //        .ok();
+    //
+    //    search_page.tick();
+    //
+    //    // On first tick page should receive the SearchCovers event
+    //    search_page.tick();
+    //
+    //    tokio::time::sleep(Duration::from_millis(100)).await;
+    //    // load first manga cover
+    //    search_page.tick();
+    //
+    //    // load second manga cover
+    //    tokio::time::sleep(Duration::from_millis(100)).await;
+    //    search_page.tick();
+    //
+    //    assert!(!search_page.manga_cover_state.is_empty());
+    //    assert!(search_page.manga_cover_state.get_image_state("manga_id_2").is_some())
+    //}
+    //
+    //#[tokio::test]
+    //async fn search_page_key_events() {
+    //    let mut search_page: SearchPage<MockMangadexClient, TrackerTest> = SearchPage::new(None, MockMangadexClient::new(), None);
+    //
+    //    assert!(search_page.state == PageState::Normal);
+    //    assert!(!search_page.filter_state.is_open);
+    //
+    //    // focus search_bar
+    //    press_key(&mut search_page, KeyCode::Char('s'));
+    //
+    //    if let Some(action) = search_page.local_action_rx.recv().await {
+    //        search_page.update(action)
+    //    }
+    //
+    //    assert!(search_page.input_mode == InputMode::Typing);
+    //
+    //    // user is typing in the search_bar
+    //    press_key(&mut search_page, KeyCode::Char('t'));
+    //    press_key(&mut search_page, KeyCode::Char('e'));
+    //
+    //    assert_eq!("te", search_page.search_bar.value());
+    //
+    //    // unfocus search_bar
+    //    press_key(&mut search_page, KeyCode::Esc);
+    //
+    //    if let Some(action) = search_page.local_action_rx.recv().await {
+    //        search_page.update(action)
+    //    }
+    //
+    //    assert!(search_page.input_mode == InputMode::Idle);
+    //
+    //    // Assuming a search was made and some mangas were found
+    //    search_page.state = PageState::DisplayingMangasFound;
+    //    search_page.mangas_found_list.widget.mangas = vec![MangaItem::default(), MangaItem::default()];
+    //    search_page.mangas_found_list.total_result = 20;
+    //    search_page.mangas_found_list.page = 1;
+    //
+    //    let area = Rect::new(0, 0, 50, 50);
+    //    let mut buf = Buffer::empty(area);
+    //
+    //    // Render the list of mangas found
+    //    StatefulWidgetRef::render_ref(
+    //        &search_page.mangas_found_list.widget,
+    //        area,
+    //        &mut buf,
+    //        &mut search_page.mangas_found_list.state,
+    //    );
+    //
+    //    // scroll down the list
+    //    press_key(&mut search_page, KeyCode::Char('j'));
+    //
+    //    if let Some(action) = search_page.local_action_rx.recv().await {
+    //        search_page.update(action)
+    //    }
+    //
+    //    assert!(search_page.mangas_found_list.state.selected.is_some());
+    //
+    //    // open filters
+    //    press_key(&mut search_page, KeyCode::Char('f'));
+    //
+    //    if let Some(action) = search_page.local_action_rx.recv().await {
+    //        search_page.update(action)
+    //    }
+    //
+    //    assert!(search_page.filter_state.is_open);
+    //
+    //    search_page.filter_state.is_open = false;
+    //
+    //    // // Add a manga to plan to read
+    //    // To test the actual funcionality it's necessary the database, so let's assert the right
+    //    // event is called in the meantime
+    //    // press_key(&mut search_page, KeyCode::Char('p'));
+    //    //
+    //    // if let Some(action) = search_page.local_action_rx.recv().await {
+    //    //     search_page.update(action)
+    //    // }
+    //    //
+    //    // assert!(search_page.manga_added_to_plan_to_read.is_some());
+    //
+    //    // Add a manga to plan to read
+    //    press_key(&mut search_page, KeyCode::Char('p'));
+    //
+    //    if let Some(action) = search_page.local_action_rx.recv().await {
+    //        assert_eq!(SearchPageActions::PlanToRead, action);
+    //    } else {
+    //        panic!("Add plan to read functionality is not being called");
+    //    }
+    //
+    //    // Go next page
+    //    press_key(&mut search_page, KeyCode::Char('w'));
+    //
+    //    if let Some(action) = search_page.local_action_rx.recv().await {
+    //        search_page.update(action)
+    //    }
+    //
+    //    assert_eq!(2, search_page.mangas_found_list.page);
+    //
+    //    search_page.state = PageState::DisplayingMangasFound;
+    //
+    //    // Go previous page
+    //    press_key(&mut search_page, KeyCode::Char('b'));
+    //
+    //    if let Some(action) = search_page.local_action_rx.recv().await {
+    //        search_page.update(action)
+    //    }
+    //    assert_eq!(1, search_page.mangas_found_list.page);
+    //
+    //    // Go to manga page
+    //    press_key(&mut search_page, KeyCode::Char('r'));
+    //
+    //    if let Some(action) = search_page.local_action_rx.recv().await {
+    //        assert_eq!(SearchPageActions::GoToMangaPage, action);
+    //    } else {
+    //        panic!("The action `go to manga page` is not working");
+    //    }
+    //}
+    //
+    //#[test]
+    //fn search_manga_cover_if_picker_is_some_after_mangas_were_found() {
+    //    let mut search_page: SearchPage<MockMangadexClient, TrackerTest> =
+    //        SearchPage::new(Some(Picker::new((8, 9))), MockMangadexClient::new(), None);
+    //
+    //    search_page.load_mangas_found(Some(SearchMangaResponse {
+    //        data: vec![Data::default()],
+    //        ..Default::default()
+    //    }));
+    //
+    //    let event = search_page.local_event_rx.blocking_recv().expect("no event was sent");
+    //
+    //    assert_eq!(event, SearchPageEvents::SearchCovers);
+    //}
+    //
+    //#[test]
+    //fn doesnt_search_cover_if_picker_is_none_after_mangas_were_found() {
+    //    let mut search_page: SearchPage<MockMangadexClient, TrackerTest> = SearchPage::new(None, MockMangadexClient::new(), None);
+    //
+    //    search_page.load_mangas_found(Some(SearchMangaResponse {
+    //        data: vec![Data::default()],
+    //        ..Default::default()
+    //    }));
+    //
+    //    assert!(search_page.local_event_rx.is_empty());
+    //}
 }

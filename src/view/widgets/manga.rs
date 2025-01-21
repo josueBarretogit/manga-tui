@@ -10,8 +10,8 @@ use throbber_widgets_tui::{Throbber, ThrobberState};
 use tokio::sync::mpsc::UnboundedSender;
 use tui_widget_list::PreRender;
 
-use crate::backend::api_responses::ChapterResponse;
 use crate::backend::filter::Languages;
+use crate::backend::manga_provider::mangadex::api_responses::ChapterResponse;
 use crate::global::{CURRENT_LIST_ITEM_STYLE, ERROR_STYLE, INSTRUCTIONS_STYLE};
 use crate::utils::display_dates_since_publication;
 use crate::view::pages::manga::MangaPageEvents;

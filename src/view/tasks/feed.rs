@@ -1,8 +1,8 @@
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::backend::api_responses::feed::OneMangaResponse;
 use crate::backend::error_log::{write_to_error_log, ErrorType};
-use crate::backend::fetch::ApiClient;
+use crate::backend::manga_provider::mangadex::api_responses::feed::OneMangaResponse;
+use crate::backend::manga_provider::mangadex::ApiClient;
 use crate::backend::tui::Events;
 use crate::utils::from_manga_response;
 use crate::view::pages::feed::FeedEvents;

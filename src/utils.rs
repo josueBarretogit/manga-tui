@@ -12,9 +12,8 @@ use tokio::sync::mpsc::UnboundedSender;
 use tokio::task::JoinSet;
 use tui_input::Input;
 
-use crate::backend::api_responses::Data;
-use crate::backend::fetch::{ApiClient, MangadexClient};
 use crate::backend::filter::Languages;
+use crate::backend::manga_provider::mangadex::api_responses::Data;
 use crate::common::{Artist, Author, Manga};
 use crate::view::widgets::filter_widget::state::{TagListItem, TagListItemState};
 use crate::view::widgets::ImageHandler;
@@ -44,38 +43,6 @@ pub fn set_filter_tags_style(tag: &TagListItem) -> Span<'_> {
         TagListItemState::Excluded => format!(" {} ", tag.name).black().on_red(),
         TagListItemState::NotSelected => Span::from(tag.name.clone()),
     }
-}
-
-pub fn search_manga_cover<IM: ImageHandler>(
-    file_name: String,
-    manga_id: String,
-    join_set: &mut JoinSet<()>,
-    tx: UnboundedSender<IM>,
-) {
-    join_set.spawn(async move {
-        let response = MangadexClient::global().get_cover_for_manga_lower_quality(&manga_id, &file_name).await;
-        match response {
-            Ok(res) => {
-                if let Ok(bytes) = res.bytes().await {
-                    let dyn_img = Reader::new(Cursor::new(bytes)).with_guessed_format().unwrap();
-
-                    let maybe_decoded = dyn_img.decode();
-
-                    if let Ok(decoded) = maybe_decoded {
-                        tx.send(IM::load(decoded, manga_id)).ok();
-                    }
-                }
-            },
-            Err(_e) => {
-                // write_to_error_log(crate::backend::error_log::ErrorType::FromError(Box::new(e)));
-                tx.send(IM::not_found(manga_id)).ok();
-            },
-        }
-    });
-}
-
-pub fn decode_bytes_to_image(data: Bytes) -> Result<DynamicImage, image::ImageError> {
-    Reader::new(Cursor::new(data)).with_guessed_format()?.decode()
 }
 
 pub fn from_manga_response(value: Data) -> Manga {

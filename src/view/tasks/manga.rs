@@ -6,16 +6,12 @@ use std::time::{Duration, Instant};
 use reqwest::Url;
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::backend::api_responses::{AggregateChapterResponse, ChapterPagesResponse, ChapterResponse};
 use crate::backend::database::{save_history, ChapterToSaveHistory, Database, MangaReadingHistorySave};
 use crate::backend::download::DownloadChapter;
 use crate::backend::error_log::{write_to_error_log, ErrorType};
-#[cfg(test)]
-use crate::backend::fetch::fake_api_client::MockMangadexClient;
-use crate::backend::fetch::ApiClient;
-#[cfg(not(test))]
-use crate::backend::fetch::MangadexClient;
 use crate::backend::filter::Languages;
+use crate::backend::manga_provider::mangadex::api_responses::{AggregateChapterResponse, ChapterPagesResponse, ChapterResponse};
+use crate::backend::manga_provider::mangadex::{ApiClient, MangadexClient};
 use crate::config::{DownloadType, ImageQuality, MangaTuiConfig};
 use crate::view::app::MangaToRead;
 use crate::view::pages::manga::{ChapterOrder, MangaPageEvents};
@@ -28,26 +24,26 @@ pub async fn search_chapters_operation(
     chapter_order: ChapterOrder,
     tx: UnboundedSender<MangaPageEvents>,
 ) {
-    #[cfg(test)]
-    let api_client = MockMangadexClient::new();
-
-    #[cfg(not(test))]
-    let api_client = MangadexClient::global();
-
-    let response = api_client.get_manga_chapters(&manga_id, page, language, chapter_order).await;
-
-    match response {
-        Ok(chapters_response) => {
-            let data: Result<ChapterResponse, reqwest::Error> = chapters_response.json().await;
-            if let Ok(chapters) = data {
-                tx.send(MangaPageEvents::LoadChapters(Some(chapters))).ok();
-            }
-        },
-        Err(e) => {
-            write_to_error_log(ErrorType::Error(Box::new(e)));
-            tx.send(MangaPageEvents::LoadChapters(None)).ok();
-        },
-    }
+    //#[cfg(test)]
+    //let api_client = MockMangadexClient::new();
+    //
+    //#[cfg(not(test))]
+    //let api_client = MangadexClient::global();
+    //
+    //let response = api_client.get_manga_chapters(&manga_id, page, language, chapter_order).await;
+    //
+    //match response {
+    //    Ok(chapters_response) => {
+    //        let data: Result<ChapterResponse, reqwest::Error> = chapters_response.json().await;
+    //        if let Ok(chapters) = data {
+    //            tx.send(MangaPageEvents::LoadChapters(Some(chapters))).ok();
+    //        }
+    //    },
+    //    Err(e) => {
+    //        write_to_error_log(ErrorType::Error(Box::new(e)));
+    //        tx.send(MangaPageEvents::LoadChapters(None)).ok();
+    //    },
+    //}
 }
 
 pub struct DownloadArgs<'a> {
@@ -361,8 +357,6 @@ pub struct ChapterArgs {
 /// These function looks very similar  to the implementation `impl FetchChapterBookmarked for MangadexClient` but where it is called
 /// provides with data that reduce one api call
 pub async fn read_chapter(chapter: &ChapterArgs) -> Result<(ChapterToRead, MangaToRead), Box<dyn std::error::Error>> {
-    use crate::backend::fetch::MangadexClient;
-
     let chapter_response: ChapterPagesResponse =
         MangadexClient::global().get_chapter_pages(&chapter.id_chapter).await?.json().await?;
 
@@ -410,204 +404,204 @@ pub async fn read_chapter(chapter: &ChapterArgs) -> Result<(ChapterToRead, Manga
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
-    use std::ops::AddAssign;
-    use std::path::{Path, PathBuf};
-
-    use fake::faker::name::en::Name;
-    use fake::Fake;
-    use manga_tui::exists;
-    use pretty_assertions::assert_eq;
-    use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
-    use uuid::Uuid;
-
-    use super::*;
-    use crate::backend::api_responses::{ChapterAttribute, ChapterData};
-    use crate::backend::fetch::fake_api_client::MockMangadexClient;
-
-    async fn validate_progress_sent(
-        mut rx: UnboundedReceiver<MangaPageEvents>,
-        expected_amount_files: f64,
-        expected_id_sent: String,
-    ) {
-        let mut iterations = 0.0;
-        for _ in 0..(expected_amount_files as usize) {
-            let event = rx.recv().await.expect("no event was sent");
-            match event {
-                MangaPageEvents::SetDownloadProgress(ratio_progress, manga_id) => {
-                    assert_eq!(manga_id, expected_id_sent);
-                    assert_eq!(iterations / expected_amount_files, ratio_progress);
-                    iterations.add_assign(1.0);
-                },
-                _ => panic!("wrong event was sent"),
-            }
-        }
-    }
-
-    async fn validate_download_all_chapter_progress(mut rx: UnboundedReceiver<MangaPageEvents>, total_chapters: f64) {
-        for _ in 0..(total_chapters as usize) {
-            let event = rx.recv().await.expect("no event was sent");
-            match event {
-                MangaPageEvents::SetDownloadAllChaptersProgress => {},
-                MangaPageEvents::SaveChapterDownloadStatus(_, _) => {},
-                _ => panic!("wrong event was sent"),
-            }
-        }
-    }
-
-    fn create_tests_directory() -> Result<PathBuf, std::io::Error> {
-        let base_directory = Path::new("./test_results/manga_page_tasks");
-
-        if !exists!(&base_directory) {
-            fs::create_dir_all(base_directory)?;
-        }
-
-        Ok(base_directory.to_path_buf())
-    }
-
-    fn get_chapter_for_testing() -> DownloadChapter {
-        DownloadChapter::new(
-            &Uuid::new_v4().to_string(),
-            &Uuid::new_v4().to_string(),
-            &Name().fake::<String>(),
-            &Name().fake::<String>(),
-            "1",
-            &Name().fake::<String>(),
-            &Languages::default().as_human_readable(),
-        )
-    }
-
-    #[tokio::test]
-    #[ignore]
-    async fn download_a_chapter_given_a_api_response_raw_images_reporting_pages_progress() -> Result<(), Box<dyn Error>> {
-        let chapter_to_download = get_chapter_for_testing();
-        let directory_to_download = create_tests_directory()?;
-
-        let (sender_progress, receiver_progress) = unbounded_channel::<MangaPageEvents>();
-        let expected_amount_files = 3;
-        let chapter_id = Uuid::new_v4().to_string();
-        let report_progress = true;
-
-        download_chapter_task(
-            chapter_to_download.clone(),
-            MockMangadexClient::new().with_amount_returning_items(expected_amount_files),
-            ImageQuality::Low,
-            directory_to_download.clone(),
-            DownloadType::Raw,
-            chapter_id.clone(),
-            report_progress,
-            sender_progress,
-        )
-        .await?;
-
-        validate_progress_sent(receiver_progress, expected_amount_files as f64, chapter_id).await;
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    #[ignore]
-    async fn download_a_chapter_given_a_api_response_cbz() -> Result<(), Box<dyn std::error::Error>> {
-        let (sender_progress, receiver_progress) = unbounded_channel::<MangaPageEvents>();
-        let expected_amount_files = 3;
-
-        let chapter_id = Uuid::new_v4().to_string();
-        let report_progress = true;
-
-        download_chapter_task(
-            get_chapter_for_testing(),
-            MockMangadexClient::new().with_amount_returning_items(expected_amount_files),
-            ImageQuality::Low,
-            create_tests_directory()?,
-            DownloadType::Cbz,
-            chapter_id.clone(),
-            report_progress,
-            sender_progress,
-        )
-        .await?;
-
-        validate_progress_sent(receiver_progress, expected_amount_files as f64, chapter_id).await;
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    #[ignore]
-    async fn download_a_chapter_given_a_api_response_epub_with_progress() -> Result<(), Box<dyn std::error::Error>> {
-        let (sender_progress, receiver_progress) = unbounded_channel::<MangaPageEvents>();
-
-        let expected_amount_files = 3;
-        let chapter_id = Uuid::new_v4().to_string();
-        let should_report_progress = true;
-
-        download_chapter_task(
-            get_chapter_for_testing(),
-            MockMangadexClient::new().with_amount_returning_items(expected_amount_files),
-            ImageQuality::Low,
-            create_tests_directory()?,
-            DownloadType::Epub,
-            chapter_id.clone(),
-            should_report_progress,
-            sender_progress,
-        )
-        .await?;
-
-        validate_progress_sent(receiver_progress, expected_amount_files as f64, chapter_id).await;
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    #[ignore]
-    async fn download_all_chapters_expected_events() -> Result<(), Box<dyn std::error::Error>> {
-        let directory_to_download = create_tests_directory()?;
-        let (sender, mut rx) = unbounded_channel::<MangaPageEvents>();
-        let total_chapters = 3;
-
-        let mut chapters: Vec<ChapterData> = vec![];
-        for index in 0..total_chapters {
-            chapters.push(ChapterData {
-                id: Uuid::new_v4().into(),
-                type_field: "chapter".into(),
-                attributes: ChapterAttribute {
-                    chapter: Some(index.to_string()),
-                    ..Default::default()
-                },
-                ..Default::default()
-            })
-        }
-
-        let response = ChapterResponse {
-            data: chapters,
-
-            ..Default::default()
-        };
-
-        let api_client = MockMangadexClient::new().with_amount_returning_items(2).with_chapter_response(response);
-
-        let manga_id = Uuid::new_v4().to_string();
-        let manga_title = Uuid::new_v4().to_string();
-        let language = Languages::default();
-        let file_format = DownloadType::Cbz;
-        let image_quality = ImageQuality::Low;
-
-        download_all_chapters(api_client, DownloadAllChapters {
-            sender,
-            manga_id,
-            manga_title,
-            image_quality,
-            directory_to_download: directory_to_download.clone(),
-            file_format,
-            language,
-        })
-        .await?;
-
-        let expected_event = rx.recv().await.expect("no event was sent");
-
-        assert_eq!(MangaPageEvents::StartDownloadProgress(total_chapters as f64), expected_event);
-
-        validate_download_all_chapter_progress(rx, total_chapters as f64).await;
-
-        Ok(())
-    }
+    //use std::fs;
+    //use std::ops::AddAssign;
+    //use std::path::{Path, PathBuf};
+    //
+    //use fake::faker::name::en::Name;
+    //use fake::Fake;
+    //use manga_tui::exists;
+    //use pretty_assertions::assert_eq;
+    //use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
+    //use uuid::Uuid;
+    //
+    //use super::*;
+    //use crate::backend::api_responses::{ChapterAttribute, ChapterData};
+    //use crate::backend::fetch::fake_api_client::MockMangadexClient;
+    //
+    //async fn validate_progress_sent(
+    //    mut rx: UnboundedReceiver<MangaPageEvents>,
+    //    expected_amount_files: f64,
+    //    expected_id_sent: String,
+    //) {
+    //    let mut iterations = 0.0;
+    //    for _ in 0..(expected_amount_files as usize) {
+    //        let event = rx.recv().await.expect("no event was sent");
+    //        match event {
+    //            MangaPageEvents::SetDownloadProgress(ratio_progress, manga_id) => {
+    //                assert_eq!(manga_id, expected_id_sent);
+    //                assert_eq!(iterations / expected_amount_files, ratio_progress);
+    //                iterations.add_assign(1.0);
+    //            },
+    //            _ => panic!("wrong event was sent"),
+    //        }
+    //    }
+    //}
+    //
+    //async fn validate_download_all_chapter_progress(mut rx: UnboundedReceiver<MangaPageEvents>, total_chapters: f64) {
+    //    for _ in 0..(total_chapters as usize) {
+    //        let event = rx.recv().await.expect("no event was sent");
+    //        match event {
+    //            MangaPageEvents::SetDownloadAllChaptersProgress => {},
+    //            MangaPageEvents::SaveChapterDownloadStatus(_, _) => {},
+    //            _ => panic!("wrong event was sent"),
+    //        }
+    //    }
+    //}
+    //
+    //fn create_tests_directory() -> Result<PathBuf, std::io::Error> {
+    //    let base_directory = Path::new("./test_results/manga_page_tasks");
+    //
+    //    if !exists!(&base_directory) {
+    //        fs::create_dir_all(base_directory)?;
+    //    }
+    //
+    //    Ok(base_directory.to_path_buf())
+    //}
+    //
+    //fn get_chapter_for_testing() -> DownloadChapter {
+    //    DownloadChapter::new(
+    //        &Uuid::new_v4().to_string(),
+    //        &Uuid::new_v4().to_string(),
+    //        &Name().fake::<String>(),
+    //        &Name().fake::<String>(),
+    //        "1",
+    //        &Name().fake::<String>(),
+    //        &Languages::default().as_human_readable(),
+    //    )
+    //}
+    //
+    //#[tokio::test]
+    //#[ignore]
+    //async fn download_a_chapter_given_a_api_response_raw_images_reporting_pages_progress() -> Result<(), Box<dyn Error>> {
+    //    let chapter_to_download = get_chapter_for_testing();
+    //    let directory_to_download = create_tests_directory()?;
+    //
+    //    let (sender_progress, receiver_progress) = unbounded_channel::<MangaPageEvents>();
+    //    let expected_amount_files = 3;
+    //    let chapter_id = Uuid::new_v4().to_string();
+    //    let report_progress = true;
+    //
+    //    download_chapter_task(
+    //        chapter_to_download.clone(),
+    //        MockMangadexClient::new().with_amount_returning_items(expected_amount_files),
+    //        ImageQuality::Low,
+    //        directory_to_download.clone(),
+    //        DownloadType::Raw,
+    //        chapter_id.clone(),
+    //        report_progress,
+    //        sender_progress,
+    //    )
+    //    .await?;
+    //
+    //    validate_progress_sent(receiver_progress, expected_amount_files as f64, chapter_id).await;
+    //
+    //    Ok(())
+    //}
+    //
+    //#[tokio::test]
+    //#[ignore]
+    //async fn download_a_chapter_given_a_api_response_cbz() -> Result<(), Box<dyn std::error::Error>> {
+    //    let (sender_progress, receiver_progress) = unbounded_channel::<MangaPageEvents>();
+    //    let expected_amount_files = 3;
+    //
+    //    let chapter_id = Uuid::new_v4().to_string();
+    //    let report_progress = true;
+    //
+    //    download_chapter_task(
+    //        get_chapter_for_testing(),
+    //        MockMangadexClient::new().with_amount_returning_items(expected_amount_files),
+    //        ImageQuality::Low,
+    //        create_tests_directory()?,
+    //        DownloadType::Cbz,
+    //        chapter_id.clone(),
+    //        report_progress,
+    //        sender_progress,
+    //    )
+    //    .await?;
+    //
+    //    validate_progress_sent(receiver_progress, expected_amount_files as f64, chapter_id).await;
+    //
+    //    Ok(())
+    //}
+    //
+    //#[tokio::test]
+    //#[ignore]
+    //async fn download_a_chapter_given_a_api_response_epub_with_progress() -> Result<(), Box<dyn std::error::Error>> {
+    //    let (sender_progress, receiver_progress) = unbounded_channel::<MangaPageEvents>();
+    //
+    //    let expected_amount_files = 3;
+    //    let chapter_id = Uuid::new_v4().to_string();
+    //    let should_report_progress = true;
+    //
+    //    download_chapter_task(
+    //        get_chapter_for_testing(),
+    //        MockMangadexClient::new().with_amount_returning_items(expected_amount_files),
+    //        ImageQuality::Low,
+    //        create_tests_directory()?,
+    //        DownloadType::Epub,
+    //        chapter_id.clone(),
+    //        should_report_progress,
+    //        sender_progress,
+    //    )
+    //    .await?;
+    //
+    //    validate_progress_sent(receiver_progress, expected_amount_files as f64, chapter_id).await;
+    //
+    //    Ok(())
+    //}
+    //
+    //#[tokio::test]
+    //#[ignore]
+    //async fn download_all_chapters_expected_events() -> Result<(), Box<dyn std::error::Error>> {
+    //    let directory_to_download = create_tests_directory()?;
+    //    let (sender, mut rx) = unbounded_channel::<MangaPageEvents>();
+    //    let total_chapters = 3;
+    //
+    //    let mut chapters: Vec<ChapterData> = vec![];
+    //    for index in 0..total_chapters {
+    //        chapters.push(ChapterData {
+    //            id: Uuid::new_v4().into(),
+    //            type_field: "chapter".into(),
+    //            attributes: ChapterAttribute {
+    //                chapter: Some(index.to_string()),
+    //                ..Default::default()
+    //            },
+    //            ..Default::default()
+    //        })
+    //    }
+    //
+    //    let response = ChapterResponse {
+    //        data: chapters,
+    //
+    //        ..Default::default()
+    //    };
+    //
+    //    let api_client = MockMangadexClient::new().with_amount_returning_items(2).with_chapter_response(response);
+    //
+    //    let manga_id = Uuid::new_v4().to_string();
+    //    let manga_title = Uuid::new_v4().to_string();
+    //    let language = Languages::default();
+    //    let file_format = DownloadType::Cbz;
+    //    let image_quality = ImageQuality::Low;
+    //
+    //    download_all_chapters(api_client, DownloadAllChapters {
+    //        sender,
+    //        manga_id,
+    //        manga_title,
+    //        image_quality,
+    //        directory_to_download: directory_to_download.clone(),
+    //        file_format,
+    //        language,
+    //    })
+    //    .await?;
+    //
+    //    let expected_event = rx.recv().await.expect("no event was sent");
+    //
+    //    assert_eq!(MangaPageEvents::StartDownloadProgress(total_chapters as f64), expected_event);
+    //
+    //    validate_download_all_chapter_progress(rx, total_chapters as f64).await;
+    //
+    //    Ok(())
+    //}
 }

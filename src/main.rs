@@ -5,6 +5,7 @@ use std::io::stdout;
 use std::process::exit;
 use std::time::Duration;
 
+use backend::manga_provider::mangadex::{MangadexClient, API_URL_BASE, COVER_IMG_URL_BASE, MANGADEX_CLIENT_INSTANCE};
 use backend::release_notifier::{ReleaseNotifier, GITHUB_URL};
 use backend::secrets::anilist::AnilistStorage;
 use backend::tracker::anilist::{Anilist, BASE_ANILIST_API_URL};
@@ -17,7 +18,6 @@ use logger::{ILogger, Logger};
 
 use self::backend::build_data_dir;
 use self::backend::database::Database;
-use self::backend::fetch::{MangadexClient, API_URL_BASE, COVER_IMG_URL_BASE, MANGADEX_CLIENT_INSTANCE};
 use self::backend::migration::migrate_version;
 use self::backend::tui::run_app;
 use self::cli::CliArgs;

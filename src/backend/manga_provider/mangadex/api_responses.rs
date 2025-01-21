@@ -359,6 +359,49 @@ pub struct OneChapterData {
     pub attributes: ChapterAttribute,
 }
 
+/* as of v0.5.0 */
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetMangaByIdResponse {
+    pub data: GetMangaByIdData,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetMangaByIdData {
+    pub id: String,
+    pub attributes: GetMangaByIdAttributes,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetMangaByIdAttributes {
+    pub title: Title,
+    pub description: Option<Description>,
+    pub publication_demograpchic: Option<String>,
+    pub tags: Vec<Tag>,
+    pub content_rating: String,
+    pub status: String,
+    pub available_translated_languages: Vec<Option<String>>,
+    pub relationships: Vec<MangaRelationship>,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MangaRelationship {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub type_field: String,
+    pub attributes: Option<MangaRelationshipAttributes>,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MangaRelationshipAttributes {
+    #[serde(rename = "fileName")]
+    pub file_name: Option<String>,
+    pub name: Option<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;

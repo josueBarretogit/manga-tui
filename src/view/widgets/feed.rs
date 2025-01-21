@@ -5,9 +5,9 @@ use ratatui::text::Line;
 use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph, StatefulWidget, Widget, Wrap};
 use tui_widget_list::PreRender;
 
-use crate::backend::api_responses::{ChapterData, ChapterResponse};
 use crate::backend::database::MangaHistoryResponse;
 use crate::backend::filter::Languages;
+use crate::backend::manga_provider::mangadex::api_responses::{ChapterData, ChapterResponse};
 use crate::global::CURRENT_LIST_ITEM_STYLE;
 use crate::utils::display_dates_since_publication;
 

@@ -9,7 +9,8 @@ use ratatui_image::picker::{Picker, ProtocolType};
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::task::JoinHandle;
 
-use super::fetch::ApiClient;
+use super::manga_provider::mangadex::ApiClient;
+use super::manga_provider::HomePageMangaProvider;
 use super::tracker::MangaTracker;
 use crate::common::{Artist, Author};
 use crate::view::app::{App, AppState, MangaToRead};
@@ -95,7 +96,7 @@ fn get_picker() -> Option<Picker> {
 ///Start app's main loop
 pub async fn run_app(
     mut terminal: Terminal<impl Backend>,
-    api_client: impl ApiClient + SearchChapter + SearchMangaPanel,
+    api_client: impl ApiClient + SearchChapter + SearchMangaPanel + HomePageMangaProvider,
     manga_tracker: Option<impl MangaTracker>,
 ) -> Result<(), Box<dyn Error>> {
     let mut app = App::new(api_client, manga_tracker, get_picker());

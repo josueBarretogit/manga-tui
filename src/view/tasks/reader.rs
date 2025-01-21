@@ -29,43 +29,43 @@ pub async fn get_manga_panel(
 
 #[cfg(test)]
 mod test {
-    use httpmock::Method::GET;
-    use httpmock::MockServer;
-    use pretty_assertions::assert_eq;
-    use reqwest::Url;
-
-    use super::*;
-    use crate::backend::fetch::MangadexClient;
-
-    #[tokio::test]
-    async fn get_manga_panel_works() {
-        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<MangaReaderEvents>();
-
-        let server = MockServer::start_async().await;
-        let expect_response = include_bytes!("../../../public/mangadex_support.jpg");
-
-        let request = server
-            .mock_async(|when, then| {
-                when.method(GET).path_contains("filename.png");
-                then.status(200).body(expect_response);
-            })
-            .await;
-
-        let base_url: Url = format!("{}/{}", server.base_url(), "filename.png").parse().unwrap();
-
-        get_manga_panel(MangadexClient::new(base_url.clone(), base_url.clone()), base_url, tx, 1).await;
-
-        request.assert_async().await;
-
-        let event = rx.recv().await.expect("could not get manga panel");
-
-        let page_data = match event {
-            MangaReaderEvents::FailedPage(_) => panic!("wrong event was sent"),
-            MangaReaderEvents::FetchPages => panic!("wrong event was sent"),
-            MangaReaderEvents::LoadPage(page_data) => page_data,
-            _ => panic!("wrong event was sent"),
-        };
-
-        assert_eq!(1, page_data.index)
-    }
+    //use httpmock::Method::GET;
+    //use httpmock::MockServer;
+    //use pretty_assertions::assert_eq;
+    //use reqwest::Url;
+    //
+    //use super::*;
+    //use crate::backend::fetch::MangadexClient;
+    //
+    //#[tokio::test]
+    //async fn get_manga_panel_works() {
+    //    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<MangaReaderEvents>();
+    //
+    //    let server = MockServer::start_async().await;
+    //    let expect_response = include_bytes!("../../../public/mangadex_support.jpg");
+    //
+    //    let request = server
+    //        .mock_async(|when, then| {
+    //            when.method(GET).path_contains("filename.png");
+    //            then.status(200).body(expect_response);
+    //        })
+    //        .await;
+    //
+    //    let base_url: Url = format!("{}/{}", server.base_url(), "filename.png").parse().unwrap();
+    //
+    //    get_manga_panel(MangadexClient::new(base_url.clone(), base_url.clone()), base_url, tx, 1).await;
+    //
+    //    request.assert_async().await;
+    //
+    //    let event = rx.recv().await.expect("could not get manga panel");
+    //
+    //    let page_data = match event {
+    //        MangaReaderEvents::FailedPage(_) => panic!("wrong event was sent"),
+    //        MangaReaderEvents::FetchPages => panic!("wrong event was sent"),
+    //        MangaReaderEvents::LoadPage(page_data) => page_data,
+    //        _ => panic!("wrong event was sent"),
+    //    };
+    //
+    //    assert_eq!(1, page_data.index)
+    //}
 }

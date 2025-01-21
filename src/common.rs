@@ -6,6 +6,7 @@ use ratatui_image::protocol::Protocol;
 use strum::{Display, EnumIter};
 
 use crate::backend::filter::Languages;
+
 #[derive(Default, Clone, Debug, PartialEq)]
 pub struct Author {
     pub id: String,

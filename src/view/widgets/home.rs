@@ -1,14 +1,13 @@
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Margin, Rect};
 use ratatui::style::{Color, Style};
-use ratatui::text::{Line, Span};
+use ratatui::text::Line;
 use ratatui::widgets::{Block, Paragraph, StatefulWidget, Widget, Wrap};
 use ratatui_image::Image;
 use throbber_widgets_tui::{Throbber, ThrobberState};
 
-use crate::backend::api_responses::{Data, SearchMangaResponse};
-use crate::common::{ImageState, Manga};
-use crate::utils::{from_manga_response, set_status_style, set_tags_style};
+use crate::backend::manga_provider::{PopularManga, RecentlyAddedManga};
+use crate::common::ImageState;
 
 #[derive(Clone, Default, PartialEq, Eq)]
 pub enum CarrouselState {
@@ -19,13 +18,13 @@ pub enum CarrouselState {
 }
 
 #[derive(Clone)]
-pub struct CarrouselItem {
-    pub manga: Manga,
+pub struct CarrouselItemPopularManga {
+    pub manga: PopularManga,
     pub loader_state: ThrobberState,
 }
 
-impl CarrouselItem {
-    fn new(manga: Manga, loader_state: ThrobberState) -> Self {
+impl CarrouselItemPopularManga {
+    fn new(manga: PopularManga, loader_state: ThrobberState) -> Self {
         Self {
             manga,
             loader_state,
@@ -55,26 +54,19 @@ impl CarrouselItem {
 
         let [tags_area, description_area] = layout.areas(area);
 
-        Block::bordered()
-            .title(self.manga.title.clone())
-            .title_bottom(self.manga.author.name.clone())
-            .render(area, buf);
+        Block::bordered().title(self.manga.title.clone()).render(area, buf);
 
-        let mut tags: Vec<Span<'_>> = self.manga.tags.iter().map(|tag| set_tags_style(tag)).collect();
-
-        tags.push(set_status_style(&self.manga.status));
-        tags.push(set_tags_style(&self.manga.content_rating));
-
-        Paragraph::new(Line::from(tags)).wrap(Wrap { trim: true }).render(tags_area, buf);
+        Paragraph::new(Line::from_iter(self.manga.genres.clone()))
+            .wrap(Wrap { trim: true })
+            .render(tags_area, buf);
 
         Paragraph::new(self.manga.description.clone())
             .wrap(Wrap { trim: true })
             .render(description_area, buf);
     }
 
-    pub fn from_response(value: Data) -> Self {
-        let manga = from_manga_response(value);
-        Self::new(manga, ThrobberState::default())
+    pub fn from_response(value: PopularManga) -> Self {
+        Self::new(value, ThrobberState::default())
     }
 
     pub fn tick(&mut self) {
@@ -84,7 +76,7 @@ impl CarrouselItem {
 
 #[derive(Default, Clone)]
 pub struct PopularMangaCarrousel {
-    pub items: Vec<CarrouselItem>,
+    pub items: Vec<CarrouselItemPopularManga>,
     pub current_item_visible_index: usize,
     pub state: CarrouselState,
     pub img_area: Rect,
@@ -121,11 +113,11 @@ impl StatefulWidget for PopularMangaCarrousel {
 }
 
 impl PopularMangaCarrousel {
-    pub fn from_response(response: SearchMangaResponse, can_display_images: bool) -> Self {
-        let mut items: Vec<CarrouselItem> = vec![];
+    pub fn from_response(response: Vec<PopularManga>, can_display_images: bool) -> Self {
+        let mut items: Vec<CarrouselItemPopularManga> = vec![];
 
-        for manga in response.data {
-            items.push(CarrouselItem::from_response(manga))
+        for manga in response {
+            items.push(CarrouselItemPopularManga::from_response(manga))
         }
 
         let img_area = Rect::default();
@@ -159,7 +151,7 @@ impl PopularMangaCarrousel {
         }
     }
 
-    pub fn get_current_item(&self) -> Option<&CarrouselItem> {
+    pub fn get_current_item(&self) -> Option<&CarrouselItemPopularManga> {
         if self.state == CarrouselState::Displaying { self.items.get(self.current_item_visible_index) } else { None }
     }
 
@@ -169,8 +161,38 @@ impl PopularMangaCarrousel {
 }
 
 #[derive(Clone)]
+pub struct CarrouselItemRecentlyAddedManga {
+    pub manga: RecentlyAddedManga,
+    pub loader_state: ThrobberState,
+}
+
+impl CarrouselItemRecentlyAddedManga {
+    fn render_cover(&mut self, area: Rect, buf: &mut Buffer, state: &mut ImageState) {
+        match state.get_image_state(&self.manga.id) {
+            Some(image_state) => {
+                let cover = Image::new(image_state.as_ref());
+                Widget::render(cover, area, buf);
+            },
+            None => {
+                let loader = Throbber::default()
+                    .label("Loading cover")
+                    .style(Style::default().fg(Color::Yellow))
+                    .throbber_set(throbber_widgets_tui::BRAILLE_SIX)
+                    .use_type(throbber_widgets_tui::WhichUse::Spin);
+
+                StatefulWidget::render(loader, area, buf, &mut self.loader_state);
+            },
+        };
+    }
+
+    pub fn tick(&mut self) {
+        self.loader_state.calc_next();
+    }
+}
+
+#[derive(Clone)]
 pub struct RecentlyAddedCarrousel {
-    pub items: Vec<CarrouselItem>,
+    pub items: Vec<CarrouselItemRecentlyAddedManga>,
     pub selected_item_index: usize,
     pub amount_items_per_page: usize,
     pub state: CarrouselState,
@@ -268,7 +290,7 @@ impl RecentlyAddedCarrousel {
         }
     }
 
-    pub fn get_current_selected_manga(&self) -> Option<&CarrouselItem> {
+    pub fn get_current_selected_manga(&self) -> Option<&CarrouselItemRecentlyAddedManga> {
         if self.state == CarrouselState::Displaying { self.items.get(self.selected_item_index) } else { None }
     }
 
@@ -276,11 +298,14 @@ impl RecentlyAddedCarrousel {
         self.items.iter_mut().for_each(|item| item.tick());
     }
 
-    pub fn from_response(response: SearchMangaResponse, can_display_images: bool) -> Self {
-        let mut items: Vec<CarrouselItem> = vec![];
+    pub fn from_response(response: Vec<RecentlyAddedManga>, can_display_images: bool) -> Self {
+        let mut items: Vec<CarrouselItemRecentlyAddedManga> = vec![];
 
-        for manga in response.data {
-            items.push(CarrouselItem::from_response(manga))
+        for mangas in response {
+            items.push(CarrouselItemRecentlyAddedManga {
+                manga: mangas,
+                loader_state: ThrobberState::default(),
+            });
         }
 
         Self {
