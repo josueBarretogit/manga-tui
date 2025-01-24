@@ -6,7 +6,6 @@ use crate::backend::manga_provider::mangadex::ApiClient;
 use crate::backend::tui::Events;
 use crate::utils::from_manga_response;
 use crate::view::pages::feed::FeedEvents;
-use crate::view::widgets::search::MangaItem;
 
 pub async fn search_manga<T: ApiClient>(
     api_client: T,
@@ -20,7 +19,7 @@ pub async fn search_manga<T: ApiClient>(
         Ok(res) => {
             if let Ok(manga) = res.json::<OneMangaResponse>().await {
                 let manga_found = from_manga_response(manga.data);
-                sender.send(Events::GoToMangaPage(MangaItem::new(manga_found))).ok();
+                //sender.send(Events::GoToMangaPage(MangaItem::new(manga_found))).ok();
             }
         },
         Err(e) => {

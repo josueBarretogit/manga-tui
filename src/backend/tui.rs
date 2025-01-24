@@ -10,12 +10,11 @@ use tokio::sync::mpsc::UnboundedSender;
 use tokio::task::JoinHandle;
 
 use super::manga_provider::mangadex::ApiClient;
-use super::manga_provider::HomePageMangaProvider;
+use super::manga_provider::{HomePageMangaProvider, Manga, MangaPageProvider};
 use super::tracker::MangaTracker;
 use crate::common::{Artist, Author};
 use crate::view::app::{App, AppState, MangaToRead};
 use crate::view::pages::reader::{ChapterToRead, SearchChapter, SearchMangaPanel};
-use crate::view::widgets::search::MangaItem;
 use crate::view::widgets::Component;
 
 pub enum Action {
@@ -28,7 +27,7 @@ pub enum Events {
     Tick,
     Key(KeyEvent),
     Mouse(MouseEvent),
-    GoToMangaPage(MangaItem),
+    GoToMangaPage(Manga),
     GoBackMangaPage,
     GoToHome,
     GoSearchPage,
@@ -96,7 +95,7 @@ fn get_picker() -> Option<Picker> {
 ///Start app's main loop
 pub async fn run_app(
     mut terminal: Terminal<impl Backend>,
-    api_client: impl ApiClient + SearchChapter + SearchMangaPanel + HomePageMangaProvider,
+    api_client: impl ApiClient + SearchChapter + SearchMangaPanel + HomePageMangaProvider + MangaPageProvider,
     manga_tracker: Option<impl MangaTracker>,
 ) -> Result<(), Box<dyn Error>> {
     let mut app = App::new(api_client, manga_tracker, get_picker());

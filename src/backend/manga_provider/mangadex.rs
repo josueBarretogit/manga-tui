@@ -14,7 +14,8 @@ use once_cell::sync::OnceCell;
 use reqwest::{Client, Response, Url};
 
 use super::{
-    Genres, HomePageMangaProvider, MangaPageProvider, MangaStatus, PopularManga, Rating, RecentlyAddedManga, SearchMangaCover,
+    Chapter, DecodeBytesToImage, Genres, GetRawImage, HomePageMangaProvider, MangaPageProvider, MangaStatus, Pagination,
+    PopularManga, Rating, RecentlyAddedManga, SearchMangaById,
 };
 use crate::backend::database::ChapterBookmarked;
 use crate::backend::filter::{Filters, IntoParam, Languages};
@@ -97,35 +98,19 @@ pub struct MangadexClient {
     image_quality: ImageQuality,
 }
 
-impl SearchMangaCover for MangadexClient {
-    async fn get_manga_cover(&self, url: &str) -> Result<image::DynamicImage, Box<dyn Error>> {
+impl GetRawImage for MangadexClient {
+    async fn get_raw_image(&self, url: &str) -> Result<Bytes, Box<dyn Error>> {
         let response = self.client.get(url).send().await?;
 
         if response.status() != StatusCode::OK {
-            return Err("failed to get manga cover".into());
+            return Err(format!("Could not get image with url : {url}").into());
         }
 
-        let image_bytes = response.bytes().await?;
-
-        let image = ImageReader::new(Cursor::new(image_bytes)).with_guessed_format()?.decode()?;
-
-        Ok(image)
-    }
-
-    async fn get_manga_cover_lower_quality(&self, url: &str) -> Result<image::DynamicImage, Box<dyn Error>> {
-        let response = self.client.get(url).send().await?;
-
-        if response.status() != StatusCode::OK {
-            return Err("failed to get manga cover".into());
-        }
-
-        let image_bytes = response.bytes().await?;
-
-        let image = ImageReader::new(Cursor::new(image_bytes)).with_guessed_format()?.decode()?;
-
-        Ok(image)
+        Ok(response.bytes().await?)
     }
 }
+
+impl DecodeBytesToImage for MangadexClient {}
 
 impl HomePageMangaProvider for MangadexClient {
     async fn get_recently_added_mangas(&self) -> Result<Vec<RecentlyAddedManga>, Box<dyn Error>> {
@@ -235,12 +220,12 @@ impl HomePageMangaProvider for MangadexClient {
     }
 }
 
-impl MangaPageProvider for MangadexClient {
+impl SearchMangaById for MangadexClient {
     async fn get_manga_by_id(&self, manga_id: &str) -> Result<super::Manga, Box<dyn Error>> {
         let response = self
             .client
             .get(format!("{}/manga/{manga_id}", self.api_url_base))
-            .query(&[("includes[]", "covert_art"), ("includes[]", "author"), ("includes[]", "artist")])
+            .query(&[("includes[]", "cover_art"), ("includes[]", "author"), ("includes[]", "artist")])
             .send()
             .await?;
 
@@ -277,7 +262,7 @@ impl MangaPageProvider for MangadexClient {
         let mut cover_img_url: Option<String> = Option::default();
         let mut cover_img_url_lower_quality: Option<String> = Option::default();
 
-        for rel in &manga.data.attributes.relationships {
+        for rel in &manga.data.relationships {
             if let Some(attributes) = &rel.attributes {
                 match rel.type_field.as_str() {
                     "cover_art" => {
@@ -313,6 +298,91 @@ impl MangaPageProvider for MangadexClient {
             artist: super::Artist::default(),
             author: super::Author::default(),
         })
+    }
+}
+
+impl MangaPageProvider for MangadexClient {
+    async fn get_chapters(
+        &self,
+        manga_id: &str,
+        filters: super::ChapterFilters,
+        pagination: super::Pagination,
+    ) -> Result<(Vec<super::Chapter>, super::Pagination), Box<dyn Error>> {
+        //let endpoint = format!(
+        //    "{}/manga/{manga_id}/feed?limit={ITEMS_PER_PAGE_CHAPTERS}&offset={page}&{order}&translatedLanguage[]={language}&
+        // includes[]=scanlation_group&includeExternalUrl=0&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&
+        // contentRating[]=pornographic",    self.api_url_base,
+        //);
+
+        let endpoint = format!("{}/manga/{manga_id}/feed", self.api_url_base);
+
+        let offset = (pagination.current_page.saturating_sub(1)) * pagination.items_per_page;
+
+        let order = match filters.order {
+            super::ChapterOrderBy::Ascending => "asc",
+            super::ChapterOrderBy::Descending => "desc",
+        };
+
+        let response = self
+            .client
+            .get(endpoint)
+            .query(&[
+                ("includes[]", "scanlation_group"),
+                ("limit", &pagination.items_per_page.to_string()),
+                ("offset", &offset.to_string()),
+                ("order", &order),
+                ("contentRating[]", "safe"),
+                ("contentRating[]", "suggestive"),
+                ("contentRating[]", "erotica"),
+                ("contentRating[]", "pornographic"),
+                ("order[volume]", order),
+                ("order[chapter]", order),
+                ("translatedLanguage[]", filters.language.as_iso_code()),
+            ])
+            .send()
+            .await?;
+
+        if response.status() != StatusCode::OK {
+            return Err(format!("Could not get chapters for manga with id : {manga_id}").into());
+        }
+
+        let response: ChapterResponse = response.json().await?;
+
+        let new_pagination = Pagination::new(pagination.current_page, response.total as u32, 16);
+
+        let response: Vec<super::Chapter> = response
+            .data
+            .into_iter()
+            .map(|chapter| {
+                let id = chapter.id;
+                let manga_id = manga_id.to_string();
+                let title = chapter.attributes.title.unwrap_or("No title".to_string());
+                let language = Languages::try_from_iso_code(&chapter.attributes.translated_language).unwrap_or_default();
+                let chapter_number = chapter.attributes.chapter.unwrap_or("0".to_string());
+                let volume_number = chapter.attributes.volume;
+
+                let scanlator = chapter
+                    .relationships
+                    .iter()
+                    .find(|rel| rel.type_field == "scanlation_group")
+                    .map(|rel| rel.attributes.as_ref().unwrap().name.to_string());
+
+                let publication_date = chapter.attributes.readable_at;
+
+                Chapter {
+                    id,
+                    manga_id,
+                    title,
+                    language,
+                    chapter_number,
+                    volume_number,
+                    scanlator,
+                    publication_date,
+                }
+            })
+            .collect();
+
+        Ok((response, new_pagination))
     }
 }
 

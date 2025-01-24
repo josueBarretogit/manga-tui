@@ -145,7 +145,7 @@ where
             SearchPageActions::GoToMangaPage => {
                 let manga_selected = self.get_current_manga_selected();
                 if let Some(manga) = manga_selected {
-                    self.global_event_tx.as_ref().unwrap().send(Events::GoToMangaPage(manga.clone())).ok();
+                    //self.global_event_tx.as_ref().unwrap().send(Events::GoToMangaPage(manga.clone())).ok();
                 }
             },
             SearchPageActions::PlanToRead => self.plan_to_read(),

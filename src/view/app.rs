@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use ::crossterm::event::KeyCode;
 use crossterm::event::{KeyEvent, KeyModifiers};
 use ratatui::buffer::Buffer;
@@ -15,7 +17,7 @@ use self::search::{InputMode, SearchPage};
 use super::widgets::search::MangaItem;
 use super::widgets::Component;
 use crate::backend::manga_provider::mangadex::ApiClient;
-use crate::backend::manga_provider::HomePageMangaProvider;
+use crate::backend::manga_provider::{HomePageMangaProvider, Manga, MangaPageProvider};
 use crate::backend::tracker::MangaTracker;
 use crate::backend::tui::{Action, Events};
 use crate::config::MangaTuiConfig;
@@ -37,7 +39,7 @@ pub struct MangaToRead {
 
 pub struct App<T, S>
 where
-    T: ApiClient + SearchChapter + SearchMangaPanel + HomePageMangaProvider + HomePageMangaProvider,
+    T: ApiClient + SearchChapter + SearchMangaPanel + HomePageMangaProvider + MangaPageProvider,
     S: MangaTracker,
 {
     pub global_action_tx: UnboundedSender<Action>,
@@ -46,7 +48,7 @@ where
     pub global_event_rx: UnboundedReceiver<Events>,
     pub state: AppState,
     pub current_tab: SelectedPage,
-    pub manga_page: Option<MangaPage<S>>,
+    pub manga_page: Option<MangaPage<T, S>>,
     pub manga_reader_page: Option<MangaReader<T, S>>,
     pub search_page: SearchPage<T, S>,
     pub home_page: Home<T>,
@@ -61,7 +63,7 @@ where
 
 impl<T, S> Component for App<T, S>
 where
-    T: ApiClient + SearchChapter + SearchMangaPanel + HomePageMangaProvider,
+    T: ApiClient + SearchChapter + SearchMangaPanel + HomePageMangaProvider + MangaPageProvider,
     S: MangaTracker,
 {
     type Actions = Action;
@@ -122,12 +124,14 @@ where
     fn clean_up(&mut self) {}
 }
 
-impl<T: ApiClient + SearchChapter + SearchMangaPanel + HomePageMangaProvider, S: MangaTracker> App<T, S> {
+impl<T: ApiClient + SearchChapter + SearchMangaPanel + HomePageMangaProvider + MangaPageProvider, S: MangaTracker> App<T, S> {
     pub fn new(api_client: T, manga_tracker: Option<S>, picker: Option<Picker>) -> Self {
         let (global_action_tx, global_action_rx) = unbounded_channel::<Action>();
         let (global_event_tx, global_event_rx) = unbounded_channel::<Events>();
 
         global_event_tx.send(Events::GoToHome).ok();
+
+        let provider = Arc::new(api_client.clone());
 
         App {
             picker,
@@ -137,7 +141,7 @@ impl<T: ApiClient + SearchChapter + SearchMangaPanel + HomePageMangaProvider, S:
             feed_page: Feed::new()
                 .with_global_sender(global_event_tx.clone())
                 .with_api_client(api_client.clone()),
-            home_page: Home::new(picker, api_client.clone()).with_global_sender(global_event_tx.clone()),
+            home_page: Home::new(picker, Arc::clone(&provider)).with_global_sender(global_event_tx.clone()),
             manga_page: None,
             manga_reader_page: None,
             global_action_tx,
@@ -257,7 +261,7 @@ impl<T: ApiClient + SearchChapter + SearchMangaPanel + HomePageMangaProvider, S:
         self.current_tab = SelectedPage::Search;
     }
 
-    fn go_to_manga_page(&mut self, manga: MangaItem) {
+    fn go_to_manga_page(&mut self, manga: Manga) {
         if self.manga_reader_page.is_some() {
             self.manga_reader_page.as_mut().unwrap().clean_up();
             self.manga_reader_page = None;
@@ -269,12 +273,12 @@ impl<T: ApiClient + SearchChapter + SearchMangaPanel + HomePageMangaProvider, S:
 
         let config = MangaTuiConfig::get();
 
-        //let manga_page = MangaPage::new(manga.manga, self.picker)
-        //    .with_global_sender(self.global_event_tx.clone())
-        //    .auto_bookmark(config.auto_bookmark)
-        //    .with_manga_tracker(self.manga_tracker.clone());
-        //
-        //self.manga_page = Some(manga_page);
+        let manga_page = MangaPage::new(manga, self.picker, self.api_client.clone().into())
+            .with_global_sender(self.global_event_tx.clone())
+            .auto_bookmark(config.auto_bookmark)
+            .with_manga_tracker(self.manga_tracker.clone());
+
+        self.manga_page = Some(manga_page);
     }
 
     fn go_to_read_chapter(&mut self, chapter_to_read: ChapterToRead, manga_to_read: MangaToRead, manga_tracker: Option<S>) {
@@ -389,12 +393,12 @@ impl<T: ApiClient + SearchChapter + SearchMangaPanel + HomePageMangaProvider, S:
         };
     }
 
-    #[cfg(test)]
-    fn with_manga_page(mut self) -> Self {
-        self.manga_page = Some(MangaPage::new(crate::backend::manga_provider::Manga::default(), self.picker.as_ref().cloned()));
-
-        self
-    }
+    //#[cfg(test)]
+    //fn with_manga_page(mut self) -> Self {
+    //    self.manga_page = Some(MangaPage::new(crate::backend::manga_provider::Manga::default(), self.picker.as_ref().cloned()));
+    //
+    //    self
+    //}
 }
 
 #[cfg(test)]
@@ -410,8 +414,8 @@ mod tests {
     //use crate::global::test_utils::TrackerTest;
     //use crate::view::widgets::press_key;
     //
-    //fn tick<T: ApiClient + SearchChapter + SearchMangaPanel + HomePageMangaProvider, S: MangaTracker>(app: &mut App<T, S>) {
-    //    let max_amoun_ticks = 10;
+    //fn tick<T: ApiClient + SearchChapter + SearchMangaPanel + HomePageMangaProvider + MangaPageProvider, S: MangaTracker>(app:
+    // &mut App<T, S>) {    let max_amoun_ticks = 10;
     //    let mut count = 0;
     //
     //    loop {
