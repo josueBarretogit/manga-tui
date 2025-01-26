@@ -1,4 +1,5 @@
 use std::cmp::Ordering;
+use std::sync::Arc;
 
 use crossterm::event::{KeyCode, KeyEvent};
 use manga_tui::SortedVec;
@@ -20,13 +21,12 @@ use crate::backend::database::{
 };
 use crate::backend::error_log::{write_to_error_log, ErrorType};
 use crate::backend::manga_provider::mangadex::api_responses::AggregateChapterResponse;
-use crate::backend::manga_provider::{ChapterToRead, MangaPanel, SearchChapterById, SearchMangaPanel};
+use crate::backend::manga_provider::{ChapterToRead, MangaPanel, ReaderPageProvider};
 use crate::backend::tracker::{track_manga, MangaTracker};
 use crate::backend::tui::Events;
 use crate::common::format_error_message_tracking_reading_history;
 use crate::config::MangaTuiConfig;
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
-use crate::view::tasks::reader::get_manga_panel;
 use crate::view::widgets::reader::{PageItemState, PagesItem, PagesList, PagesListState};
 use crate::view::widgets::Component;
 
@@ -256,7 +256,7 @@ impl ListOfChapters {
 
 pub struct MangaReader<T, S>
 where
-    T: SearchChapterById + SearchMangaPanel,
+    T: ReaderPageProvider,
     S: MangaTracker,
 {
     manga_title: String,
@@ -271,7 +271,7 @@ where
     image_tasks: JoinSet<()>,
     picker: Picker,
     search_next_chapter_loader: ThrobberState,
-    api_client: T,
+    api_client: Arc<T>,
     pub manga_tracker: Option<S>,
     pub auto_bookmark: bool,
     pub global_event_tx: Option<UnboundedSender<Events>>,
@@ -283,7 +283,7 @@ where
 
 impl<T, S> Component for MangaReader<T, S>
 where
-    T: SearchChapterById + SearchMangaPanel,
+    T: ReaderPageProvider,
     S: MangaTracker,
 {
     type Actions = MangaReaderActions;
@@ -368,10 +368,10 @@ where
 
 impl<T, S> MangaReader<T, S>
 where
-    T: SearchChapterById + SearchMangaPanel,
+    T: ReaderPageProvider,
     S: MangaTracker,
 {
-    pub fn new(chapter: ChapterToRead, manga_id: String, picker: Picker, api_client: T) -> Self {
+    pub fn new(chapter: ChapterToRead, manga_id: String, picker: Picker, api_client: Arc<T>) -> Self {
         let set: JoinSet<()> = JoinSet::new();
         let (local_action_tx, local_action_rx) = mpsc::unbounded_channel::<MangaReaderActions>();
         let (local_event_tx, local_event_rx) = mpsc::unbounded_channel::<MangaReaderEvents>();
@@ -539,9 +539,23 @@ where
             //NOTE:  This will need to become async atomic if this becomes an async function
             if item.state != PageItemState::Loading && item.state != PageItemState::FinishedLoad {
                 let tx = self.local_event_tx.clone();
-                let api_client = self.api_client.clone();
+                let api_client = Arc::clone(&self.api_client);
+                let url = url.clone();
 
-                self.image_tasks.spawn(get_manga_panel(api_client, url.clone(), tx, index));
+                self.image_tasks.spawn(async move {
+                    let response = api_client.search_manga_panel(url).await;
+
+                    match response {
+                        Ok(panel) => {
+                            let page = PageData { panel, index };
+                            tx.send(MangaReaderEvents::LoadPage(page)).ok();
+                        },
+                        Err(e) => {
+                            tx.send(MangaReaderEvents::FailedPage(index)).ok();
+                            write_to_error_log(ErrorType::Error(e));
+                        },
+                    }
+                });
 
                 item.state = PageItemState::Loading;
             }

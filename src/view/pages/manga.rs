@@ -24,9 +24,8 @@ use crate::backend::database::{
 use crate::backend::download::DownloadChapter;
 use crate::backend::error_log::{self, write_to_error_log, ErrorType};
 use crate::backend::manga_provider::mangadex::api_responses::{ChapterResponse, MangaStatisticsResponse};
-use crate::backend::manga_provider::mangadex::ITEMS_PER_PAGE_CHAPTERS;
 use crate::backend::manga_provider::{
-    Chapter, ChapterFilters, ChapterOrderBy, ChapterToRead, FetchChapterBookmarked, GetChaptersResponse, Languages, Manga,
+    ChapterFilters, ChapterOrderBy, ChapterToRead, FetchChapterBookmarked, GetChaptersResponse, Languages, Manga,
     MangaPageProvider, Pagination,
 };
 use crate::backend::tracker::{track_manga, MangaTracker};
@@ -35,9 +34,8 @@ use crate::backend::AppDirectories;
 use crate::common::format_error_message_tracking_reading_history;
 use crate::config::MangaTuiConfig;
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
-use crate::utils::{set_status_style, set_tags_style};
 use crate::view::app::MangaToRead;
-use crate::view::tasks::manga::{download_all_chapters, download_chapter_task, ChapterArgs, DownloadAllChapters};
+use crate::view::tasks::manga::{ChapterArgs, DownloadAllChapters};
 use crate::view::widgets::manga::{
     ChapterItem, ChaptersListWidget, DownloadAllChaptersState, DownloadAllChaptersWidget, DownloadPhase,
 };

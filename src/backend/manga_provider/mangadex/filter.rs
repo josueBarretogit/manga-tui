@@ -9,10 +9,11 @@ use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
 
+use super::{API_URL_BASE, COVER_IMG_URL_BASE};
 use crate::backend::manga_provider::mangadex::api_responses::authors::AuthorsResponse;
 use crate::backend::manga_provider::mangadex::api_responses::tags::TagsResponse;
-use crate::backend::manga_provider::mangadex::{ApiClient, MangadexClient};
-use crate::backend::manga_provider::Languages;
+use crate::backend::manga_provider::mangadex::MangadexClient;
+use crate::backend::manga_provider::{Artist, Author, EventHandler as FiltersEventHandler, FiltersHandler, Languages};
 use crate::backend::tui::Events;
 
 pub trait IntoParam: Debug {
@@ -253,11 +254,11 @@ impl SendEventOnSuccess for AuthorState {
 }
 
 impl<T: SendEventOnSuccess> FilterListDynamic<T> {
-    pub fn search_items(&self, tx: UnboundedSender<FilterEvents>, api_client: impl ApiClient) {
+    pub fn search_items(&self, tx: UnboundedSender<FilterEvents>, client: MangadexClient) {
         let name_to_search = SearchTerm::trimmed_lowercased(self.search_bar.value());
         if let Some(search_term) = name_to_search {
             tokio::spawn(async move {
-                let response = api_client.get_authors(search_term).await;
+                let response = client.get_authors(search_term).await;
                 if let Ok(res) = response {
                     tx.send(T::send(res.json().await.ok())).ok();
                 }
@@ -431,7 +432,7 @@ impl TagsState {
 }
 
 #[derive(Debug)]
-pub struct FilterState {
+pub struct MangadexFilterProvider {
     pub is_open: bool,
     pub id_filter: usize,
     pub filters: Filters,
@@ -444,11 +445,42 @@ pub struct FilterState {
     pub artist_state: FilterListDynamic<ArtistState>,
     pub lang_state: FilterList<LanguageState>,
     pub is_typing: bool,
+    api_client: MangadexClient,
     tx: UnboundedSender<FilterEvents>,
     rx: UnboundedReceiver<FilterEvents>,
 }
 
-impl FilterState {
+impl FiltersEventHandler for MangadexFilterProvider {
+    fn handle_events(&mut self, events: Events) {
+        match events {
+            Events::Key(key_event) => self.handle_key_events(key_event),
+            Events::Tick => self.tick(),
+            _ => {},
+        }
+    }
+}
+
+impl FiltersHandler for MangadexFilterProvider {
+    type InnerState = Filters;
+
+    fn toggle(&mut self) {
+        self.is_open = !self.is_open;
+    }
+
+    fn is_typing(&self) -> bool {
+        self.is_typing
+    }
+
+    fn is_open(&self) -> bool {
+        self.is_open
+    }
+
+    fn get_state(&self) -> &Self::InnerState {
+        &self.filters
+    }
+}
+
+impl MangadexFilterProvider {
     pub fn new() -> Self {
         let (tx, rx) = mpsc::unbounded_channel::<FilterEvents>();
         tx.send(FilterEvents::SearchTags).ok();
@@ -464,6 +496,7 @@ impl FilterState {
             author_state: FilterListDynamic::<AuthorState>::default(),
             artist_state: FilterListDynamic::<ArtistState>::default(),
             lang_state: FilterList::<LanguageState>::default(),
+            api_client: MangadexClient::new(API_URL_BASE.parse().unwrap(), COVER_IMG_URL_BASE.parse().unwrap()),
             is_typing: false,
             tx,
             rx,
@@ -491,10 +524,6 @@ impl FilterState {
         self.artist_state = FilterListDynamic::<ArtistState>::default();
     }
 
-    pub fn toggle(&mut self) {
-        self.is_open = !self.is_open;
-    }
-
     fn tick(&mut self) {
         if let Ok(event) = self.rx.try_recv() {
             match event {
@@ -508,8 +537,9 @@ impl FilterState {
 
     fn search_tags(&mut self) {
         let tx = self.tx.clone();
+        let client = self.api_client.clone();
         tokio::spawn(async move {
-            let response = MangadexClient::global().get_tags().await;
+            let response = client.get_tags().await;
             if let Ok(res) = response {
                 if let Ok(tags) = res.json().await {
                     tx.send(FilterEvents::LoadTags(tags)).ok();
@@ -525,20 +555,12 @@ impl FilterState {
     fn search(&mut self) {
         if let Some(filter) = FILTERS.get(self.id_filter) {
             let tx = self.tx.clone();
-            let api_client = MangadexClient::global().clone();
+            let client = self.api_client.clone();
             if *filter == MangaFilters::Authors {
-                self.author_state.search_items(tx, api_client);
+                self.author_state.search_items(tx, client);
             } else if *filter == MangaFilters::Artists {
-                self.artist_state.search_items(tx, api_client);
+                self.artist_state.search_items(tx, client);
             }
-        }
-    }
-
-    pub fn handle_events(&mut self, events: Events) {
-        match events {
-            Events::Key(key_event) => self.handle_key_events(key_event),
-            Events::Tick => self.tick(),
-            _ => {},
         }
     }
 
@@ -827,7 +849,7 @@ impl FilterState {
                     .iter()
                     .filter_map(|item| {
                         if item.is_selected {
-                            return Some(Author::new(item.id.to_string()));
+                            return Some(AuthorFilterState::new(item.id.to_string()));
                         }
                         None
                     })
@@ -843,7 +865,7 @@ impl FilterState {
                     .iter()
                     .filter_map(|item| {
                         if item.is_selected {
-                            return Some(Artist::new(item.id.to_string()));
+                            return Some(ArtistFilterState::new(item.id.to_string()));
                         }
                         None
                     })
@@ -868,7 +890,7 @@ impl FilterState {
     }
 
     /// This function is called from manga page
-    pub fn set_author(&mut self, author: crate::common::Author) {
+    pub fn set_author(&mut self, author: Author) {
         self.filters.reset_author();
         self.filters.reset_artist();
         self.artist_state.items = None;
@@ -877,11 +899,11 @@ impl FilterState {
             is_selected: true,
             name: author.name,
         }]);
-        self.filters.authors.set_one_user(Author::new(author.id))
+        self.filters.authors.set_one_user(AuthorFilterState::new(author.id))
     }
 
     /// This function is called from manga page
-    pub fn set_artist(&mut self, artist: crate::common::Artist) {
+    pub fn set_artist(&mut self, artist: Artist) {
         self.filters.reset_author();
         self.filters.reset_artist();
 
@@ -891,7 +913,7 @@ impl FilterState {
             is_selected: true,
             name: artist.name,
         }]);
-        self.filters.artists.set_one_user(Artist::new(artist.id))
+        self.filters.artists.set_one_user(ArtistFilterState::new(artist.id))
     }
 }
 
@@ -1083,27 +1105,27 @@ impl IntoParam for Vec<MagazineDemographic> {
 }
 
 #[derive(Default, Clone, Debug)]
-pub struct Author(String);
+pub struct AuthorFilterState(String);
 
-impl Author {
+impl AuthorFilterState {
     pub fn new(id_author: String) -> Self {
-        Author(id_author)
+        AuthorFilterState(id_author)
     }
 }
 
 #[derive(Default, Clone, Debug)]
-pub struct Artist(String);
+pub struct ArtistFilterState(String);
 
-impl Artist {
+impl ArtistFilterState {
     pub fn new(id_artist: String) -> Self {
-        Artist(id_artist)
+        ArtistFilterState(id_artist)
     }
 }
 
 #[derive(Default, Clone, Debug)]
 pub struct User<T: Clone + Default>(pub Vec<T>);
 
-impl IntoParam for User<Author> {
+impl IntoParam for User<AuthorFilterState> {
     fn into_param(self) -> String {
         if self.0.is_empty() {
             return String::new();
@@ -1115,7 +1137,7 @@ impl IntoParam for User<Author> {
     }
 }
 
-impl IntoParam for User<Artist> {
+impl IntoParam for User<ArtistFilterState> {
     fn into_param(self) -> String {
         if self.0.is_empty() {
             return String::new();
@@ -1192,8 +1214,8 @@ pub struct Filters {
     pub sort_by: SortBy,
     pub tags: Tags,
     pub magazine_demographic: Vec<MagazineDemographic>,
-    pub authors: User<Author>,
-    pub artists: User<Artist>,
+    pub authors: User<AuthorFilterState>,
+    pub artists: User<ArtistFilterState>,
     pub languages: Vec<Languages>,
 }
 
@@ -1221,8 +1243,8 @@ impl Default for Filters {
             sort_by: SortBy::default(),
             tags: Tags(vec![]),
             magazine_demographic: vec![],
-            authors: User::<Author>::default(),
-            artists: User::<Artist>::default(),
+            authors: User::<AuthorFilterState>::default(),
+            artists: User::<ArtistFilterState>::default(),
             languages: vec![*Languages::get_preferred_lang()],
         }
     }
@@ -1253,11 +1275,11 @@ impl Filters {
         self.magazine_demographic = magazine_demographics;
     }
 
-    pub fn set_authors(&mut self, author_ids: Vec<Author>) {
+    pub fn set_authors(&mut self, author_ids: Vec<AuthorFilterState>) {
         self.authors.0 = author_ids;
     }
 
-    pub fn set_artists(&mut self, artist_ids: Vec<Artist>) {
+    pub fn set_artists(&mut self, artist_ids: Vec<ArtistFilterState>) {
         self.artists.0 = artist_ids;
     }
 

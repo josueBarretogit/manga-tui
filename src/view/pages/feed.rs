@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent, MouseEventKind};
 use manga_tui::SearchTerm;
 use ratatui::buffer::Buffer;
@@ -14,12 +16,10 @@ use tui_input::Input;
 
 use crate::backend::database::{get_history, GetHistoryArgs, MangaHistoryResponse, MangaHistoryType, DBCONN};
 use crate::backend::error_log::{write_to_error_log, ErrorType};
-use crate::backend::manga_provider::mangadex::api_responses::ChapterResponse;
-use crate::backend::manga_provider::mangadex::ApiClient;
+use crate::backend::manga_provider::{FeedPageProvider, LatestChapter};
 use crate::backend::tui::Events;
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
 use crate::utils::render_search_bar;
-use crate::view::tasks::feed::{search_latest_chapters, search_manga};
 use crate::view::widgets::feed::{FeedTabs, HistoryWidget};
 use crate::view::widgets::Component;
 
@@ -49,13 +49,15 @@ pub enum FeedEvents {
     SearchingFinalized,
     SearchHistory,
     SearchRecentChapters,
-    LoadRecentChapters(String, Option<ChapterResponse>),
+    LoadLatestChapters(String, Option<Vec<LatestChapter>>),
     ErrorSearchingMangaData,
-    /// page , (history_data, total_results)
     LoadHistory(Option<MangaHistoryResponse>),
 }
 
-pub struct Feed<T: ApiClient> {
+pub struct Feed<T>
+where
+    T: FeedPageProvider,
+{
     pub tabs: FeedTabs,
     state: FeedState,
     pub history: Option<HistoryWidget>,
@@ -69,10 +71,13 @@ pub struct Feed<T: ApiClient> {
     is_typing: bool,
     items_per_page: u32,
     tasks: JoinSet<()>,
-    api_client: Option<T>,
+    manga_provider: Option<Arc<T>>,
 }
 
-impl<T: ApiClient> Feed<T> {
+impl<T> Feed<T>
+where
+    T: FeedPageProvider,
+{
     pub fn new() -> Self {
         let (local_action_tx, local_action_rx) = mpsc::unbounded_channel::<FeedActions>();
         let (local_event_tx, local_event_rx) = mpsc::unbounded_channel::<FeedEvents>();
@@ -90,7 +95,7 @@ impl<T: ApiClient> Feed<T> {
             search_bar: Input::default(),
             items_per_page: 5,
             is_typing: false,
-            api_client: None,
+            manga_provider: None,
         }
     }
 
@@ -103,8 +108,8 @@ impl<T: ApiClient> Feed<T> {
         self
     }
 
-    pub fn with_api_client(mut self, api_client: T) -> Self {
-        self.api_client = Some(api_client);
+    pub fn with_api_client(mut self, api_client: Arc<T>) -> Self {
+        self.manga_provider = Some(api_client);
         self
     }
 
@@ -250,14 +255,14 @@ impl<T: ApiClient> Feed<T> {
                 FeedEvents::SearchHistory => self.search_history(),
                 FeedEvents::LoadHistory(maybe_history) => self.load_history(maybe_history),
                 FeedEvents::SearchRecentChapters => self.search_latest_chapters(),
-                FeedEvents::LoadRecentChapters(manga_id, maybe_chapters) => {
+                FeedEvents::LoadLatestChapters(manga_id, maybe_chapters) => {
                     self.load_recent_chapters(manga_id, maybe_chapters);
                 },
             }
         }
     }
 
-    fn load_recent_chapters(&mut self, manga_id: String, maybe_history: Option<ChapterResponse>) {
+    fn load_recent_chapters(&mut self, manga_id: String, maybe_history: Option<Vec<LatestChapter>>) {
         if let Some(chapters_response) = maybe_history {
             if let Some(history) = self.history.as_mut() {
                 history.set_chapter(manga_id, chapters_response);
@@ -270,8 +275,19 @@ impl<T: ApiClient> Feed<T> {
             for manga in history.mangas.clone() {
                 let manga_id = manga.id;
                 let sender = self.local_event_tx.clone();
-                let api_client = self.api_client.as_ref().cloned().unwrap();
-                self.tasks.spawn(search_latest_chapters(api_client, manga_id, sender));
+                let client = self.manga_provider.as_ref().cloned().unwrap();
+                self.tasks.spawn(async move {
+                    let response = client.get_latest_chapters(&manga_id).await;
+                    match response {
+                        Ok(res) => {
+                            sender.send(FeedEvents::LoadLatestChapters(manga_id, Some(res))).ok();
+                        },
+                        Err(e) => {
+                            write_to_error_log(e.into());
+                            sender.send(FeedEvents::LoadLatestChapters(manga_id, None)).ok();
+                        },
+                    }
+                });
             }
         }
     }
@@ -381,9 +397,20 @@ impl<T: ApiClient> Feed<T> {
 
                 self.loading_state = Some(ThrobberState::default());
 
-                let api_client = self.api_client.as_ref().cloned().unwrap();
+                let client = self.manga_provider.as_ref().cloned().unwrap();
 
-                self.tasks.spawn(search_manga(api_client, manga_id, tx, local_tx));
+                self.tasks.spawn(async move {
+                    let response = client.get_manga_by_id(&manga_id).await;
+                    match response {
+                        Ok(res) => {
+                            tx.send(Events::GoToMangaPage(res)).ok();
+                        },
+                        Err(e) => {
+                            write_to_error_log(e.into());
+                            local_tx.send(FeedEvents::ErrorSearchingMangaData).ok();
+                        },
+                    }
+                });
             }
         }
     }
@@ -420,7 +447,10 @@ impl<T: ApiClient> Feed<T> {
     }
 }
 
-impl<T: ApiClient> Component for Feed<T> {
+impl<T> Component for Feed<T>
+where
+    T: FeedPageProvider,
+{
     type Actions = FeedActions;
 
     fn render(&mut self, area: Rect, frame: &mut Frame<'_>) {

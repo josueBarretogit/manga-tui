@@ -7,12 +7,17 @@ use ratatui::Frame;
 
 use super::filter::*;
 use super::StatefulWidgetFrame;
-use crate::global::CURRENT_LIST_ITEM_STYLE;
+use crate::backend::manga_provider::FiltersWidget;
+use crate::global::{CURRENT_LIST_ITEM_STYLE, INSTRUCTIONS_STYLE};
 use crate::utils::{centered_rect, render_search_bar, set_filter_tags_style};
 
-pub struct FilterWidget<'a> {
-    pub block: Option<Block<'a>>,
+#[derive(Clone)]
+pub struct MangadexFilterWidget {
     pub _style: Style,
+}
+
+impl FiltersWidget for MangadexFilterWidget {
+    type FilterState = MangadexFilterProvider;
 }
 
 impl From<MangaFilters> for Line<'_> {
@@ -49,8 +54,8 @@ impl From<TagListItem> for ListItem<'_> {
     }
 }
 
-impl<'a> StatefulWidgetFrame for FilterWidget<'a> {
-    type State = FilterState;
+impl StatefulWidgetFrame for MangadexFilterWidget {
+    type State = MangadexFilterProvider;
 
     fn render(&mut self, area: Rect, frame: &mut Frame<'_>, state: &mut Self::State) {
         let buf = frame.buffer_mut();
@@ -58,9 +63,14 @@ impl<'a> StatefulWidgetFrame for FilterWidget<'a> {
 
         Clear.render(popup_area, buf);
 
-        if let Some(block) = self.block.as_ref() {
-            block.render(popup_area, buf);
-        }
+        let filter_instructions = Line::from(vec![
+            "Close ".into(),
+            Span::raw("<f>").style(*INSTRUCTIONS_STYLE),
+            " Reset filters ".into(),
+            Span::raw("<r>").style(*INSTRUCTIONS_STYLE),
+        ]);
+
+        Block::bordered().title(filter_instructions).render(popup_area, buf);
 
         let [tabs_area, current_filter_area] = Layout::vertical([Constraint::Percentage(20), Constraint::Percentage(80)])
             .margin(2)
@@ -189,20 +199,14 @@ impl<'a> StatefulWidgetFrame for FilterWidget<'a> {
     }
 }
 
-impl<'a> FilterWidget<'a> {
+impl MangadexFilterWidget {
     pub fn new() -> Self {
         Self {
-            block: None,
             _style: Style::default(),
         }
     }
 
-    pub fn block(mut self, block: Block<'a>) -> Self {
-        self.block = Some(block);
-        self
-    }
-
-    fn render_tags_list(&mut self, area: Rect, frame: &mut Frame<'_>, state: &mut FilterState) {
+    fn render_tags_list(&mut self, area: Rect, frame: &mut Frame<'_>, state: &mut MangadexFilterProvider) {
         let buf = frame.buffer_mut();
         let [list_area, input_area] = Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)]).areas(area);
 

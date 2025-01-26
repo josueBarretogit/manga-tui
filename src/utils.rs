@@ -5,10 +5,7 @@ use ratatui::widgets::{Block, Paragraph, Widget};
 use ratatui::Frame;
 use tui_input::Input;
 
-use crate::backend::manga_provider::mangadex::api_responses::Data;
 use crate::backend::manga_provider::mangadex::filter::{TagListItem, TagListItemState};
-use crate::backend::manga_provider::Languages;
-use crate::common::{Artist, Author, Manga};
 
 pub fn set_tags_style(tag: &str) -> Span<'_> {
     match tag.to_lowercase().as_str() {
@@ -37,87 +34,87 @@ pub fn set_filter_tags_style(tag: &TagListItem) -> Span<'_> {
     }
 }
 
-pub fn from_manga_response(value: Data) -> Manga {
-    let id = value.id;
-
-    // Todo! maybe there is a better way to do this
-    let title = value.attributes.title.en.unwrap_or(
-        value.attributes.title.ja_ro.unwrap_or(
-            value.attributes.title.ja.unwrap_or(
-                value.attributes.title.jp.unwrap_or(
-                    value
-                        .attributes
-                        .title
-                        .zh
-                        .unwrap_or(value.attributes.title.ko.unwrap_or(value.attributes.title.ko_ro.unwrap_or_default())),
-                ),
-            ),
-        ),
-    );
-
-    let description = match value.attributes.description {
-        Some(description) => description.en.unwrap_or("No description".to_string()),
-        None => String::from("No description"),
-    };
-
-    let content_rating = value.attributes.content_rating;
-
-    let tags: Vec<String> = value.attributes.tags.iter().map(|tag| tag.attributes.name.en.to_string()).collect();
-
-    let mut img_url: Option<String> = Option::default();
-    let mut author = Author::default();
-    let mut artist = Artist::default();
-
-    for rel in &value.relationships {
-        if let Some(attributes) = &rel.attributes {
-            match rel.type_field.as_str() {
-                "author" => {
-                    author = Author {
-                        id: rel.id.to_string(),
-                        name: attributes.name.as_ref().cloned().unwrap_or_default(),
-                    };
-                },
-                "artist" => {
-                    artist = Artist {
-                        id: rel.id.to_string(),
-                        name: attributes.name.as_ref().cloned().unwrap_or_default(),
-                    }
-                },
-                "cover_art" => img_url = Some(attributes.file_name.as_ref().unwrap().to_string()),
-                _ => {},
-            }
-        }
-    }
-
-    let languages: Vec<Languages> = value
-        .attributes
-        .available_translated_languages
-        .into_iter()
-        .flatten()
-        .flat_map(|lang| Languages::try_from_iso_code(&lang))
-        .collect();
-
-    let status = value.attributes.status;
-
-    let publication_demographic = value.attributes.publication_demographic.unwrap_or_default();
-
-    let created_at = value.attributes.created_at;
-
-    Manga {
-        id,
-        title,
-        description,
-        content_rating,
-        tags,
-        status,
-        img_url,
-        author,
-        artist,
-        publication_demographic,
-        available_languages: languages,
-        created_at,
-    }
-}
+//pub fn from_manga_response(value: Data) -> Manga {
+//    let id = value.id;
+//
+//    // Todo! maybe there is a better way to do this
+//    let title = value.attributes.title.en.unwrap_or(
+//        value.attributes.title.ja_ro.unwrap_or(
+//            value.attributes.title.ja.unwrap_or(
+//                value.attributes.title.jp.unwrap_or(
+//                    value
+//                        .attributes
+//                        .title
+//                        .zh
+//                        .unwrap_or(value.attributes.title.ko.unwrap_or(value.attributes.title.ko_ro.unwrap_or_default())),
+//                ),
+//            ),
+//        ),
+//    );
+//
+//    let description = match value.attributes.description {
+//        Some(description) => description.en.unwrap_or("No description".to_string()),
+//        None => String::from("No description"),
+//    };
+//
+//    let content_rating = value.attributes.content_rating;
+//
+//    let tags: Vec<String> = value.attributes.tags.iter().map(|tag| tag.attributes.name.en.to_string()).collect();
+//
+//    let mut img_url: Option<String> = Option::default();
+//    let mut author = Author::default();
+//    let mut artist = Artist::default();
+//
+//    for rel in &value.relationships {
+//        if let Some(attributes) = &rel.attributes {
+//            match rel.type_field.as_str() {
+//                "author" => {
+//                    author = Author {
+//                        id: rel.id.to_string(),
+//                        name: attributes.name.as_ref().cloned().unwrap_or_default(),
+//                    };
+//                },
+//                "artist" => {
+//                    artist = Artist {
+//                        id: rel.id.to_string(),
+//                        name: attributes.name.as_ref().cloned().unwrap_or_default(),
+//                    }
+//                },
+//                "cover_art" => img_url = Some(attributes.file_name.as_ref().unwrap().to_string()),
+//                _ => {},
+//            }
+//        }
+//    }
+//
+//    let languages: Vec<Languages> = value
+//        .attributes
+//        .available_translated_languages
+//        .into_iter()
+//        .flatten()
+//        .flat_map(|lang| Languages::try_from_iso_code(&lang))
+//        .collect();
+//
+//    let status = value.attributes.status;
+//
+//    let publication_demographic = value.attributes.publication_demographic.unwrap_or_default();
+//
+//    let created_at = value.attributes.created_at;
+//
+//    Manga {
+//        id,
+//        title,
+//        description,
+//        content_rating,
+//        tags,
+//        status,
+//        img_url,
+//        author,
+//        artist,
+//        publication_demographic,
+//        available_languages: languages,
+//        created_at,
+//    }
+//}
 
 pub fn display_dates_since_publication(day: i64) -> String {
     let month = (day as f64 / 30.44) as i64;

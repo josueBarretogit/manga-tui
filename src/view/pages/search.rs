@@ -22,7 +22,7 @@ use tui_widget_list::ListState;
 use crate::backend::database::{save_plan_to_read, MangaPlanToReadSave, DBCONN};
 use crate::backend::error_log::{write_to_error_log, ErrorType};
 use crate::backend::manga_provider::{
-    EventHandler as FilterEventHandler, FiltersProvider, GetMangasResponse, Manga, Pagination, SearchPageProvider,
+    EventHandler as FilterEventHandler, FiltersHandler, GetMangasResponse, Manga, Pagination, SearchPageProvider,
 };
 use crate::backend::tracker::{track_manga_plan_to_read, MangaTracker};
 use crate::backend::tui::Events;
@@ -92,7 +92,7 @@ where
     state: PageState,
     loader_state: ThrobberState,
     mangas_found_list: MangasFoundList,
-    filter_state: T::FiltersState,
+    filter_state: T::FiltersHandler,
     filter_widget: T::Widget,
     manga_added_to_plan_to_read: Option<String>,
     picker: Option<Picker>,
@@ -194,7 +194,7 @@ where
         picker: Option<Picker>,
         api_client: Arc<T>,
         manga_tracker: Option<S>,
-        filter_state: T::FiltersState,
+        filter_state: T::FiltersHandler,
         filter_widget: T::Widget,
     ) -> Self {
         let (action_tx, action_rx) = mpsc::unbounded_channel::<SearchPageActions>();
@@ -532,7 +532,7 @@ where
         let page = self.mangas_found_list.pagination.clone();
         let tx = self.local_event_tx.clone();
         let search_term = SearchTerm::trimmed_lowercased(self.search_bar.value());
-        let filters = self.filter_state.clone();
+        let filters = self.filter_state.get_state().clone();
         let client = Arc::clone(&self.manga_provider);
 
         self.tasks.spawn(async move {

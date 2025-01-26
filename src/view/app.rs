@@ -15,10 +15,7 @@ use self::manga::MangaPage;
 use self::reader::{ListOfChapters, MangaReader};
 use self::search::{InputMode, SearchPage};
 use super::widgets::Component;
-use crate::backend::manga_provider::mangadex::ApiClient;
-use crate::backend::manga_provider::{
-    ChapterToRead, HomePageMangaProvider, Manga, MangaPageProvider, MangaProvider, SearchChapterById, SearchMangaPanel,
-};
+use crate::backend::manga_provider::{ChapterToRead, Manga, MangaProvider};
 use crate::backend::tracker::MangaTracker;
 use crate::backend::tui::{Action, Events};
 use crate::config::MangaTuiConfig;
@@ -40,7 +37,7 @@ pub struct MangaToRead {
 
 pub struct App<T, S>
 where
-    T: ApiClient + MangaProvider,
+    T: MangaProvider,
     S: MangaTracker,
 {
     pub global_action_tx: UnboundedSender<Action>,
@@ -54,7 +51,7 @@ where
     pub search_page: SearchPage<T, S>,
     pub home_page: Home<T>,
     pub feed_page: Feed<T>,
-    api_client: T,
+    api_client: Arc<T>,
     manga_tracker: Option<S>,
     // The picker is what decides how big a image needs to be rendered depending on the user's
     // terminal font size and the graphics it supports
@@ -64,7 +61,7 @@ where
 
 impl<T, S> Component for App<T, S>
 where
-    T: ApiClient + MangaProvider,
+    T: MangaProvider,
     S: MangaTracker,
 {
     type Actions = Action;
@@ -96,12 +93,6 @@ where
             Events::GoToHome => self.go_to_home(),
             Events::GoFeedPage => self.go_feed_page(),
 
-            Events::GoSearchMangasAuthor(author) => {
-                self.go_search_page();
-            },
-            Events::GoSearchMangasArtist(artist) => {
-                self.go_search_page();
-            },
             Events::GoBackMangaPage => {
                 if self.current_tab == SelectedPage::ReaderTab && self.manga_reader_page.is_some() {
                     self.manga_reader_page.as_mut().unwrap().clean_up();
@@ -125,14 +116,14 @@ where
 
 impl<T, S> App<T, S>
 where
-    T: ApiClient + MangaProvider,
+    T: MangaProvider,
     S: MangaTracker,
 {
     pub fn new(
         api_client: T,
         manga_tracker: Option<S>,
         picker: Option<Picker>,
-        filters_state: T::FiltersState,
+        filters_state: T::FiltersHandler,
         filter_widget: T::Widget,
     ) -> Self {
         let (global_action_tx, global_action_rx) = unbounded_channel::<Action>();
@@ -140,7 +131,7 @@ where
 
         global_event_tx.send(Events::GoToHome).ok();
 
-        let provider = Arc::new(api_client.clone());
+        let provider = Arc::new(api_client);
 
         App {
             picker,
@@ -149,7 +140,7 @@ where
                 .with_global_sender(global_event_tx.clone()),
             feed_page: Feed::new()
                 .with_global_sender(global_event_tx.clone())
-                .with_api_client(api_client.clone()),
+                .with_api_client(Arc::clone(&provider)),
             home_page: Home::new(picker, Arc::clone(&provider)).with_global_sender(global_event_tx.clone()),
             manga_page: None,
             manga_reader_page: None,
@@ -159,7 +150,7 @@ where
             global_event_rx,
             manga_tracker,
             state: AppState::Runnning,
-            api_client,
+            api_client: Arc::clone(&provider),
         }
     }
 

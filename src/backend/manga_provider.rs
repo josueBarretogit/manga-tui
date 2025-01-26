@@ -296,6 +296,17 @@ pub struct Chapter {
     pub publication_date: String,
 }
 
+#[derive(Debug, Default, PartialEq, Clone)]
+pub struct LatestChapter {
+    pub id: String,
+    pub manga_id: String,
+    pub title: String,
+    pub language: Languages,
+    pub chapter_number: String,
+    pub volume_number: Option<String>,
+    pub publication_date: String,
+}
+
 #[derive(Debug, Default, PartialEq, Clone, Copy)]
 pub enum ChapterOrderBy {
     Ascending,
@@ -512,16 +523,19 @@ pub trait MangaPageProvider: DecodeBytesToImage + GoToReadChapter + FetchChapter
     //fn get_chapter_by_id(&self, chapter_id: &str) -> impl Future<Output = Result<Chapter, Box<dyn Error>>> + Send;
 }
 
-pub trait ReaderPageProvider: SearchMangaPanel + SearchChapterById {}
+pub trait ReaderPageProvider: SearchMangaPanel + SearchChapterById + Send + Sync {}
 
 pub trait EventHandler {
     fn handle_events(&mut self, events: Events);
 }
 
-pub trait FiltersProvider: EventHandler + Clone {
+pub trait FiltersHandler: EventHandler {
+    type InnerState: Send + Clone;
+
     fn toggle(&mut self);
     fn is_open(&self) -> bool;
     fn is_typing(&self) -> bool;
+    fn get_state(&self) -> &Self::InnerState;
 }
 
 pub trait FiltersWidget: StatefulWidgetFrame<State = Self::FilterState> {
@@ -535,17 +549,29 @@ pub struct GetMangasResponse {
 }
 
 pub trait SearchPageProvider: DecodeBytesToImage + SearchMangaById + Clone + Send + 'static + Sync {
-    type FiltersState: FiltersProvider + Send;
-    type Widget: FiltersWidget<FilterState = Self::FiltersState> + Clone;
+    /// The filter state that will be used in api calls, needs to be `Send` in order to do so
+    type InnerState: Send + Clone;
+    /// Struct which handles the key events of the user
+    type FiltersHandler: FiltersHandler<InnerState = Self::InnerState>;
+    /// The widget used to show the filters to the user
+    type Widget: FiltersWidget<FilterState = Self::FiltersHandler> + Clone;
+
     fn search_mangas(
         &self,
         search_term: Option<SearchTerm>,
-        filters: Self::FiltersState,
+        filters: Self::InnerState,
         pagination: Pagination,
     ) -> impl Future<Output = Result<GetMangasResponse, Box<dyn Error>>> + Send;
 }
 
-pub trait MangaProvider: HomePageMangaProvider + MangaPageProvider + SearchPageProvider + ReaderPageProvider + Send + Sync {}
+pub trait FeedPageProvider: SearchMangaById + Clone + Send + Sync {
+    fn get_latest_chapters(&self, manga_id: &str) -> impl Future<Output = Result<Vec<LatestChapter>, Box<dyn Error>>> + Send;
+}
+
+pub trait MangaProvider:
+    HomePageMangaProvider + MangaPageProvider + SearchPageProvider + ReaderPageProvider + FeedPageProvider + Send + Sync
+{
+}
 
 #[cfg(test)]
 pub mod mock {

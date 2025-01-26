@@ -6,8 +6,7 @@ use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph, StatefulWidget
 use tui_widget_list::PreRender;
 
 use crate::backend::database::MangaHistoryResponse;
-use crate::backend::manga_provider::mangadex::api_responses::{ChapterData, ChapterResponse};
-use crate::backend::manga_provider::Languages;
+use crate::backend::manga_provider::{Languages, LatestChapter};
 use crate::global::CURRENT_LIST_ITEM_STYLE;
 use crate::utils::display_dates_since_publication;
 
@@ -60,23 +59,22 @@ pub struct MangasRead {
     pub recent_chapters: Vec<RecentChapters>,
 }
 
-impl From<ChapterData> for RecentChapters {
-    fn from(value: ChapterData) -> Self {
+impl From<LatestChapter> for RecentChapters {
+    fn from(value: LatestChapter) -> Self {
         let id = value.id;
         let today = chrono::offset::Local::now().date_naive();
-        let parse_date = chrono::DateTime::parse_from_rfc3339(&value.attributes.readable_at).unwrap_or_default();
+        let parse_date = chrono::DateTime::parse_from_rfc3339(&value.publication_date).unwrap_or_default();
 
         let difference = today - parse_date.date_naive();
 
         let num_days = difference.num_days();
 
-        let translated_language =
-            Languages::try_from_iso_code(&value.attributes.translated_language).unwrap_or(*Languages::get_preferred_lang());
+        let translated_language = value.language;
 
         Self {
             id,
-            title: value.attributes.title.unwrap_or("No title ".to_string()),
-            number: value.attributes.chapter.unwrap_or_default(),
+            title: value.title,
+            number: value.chapter_number,
             readeable_at: display_dates_since_publication(num_days),
             translated_language,
         }
@@ -153,9 +151,9 @@ impl HistoryWidget {
         self.page -= 1;
     }
 
-    pub fn set_chapter(&mut self, manga_id: String, response: ChapterResponse) {
+    pub fn set_chapter(&mut self, manga_id: String, response: Vec<LatestChapter>) {
         if let Some(manga) = self.mangas.iter_mut().find(|manga| manga.id == manga_id) {
-            for chapter in response.data {
+            for chapter in response {
                 manga.recent_chapters.push(RecentChapters::from(chapter));
             }
         }

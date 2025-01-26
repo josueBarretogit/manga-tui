@@ -1,5 +1,5 @@
 use std::fs::{create_dir, create_dir_all, File};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use bytes::Bytes;
@@ -24,6 +24,10 @@ static EPUB_FILE_TEMPLATE: &str = r#"
                               </body>
                             </html>
 "#;
+
+pub trait Downloader {
+    fn save_chapter_in_file_system(&self, file_system: impl Write + Read);
+}
 
 #[derive(Debug, Clone)]
 pub struct DownloadChapter {
