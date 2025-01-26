@@ -2,7 +2,8 @@ use reqwest::Url;
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::backend::error_log::{write_to_error_log, ErrorType};
-use crate::view::pages::reader::{MangaReaderEvents, PageData, SearchMangaPanel};
+use crate::backend::manga_provider::SearchMangaPanel;
+use crate::view::pages::reader::{MangaReaderEvents, PageData};
 
 pub async fn get_manga_panel(
     client: impl SearchMangaPanel,

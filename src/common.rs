@@ -5,7 +5,7 @@ use ratatui::layout::Rect;
 use ratatui_image::protocol::Protocol;
 use strum::{Display, EnumIter};
 
-use crate::backend::filter::Languages;
+use crate::backend::manga_provider::Languages;
 
 #[derive(Default, Clone, Debug, PartialEq)]
 pub struct Author {

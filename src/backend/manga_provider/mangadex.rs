@@ -1,31 +1,35 @@
 use std::error::Error;
 use std::future::Future;
-use std::io::Cursor;
 use std::time::Duration as StdDuration;
 
 use api_responses::*;
 use bytes::Bytes;
 use chrono::Months;
 use http::StatusCode;
-use image::io::Reader;
-use image::{GenericImageView, ImageReader};
+use image::GenericImageView;
 use manga_tui::SearchTerm;
 use once_cell::sync::OnceCell;
+use ratatui::widgets::{Block, StatefulWidget};
 use reqwest::{Client, Response, Url};
+use serde::Serialize;
 
 use super::{
-    Chapter, DecodeBytesToImage, Genres, GetRawImage, HomePageMangaProvider, MangaPageProvider, MangaStatus, Pagination,
-    PopularManga, Rating, RecentlyAddedManga, SearchMangaById,
+    Chapter, ChapterToRead, DecodeBytesToImage, EventHandler, FetchChapterBookmarked, FiltersProvider, FiltersWidget, Genres,
+    GetChaptersResponse, GetMangasResponse, GetRawImage, GoToReadChapter, HomePageMangaProvider, Languages, Manga,
+    MangaPageProvider, MangaPanel, MangaProvider, MangaStatus, PopularManga, Rating, ReaderPageProvider, RecentlyAddedManga,
+    SearchChapterById, SearchMangaById, SearchMangaPanel, SearchPageProvider,
 };
 use crate::backend::database::ChapterBookmarked;
-use crate::backend::filter::{Filters, IntoParam, Languages};
+use crate::backend::tui::Events;
 use crate::config::ImageQuality;
 use crate::global::USER_AGENT;
-use crate::view::app::MangaToRead;
-use crate::view::pages::manga::{ChapterOrder, FetchChapterBookmarked};
-use crate::view::pages::reader::{ChapterToRead, ListOfChapters, MangaPanel, SearchChapter, SearchMangaPanel};
+use crate::view::pages::reader::ListOfChapters;
+use crate::view::widgets::StatefulWidgetFrame;
 
 pub mod api_responses;
+
+pub mod filter;
+pub mod filter_widget;
 
 pub static MANGADEX_CLIENT_INSTANCE: OnceCell<MangadexClient> = once_cell::sync::OnceCell::new();
 
@@ -41,15 +45,6 @@ pub static ITEMS_PER_PAGE_SEARCH: u32 = 10;
 
 // Todo! this trait should be split 💀💀
 pub trait ApiClient: Clone + Send + 'static {
-    fn get_chapter_page(&self, endpoint: Url) -> impl Future<Output = Result<Response, reqwest::Error>> + Send;
-
-    fn search_mangas(
-        &self,
-        search_term: Option<SearchTerm>,
-        page: u32,
-        filters: Filters,
-    ) -> impl Future<Output = Result<Response, reqwest::Error>> + Send;
-
     fn get_cover_for_manga(&self, id_manga: &str, file_name: &str)
     -> impl Future<Output = Result<Response, reqwest::Error>> + Send;
 
@@ -59,21 +54,7 @@ pub trait ApiClient: Clone + Send + 'static {
         file_name: &str,
     ) -> impl Future<Output = Result<Response, reqwest::Error>> + Send;
 
-    fn get_manga_chapters(
-        &self,
-        id: &str,
-        page: u32,
-        language: Languages,
-        order: ChapterOrder,
-    ) -> impl Future<Output = Result<Response, reqwest::Error>> + Send;
-
     fn get_chapter_pages(&self, chapter_id: &str) -> impl Future<Output = Result<Response, reqwest::Error>> + Send;
-
-    fn get_manga_statistics(&self, id_manga: &str) -> impl Future<Output = Result<Response, reqwest::Error>> + Send;
-
-    fn get_popular_mangas2(&self) -> impl Future<Output = Result<Response, reqwest::Error>> + Send;
-
-    fn get_recently_added(&self) -> impl Future<Output = Result<Response, reqwest::Error>> + Send;
 
     fn get_one_manga(&self, manga_id: &str) -> impl Future<Output = Result<Response, reqwest::Error>> + Send;
 
@@ -285,7 +266,11 @@ impl SearchMangaById for MangadexClient {
             .flat_map(|lang| Languages::try_from_iso_code(&lang))
             .collect();
 
+        let rating = self.get_manga_statistics(&id).await.ok().unwrap_or_default();
+        let rating = rating.statistics.get(&id).cloned().unwrap_or_default().rating.average.unwrap_or_default();
+
         Ok(super::Manga {
+            rating,
             id,
             title,
             genres,
@@ -294,10 +279,19 @@ impl SearchMangaById for MangadexClient {
             cover_img_url,
             cover_img_url_lower_quality,
             languages,
-            rating: 2.3,
-            artist: super::Artist::default(),
-            author: super::Author::default(),
+            artist: None,
+            author: None,
         })
+    }
+}
+
+impl GoToReadChapter for MangadexClient {
+    async fn read_chapter(&self, chapter_id: &str, manga_id: &str) -> Result<(ChapterToRead, ListOfChapters), Box<dyn Error>> {
+        let chapter = self.search_chapter(chapter_id, manga_id).await?;
+
+        let list_of_chapters = self.search_list_of_chapters(manga_id, chapter.language).await?;
+
+        Ok((chapter, list_of_chapters.into()))
     }
 }
 
@@ -307,13 +301,7 @@ impl MangaPageProvider for MangadexClient {
         manga_id: &str,
         filters: super::ChapterFilters,
         pagination: super::Pagination,
-    ) -> Result<(Vec<super::Chapter>, super::Pagination), Box<dyn Error>> {
-        //let endpoint = format!(
-        //    "{}/manga/{manga_id}/feed?limit={ITEMS_PER_PAGE_CHAPTERS}&offset={page}&{order}&translatedLanguage[]={language}&
-        // includes[]=scanlation_group&includeExternalUrl=0&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&
-        // contentRating[]=pornographic",    self.api_url_base,
-        //);
-
+    ) -> Result<GetChaptersResponse, Box<dyn Error>> {
         let endpoint = format!("{}/manga/{manga_id}/feed", self.api_url_base);
 
         let offset = (pagination.current_page.saturating_sub(1)) * pagination.items_per_page;
@@ -348,7 +336,7 @@ impl MangaPageProvider for MangadexClient {
 
         let response: ChapterResponse = response.json().await?;
 
-        let new_pagination = Pagination::new(pagination.current_page, response.total as u32, 16);
+        let total_items = response.total;
 
         let response: Vec<super::Chapter> = response
             .data
@@ -382,7 +370,10 @@ impl MangaPageProvider for MangadexClient {
             })
             .collect();
 
-        Ok((response, new_pagination))
+        Ok(GetChaptersResponse {
+            chapters: response,
+            total_chapters: total_items as u32,
+        })
     }
 }
 
@@ -421,62 +412,36 @@ impl MangadexClient {
         self
     }
 
-    // Not crucial this doesnt need to be tested
-    pub async fn get_mangadex_image_support(&self) -> Result<Bytes, reqwest::Error> {
-        self.client
-            .get("https://mangadex.org/img/namicomi/support-dex-chan-1.png")
-            .send()
-            .await?
-            .bytes()
-            .await
-    }
-
     /// Check if mangadex is available
     pub async fn check_status(&self) -> Result<Response, reqwest::Error> {
         let endpoint = format!("{}/ping", self.api_url_base);
         self.client.get(endpoint).send().await
     }
 
-    pub async fn search_chapters_aggregate(&self, manga_id: &str, language: Languages) -> Result<Response, reqwest::Error> {
+    pub async fn search_list_of_chapters(
+        &self,
+        manga_id: &str,
+        language: Languages,
+    ) -> Result<AggregateChapterResponse, reqwest::Error> {
         let endpoint =
             format!("{}/manga/{}/aggregate?translatedLanguage[]={}", self.api_url_base, manga_id, language.as_iso_code());
-        self.client.get(endpoint).send().await
+        let response: AggregateChapterResponse = self.client.get(endpoint).send().await?.json().await?;
+
+        Ok(response)
     }
 
-    pub async fn search_chapters_by_id(&self, chapter_id: &str) -> Result<Response, reqwest::Error> {
-        let endpoint = format!("{}/chapter/{chapter_id}", self.api_url_base);
-        self.client.get(endpoint).send().await
+    /// Used in `manga` page to request the the amount of follows and stars a manga has
+    async fn get_manga_statistics(&self, id_manga: &str) -> Result<MangaStatisticsResponse, reqwest::Error> {
+        let endpoint = format!("{}/statistics/manga/{id_manga}", self.api_url_base);
+
+        let response: MangaStatisticsResponse =
+            self.client.get(endpoint).timeout(StdDuration::from_secs(5)).send().await?.json().await?;
+
+        Ok(response)
     }
 }
 
 impl ApiClient for MangadexClient {
-    async fn get_chapter_page(&self, endpoint: Url) -> Result<Response, reqwest::Error> {
-        self.client.get(endpoint).timeout(StdDuration::from_secs(20)).send().await
-    }
-
-    async fn search_mangas(
-        &self,
-        search_term: Option<SearchTerm>,
-        page: u32,
-        filters: Filters,
-    ) -> Result<Response, reqwest::Error> {
-        let offset = (page - 1) * ITEMS_PER_PAGE_SEARCH;
-
-        let search_by_title = match search_term {
-            Some(search) => format!("title={}", search),
-            None => "".to_string(),
-        };
-
-        let filters = filters.into_param();
-
-        let url = format!(
-            "{}/manga?{search_by_title}&includes[]=cover_art&includes[]=author&includes[]=artist&limit={ITEMS_PER_PAGE_SEARCH}&offset={offset}{filters}&includedTagsMode=AND&excludedTagsMode=OR&hasAvailableChapters=true",
-            self.api_url_base,
-        );
-
-        self.client.get(url).send().await
-    }
-
     async fn get_cover_for_manga(&self, id_manga: &str, file_name: &str) -> Result<Response, reqwest::Error> {
         let file_name = format!("{file_name}.512.jpg");
         self.client
@@ -493,61 +458,9 @@ impl ApiClient for MangadexClient {
             .await
     }
 
-    /// Used to get the chapters of a manga
-    async fn get_manga_chapters(
-        &self,
-        manga_id: &str,
-        page: u32,
-        language: Languages,
-        order: ChapterOrder,
-    ) -> Result<Response, reqwest::Error> {
-        let language = language.as_iso_code();
-        let page = (page - 1) * ITEMS_PER_PAGE_CHAPTERS;
-
-        let order = format!("order[volume]={order}&order[chapter]={order}");
-
-        let endpoint = format!(
-            "{}/manga/{manga_id}/feed?limit={ITEMS_PER_PAGE_CHAPTERS}&offset={page}&{order}&translatedLanguage[]={language}&includes[]=scanlation_group&includeExternalUrl=0&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&contentRating[]=pornographic",
-            self.api_url_base,
-        );
-
-        self.client.get(endpoint).send().await
-    }
-
     /// Used to get the list of endpoints which provide the url to get a chapter's pages / panels
     async fn get_chapter_pages(&self, chapter_id: &str) -> Result<Response, reqwest::Error> {
         let endpoint = format!("{}/at-home/server/{chapter_id}", self.api_url_base);
-
-        self.client.get(endpoint).send().await
-    }
-
-    /// Used in `manga` page to request the the amount of follows and stars a manga has
-    async fn get_manga_statistics(&self, id_manga: &str) -> Result<Response, reqwest::Error> {
-        let endpoint = format!("{}/statistics/manga/{id_manga}", self.api_url_base);
-
-        self.client.get(endpoint).send().await
-    }
-
-    /// Used in `home` page to request the popular mangas of this month
-    async fn get_popular_mangas2(&self) -> Result<Response, reqwest::Error> {
-        let current_date = chrono::offset::Local::now().date_naive().checked_sub_months(Months::new(1)).unwrap();
-        let language = Languages::get_preferred_lang().as_iso_code();
-
-        let endpoint = format!(
-            "{}/manga?includes[]=cover_art&includes[]=artist&includes[]=author&order[followedCount]=desc&contentRating[]=safe&contentRating[]=suggestive&hasAvailableChapters=true&availableTranslatedLanguage[]={language}&createdAtSince={current_date}T00:00:00",
-            self.api_url_base,
-        );
-
-        self.client.get(endpoint).send().await
-    }
-
-    /// Used in `home` page to request the most recently added mangas
-    async fn get_recently_added(&self) -> Result<Response, reqwest::Error> {
-        let language = Languages::get_preferred_lang().as_iso_code();
-        let endpoint = format!(
-            "{}/manga?limit=5&contentRating[]=safe&contentRating[]=suggestive&order[createdAt]=desc&includes[]=cover_art&includes[]=artist&includes[]=author&hasAvailableChapters=true&availableTranslatedLanguage[]={language}",
-            self.api_url_base,
-        );
 
         self.client.get(endpoint).send().await
     }
@@ -597,190 +510,10 @@ impl ApiClient for MangadexClient {
     }
 }
 
-#[cfg(test)]
-pub mod fake_api_client {
-
-    //use std::time::Duration;
-    //
-    //use manga_tui::SearchTerm;
-    //use reqwest::{Client, Response, Url};
-    //use serde::Serialize;
-    //use serde_json::json;
-    //
-    //use super::ApiClient;
-    //use crate::backend::filter::{Filters, Languages};
-    //use crate::backend::manga_provider::{HomePageMangaProvider, PopularManga, RecentlyAddedManga};
-    //use crate::view::pages::manga::ChapterOrder;
-    //use crate::view::pages::reader::{SearchChapter, SearchMangaPanel};
-    //
-    //#[derive(Clone, Debug)]
-    //pub struct MockMangadexClient {
-    //    /// How many `items` the fake response is expected to return
-    //    amount_results: Option<usize>,
-    //    chapters_response: Option<ChapterResponse>,
-    //    return_error: bool,
-    //    client: Client,
-    //}
-    //
-    //impl HomePageMangaProvider for MockMangadexClient {
-    //    async fn get_popular_mangas(&self) -> Result<Vec<PopularManga>, Box<dyn std::error::Error>> {
-    //        Ok(vec![PopularManga::default()])
-    //    }
-    //
-    //    async fn get_recently_added_mangas(&self) -> Result<Vec<RecentlyAddedManga>, Box<dyn std::error::Error>> {
-    //        Ok(vec![RecentlyAddedManga::default()])
-    //    }
-    //}
-    //
-    //impl SearchChapter for MockMangadexClient {
-    //    async fn search_chapter(
-    //        &self,
-    //        _manga_id: &str,
-    //    ) -> Result<crate::view::pages::reader::ChapterToRead, Box<dyn std::error::Error>> {
-    //        unimplemented!()
-    //    }
-    //}
-    //
-    //impl SearchMangaPanel for MockMangadexClient {
-    //    async fn search_manga_panel(
-    //        &self,
-    //        _endpoint: Url,
-    //    ) -> Result<crate::view::pages::reader::MangaPanel, Box<dyn std::error::Error>> {
-    //        unimplemented!()
-    //    }
-    //}
-    //
-    //impl MockMangadexClient {
-    //    pub fn with_amount_returning_items(mut self, items: usize) -> Self {
-    //        self.amount_results = Some(items);
-    //        self
-    //    }
-    //
-    //    pub fn with_chapter_response(mut self, response: ChapterResponse) -> Self {
-    //        self.chapters_response = Some(response);
-    //        self
-    //    }
-    //
-    //    pub fn with_returning_errors(mut self) -> Self {
-    //        self.return_error = true;
-    //        self
-    //    }
-    //
-    //    pub fn new() -> Self {
-    //        MockMangadexClient {
-    //            amount_results: None,
-    //            chapters_response: None,
-    //            return_error: false,
-    //            client: Client::builder().timeout(Duration::from_millis(100)).build().unwrap(),
-    //        }
-    //    }
-    //
-    //    pub fn mock_json_response(data: impl Serialize) -> Result<Response, reqwest::Error> {
-    //        let mock_response = json!(data).to_string();
-    //        Ok(http::Response::builder().body(mock_response).unwrap().into())
-    //    }
-    //
-    //    pub fn mock_bytes_response() -> Result<Response, reqwest::Error> {
-    //        let image_bytes = include_bytes!("../../data_test/images/1.jpg").to_vec();
-    //        let response = http::Response::builder().body(image_bytes).unwrap();
-    //        Ok(response.into())
-    //    }
-    //}
-    //
-    //impl ApiClient for MockMangadexClient {
-    //    async fn get_chapter_page(&self, _endpoint: Url) -> Result<Response, reqwest::Error> {
-    //        Self::mock_bytes_response()
-    //    }
-    //
-    //    async fn search_mangas(
-    //        &self,
-    //        _search_term: Option<SearchTerm>,
-    //        _page: u32,
-    //        _filters: Filters,
-    //    ) -> Result<Response, reqwest::Error> {
-    //        Self::mock_json_response(SearchMangaResponse::default())
-    //    }
-    //
-    //    async fn get_cover_for_manga(&self, _id_manga: &str, _file_name: &str) -> Result<Response, reqwest::Error> {
-    //        Self::mock_bytes_response()
-    //    }
-    //
-    //    async fn get_cover_for_manga_lower_quality(&self, _id_manga: &str, _file_name: &str) -> Result<Response, reqwest::Error> {
-    //        Self::mock_bytes_response()
-    //    }
-    //
-    //    async fn get_manga_chapters(
-    //        &self,
-    //        _id: &str,
-    //        _page: u32,
-    //        _language: Languages,
-    //        _order: ChapterOrder,
-    //    ) -> Result<Response, reqwest::Error> {
-    //        Self::mock_json_response(ChapterResponse::default())
-    //    }
-    //
-    //    async fn get_chapter_pages(&self, _chapter_id: &str) -> Result<Response, reqwest::Error> {
-    //        let mut data: Vec<String> = vec![];
-    //        let mut data_saver: Vec<String> = vec![];
-    //
-    //        for _ in 0..self.amount_results.unwrap_or(1) {
-    //            data.push("some_file_name.jpg".to_string());
-    //            data_saver.push("some_file_name.jpg".to_string());
-    //        }
-    //
-    //        let chapter_pages_response = ChapterPagesResponse {
-    //            chapter: {
-    //                ChapterPages {
-    //                    data,
-    //                    data_saver,
-    //                    ..Default::default()
-    //                }
-    //            },
-    //            ..Default::default()
-    //        };
-    //        Self::mock_json_response(chapter_pages_response)
-    //    }
-    //
-    //    async fn get_manga_statistics(&self, _id_manga: &str) -> Result<Response, reqwest::Error> {
-    //        Self::mock_json_response(MangaStatisticsResponse::default())
-    //    }
-    //
-    //    async fn get_popular_mangas2(&self) -> Result<Response, reqwest::Error> {
-    //        Self::mock_json_response(SearchMangaResponse::default())
-    //    }
-    //
-    //    async fn get_recently_added(&self) -> Result<Response, reqwest::Error> {
-    //        Self::mock_json_response(SearchMangaResponse::default())
-    //    }
-    //
-    //    async fn get_one_manga(&self, _manga_id: &str) -> Result<Response, reqwest::Error> {
-    //        if self.return_error {
-    //            return self.client.get("should_fail").send().await;
-    //        }
-    //        Self::mock_json_response(OneMangaResponse::default())
-    //    }
-    //
-    //    async fn get_latest_chapters(&self, _manga_id: &str) -> Result<Response, reqwest::Error> {
-    //        Self::mock_json_response(self.chapters_response.as_ref().cloned().unwrap_or_default())
-    //    }
-    //
-    //    async fn get_tags(&self) -> Result<Response, reqwest::Error> {
-    //        Self::mock_json_response(TagsResponse::default())
-    //    }
-    //
-    //    async fn get_authors(&self, _name: SearchTerm) -> Result<Response, reqwest::Error> {
-    //        Self::mock_json_response(AuthorsResponse::default())
-    //    }
-    //
-    //    async fn get_all_chapters_for_manga(&self, _id: &str, _language: Languages) -> Result<Response, reqwest::Error> {
-    //        Self::mock_json_response(self.chapters_response.as_ref().cloned().unwrap_or_default())
-    //    }
-    //}
-}
-
-impl SearchChapter for MangadexClient {
-    async fn search_chapter(&self, chapter_id: &str) -> Result<ChapterToRead, Box<dyn std::error::Error>> {
-        let response: OneChapterResponse = self.search_chapters_by_id(chapter_id).await?.json().await?;
+impl SearchChapterById for MangadexClient {
+    async fn search_chapter(&self, chapter_id: &str, _manga_id: &str) -> Result<ChapterToRead, Box<dyn std::error::Error>> {
+        let endpoint = format!("{}/chapter/{chapter_id}", self.api_url_base);
+        let response: OneChapterResponse = self.client.get(endpoint).send().await?.json().await?;
         let pages_response: ChapterPagesResponse = self.get_chapter_pages(chapter_id).await?.json().await?;
 
         let language = Languages::try_from_iso_code(response.data.attributes.translated_language.as_str()).unwrap_or_default();
@@ -804,56 +537,187 @@ impl SearchChapter for MangadexClient {
 
 impl SearchMangaPanel for MangadexClient {
     async fn search_manga_panel(&self, endpoint: Url) -> Result<MangaPanel, Box<dyn Error>> {
-        let response = self.get_chapter_page(endpoint).await?.bytes().await?;
+        let response = self.get_image(endpoint.as_str()).await?;
 
-        let image_decoded = Reader::new(std::io::Cursor::new(response)).with_guessed_format()?.decode()?;
-
-        let dimensions = image_decoded.dimensions();
+        let dimensions = response.dimensions();
 
         Ok(MangaPanel {
-            image_decoded,
+            image_decoded: response,
             dimensions,
         })
     }
 }
 
 impl FetchChapterBookmarked for MangadexClient {
-    async fn fetch_chapter_bookmarked(&self, chapter: ChapterBookmarked) -> Result<(ChapterToRead, MangaToRead), Box<dyn Error>> {
-        let response: OneChapterResponse = self.search_chapters_by_id(&chapter.id).await?.json().await?;
+    async fn fetch_chapter_bookmarked(
+        &self,
+        chapter: ChapterBookmarked,
+    ) -> Result<(ChapterToRead, ListOfChapters), Box<dyn Error>> {
+        let chapter_found = self.search_chapter(&chapter.id, &chapter.manga_id).await?;
         let pages_response: ChapterPagesResponse = self.get_chapter_pages(&chapter.id).await?.json().await?;
 
-        let list_of_chapters: AggregateChapterResponse = self
-            .search_chapters_aggregate(
-                &chapter.manga_id,
-                Languages::try_from_iso_code(response.data.attributes.translated_language.as_str()).unwrap(),
-            )
+        let list_of_chapters: AggregateChapterResponse =
+            self.search_list_of_chapters(&chapter.manga_id, chapter_found.language).await?;
+
+        let chapter_to_read: ChapterToRead = ChapterToRead {
+            id: chapter.id,
+            title: chapter_found.title,
+            number: chapter_found.number,
+            volume_number: chapter_found.volume_number,
+            num_page_bookmarked: chapter.number_page_bookmarked,
+            language: chapter_found.language,
+            pages_url: pages_response.get_files_based_on_quality_as_url(self.image_quality),
+        };
+
+        Ok((chapter_to_read, ListOfChapters::from(list_of_chapters)))
+    }
+}
+
+impl ReaderPageProvider for MangadexClient {}
+
+#[derive(Debug, Clone)]
+pub struct MangadexFiltersWidget {}
+
+#[derive(Debug, Clone)]
+pub struct MangadexFiltersState {}
+
+impl EventHandler for MangadexFiltersState {
+    fn handle_events(&mut self, events: Events) {
+        match events {
+            Events::Key(key) => {},
+            _ => {},
+        }
+    }
+}
+
+impl FiltersProvider for MangadexFiltersState {
+    fn is_open(&self) -> bool {
+        false
+    }
+
+    fn toggle(&mut self) {}
+
+    fn is_typing(&self) -> bool {
+        false
+    }
+}
+impl StatefulWidgetFrame for MangadexFiltersWidget {
+    type State = MangadexFiltersState;
+
+    fn render(&mut self, area: ratatui::prelude::Rect, frame: &mut ratatui::Frame<'_>, state: &mut Self::State) {}
+}
+
+impl FiltersWidget for MangadexFiltersWidget {
+    type FilterState = MangadexFiltersState;
+}
+
+impl SearchPageProvider for MangadexClient {
+    type FiltersState = MangadexFiltersState;
+    type Widget = MangadexFiltersWidget;
+
+    async fn search_mangas(
+        &self,
+        search_term: Option<SearchTerm>,
+        filters: Self::FiltersState,
+        pagination: super::Pagination,
+    ) -> Result<GetMangasResponse, Box<dyn Error>> {
+        let offset = (pagination.current_page - 1) * pagination.items_per_page;
+
+        let endpoint = format!("{}/manga", self.api_url_base);
+
+        let mut search = String::default();
+
+        if let Some(sea) = search_term {
+            search = sea.get().to_string()
+        }
+
+        let response: SearchMangaResponse = self
+            .client
+            .get(endpoint)
+            .query(&[
+                ("includes[]", "cover_art"),
+                ("includes[]", "author"),
+                ("includes[]", "artist"),
+                ("limit", &pagination.items_per_page.to_string()),
+                ("offset", &offset.to_string()),
+                ("hasAvailableChapters", "true"),
+                ("includedTagsMode", "AND"),
+                if search.is_empty() { ("", "") } else { ("title", &search) },
+            ])
+            .send()
             .await?
             .json()
             .await?;
 
-        let number: f64 = response.data.attributes.chapter.unwrap_or("0".to_string()).parse().unwrap();
-        let volume_number = response.data.attributes.volume;
-        let language = Languages::try_from_iso_code(&response.data.attributes.translated_language).unwrap_or_default();
+        let total_mangas = response.total;
 
-        let chapter_to_read: ChapterToRead = ChapterToRead {
-            id: chapter.id,
-            title: response.data.attributes.title.unwrap_or_default(),
-            number,
-            volume_number,
-            num_page_bookmarked: chapter.number_page_bookmarked,
-            language,
-            pages_url: pages_response.get_files_based_on_quality_as_url(self.image_quality),
-        };
+        let mangas: Vec<super::SearchManga> = response
+            .data
+            .into_iter()
+            .map(|manga| {
+                let id = manga.id;
 
-        let manga_to_read: MangaToRead = MangaToRead {
-            title: chapter.manga_title,
-            manga_id: chapter.manga_id,
-            list: ListOfChapters::from(list_of_chapters),
-        };
+                let title = manga.attributes.title.en.unwrap_or_default();
 
-        Ok((chapter_to_read, manga_to_read))
+                let genres: Vec<Genres> = manga
+                    .attributes
+                    .tags
+                    .into_iter()
+                    .map(|tag| Genres::new(tag.attributes.name.en, Rating::default()))
+                    .collect();
+
+                let description = manga.attributes.description.map(|desc| desc.en.unwrap_or_default()).unwrap_or_default();
+
+                let status = match manga.attributes.status.as_str() {
+                    "ongoing" => MangaStatus::Ongoing,
+                    _ => MangaStatus::default(),
+                };
+
+                let mut cover_img_url: Option<String> = Option::default();
+
+                for rel in &manga.relationships {
+                    if let Some(attributes) = &rel.attributes {
+                        match rel.type_field.as_str() {
+                            "cover_art" => {
+                                let file_name = attributes.file_name.as_ref().unwrap().to_string();
+                                cover_img_url = Some(self.make_cover_img_url_lower_quality(&id, &file_name));
+                            },
+                            "author" => {},
+                            _ => {},
+                        }
+                    }
+                }
+
+                let languages: Vec<Languages> = manga
+                    .attributes
+                    .available_translated_languages
+                    .into_iter()
+                    .flatten()
+                    .flat_map(|lang| Languages::try_from_iso_code(&lang))
+                    .collect();
+
+                super::SearchManga {
+                    id,
+                    title,
+                    description: Some(description),
+                    genres,
+                    artist: None,
+                    author: None,
+                    cover_img_url,
+                    languages,
+                    status: Some(status),
+                }
+            })
+            .collect();
+
+        Ok(GetMangasResponse {
+            mangas,
+            total_mangas,
+        })
     }
 }
+
+impl MangaProvider for MangadexClient {}
 
 #[cfg(test)]
 mod test {

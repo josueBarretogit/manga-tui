@@ -1,5 +1,3 @@
-use std::error::Error;
-use std::future::Future;
 use std::sync::Arc;
 
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent, MouseEventKind};
@@ -18,17 +16,19 @@ use throbber_widgets_tui::{Throbber, ThrobberState};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
-use super::reader::ChapterToRead;
+use super::reader::ListOfChapters;
 use crate::backend::database::{
     get_chapters_history_status, save_history, set_chapter_downloaded, Bookmark, ChapterBookmarked, ChapterToBookmark,
     ChapterToSaveHistory, Database, MangaReadingHistorySave, RetrieveBookmark, SetChapterDownloaded, DBCONN,
 };
 use crate::backend::download::DownloadChapter;
 use crate::backend::error_log::{self, write_to_error_log, ErrorType};
-use crate::backend::filter::Languages;
 use crate::backend::manga_provider::mangadex::api_responses::{ChapterResponse, MangaStatisticsResponse};
 use crate::backend::manga_provider::mangadex::ITEMS_PER_PAGE_CHAPTERS;
-use crate::backend::manga_provider::{Chapter, ChapterFilters, ChapterOrderBy, Manga, MangaPageProvider, Pagination};
+use crate::backend::manga_provider::{
+    Chapter, ChapterFilters, ChapterOrderBy, ChapterToRead, FetchChapterBookmarked, GetChaptersResponse, Languages, Manga,
+    MangaPageProvider, Pagination,
+};
 use crate::backend::tracker::{track_manga, MangaTracker};
 use crate::backend::tui::Events;
 use crate::backend::AppDirectories;
@@ -37,9 +37,7 @@ use crate::config::MangaTuiConfig;
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
 use crate::utils::{set_status_style, set_tags_style};
 use crate::view::app::MangaToRead;
-use crate::view::tasks::manga::{
-    download_all_chapters, download_chapter_task, read_chapter, search_chapters_operation, ChapterArgs, DownloadAllChapters,
-};
+use crate::view::tasks::manga::{download_all_chapters, download_chapter_task, ChapterArgs, DownloadAllChapters};
 use crate::view::widgets::manga::{
     ChapterItem, ChaptersListWidget, DownloadAllChaptersState, DownloadAllChaptersWidget, DownloadPhase,
 };
@@ -97,7 +95,7 @@ pub enum MangaPageActions {
 
 #[derive(Debug, PartialEq, EnumIs)]
 pub enum MangaPageEvents {
-    ReadChapterBookmarked(ChapterToRead, MangaToRead),
+    ReadChapterBookmarked(ChapterToRead, ListOfChapters),
     FetchBookmarkFailed,
     SearchChapters,
     SearchCover,
@@ -117,35 +115,9 @@ pub enum MangaPageEvents {
     DownloadError(String),
     ReadError(String),
 
-    ReadSuccesful(ChapterToRead, MangaToRead),
-    LoadChapters(Option<(Vec<Chapter>, Pagination)>),
-    LoadStatistics(Option<MangaStatisticsResponse>),
+    ReadSuccesful(ChapterToRead, ListOfChapters),
+    LoadChapters(Option<GetChaptersResponse>),
     TrackingFailed(String),
-}
-
-#[derive(Display, Default, Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ChapterOrder {
-    #[strum(to_string = "asc")]
-    Ascending,
-    #[strum(to_string = "desc")]
-    #[default]
-    Descending,
-}
-
-impl ChapterOrder {
-    fn toggle(self) -> Self {
-        match self {
-            ChapterOrder::Ascending => ChapterOrder::Descending,
-            ChapterOrder::Descending => ChapterOrder::Ascending,
-        }
-    }
-}
-
-pub trait FetchChapterBookmarked: Send + Clone + 'static {
-    fn fetch_chapter_bookmarked(
-        &self,
-        chapter: ChapterBookmarked,
-    ) -> impl Future<Output = Result<(ChapterToRead, MangaToRead), Box<dyn Error>>> + Send;
 }
 
 pub struct MangaPage<T, S>
@@ -162,11 +134,9 @@ where
     local_event_tx: UnboundedSender<MangaPageEvents>,
     local_event_rx: UnboundedReceiver<MangaPageEvents>,
     chapters: Option<ChaptersData>,
-    chapter_order: ChapterOrder,
-    chapter_language: Languages,
+    chapter_filters: ChapterFilters,
     state: PageState,
     bookmark_state: BookMarkState,
-    statistics: Option<MangaStatistics>,
     tasks: JoinSet<()>,
     picker: Option<Picker>,
     available_languages_state: ListState,
@@ -192,7 +162,6 @@ struct ChaptersData {
     state: tui_widget_list::ListState,
     widget: ChaptersListWidget,
     pagination: Pagination,
-    filter: ChapterFilters,
 }
 
 impl<T, S> MangaPage<T, S>
@@ -221,18 +190,19 @@ where
             local_event_tx: local_event_tx.clone(),
             local_event_rx,
             chapters: None,
-            chapter_order: ChapterOrder::default(),
             state: PageState::SearchingChapters,
-            statistics: None,
             bookmark_state: BookMarkState::default(),
             tasks: JoinSet::new(),
             available_languages_state: ListState::default(),
             is_list_languages_open: false,
             download_all_chapters_state: DownloadAllChaptersState::new(local_event_tx),
-            chapter_language: chapter_language.unwrap_or(Languages::default()),
             cover_area,
             manga_tracker: None,
             manga_provider: provider,
+            chapter_filters: ChapterFilters {
+                order: ChapterOrderBy::default(),
+                language: chapter_language.unwrap_or_default(),
+            },
         }
     }
 
@@ -297,12 +267,13 @@ where
 
         let [manga_information_area, manga_chapters_area] = layout.areas(area);
 
-        let statistics = match &self.statistics {
-            Some(statistics) => Span::raw(format!("⭐ {} follows : {} ", statistics.rating.round(), statistics.follows)),
-            None => Span::raw("⭐ follows : "),
+        let statistics = if self.manga.rating == 0.0 {
+            Span::raw(format!("⭐ {} ", self.manga.rating.round()))
+        } else {
+            Span::raw("⭐ follows : ")
         };
 
-        let author_and_artist = Span::raw(format!("Author : {} | Artist : {}", self.manga.author.name, self.manga.artist.name));
+        //let author_and_artist = Span::raw(format!("Author : {} | Artist : {}", self.manga.author.name, self.manga.artist.name));
 
         let go_to_author_artist_instructions = Span::raw("<c>/<v>").style(*INSTRUCTIONS_STYLE);
 
@@ -311,7 +282,7 @@ where
             .title_bottom(Line::from(vec![
                 statistics,
                 " ".into(),
-                author_and_artist,
+                //author_and_artist,
                 " | More about author/artist ".into(),
                 go_to_author_artist_instructions,
             ]))
@@ -412,9 +383,9 @@ where
         let layout = Layout::horizontal([Constraint::Percentage(40), Constraint::Percentage(60)]);
         let [sorting_area, language_area] = layout.areas(area);
 
-        let order_title = format!("Order: {} ", match self.chapter_order {
-            ChapterOrder::Descending => "Descending",
-            ChapterOrder::Ascending => "Ascending",
+        let order_title = format!("Order: {} ", match self.chapter_filters.order {
+            ChapterOrderBy::Descending => "Descending",
+            ChapterOrderBy::Ascending => "Ascending",
         });
 
         Paragraph::new(Line::from(vec![
@@ -450,7 +421,7 @@ where
         } else {
             Paragraph::new(Line::from(vec![
                 "Language: ".into(),
-                self.chapter_language.as_emoji().into(),
+                self.chapter_filters.language.as_emoji().into(),
                 " | ".into(),
                 "Available languages: ".into(),
                 "<l>".bold().yellow(),
@@ -465,7 +436,7 @@ where
 
     fn search_by_language(&mut self) {
         self.chapters = None;
-        self.chapter_language = self.get_current_selected_language();
+        self.chapter_filters.language = self.get_current_selected_language();
         self.search_chapters();
     }
 
@@ -576,7 +547,7 @@ where
     }
 
     fn toggle_chapter_order(&mut self) {
-        self.chapter_order = self.chapter_order.toggle();
+        self.chapter_filters.order = self.chapter_filters.order.toggle();
         self.search_chapters();
     }
 
@@ -612,83 +583,67 @@ where
         }
     }
 
+    /// Remember to mark reading status in database
     fn read_chapter(&mut self) {
-        //if self.picker.is_none() {
-        //    return;
-        //}
-        //self.state = PageState::SearchingChapterData;
-        //match self.get_current_selected_chapter_mut() {
-        //    Some(chapter_selected) => {
-        //        chapter_selected.set_normal_state();
-        //
-        //        let id_chapter = chapter_selected.id.clone();
-        //        let chapter_title = chapter_selected.title.clone();
-        //        let number: f64 = chapter_selected.chapter_number.parse().unwrap_or_default();
-        //        let volume_number = chapter_selected.volume_number.clone();
-        //        let language = self.get_current_selected_language();
-        //        let manga_id = self.manga.id.clone();
-        //        let title = self.manga.title.clone();
-        //        let img_url = self.manga.cover_img_url.clone();
-        //        let local_tx = self.local_event_tx.clone();
-        //
-        //        let chapter_to_read: ChapterArgs = ChapterArgs {
-        //            id_chapter,
-        //            manga_id,
-        //            title,
-        //            chapter_title,
-        //            language,
-        //            number,
-        //            volume_number,
-        //            img_url,
-        //        };
-        //
-        //        tokio::spawn(async move {
-        //            let search_chapter_response = read_chapter(&chapter_to_read).await;
-        //
-        //            match search_chapter_response {
-        //                Ok((chapter, manga_to_read)) => {
-        //                    local_tx.send(MangaPageEvents::ReadSuccesful(chapter.clone(), manga_to_read.clone())).ok();
-        //                },
-        //                Err(e) => {
-        //                    write_to_error_log(error_log::ErrorType::Error(
-        //                        format!(
-        //                            "cannot read chapter with id {} of manga with id {}, more details : {e}",
-        //                            chapter_to_read.id_chapter, chapter_to_read.manga_id
-        //                        )
-        //                        .into(),
-        //                    ));
-        //                    local_tx.send(MangaPageEvents::ReadError(chapter_to_read.id_chapter)).ok();
-        //                },
-        //            }
-        //        });
-        //    },
-        //    None => self.state = PageState::DisplayingChapters,
-        //}
+        if self.picker.is_none() {
+            return;
+        }
+        self.state = PageState::SearchingChapterData;
+        match self.get_current_selected_chapter_mut() {
+            Some(chapter_selected) => {
+                chapter_selected.set_normal_state();
+                let id_chapter = chapter_selected.chapter.id.clone();
+                let manga_id = self.manga.id.clone();
+                let local_tx = self.local_event_tx.clone();
+                let client = Arc::clone(&self.manga_provider);
+
+                tokio::spawn(async move {
+                    let search_chapter_response = client.read_chapter(&id_chapter, &manga_id).await;
+
+                    match search_chapter_response {
+                        Ok((chapter, manga_to_read)) => {
+                            local_tx.send(MangaPageEvents::ReadSuccesful(chapter, manga_to_read)).ok();
+                        },
+                        Err(e) => {
+                            write_to_error_log(error_log::ErrorType::Error(
+                                format!(
+                                    "cannot read chapter with id {} of manga with id {}, more details : {e}",
+                                    id_chapter, manga_id
+                                )
+                                .into(),
+                            ));
+                            local_tx.send(MangaPageEvents::ReadError(id_chapter)).ok();
+                        },
+                    }
+                });
+            },
+            None => self.state = PageState::DisplayingChapters,
+        }
     }
 
     fn get_current_selected_language(&self) -> Languages {
         match self.available_languages_state.selected() {
             Some(index) => self.manga.languages[index],
-            None => self.chapter_language,
+            None => self.chapter_filters.language,
         }
     }
 
     fn search_next_chapters(&mut self) {
-        //if let Some(chapters) = self.chapters.as_mut() {
-        //    if chapters.page * ITEMS_PER_PAGE_CHAPTERS < chapters.total_result {
-        //        chapters.page += 1;
-        //        self.search_chapters();
-        //    }
-        //}
+        if let Some(chapters) = self.chapters.as_mut() {
+            if chapters.pagination.can_go_next_page() {
+                chapters.pagination.go_next_page();
+                self.search_chapters();
+            }
+        }
     }
 
     fn search_previous_chapters(&mut self) {
-        //if let Some(chapters) = self.chapters.as_mut() {
-        //    if chapters.page != 1 {
-        //        chapters.page -= 1;
-        //        self.search_chapters();
-        //    }
-        //}
+        if let Some(chapters) = self.chapters.as_mut() {
+            if chapters.pagination.can_go_previous_page() {
+                chapters.pagination.go_previous_page();
+                self.search_chapters();
+            }
+        }
     }
 
     fn search_chapters(&mut self) {
@@ -699,9 +654,10 @@ where
 
         let pagination =
             if let Some(chapters) = self.chapters.as_ref() { chapters.pagination.clone() } else { Pagination::default() };
+        let filters = self.chapter_filters.clone();
 
         self.tasks.spawn(async move {
-            let response = client.get_chapters(&manga_id, ChapterFilters::default(), pagination).await;
+            let response = client.get_chapters(&manga_id, filters, pagination).await;
 
             match response {
                 Ok(res) => {
@@ -715,25 +671,25 @@ where
     }
 
     fn check_chapters_read(&mut self) {
-        //let binding = DBCONN.lock().unwrap();
-        //let conn = binding.as_ref().unwrap();
-        //let history = get_chapters_history_status(&self.manga.id, conn);
-        //match history {
-        //    Ok(his) => {
-        //        if let Some(chapters) = self.chapters.as_mut() {
-        //            for chapter in chapters.widget.chapters.iter_mut() {
-        //                let chapter_found = his.iter().find(|chap| chap.id == chapter.id);
-        //                if let Some(chapt) = chapter_found {
-        //                    chapter.is_read = chapt.is_read;
-        //                    chapter.is_downloaded = chapt.is_downloaded
-        //                }
-        //            }
-        //        }
-        //    },
-        //    Err(e) => {
-        //        write_to_error_log(error_log::ErrorType::Error(Box::new(e)));
-        //    },
-        //}
+        let binding = DBCONN.lock().unwrap();
+        let conn = binding.as_ref().unwrap();
+        let history = get_chapters_history_status(&self.manga.id, conn);
+        match history {
+            Ok(his) => {
+                if let Some(chapters) = self.chapters.as_mut() {
+                    for item in chapters.widget.chapters.iter_mut() {
+                        let chapter_found = his.iter().find(|chap| chap.id == item.chapter.id);
+                        if let Some(chapt) = chapter_found {
+                            item.is_read = chapt.is_read;
+                            item.is_downloaded = chapt.is_downloaded
+                        }
+                    }
+                }
+            },
+            Err(e) => {
+                write_to_error_log(error_log::ErrorType::Error(Box::new(e)));
+            },
+        }
     }
 
     fn clear_chapters_as_bookmarked(&mut self) {
@@ -743,27 +699,27 @@ where
     }
 
     fn bookmark_current_chapter_selected(&mut self, database: &mut dyn Bookmark) {
-        //self.clear_chapters_as_bookmarked();
-        //let manga_id = self.manga.id.clone();
-        //let manga_title = self.manga.title.clone();
-        //let cover_img_url = self.manga.cover_img_url.clone();
-        //let chapter_language = self.get_current_selected_language();
-        //if let Some(chapter_selected) = self.get_current_selected_chapter_mut() {
-        //    let chapter_to_bookmark: ChapterToBookmark = ChapterToBookmark {
-        //        chapter_id: &chapter_selected.id,
-        //        manga_id: &manga_id,
-        //        chapter_title: &chapter_selected.title,
-        //        manga_title: &manga_title,
-        //        manga_cover_url: cover_img_url.as_deref(),
-        //        translated_language: chapter_language,
-        //        page_number: None,
-        //    };
-        //
-        //    match database.bookmark(chapter_to_bookmark) {
-        //        Ok(()) => chapter_selected.is_bookmarked = true,
-        //        Err(e) => write_to_error_log(ErrorType::Error(e)),
-        //    }
-        //}
+        self.clear_chapters_as_bookmarked();
+        let manga_id = self.manga.id.clone();
+        let manga_title = self.manga.title.clone();
+        let cover_img_url = self.manga.cover_img_url.clone();
+        let chapter_language = self.get_current_selected_language();
+        if let Some(chapter_selected) = self.get_current_selected_chapter_mut() {
+            let chapter_to_bookmark: ChapterToBookmark = ChapterToBookmark {
+                chapter_id: &chapter_selected.chapter.id,
+                manga_id: &manga_id,
+                chapter_title: &chapter_selected.chapter.title,
+                manga_title: &manga_title,
+                manga_cover_url: cover_img_url.as_deref(),
+                translated_language: chapter_language,
+                page_number: None,
+            };
+
+            match database.bookmark(chapter_to_bookmark) {
+                Ok(()) => chapter_selected.is_bookmarked = true,
+                Err(e) => write_to_error_log(ErrorType::Error(e)),
+            }
+        }
     }
 
     fn get_chapter_bookmarked_from_db(&mut self, datatabase: impl RetrieveBookmark) {
@@ -780,12 +736,13 @@ where
         };
     }
 
-    fn fetch_chapter_bookmarked(&mut self, bookmarked_chapter: ChapterBookmarked, api_client: impl FetchChapterBookmarked) {
+    fn fetch_chapter_bookmarked(&mut self, bookmarked_chapter: ChapterBookmarked) {
         let sender = self.local_event_tx.clone();
         self.bookmark_state.phase = BookmarkPhase::SearchingFromApi;
+        let client = Arc::clone(&self.manga_provider);
 
         self.tasks.spawn(async move {
-            let response = api_client.fetch_chapter_bookmarked(bookmarked_chapter).await;
+            let response = client.fetch_chapter_bookmarked(bookmarked_chapter).await;
 
             match response {
                 Ok(response) => {
@@ -954,7 +911,7 @@ where
         //}
     }
 
-    fn load_chapters(&mut self, response: Option<(Vec<Chapter>, Pagination)>) {
+    fn load_chapters(&mut self, response: Option<GetChaptersResponse>) {
         self.state = PageState::DisplayingChapters;
         match response {
             Some(response) => {
@@ -962,15 +919,22 @@ where
 
                 list_state.select(Some(0));
 
-                let chapter_widget = ChaptersListWidget::from_response(response.0);
+                let chapter_widget = ChaptersListWidget::from_response(response.chapters);
 
-                self.chapters = Some(ChaptersData {
-                    state: list_state,
-                    widget: chapter_widget,
-                    pagination: response.1,
-                    filter: ChapterFilters::default(),
-                });
+                let chapters = match &self.chapters {
+                    Some(chapters) => Some(ChaptersData {
+                        state: list_state,
+                        widget: chapter_widget,
+                        pagination: chapters.pagination.clone(),
+                    }),
+                    None => Some(ChaptersData {
+                        state: list_state,
+                        widget: chapter_widget,
+                        pagination: Pagination::from_total_items(response.total_chapters),
+                    }),
+                };
 
+                self.chapters = chapters;
                 self.local_event_tx.send(MangaPageEvents::CheckChapterStatus).ok();
             },
             None => {
@@ -1117,14 +1081,11 @@ where
         self.bookmark_state.phase = BookmarkPhase::FailedToFetch;
     }
 
-    fn read_chapter_bookmarked(&mut self, chapter: ChapterToRead, manga_to_read: MangaToRead) {
-        self.bookmark_state.phase = BookmarkPhase::default();
-
+    fn mark_chapter_as_read_in_db(&self, chapter: &ChapterToRead) {
         let connection = Database::get_connection();
-        let language = self.get_current_selected_language();
 
         if let Ok(conn) = connection {
-            save_history(
+            let save_read_history_result = save_history(
                 MangaReadingHistorySave {
                     id: &self.manga.id,
                     title: &self.manga.title,
@@ -1132,19 +1093,31 @@ where
                     chapter: ChapterToSaveHistory {
                         id: &chapter.id,
                         title: &chapter.title,
-                        translated_language: language.as_iso_code(),
+                        translated_language: chapter.language.as_iso_code(),
                     },
                 },
                 &conn,
-            )
-            .expect("error saving reading history");
+            );
 
-            self.global_event_tx
-                .as_ref()
-                .unwrap()
-                .send(Events::ReadChapter(chapter, manga_to_read))
-                .ok();
+            if let Err(e) = save_read_history_result {
+                write_to_error_log(format!("error saving reading history in local db: {e}").into());
+            }
         }
+    }
+
+    fn read_chapter_bookmarked(&mut self, chapter: ChapterToRead, list_of_chapters: ListOfChapters) {
+        self.bookmark_state.phase = BookmarkPhase::default();
+        self.mark_chapter_as_read_in_db(&chapter);
+
+        self.global_event_tx
+            .as_ref()
+            .unwrap()
+            .send(Events::ReadChapter(chapter, MangaToRead {
+                title: self.manga.title.clone(),
+                manga_id: self.manga.id.clone(),
+                list: list_of_chapters,
+            }))
+            .ok();
     }
 
     fn track_manga(&self, tracker: Option<S>, manga_title: String, chapter_number: u32, volume_number: Option<u32>) {
@@ -1168,12 +1141,10 @@ where
         while let Ok(background_event) = self.local_event_rx.try_recv() {
             match background_event {
                 MangaPageEvents::TrackingFailed(error_message) => self.log_tracking_manga_error(error_message),
-                MangaPageEvents::ReadChapterBookmarked(chapter, manga) => self.read_chapter_bookmarked(chapter, manga),
+                MangaPageEvents::ReadChapterBookmarked(chapter, list) => self.read_chapter_bookmarked(chapter, list),
                 MangaPageEvents::FetchBookmarkFailed => self.fetch_bookmarked_chapter_failed(),
                 MangaPageEvents::FetchChapterBookmarked(chapter_bookmarked) => {
-                    //let api_client = MangadexClient::global().clone();
-                    //
-                    //self.fetch_chapter_bookmarked(chapter_bookmarked, api_client);
+                    self.fetch_chapter_bookmarked(chapter_bookmarked);
                 },
                 MangaPageEvents::LoadCover(img) => self.load_cover(img),
                 MangaPageEvents::SearchCover => self.search_cover(),
@@ -1195,18 +1166,10 @@ where
                 MangaPageEvents::CheckChapterStatus => {
                     self.check_chapters_read();
                 },
-                MangaPageEvents::LoadStatistics(maybe_statistics) => {
-                    //if let Some(response) = maybe_statistics {
-                    //    let statistics: &Statistics = &response.statistics[&self.manga.id];
-                    //    self.statistics = Some(MangaStatistics::new(
-                    //        statistics.rating.average.unwrap_or_default(),
-                    //        statistics.follows.unwrap_or_default(),
-                    //    ));
-                    //}
-                },
-                MangaPageEvents::ReadSuccesful(chapter_to_read, manga_to_read) => {
+                MangaPageEvents::ReadSuccesful(chapter_to_read, list) => {
                     self.state = PageState::DisplayingChapters;
                     let volume = chapter_to_read.clone().volume_number.and_then(|vol| vol.parse::<u32>().ok());
+                    self.mark_chapter_as_read_in_db(&chapter_to_read);
                     self.track_manga(self.manga_tracker.clone(), self.manga.title.clone(), chapter_to_read.number as u32, volume);
 
                     self.local_event_tx.send(MangaPageEvents::CheckChapterStatus).ok();
@@ -1214,7 +1177,11 @@ where
                     self.global_event_tx
                         .as_ref()
                         .unwrap()
-                        .send(Events::ReadChapter(chapter_to_read, manga_to_read))
+                        .send(Events::ReadChapter(chapter_to_read, MangaToRead {
+                            title: self.manga.title.clone(),
+                            manga_id: self.manga.id.clone(),
+                            list,
+                        }))
                         .ok();
                 },
             }

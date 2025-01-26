@@ -5,7 +5,9 @@ use std::io::stdout;
 use std::process::exit;
 use std::time::Duration;
 
-use backend::manga_provider::mangadex::{MangadexClient, API_URL_BASE, COVER_IMG_URL_BASE, MANGADEX_CLIENT_INSTANCE};
+use backend::manga_provider::mangadex::{
+    MangadexClient, MangadexFiltersState, MangadexFiltersWidget, API_URL_BASE, COVER_IMG_URL_BASE, MANGADEX_CLIENT_INSTANCE,
+};
 use backend::release_notifier::{ReleaseNotifier, GITHUB_URL};
 use backend::secrets::anilist::AnilistStorage;
 use backend::tracker::anilist::{Anilist, BASE_ANILIST_API_URL};
@@ -116,7 +118,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     color_eyre::install()?;
     stdout().execute(EnableMouseCapture)?;
-    run_app(ratatui::init(), MangadexClient::global().clone(), anilist_client).await?;
+    run_app(ratatui::init(), MangadexClient::global().clone(), anilist_client, MangadexFiltersState {}, MangadexFiltersWidget {})
+        .await?;
     ratatui::restore();
     stdout().execute(DisableMouseCapture)?;
 

@@ -4,13 +4,11 @@ use ratatui::style::{Color, Style, Stylize};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear, HighlightSpacing, List, ListItem, ListState, Paragraph, StatefulWidget, Tabs, Widget, Wrap};
 use ratatui::Frame;
-use state::*;
 
+use super::filter::*;
 use super::StatefulWidgetFrame;
 use crate::global::CURRENT_LIST_ITEM_STYLE;
 use crate::utils::{centered_rect, render_search_bar, set_filter_tags_style};
-
-pub mod state;
 
 pub struct FilterWidget<'a> {
     pub block: Option<Block<'a>>,

@@ -198,7 +198,7 @@ mod tests {
     use uuid::Uuid;
 
     use super::*;
-    use crate::backend::filter::Languages;
+    use crate::backend::manga_provider::Languages;
 
     fn create_tests_directory() -> Result<PathBuf, std::io::Error> {
         let base_directory = Path::new("./test_results/download");

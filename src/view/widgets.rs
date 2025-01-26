@@ -7,7 +7,6 @@ use ratatui::Frame;
 use crate::backend::tui::Events;
 
 pub mod feed;
-pub mod filter_widget;
 pub mod home;
 pub mod manga;
 pub mod reader;

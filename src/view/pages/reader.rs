@@ -1,10 +1,6 @@
 use std::cmp::Ordering;
-use std::error::Error;
-use std::fmt::Display;
-use std::future::Future;
 
 use crossterm::event::{KeyCode, KeyEvent};
-use image::DynamicImage;
 use manga_tui::SortedVec;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Margin, Rect};
@@ -14,7 +10,6 @@ use ratatui::Frame;
 use ratatui_image::picker::Picker;
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::{Resize, StatefulImage};
-use reqwest::Url;
 use rusqlite::Connection;
 use throbber_widgets_tui::{Throbber, ThrobberState};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
@@ -24,8 +19,8 @@ use crate::backend::database::{
     save_history, Bookmark, ChapterToBookmark, ChapterToSaveHistory, Database, MangaReadingHistorySave,
 };
 use crate::backend::error_log::{write_to_error_log, ErrorType};
-use crate::backend::filter::Languages;
 use crate::backend::manga_provider::mangadex::api_responses::AggregateChapterResponse;
+use crate::backend::manga_provider::{ChapterToRead, MangaPanel, SearchChapterById, SearchMangaPanel};
 use crate::backend::tracker::{track_manga, MangaTracker};
 use crate::backend::tui::Events;
 use crate::common::format_error_message_tracking_reading_history;
@@ -34,20 +29,6 @@ use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
 use crate::view::tasks::reader::get_manga_panel;
 use crate::view::widgets::reader::{PageItemState, PagesItem, PagesList, PagesListState};
 use crate::view::widgets::Component;
-
-pub trait SearchChapter: Send + Clone + 'static {
-    fn search_chapter(&self, chapter_id: &str) -> impl Future<Output = Result<ChapterToRead, Box<dyn Error>>> + Send;
-}
-
-pub trait SearchMangaPanel: Send + Clone + 'static {
-    fn search_manga_panel(&self, endpoint: Url) -> impl Future<Output = Result<MangaPanel, Box<dyn Error>>> + Send;
-}
-
-#[derive(Debug, PartialEq, Clone, Default)]
-pub struct MangaPanel {
-    pub image_decoded: DynamicImage,
-    pub dimensions: (u32, u32),
-}
 
 #[derive(Debug, PartialEq, Clone, Default)]
 pub enum PageSize {
@@ -107,54 +88,6 @@ impl Page {
         Self {
             image_state: None,
             dimensions: None,
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct ChapterToRead {
-    pub id: String,
-    pub title: String,
-    pub number: f64,
-    /// This is string because it could also be "none" for chapters with no volume associated
-    pub volume_number: Option<String>,
-    pub num_page_bookmarked: Option<u32>,
-    pub language: Languages,
-    pub pages_url: Vec<Url>,
-}
-
-impl Display for ChapterToRead {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            r#"
-     id: {},
-     title: {},
-     number: {},
-     volume: {}
-     Page bookmarked: {}
-     language: {},
-        "#,
-            self.id,
-            self.title,
-            self.number,
-            self.volume_number.clone().unwrap_or("none".to_string()),
-            self.num_page_bookmarked.unwrap_or(0),
-            self.language,
-        )
-    }
-}
-
-impl Default for ChapterToRead {
-    fn default() -> Self {
-        Self {
-            id: String::default(),
-            number: 1.0,
-            title: String::default(),
-            volume_number: Some("1".to_string()),
-            pages_url: vec![],
-            language: Languages::default(),
-            num_page_bookmarked: None,
         }
     }
 }
@@ -323,7 +256,7 @@ impl ListOfChapters {
 
 pub struct MangaReader<T, S>
 where
-    T: SearchChapter + SearchMangaPanel,
+    T: SearchChapterById + SearchMangaPanel,
     S: MangaTracker,
 {
     manga_title: String,
@@ -350,7 +283,7 @@ where
 
 impl<T, S> Component for MangaReader<T, S>
 where
-    T: SearchChapter + SearchMangaPanel,
+    T: SearchChapterById + SearchMangaPanel,
     S: MangaTracker,
 {
     type Actions = MangaReaderActions;
@@ -435,7 +368,7 @@ where
 
 impl<T, S> MangaReader<T, S>
 where
-    T: SearchChapter + SearchMangaPanel,
+    T: SearchChapterById + SearchMangaPanel,
     S: MangaTracker,
 {
     pub fn new(chapter: ChapterToRead, manga_id: String, picker: Picker, api_client: T) -> Self {
@@ -856,8 +789,9 @@ where
     fn search_chapter(&mut self, chapter_id: String) {
         let api_client = self.api_client.clone();
         let sender = self.local_event_tx.clone();
+        let manga_id = self.manga_id.clone();
         self.image_tasks.spawn(async move {
-            let response = api_client.search_chapter(&chapter_id).await;
+            let response = api_client.search_chapter(&chapter_id, &manga_id).await;
             match response {
                 Ok(res) => {
                     sender.send(MangaReaderEvents::LoadChapter(res)).ok();
@@ -891,903 +825,903 @@ where
 
 #[cfg(test)]
 mod test {
-    use std::time::Duration;
-
-    use pretty_assertions::assert_eq;
-    use tokio::time::timeout;
-
-    use self::mpsc::unbounded_channel;
-    use super::*;
-    use crate::backend::database::{ChapterToBookmark, Database};
-    use crate::global::test_utils::TrackerTest;
-    use crate::view::widgets::press_key;
-
-    #[derive(Clone)]
-    struct TestApiClient {
-        should_fail: bool,
-        response: ChapterToRead,
-        panel_response: MangaPanel,
-    }
-
-    impl TestApiClient {
-        pub fn new() -> Self {
-            Self {
-                should_fail: false,
-                response: ChapterToRead::default(),
-                panel_response: MangaPanel::default(),
-            }
-        }
-
-        pub fn with_response(response: ChapterToRead) -> Self {
-            Self {
-                should_fail: false,
-                response,
-                panel_response: MangaPanel::default(),
-            }
-        }
-
-        pub fn with_failing_request() -> Self {
-            Self {
-                should_fail: true,
-                response: ChapterToRead::default(),
-                panel_response: MangaPanel::default(),
-            }
-        }
-
-        pub fn with_page_response(response: MangaPanel) -> Self {
-            Self {
-                should_fail: true,
-                response: ChapterToRead::default(),
-                panel_response: response,
-            }
-        }
-    }
-
-    impl SearchChapter for TestApiClient {
-        async fn search_chapter(&self, _chapter_id: &str) -> Result<ChapterToRead, Box<dyn Error>> {
-            if self.should_fail { Err("should_fail".into()) } else { Ok(self.response.clone()) }
-        }
-    }
-
-    impl SearchMangaPanel for TestApiClient {
-        async fn search_manga_panel(&self, _endpoint: Url) -> Result<MangaPanel, Box<dyn Error>> {
-            if self.should_fail { Err("must_failt".into()) } else { Ok(self.panel_response.clone()) }
-        }
-    }
-
-    fn initialize_reader_page<T, S>(api_client: T) -> MangaReader<T, S>
-    where
-        T: SearchChapter + SearchMangaPanel,
-        S: MangaTracker,
-    {
-        let picker = Picker::new((8, 19));
-        let chapter_id = "some_id".to_string();
-        let url_imgs = vec!["http://localhost".parse().unwrap(), "http://localhost".parse().unwrap()];
-        MangaReader::new(
-            ChapterToRead {
-                id: chapter_id,
-                title: String::default(),
-                number: 1.0,
-                pages_url: url_imgs,
-                language: Languages::default(),
-                num_page_bookmarked: None,
-                volume_number: Some("2".to_string()),
-            },
-            "some_manga_id".to_string(),
-            picker,
-            api_client,
-        )
-    }
-
-    #[test]
-    fn sorted_chapter_searches_next_chapter() {
-        let chapter_to_search: Chapter = Chapter {
-            id: "second_chapter".to_string(),
-            number: "2".to_string(),
-            volume: "1".to_string(),
-        };
-
-        let chapters = SortedChapters::new(vec![
-            Chapter {
-                id: "some_id".to_string(),
-                number: "1".to_string(),
-                volume: "1".to_string(),
-            },
-            chapter_to_search.clone(),
-        ]);
-
-        let result = chapters.search_next_chapter("1").expect("should find next chapter");
-        let not_found = chapters.search_next_chapter("2");
-
-        assert_eq!(chapter_to_search, result);
-        assert!(not_found.is_none());
-    }
-
-    #[test]
-    fn sorted_volumes_searches_next_volume() {
-        let volume_to_search: Volumes = Volumes {
-            volume: "2".to_string(),
-            chapters: SortedChapters::new(vec![Chapter::default()]),
-        };
-
-        let other: Volumes = Volumes {
-            volume: "1".to_string(),
-            chapters: SortedChapters::new(vec![Chapter::default()]),
-        };
-
-        let no_volume: Volumes = Volumes {
-            volume: "none".to_string(),
-            chapters: SortedChapters::new(vec![Chapter::default()]),
-        };
-
-        let volumes: Vec<Volumes> = vec![volume_to_search.clone(), no_volume, other];
-
-        let volumes = dbg!(SortedVolumes::new(volumes));
-
-        let result = volumes.search_next_volume("1").expect("should search next volume");
-        let not_found = volumes.search_next_volume("none");
-
-        assert_eq!(volume_to_search, result);
-        assert!(not_found.is_none());
-    }
-
-    #[test]
-    fn sorted_volumes_searches_previous_volume() {
-        let volume_to_search: Volumes = Volumes {
-            volume: "1".to_string(),
-            chapters: SortedChapters::new(vec![Chapter::default()]),
-        };
-
-        let other: Volumes = Volumes {
-            volume: "3".to_string(),
-            chapters: SortedChapters::new(vec![Chapter::default()]),
-        };
-
-        let volumes: Vec<Volumes> = vec![volume_to_search.clone(), other];
-
-        let volumes = SortedVolumes::new(volumes);
-
-        let result = volumes.search_previous_volume("3").expect("should search previous volume");
-        let not_found = volumes.search_previous_volume("4");
-
-        assert_eq!(volume_to_search, result);
-        assert!(not_found.is_none());
-    }
-
-    #[test]
-    fn it_searches_next_chapter_in_the_list_of_chapters() {
-        let mut list_of_volumes: Vec<Volumes> = vec![];
-        let mut list_of_chapters: Vec<Chapter> = vec![];
-
-        let chapter_to_search = Chapter {
-            id: "".to_string(),
-            number: "2".to_string(),
-            volume: "1".to_string(),
-        };
-
-        list_of_chapters.push(Chapter {
-            id: "".to_string(),
-            number: "1".to_string(),
-            volume: "1".to_string(),
-        });
-
-        list_of_chapters.push(chapter_to_search.clone());
-
-        list_of_volumes.push(Volumes {
-            volume: "1".to_string(),
-            chapters: SortedChapters::new(list_of_chapters),
-        });
-
-        let list = ListOfChapters {
-            volumes: SortedVolumes::new(list_of_volumes),
-        };
-
-        let list = dbg!(list);
-
-        let next_chapter = list.get_next_chapter(Some("1"), 1.0).expect("should get next chapter");
-        let not_found = list.get_next_chapter(Some("1"), 2.0);
-
-        assert_eq!(chapter_to_search, next_chapter);
-        assert!(not_found.is_none());
-    }
-
-    #[test]
-    fn it_searches_next_chapter_in_the_list_of_chapters_decimal_chapter() {
-        let mut list_of_volumes: Vec<Volumes> = vec![];
-        let mut list_of_chapters: Vec<Chapter> = vec![];
-
-        let chapter_to_search = Chapter {
-            id: "".to_string(),
-            number: "1.3".to_string(),
-            volume: "1".to_string(),
-        };
-
-        list_of_chapters.push(chapter_to_search.clone());
-
-        list_of_chapters.push(Chapter {
-            id: "".to_string(),
-            number: "1.1".to_string(),
-            volume: "1".to_string(),
-        });
-
-        list_of_volumes.push(Volumes {
-            volume: "1".to_string(),
-            chapters: SortedChapters::new(list_of_chapters),
-        });
-
-        let list = dbg!(ListOfChapters {
-            volumes: SortedVolumes::new(list_of_volumes),
-        });
-
-        let next_chapter = list.get_next_chapter(Some("1"), 1.1).expect("should get next chapter");
-        let not_found = list.get_next_chapter(Some("1"), 1.3);
-
-        assert_eq!(chapter_to_search, next_chapter);
-        assert!(not_found.is_none());
-    }
-
-    #[test]
-    fn list_of_chapters_searches_chapter_which_is_in_next_volume() {
-        let mut list_of_volumes: Vec<Volumes> = vec![];
-        let mut list_of_chapters: Vec<Chapter> = vec![];
-
-        let chapter_to_search = Chapter {
-            id: "".to_string(),
-            number: "2".to_string(),
-            volume: "2".to_string(),
-        };
-
-        list_of_chapters.push(Chapter {
-            id: "".to_string(),
-            number: "1".to_string(),
-            volume: "1".to_string(),
-        });
-
-        list_of_volumes.push(Volumes {
-            volume: "1".to_string(),
-            chapters: SortedChapters::new(list_of_chapters),
-        });
-
-        list_of_volumes.push(Volumes {
-            volume: "2".to_string(),
-            chapters: SortedChapters::new(vec![chapter_to_search.clone()]),
-        });
-
-        let list = dbg!(ListOfChapters {
-            volumes: SortedVolumes::new(list_of_volumes),
-        });
-
-        let next_chapter = list.get_next_chapter(Some("1"), 1.0).expect("should get next chapter");
-        let not_found = list.get_next_chapter(Some("2"), 2.0);
-
-        assert_eq!(chapter_to_search, next_chapter);
-        assert!(not_found.is_none());
-    }
-
-    #[test]
-    fn list_of_chapters_searches_previous_chapter() {
-        let mut list_of_volumes: Vec<Volumes> = vec![];
-        let mut list_of_chapters: Vec<Chapter> = vec![];
-
-        let chapter_to_search = Chapter {
-            number: "1".to_string(),
-            volume: "1".to_string(),
-            ..Default::default()
-        };
-
-        list_of_chapters.push(Chapter {
-            number: "2".to_string(),
-            volume: "1".to_string(),
-            ..Default::default()
-        });
-
-        list_of_chapters.push(chapter_to_search.clone());
-
-        list_of_volumes.push(Volumes {
-            volume: "1".to_string(),
-            chapters: SortedChapters::new(list_of_chapters),
-        });
-
-        let list = ListOfChapters {
-            volumes: SortedVolumes::new(list_of_volumes),
-        };
-
-        let list = dbg!(list);
-
-        let previous = list.get_previous_chapter(Some("1"), 2.0).expect("should get previous chapter");
-        let from_first_chapter = list.get_previous_chapter(Some("1"), 1.0);
-
-        assert_eq!(chapter_to_search, previous);
-        assert!(from_first_chapter.is_none());
-    }
-
-    #[test]
-    fn list_of_chapters_searches_previous_which_is_in_previos_volume() {
-        let mut list_of_volumes: Vec<Volumes> = vec![];
-        let mut list_of_chapters: Vec<Chapter> = vec![];
-
-        let chapter_to_search_1 = Chapter {
-            number: "1".to_string(),
-            volume: "1".to_string(),
-            ..Default::default()
-        };
-
-        let chapter_to_search_2 = Chapter {
-            number: "2".to_string(),
-            volume: "1".to_string(),
-            ..Default::default()
-        };
-
-        list_of_chapters.push(Chapter {
-            number: "3".to_string(),
-            volume: "2".to_string(),
-            ..Default::default()
-        });
-
-        list_of_chapters.push(Chapter {
-            number: "3.2".to_string(),
-            volume: "2".to_string(),
-            ..Default::default()
-        });
-        list_of_chapters.push(Chapter {
-            number: "4".to_string(),
-            volume: "2".to_string(),
-            ..Default::default()
-        });
-
-        list_of_volumes.push(Volumes {
-            volume: "1".to_string(),
-            chapters: SortedChapters::new(vec![chapter_to_search_1.clone(), chapter_to_search_2.clone()]),
-        });
-
-        list_of_volumes.push(Volumes {
-            volume: "2".to_string(),
-            chapters: SortedChapters::new(list_of_chapters),
-        });
-
-        let list = dbg!(ListOfChapters {
-            volumes: SortedVolumes::new(list_of_volumes),
-        });
-
-        let previous_2 = list
-            .get_previous_chapter(Some("2"), 3.0)
-            .expect("should get previous chapter in previous volume");
-
-        let previous_1 = list
-            .get_previous_chapter(Some("1"), 2.0)
-            .expect("should get previous chapter in previous volume");
-
-        let not_found = list.get_previous_chapter(Some("3"), 1.0);
-
-        assert_eq!(chapter_to_search_2, previous_2);
-        assert_eq!(chapter_to_search_1, previous_1);
-        assert!(not_found.is_none());
-    }
-
-    #[tokio::test]
-    async fn trigget_key_events() {
-        let mut reader_page: MangaReader<TestApiClient, TrackerTest> = initialize_reader_page(TestApiClient::new());
-
-        press_key(&mut reader_page, KeyCode::Char('j'));
-        let action = reader_page.local_action_rx.recv().await.unwrap();
-
-        assert_eq!(MangaReaderActions::NextPage, action);
-
-        press_key(&mut reader_page, KeyCode::Char('k'));
-        let action = reader_page.local_action_rx.recv().await.unwrap();
-
-        assert_eq!(MangaReaderActions::PreviousPage, action);
-    }
-
-    #[tokio::test]
-    async fn handle_key_events() {
-        let mut reader_page: MangaReader<TestApiClient, TrackerTest> = initialize_reader_page(TestApiClient::new());
-
-        reader_page.pages_list = PagesList::new(vec![PagesItem::new(0), PagesItem::new(1), PagesItem::new(2)]);
-
-        let area = Rect::new(0, 0, 20, 20);
-        let mut buf = Buffer::empty(area);
-
-        reader_page.render_page_list(area, &mut buf);
-
-        let action = MangaReaderActions::NextPage;
-        reader_page.update(action);
-
-        assert_eq!(0, reader_page.page_list_state.list_state.selected.expect("no page is selected"));
-
-        let action = MangaReaderActions::NextPage;
-        reader_page.update(action);
-
-        assert_eq!(1, reader_page.page_list_state.list_state.selected.expect("no page is selected"));
-
-        let action = MangaReaderActions::PreviousPage;
-        reader_page.update(action);
-
-        assert_eq!(0, reader_page.page_list_state.list_state.selected.expect("no page is selected"));
-    }
-
-    #[tokio::test]
-    async fn init_fetching_and_fetch_pages_should_set_correct_page_count_and_first_page_state_to_loading() {
-        let chapter: ChapterToRead = ChapterToRead {
-            pages_url: vec!["http://localhost".parse().unwrap(), "http://localhost".parse().unwrap()],
-            ..Default::default()
-        };
-
-        let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
-            MangaReader::new(chapter, "some_id".to_string(), Picker::new((8, 8)), TestApiClient::new());
-
-        manga_reader.init_fetching_pages();
-        manga_reader.fetch_pages();
-
-        assert_eq!(2, manga_reader.pages.len());
-        assert_eq!(2, manga_reader.pages_list.pages.len());
-
-        assert_eq!(PageItemState::Loading, manga_reader.pages_list.pages[0].state);
-    }
-
-    #[test]
-    fn it_increases_page_size_based_on_manga_panel_dimesions() {
-        let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
-            MangaReader::new(ChapterToRead::default(), "some_id".to_string(), Picker::new((8, 8)), TestApiClient::new());
-
-        manga_reader.resize_based_on_image_size(500, 200);
-
-        assert_eq!(PageSize::Wide, manga_reader.current_page_size);
-
-        manga_reader.resize_based_on_image_size(100, 200);
-
-        assert_eq!(PageSize::Normal, manga_reader.current_page_size);
-
-        // only resize if the image is big enough
-        manga_reader.resize_based_on_image_size(300, 200);
-
-        assert_eq!(PageSize::Normal, manga_reader.current_page_size);
-    }
-
-    #[test]
-    fn it_does_not_initiate_search_next_chapter_if_there_is_no_next_chapter() {
-        let list_of_chapters = ListOfChapters::default();
-        let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
-            MangaReader::new(ChapterToRead::default(), "".to_string(), Picker::new((8, 8)), TestApiClient::new())
-                .with_list_of_chapters(list_of_chapters);
-
-        manga_reader.initiate_search_next_chapter();
-
-        assert_eq!(manga_reader.state, State::DisplayingChapterNotFound);
-    }
-
-    #[test]
-    fn it_does_not_initiate_search_previous_chapter_if_there_is_no_previous_chapter() {
-        let list_of_chapters = ListOfChapters::default();
-        let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
-            MangaReader::new(ChapterToRead::default(), "".to_string(), Picker::new((8, 8)), TestApiClient::new())
-                .with_list_of_chapters(list_of_chapters);
-
-        manga_reader.initiate_search_previous_chapter();
-
-        assert_eq!(manga_reader.state, State::DisplayingChapterNotFound);
-    }
-
-    #[tokio::test]
-    async fn it_initiates_search_next_chapter() {
-        let list_of_chapters: ListOfChapters = ListOfChapters {
-            volumes: SortedVolumes::new(vec![Volumes {
-                volume: "1".to_string(),
-                chapters: SortedChapters::new(vec![
-                    Chapter {
-                        number: "1".to_string(),
-                        ..Default::default()
-                    },
-                    Chapter {
-                        id: "id_next_chapter".to_string(),
-                        number: "2".to_string(),
-                        ..Default::default()
-                    },
-                ]),
-            }]),
-        };
-
-        let current_chapter: ChapterToRead = ChapterToRead {
-            number: 1.0,
-            volume_number: Some("1".to_string()),
-            ..Default::default()
-        };
-
-        let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
-            MangaReader::new(current_chapter, "".to_string(), Picker::new((8, 8)), TestApiClient::new())
-                .with_list_of_chapters(list_of_chapters);
-
-        manga_reader.initiate_search_next_chapter();
-
-        let expected = MangaReaderEvents::SearchNextChapter("id_next_chapter".to_string());
-
-        let result = timeout(Duration::from_millis(250), manga_reader.local_event_rx.recv())
-            .await
-            .unwrap()
-            .unwrap();
-
-        assert_eq!(expected, result);
-        assert_eq!(State::SearchingChapter, manga_reader.state);
-    }
-    #[tokio::test]
-    async fn it_initiates_search_previous_chapter() {
-        let list_of_chapters: ListOfChapters = ListOfChapters {
-            volumes: SortedVolumes::new(vec![Volumes {
-                volume: "1".to_string(),
-                chapters: SortedChapters::new(vec![
-                    Chapter {
-                        id: "id_previous_chapter".to_string(),
-                        number: "1".to_string(),
-                        ..Default::default()
-                    },
-                    Chapter {
-                        number: "2".to_string(),
-                        ..Default::default()
-                    },
-                ]),
-            }]),
-        };
-
-        let current_chapter: ChapterToRead = ChapterToRead {
-            number: 2.0,
-            volume_number: Some("1".to_string()),
-            ..Default::default()
-        };
-
-        let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
-            MangaReader::new(current_chapter, "".to_string(), Picker::new((8, 8)), TestApiClient::new())
-                .with_list_of_chapters(list_of_chapters);
-
-        manga_reader.initiate_search_previous_chapter();
-
-        let expected_event = tokio::time::timeout(Duration::from_millis(250), manga_reader.local_event_rx.recv())
-            .await
-            .unwrap()
-            .unwrap();
-
-        assert_eq!(expected_event, MangaReaderEvents::SearchPreviousChapter("id_previous_chapter".to_string()));
-        assert_eq!(manga_reader.state, State::SearchingChapter);
-    }
-
-    #[tokio::test]
-    async fn it_sends_search_next_chapter_action_on_w_key_press() {
-        let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
-            MangaReader::new(ChapterToRead::default(), "".to_string(), Picker::new((8, 8)), TestApiClient::new());
-
-        press_key(&mut manga_reader, KeyCode::Char('w'));
-
-        let expected_event = timeout(Duration::from_millis(250), manga_reader.local_action_rx.recv())
-            .await
-            .unwrap()
-            .unwrap();
-
-        assert_eq!(expected_event, MangaReaderActions::SearchNextChapter);
-    }
-
-    #[tokio::test]
-    async fn it_sends_search_previous_chapter_event_on_b_key_press() {
-        let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
-            MangaReader::new(ChapterToRead::default(), "".to_string(), Picker::new((8, 8)), TestApiClient::new());
-
-        press_key(&mut manga_reader, KeyCode::Char('b'));
-
-        let expected_event = timeout(Duration::from_millis(250), manga_reader.local_action_rx.recv())
-            .await
-            .unwrap()
-            .unwrap();
-
-        assert_eq!(MangaReaderActions::SearchPreviousChapter, expected_event);
-    }
-
-    #[tokio::test]
-    async fn it_searches_chapter_and_sends_successful_result() {
-        let expected = ChapterToRead {
-            id: "next_chapter_id".to_string(),
-            title: "some_title".to_string(),
-            number: 2.0,
-            language: Languages::default(),
-            volume_number: Some("1".to_string()),
-            num_page_bookmarked: None,
-            pages_url: vec!["http://localhost".parse().unwrap()],
-        };
-
-        let api_client = TestApiClient::with_response(expected.clone());
-
-        let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
-            MangaReader::new(ChapterToRead::default(), "some_id".to_string(), Picker::new((8, 8)), api_client);
-
-        manga_reader.search_chapter("some_id".to_string());
-
-        let result = timeout(Duration::from_millis(250), manga_reader.local_event_rx.recv())
-            .await
-            .unwrap()
-            .unwrap();
-
-        assert_eq!(result, MangaReaderEvents::LoadChapter(expected));
-    }
-
-    #[tokio::test]
-    async fn it_searches_chapter_and_sends_error_event() {
-        let api_client = TestApiClient::with_failing_request();
-
-        let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
-            MangaReader::new(ChapterToRead::default(), "some_id".to_string(), Picker::new((8, 8)), api_client);
-
-        manga_reader.search_chapter("some_id".to_string());
-
-        let result = timeout(Duration::from_millis(250), manga_reader.local_event_rx.recv())
-            .await
-            .unwrap()
-            .unwrap();
-
-        assert_eq!(result, MangaReaderEvents::ErrorSearchingChapter);
-    }
-
-    #[test]
-    fn it_loads_chapter_found_and_sets_state_as_default() {
-        let expected = ChapterToRead {
-            id: "id_before".to_string(),
-            title: "some_title".to_string(),
-            language: Languages::default(),
-            number: 1.0,
-            num_page_bookmarked: None,
-            volume_number: Some("1".to_string()),
-            pages_url: vec![],
-        };
-
-        let api_client = TestApiClient::with_response(expected.clone());
-
-        let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
-            MangaReader::new(ChapterToRead::default(), "some_id".to_string(), Picker::new((8, 8)), api_client);
-
-        manga_reader.state = State::SearchingChapter;
-
-        manga_reader.load_chapter(expected.clone());
-
-        assert_eq!(expected, manga_reader.current_chapter);
-        assert_eq!(manga_reader.state, State::default());
-    }
-
-    #[test]
-    fn it_resets_pages_after_chapter_was_found() {
-        let api_client = TestApiClient::new();
-
-        let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
-            MangaReader::new(ChapterToRead::default(), "some_id".to_string(), Picker::new((8, 8)), api_client);
-
-        manga_reader.pages = vec![Page::new(), Page::new()];
-        manga_reader.pages_list.pages = vec![PagesItem::new(1), PagesItem::new(1)];
-        manga_reader.page_list_state.list_state.select(Some(1));
-
-        manga_reader.load_chapter(ChapterToRead::default());
-
-        assert!(manga_reader.pages.is_empty());
-        assert!(manga_reader.pages_list.pages.is_empty());
-        assert!(manga_reader.page_list_state.list_state.selected.is_none());
-    }
-
-    #[tokio::test]
-    async fn it_send_event_to_search_pages_after_chapter_was_loaded() {
-        let api_client = TestApiClient::new();
-        let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
-            MangaReader::new(ChapterToRead::default(), "".to_string(), Picker::new((8, 8)), api_client);
-
-        manga_reader.load_chapter(ChapterToRead::default());
-
-        let expected = MangaReaderEvents::FetchPages;
-
-        let result = timeout(Duration::from_millis(250), manga_reader.local_event_rx.recv())
-            .await
-            .unwrap()
-            .unwrap();
-
-        assert_eq!(expected, result)
-    }
-
-    #[tokio::test]
-    async fn it_send_event_to_save_reading_status_to_database_after_chapter_was_loaded() {
-        let api_client = TestApiClient::new();
-
-        let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
-            MangaReader::new(ChapterToRead::default(), "".to_string(), Picker::new((8, 8)), api_client);
-
-        let new_chapter: ChapterToRead = ChapterToRead {
-            id: "chapter_to_save".to_string(),
-            ..Default::default()
-        };
-
-        manga_reader.load_chapter(new_chapter);
-
-        let expected = MangaReaderEvents::SaveReadingToDatabase;
-
-        let mut events: Vec<MangaReaderEvents> = vec![];
-
-        manga_reader.local_event_rx.recv_many(&mut events, 3).await;
-
-        events.iter().find(|result| **result == expected).expect("expected event was not sent");
-    }
-
-    #[test]
-    fn it_save_reading_history() -> Result<(), rusqlite::Error> {
-        let mut conn = Connection::open_in_memory()?;
-
-        let test_database = Database::new(&conn);
-
-        test_database.setup()?;
-
-        let chapter: ChapterToRead = ChapterToRead {
-            id: "chapter_to_save".to_string(),
-            ..Default::default()
-        };
-
-        let manga_reader: MangaReader<TestApiClient, TrackerTest> =
-            MangaReader::new(chapter, "".to_string(), Picker::new((8, 8)), TestApiClient::new());
-
-        let id_chapter_saved = manga_reader.save_reading_history(&mut conn)?;
-
-        let has_been_saved: bool =
-            conn.query_row("SELECT is_read FROM chapters WHERE id = ?1", [id_chapter_saved], |row| row.get(0))?;
-
-        assert!(has_been_saved);
-
-        Ok(())
-    }
-
-    #[test]
-    fn it_loads_chapter_on_event() {
-        let chapter_to_load = ChapterToRead {
-            id: "new_chapter_id".to_string(),
-            ..Default::default()
-        };
-
-        let api_client = TestApiClient::new();
-
-        let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
-            MangaReader::new(ChapterToRead::default(), "some_id".to_string(), Picker::new((8, 8)), api_client);
-
-        manga_reader
-            .local_event_tx
-            .send(MangaReaderEvents::LoadChapter(chapter_to_load.clone()))
-            .ok();
-
-        manga_reader.tick();
-
-        assert_eq!(manga_reader.current_chapter.id, chapter_to_load.id);
-    }
-
-    #[test]
-    fn it_is_set_as_error_searching_chapter_on_event() {
-        let api_client = TestApiClient::new();
-
-        let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
-            MangaReader::new(ChapterToRead::default(), "some_id".to_string(), Picker::new((8, 8)), api_client);
-
-        manga_reader.local_event_tx.send(MangaReaderEvents::ErrorSearchingChapter).ok();
-
-        manga_reader.tick();
-
-        assert_eq!(manga_reader.state, State::ErrorSearchingChapter);
-    }
-
-    #[derive(Default, Debug)]
-    struct TestDatabase {
-        should_fail: bool,
-        bookmarked: bool,
-    }
-
-    impl TestDatabase {
-        pub fn new() -> Self {
-            Self {
-                should_fail: false,
-                bookmarked: false,
-            }
-        }
-
-        pub fn was_bookmarked(self) -> bool {
-            self.bookmarked
-        }
-    }
-
-    impl Bookmark for TestDatabase {
-        fn bookmark(&mut self, _chapter_to_bookmark: ChapterToBookmark<'_>) -> Result<(), Box<dyn std::error::Error>> {
-            if self.should_fail {
-                return Err("cannot bookmark chapter".into());
-            }
-            self.bookmarked = true;
-            Ok(())
-        }
-    }
-
-    #[test]
-    fn it_sets_current_chapter_as_bookmarked_and_sets_state_as_bookmarked() {
-        let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
-            MangaReader::new(ChapterToRead::default(), "".to_string(), Picker::new((8, 8)), TestApiClient::new());
-
-        let mut database = TestDatabase::new();
-
-        manga_reader.set_current_chapter_bookmarked(Some(2), &mut database);
-
-        assert!(database.was_bookmarked());
-        assert_eq!(Some(2), manga_reader.page_list_state.page_bookmarked);
-        assert_eq!(State::ManualBookmark, manga_reader.state)
-    }
-
-    #[test]
-    fn when_pages_list_is_rendered_it_selects_page_with_num_page_bookmarked_and_highlights_it() {
-        let chapter_to_read: ChapterToRead = ChapterToRead {
-            num_page_bookmarked: Some(1),
-            ..Default::default()
-        };
-
-        let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
-            MangaReader::new(chapter_to_read, "".to_string(), Picker::new((8, 8)), TestApiClient::new());
-
-        manga_reader.pages_list = PagesList::new(vec![PagesItem::new(0), PagesItem::new(1)]);
-
-        let area = Rect::new(0, 0, 10, 10);
-        let mut buf = Buffer::empty(area);
-
-        StatefulWidget::render(manga_reader.pages_list.clone(), area, &mut buf, &mut manga_reader.page_list_state);
-
-        assert_eq!(1, manga_reader.page_list_state.list_state.selected.expect("should not be none"));
-    }
-
-    #[tokio::test]
-    async fn it_does_not_send_event_to_bookmark_chapter_on_m_key_press_if_autobookmarking_is_true() {
-        let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
-            MangaReader::new(ChapterToRead::default(), "".to_string(), Picker::new((8, 8)), TestApiClient::new());
-
-        manga_reader.set_auto_bookmark();
-
-        press_key(&mut manga_reader, KeyCode::Char('m'));
-
-        assert!(manga_reader.local_action_rx.is_empty());
-    }
-
-    #[tokio::test]
-    async fn it_sends_event_go_manga_page_on_exit() {
-        let (tx, mut rx) = unbounded_channel::<Events>();
-        let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
-            MangaReader::new(ChapterToRead::default(), "".to_string(), Picker::new((8, 8)), TestApiClient::new())
-                .with_global_sender(tx);
-
-        manga_reader.exit();
-
-        let expected = Events::GoBackMangaPage;
-
-        let result = timeout(Duration::from_millis(250), rx.recv()).await.unwrap().unwrap();
-
-        assert_eq!(expected, result)
-    }
-
-    #[tokio::test]
-    async fn it_sends_event_to_log_manga_tracking_error() -> Result<(), Box<dyn Error>> {
-        let chapter: ChapterToRead = ChapterToRead {
-            id: "some_id".to_string(),
-            title: "some_title".to_string(),
-            number: 1.0,
-            volume_number: Some(2.to_string()),
-            ..Default::default()
-        };
-
-        let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
-            MangaReader::new(chapter.clone(), "".to_string(), Picker::new((8, 8)), TestApiClient::new())
-                .with_manga_title("some_title".to_string());
-
-        let expected_error_message = "some_error_message";
-
-        let tracker = TrackerTest::failing_with_error_message(expected_error_message);
-
-        manga_reader.track_manga_reading_history(Some(tracker));
-
-        let expected = MangaReaderEvents::ErrorTrackingReadingProgress(expected_error_message.to_string());
-
-        let result = timeout(Duration::from_millis(500), manga_reader.local_event_rx.recv())
-            .await?
-            .expect("should send event");
-
-        assert_eq!(expected, result);
-
-        Ok(())
-    }
+    //use std::time::Duration;
+    //
+    //use pretty_assertions::assert_eq;
+    //use tokio::time::timeout;
+    //
+    //use self::mpsc::unbounded_channel;
+    //use super::*;
+    //use crate::backend::database::{ChapterToBookmark, Database};
+    //use crate::global::test_utils::TrackerTest;
+    //use crate::view::widgets::press_key;
+    //
+    //#[derive(Clone)]
+    //struct TestApiClient {
+    //    should_fail: bool,
+    //    response: ChapterToRead,
+    //    panel_response: MangaPanel,
+    //}
+    //
+    //impl TestApiClient {
+    //    pub fn new() -> Self {
+    //        Self {
+    //            should_fail: false,
+    //            response: ChapterToRead::default(),
+    //            panel_response: MangaPanel::default(),
+    //        }
+    //    }
+    //
+    //    pub fn with_response(response: ChapterToRead) -> Self {
+    //        Self {
+    //            should_fail: false,
+    //            response,
+    //            panel_response: MangaPanel::default(),
+    //        }
+    //    }
+    //
+    //    pub fn with_failing_request() -> Self {
+    //        Self {
+    //            should_fail: true,
+    //            response: ChapterToRead::default(),
+    //            panel_response: MangaPanel::default(),
+    //        }
+    //    }
+    //
+    //    pub fn with_page_response(response: MangaPanel) -> Self {
+    //        Self {
+    //            should_fail: true,
+    //            response: ChapterToRead::default(),
+    //            panel_response: response,
+    //        }
+    //    }
+    //}
+    //
+    //impl SearchChapterById for TestApiClient {
+    //    async fn search_chapter(&self, _chapter_id: &str) -> Result<ChapterToRead, Box<dyn Error>> {
+    //        if self.should_fail { Err("should_fail".into()) } else { Ok(self.response.clone()) }
+    //    }
+    //}
+    //
+    //impl SearchMangaPanel for TestApiClient {
+    //    async fn search_manga_panel(&self, _endpoint: Url) -> Result<MangaPanel, Box<dyn Error>> {
+    //        if self.should_fail { Err("must_failt".into()) } else { Ok(self.panel_response.clone()) }
+    //    }
+    //}
+    //
+    //fn initialize_reader_page<T, S>(api_client: T) -> MangaReader<T, S>
+    //where
+    //    T: SearchChapter + SearchMangaPanel,
+    //    S: MangaTracker,
+    //{
+    //    let picker = Picker::new((8, 19));
+    //    let chapter_id = "some_id".to_string();
+    //    let url_imgs = vec!["http://localhost".parse().unwrap(), "http://localhost".parse().unwrap()];
+    //    MangaReader::new(
+    //        ChapterToRead {
+    //            id: chapter_id,
+    //            title: String::default(),
+    //            number: 1.0,
+    //            pages_url: url_imgs,
+    //            language: Languages::default(),
+    //            num_page_bookmarked: None,
+    //            volume_number: Some("2".to_string()),
+    //        },
+    //        "some_manga_id".to_string(),
+    //        picker,
+    //        api_client,
+    //    )
+    //}
+    //
+    //#[test]
+    //fn sorted_chapter_searches_next_chapter() {
+    //    let chapter_to_search: Chapter = Chapter {
+    //        id: "second_chapter".to_string(),
+    //        number: "2".to_string(),
+    //        volume: "1".to_string(),
+    //    };
+    //
+    //    let chapters = SortedChapters::new(vec![
+    //        Chapter {
+    //            id: "some_id".to_string(),
+    //            number: "1".to_string(),
+    //            volume: "1".to_string(),
+    //        },
+    //        chapter_to_search.clone(),
+    //    ]);
+    //
+    //    let result = chapters.search_next_chapter("1").expect("should find next chapter");
+    //    let not_found = chapters.search_next_chapter("2");
+    //
+    //    assert_eq!(chapter_to_search, result);
+    //    assert!(not_found.is_none());
+    //}
+    //
+    //#[test]
+    //fn sorted_volumes_searches_next_volume() {
+    //    let volume_to_search: Volumes = Volumes {
+    //        volume: "2".to_string(),
+    //        chapters: SortedChapters::new(vec![Chapter::default()]),
+    //    };
+    //
+    //    let other: Volumes = Volumes {
+    //        volume: "1".to_string(),
+    //        chapters: SortedChapters::new(vec![Chapter::default()]),
+    //    };
+    //
+    //    let no_volume: Volumes = Volumes {
+    //        volume: "none".to_string(),
+    //        chapters: SortedChapters::new(vec![Chapter::default()]),
+    //    };
+    //
+    //    let volumes: Vec<Volumes> = vec![volume_to_search.clone(), no_volume, other];
+    //
+    //    let volumes = dbg!(SortedVolumes::new(volumes));
+    //
+    //    let result = volumes.search_next_volume("1").expect("should search next volume");
+    //    let not_found = volumes.search_next_volume("none");
+    //
+    //    assert_eq!(volume_to_search, result);
+    //    assert!(not_found.is_none());
+    //}
+    //
+    //#[test]
+    //fn sorted_volumes_searches_previous_volume() {
+    //    let volume_to_search: Volumes = Volumes {
+    //        volume: "1".to_string(),
+    //        chapters: SortedChapters::new(vec![Chapter::default()]),
+    //    };
+    //
+    //    let other: Volumes = Volumes {
+    //        volume: "3".to_string(),
+    //        chapters: SortedChapters::new(vec![Chapter::default()]),
+    //    };
+    //
+    //    let volumes: Vec<Volumes> = vec![volume_to_search.clone(), other];
+    //
+    //    let volumes = SortedVolumes::new(volumes);
+    //
+    //    let result = volumes.search_previous_volume("3").expect("should search previous volume");
+    //    let not_found = volumes.search_previous_volume("4");
+    //
+    //    assert_eq!(volume_to_search, result);
+    //    assert!(not_found.is_none());
+    //}
+    //
+    //#[test]
+    //fn it_searches_next_chapter_in_the_list_of_chapters() {
+    //    let mut list_of_volumes: Vec<Volumes> = vec![];
+    //    let mut list_of_chapters: Vec<Chapter> = vec![];
+    //
+    //    let chapter_to_search = Chapter {
+    //        id: "".to_string(),
+    //        number: "2".to_string(),
+    //        volume: "1".to_string(),
+    //    };
+    //
+    //    list_of_chapters.push(Chapter {
+    //        id: "".to_string(),
+    //        number: "1".to_string(),
+    //        volume: "1".to_string(),
+    //    });
+    //
+    //    list_of_chapters.push(chapter_to_search.clone());
+    //
+    //    list_of_volumes.push(Volumes {
+    //        volume: "1".to_string(),
+    //        chapters: SortedChapters::new(list_of_chapters),
+    //    });
+    //
+    //    let list = ListOfChapters {
+    //        volumes: SortedVolumes::new(list_of_volumes),
+    //    };
+    //
+    //    let list = dbg!(list);
+    //
+    //    let next_chapter = list.get_next_chapter(Some("1"), 1.0).expect("should get next chapter");
+    //    let not_found = list.get_next_chapter(Some("1"), 2.0);
+    //
+    //    assert_eq!(chapter_to_search, next_chapter);
+    //    assert!(not_found.is_none());
+    //}
+    //
+    //#[test]
+    //fn it_searches_next_chapter_in_the_list_of_chapters_decimal_chapter() {
+    //    let mut list_of_volumes: Vec<Volumes> = vec![];
+    //    let mut list_of_chapters: Vec<Chapter> = vec![];
+    //
+    //    let chapter_to_search = Chapter {
+    //        id: "".to_string(),
+    //        number: "1.3".to_string(),
+    //        volume: "1".to_string(),
+    //    };
+    //
+    //    list_of_chapters.push(chapter_to_search.clone());
+    //
+    //    list_of_chapters.push(Chapter {
+    //        id: "".to_string(),
+    //        number: "1.1".to_string(),
+    //        volume: "1".to_string(),
+    //    });
+    //
+    //    list_of_volumes.push(Volumes {
+    //        volume: "1".to_string(),
+    //        chapters: SortedChapters::new(list_of_chapters),
+    //    });
+    //
+    //    let list = dbg!(ListOfChapters {
+    //        volumes: SortedVolumes::new(list_of_volumes),
+    //    });
+    //
+    //    let next_chapter = list.get_next_chapter(Some("1"), 1.1).expect("should get next chapter");
+    //    let not_found = list.get_next_chapter(Some("1"), 1.3);
+    //
+    //    assert_eq!(chapter_to_search, next_chapter);
+    //    assert!(not_found.is_none());
+    //}
+    //
+    //#[test]
+    //fn list_of_chapters_searches_chapter_which_is_in_next_volume() {
+    //    let mut list_of_volumes: Vec<Volumes> = vec![];
+    //    let mut list_of_chapters: Vec<Chapter> = vec![];
+    //
+    //    let chapter_to_search = Chapter {
+    //        id: "".to_string(),
+    //        number: "2".to_string(),
+    //        volume: "2".to_string(),
+    //    };
+    //
+    //    list_of_chapters.push(Chapter {
+    //        id: "".to_string(),
+    //        number: "1".to_string(),
+    //        volume: "1".to_string(),
+    //    });
+    //
+    //    list_of_volumes.push(Volumes {
+    //        volume: "1".to_string(),
+    //        chapters: SortedChapters::new(list_of_chapters),
+    //    });
+    //
+    //    list_of_volumes.push(Volumes {
+    //        volume: "2".to_string(),
+    //        chapters: SortedChapters::new(vec![chapter_to_search.clone()]),
+    //    });
+    //
+    //    let list = dbg!(ListOfChapters {
+    //        volumes: SortedVolumes::new(list_of_volumes),
+    //    });
+    //
+    //    let next_chapter = list.get_next_chapter(Some("1"), 1.0).expect("should get next chapter");
+    //    let not_found = list.get_next_chapter(Some("2"), 2.0);
+    //
+    //    assert_eq!(chapter_to_search, next_chapter);
+    //    assert!(not_found.is_none());
+    //}
+    //
+    //#[test]
+    //fn list_of_chapters_searches_previous_chapter() {
+    //    let mut list_of_volumes: Vec<Volumes> = vec![];
+    //    let mut list_of_chapters: Vec<Chapter> = vec![];
+    //
+    //    let chapter_to_search = Chapter {
+    //        number: "1".to_string(),
+    //        volume: "1".to_string(),
+    //        ..Default::default()
+    //    };
+    //
+    //    list_of_chapters.push(Chapter {
+    //        number: "2".to_string(),
+    //        volume: "1".to_string(),
+    //        ..Default::default()
+    //    });
+    //
+    //    list_of_chapters.push(chapter_to_search.clone());
+    //
+    //    list_of_volumes.push(Volumes {
+    //        volume: "1".to_string(),
+    //        chapters: SortedChapters::new(list_of_chapters),
+    //    });
+    //
+    //    let list = ListOfChapters {
+    //        volumes: SortedVolumes::new(list_of_volumes),
+    //    };
+    //
+    //    let list = dbg!(list);
+    //
+    //    let previous = list.get_previous_chapter(Some("1"), 2.0).expect("should get previous chapter");
+    //    let from_first_chapter = list.get_previous_chapter(Some("1"), 1.0);
+    //
+    //    assert_eq!(chapter_to_search, previous);
+    //    assert!(from_first_chapter.is_none());
+    //}
+    //
+    //#[test]
+    //fn list_of_chapters_searches_previous_which_is_in_previos_volume() {
+    //    let mut list_of_volumes: Vec<Volumes> = vec![];
+    //    let mut list_of_chapters: Vec<Chapter> = vec![];
+    //
+    //    let chapter_to_search_1 = Chapter {
+    //        number: "1".to_string(),
+    //        volume: "1".to_string(),
+    //        ..Default::default()
+    //    };
+    //
+    //    let chapter_to_search_2 = Chapter {
+    //        number: "2".to_string(),
+    //        volume: "1".to_string(),
+    //        ..Default::default()
+    //    };
+    //
+    //    list_of_chapters.push(Chapter {
+    //        number: "3".to_string(),
+    //        volume: "2".to_string(),
+    //        ..Default::default()
+    //    });
+    //
+    //    list_of_chapters.push(Chapter {
+    //        number: "3.2".to_string(),
+    //        volume: "2".to_string(),
+    //        ..Default::default()
+    //    });
+    //    list_of_chapters.push(Chapter {
+    //        number: "4".to_string(),
+    //        volume: "2".to_string(),
+    //        ..Default::default()
+    //    });
+    //
+    //    list_of_volumes.push(Volumes {
+    //        volume: "1".to_string(),
+    //        chapters: SortedChapters::new(vec![chapter_to_search_1.clone(), chapter_to_search_2.clone()]),
+    //    });
+    //
+    //    list_of_volumes.push(Volumes {
+    //        volume: "2".to_string(),
+    //        chapters: SortedChapters::new(list_of_chapters),
+    //    });
+    //
+    //    let list = dbg!(ListOfChapters {
+    //        volumes: SortedVolumes::new(list_of_volumes),
+    //    });
+    //
+    //    let previous_2 = list
+    //        .get_previous_chapter(Some("2"), 3.0)
+    //        .expect("should get previous chapter in previous volume");
+    //
+    //    let previous_1 = list
+    //        .get_previous_chapter(Some("1"), 2.0)
+    //        .expect("should get previous chapter in previous volume");
+    //
+    //    let not_found = list.get_previous_chapter(Some("3"), 1.0);
+    //
+    //    assert_eq!(chapter_to_search_2, previous_2);
+    //    assert_eq!(chapter_to_search_1, previous_1);
+    //    assert!(not_found.is_none());
+    //}
+    //
+    //#[tokio::test]
+    //async fn trigget_key_events() {
+    //    let mut reader_page: MangaReader<TestApiClient, TrackerTest> = initialize_reader_page(TestApiClient::new());
+    //
+    //    press_key(&mut reader_page, KeyCode::Char('j'));
+    //    let action = reader_page.local_action_rx.recv().await.unwrap();
+    //
+    //    assert_eq!(MangaReaderActions::NextPage, action);
+    //
+    //    press_key(&mut reader_page, KeyCode::Char('k'));
+    //    let action = reader_page.local_action_rx.recv().await.unwrap();
+    //
+    //    assert_eq!(MangaReaderActions::PreviousPage, action);
+    //}
+    //
+    //#[tokio::test]
+    //async fn handle_key_events() {
+    //    let mut reader_page: MangaReader<TestApiClient, TrackerTest> = initialize_reader_page(TestApiClient::new());
+    //
+    //    reader_page.pages_list = PagesList::new(vec![PagesItem::new(0), PagesItem::new(1), PagesItem::new(2)]);
+    //
+    //    let area = Rect::new(0, 0, 20, 20);
+    //    let mut buf = Buffer::empty(area);
+    //
+    //    reader_page.render_page_list(area, &mut buf);
+    //
+    //    let action = MangaReaderActions::NextPage;
+    //    reader_page.update(action);
+    //
+    //    assert_eq!(0, reader_page.page_list_state.list_state.selected.expect("no page is selected"));
+    //
+    //    let action = MangaReaderActions::NextPage;
+    //    reader_page.update(action);
+    //
+    //    assert_eq!(1, reader_page.page_list_state.list_state.selected.expect("no page is selected"));
+    //
+    //    let action = MangaReaderActions::PreviousPage;
+    //    reader_page.update(action);
+    //
+    //    assert_eq!(0, reader_page.page_list_state.list_state.selected.expect("no page is selected"));
+    //}
+    //
+    //#[tokio::test]
+    //async fn init_fetching_and_fetch_pages_should_set_correct_page_count_and_first_page_state_to_loading() {
+    //    let chapter: ChapterToRead = ChapterToRead {
+    //        pages_url: vec!["http://localhost".parse().unwrap(), "http://localhost".parse().unwrap()],
+    //        ..Default::default()
+    //    };
+    //
+    //    let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
+    //        MangaReader::new(chapter, "some_id".to_string(), Picker::new((8, 8)), TestApiClient::new());
+    //
+    //    manga_reader.init_fetching_pages();
+    //    manga_reader.fetch_pages();
+    //
+    //    assert_eq!(2, manga_reader.pages.len());
+    //    assert_eq!(2, manga_reader.pages_list.pages.len());
+    //
+    //    assert_eq!(PageItemState::Loading, manga_reader.pages_list.pages[0].state);
+    //}
+    //
+    //#[test]
+    //fn it_increases_page_size_based_on_manga_panel_dimesions() {
+    //    let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
+    //        MangaReader::new(ChapterToRead::default(), "some_id".to_string(), Picker::new((8, 8)), TestApiClient::new());
+    //
+    //    manga_reader.resize_based_on_image_size(500, 200);
+    //
+    //    assert_eq!(PageSize::Wide, manga_reader.current_page_size);
+    //
+    //    manga_reader.resize_based_on_image_size(100, 200);
+    //
+    //    assert_eq!(PageSize::Normal, manga_reader.current_page_size);
+    //
+    //    // only resize if the image is big enough
+    //    manga_reader.resize_based_on_image_size(300, 200);
+    //
+    //    assert_eq!(PageSize::Normal, manga_reader.current_page_size);
+    //}
+    //
+    //#[test]
+    //fn it_does_not_initiate_search_next_chapter_if_there_is_no_next_chapter() {
+    //    let list_of_chapters = ListOfChapters::default();
+    //    let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
+    //        MangaReader::new(ChapterToRead::default(), "".to_string(), Picker::new((8, 8)), TestApiClient::new())
+    //            .with_list_of_chapters(list_of_chapters);
+    //
+    //    manga_reader.initiate_search_next_chapter();
+    //
+    //    assert_eq!(manga_reader.state, State::DisplayingChapterNotFound);
+    //}
+    //
+    //#[test]
+    //fn it_does_not_initiate_search_previous_chapter_if_there_is_no_previous_chapter() {
+    //    let list_of_chapters = ListOfChapters::default();
+    //    let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
+    //        MangaReader::new(ChapterToRead::default(), "".to_string(), Picker::new((8, 8)), TestApiClient::new())
+    //            .with_list_of_chapters(list_of_chapters);
+    //
+    //    manga_reader.initiate_search_previous_chapter();
+    //
+    //    assert_eq!(manga_reader.state, State::DisplayingChapterNotFound);
+    //}
+    //
+    //#[tokio::test]
+    //async fn it_initiates_search_next_chapter() {
+    //    let list_of_chapters: ListOfChapters = ListOfChapters {
+    //        volumes: SortedVolumes::new(vec![Volumes {
+    //            volume: "1".to_string(),
+    //            chapters: SortedChapters::new(vec![
+    //                Chapter {
+    //                    number: "1".to_string(),
+    //                    ..Default::default()
+    //                },
+    //                Chapter {
+    //                    id: "id_next_chapter".to_string(),
+    //                    number: "2".to_string(),
+    //                    ..Default::default()
+    //                },
+    //            ]),
+    //        }]),
+    //    };
+    //
+    //    let current_chapter: ChapterToRead = ChapterToRead {
+    //        number: 1.0,
+    //        volume_number: Some("1".to_string()),
+    //        ..Default::default()
+    //    };
+    //
+    //    let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
+    //        MangaReader::new(current_chapter, "".to_string(), Picker::new((8, 8)), TestApiClient::new())
+    //            .with_list_of_chapters(list_of_chapters);
+    //
+    //    manga_reader.initiate_search_next_chapter();
+    //
+    //    let expected = MangaReaderEvents::SearchNextChapter("id_next_chapter".to_string());
+    //
+    //    let result = timeout(Duration::from_millis(250), manga_reader.local_event_rx.recv())
+    //        .await
+    //        .unwrap()
+    //        .unwrap();
+    //
+    //    assert_eq!(expected, result);
+    //    assert_eq!(State::SearchingChapter, manga_reader.state);
+    //}
+    //#[tokio::test]
+    //async fn it_initiates_search_previous_chapter() {
+    //    let list_of_chapters: ListOfChapters = ListOfChapters {
+    //        volumes: SortedVolumes::new(vec![Volumes {
+    //            volume: "1".to_string(),
+    //            chapters: SortedChapters::new(vec![
+    //                Chapter {
+    //                    id: "id_previous_chapter".to_string(),
+    //                    number: "1".to_string(),
+    //                    ..Default::default()
+    //                },
+    //                Chapter {
+    //                    number: "2".to_string(),
+    //                    ..Default::default()
+    //                },
+    //            ]),
+    //        }]),
+    //    };
+    //
+    //    let current_chapter: ChapterToRead = ChapterToRead {
+    //        number: 2.0,
+    //        volume_number: Some("1".to_string()),
+    //        ..Default::default()
+    //    };
+    //
+    //    let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
+    //        MangaReader::new(current_chapter, "".to_string(), Picker::new((8, 8)), TestApiClient::new())
+    //            .with_list_of_chapters(list_of_chapters);
+    //
+    //    manga_reader.initiate_search_previous_chapter();
+    //
+    //    let expected_event = tokio::time::timeout(Duration::from_millis(250), manga_reader.local_event_rx.recv())
+    //        .await
+    //        .unwrap()
+    //        .unwrap();
+    //
+    //    assert_eq!(expected_event, MangaReaderEvents::SearchPreviousChapter("id_previous_chapter".to_string()));
+    //    assert_eq!(manga_reader.state, State::SearchingChapter);
+    //}
+    //
+    //#[tokio::test]
+    //async fn it_sends_search_next_chapter_action_on_w_key_press() {
+    //    let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
+    //        MangaReader::new(ChapterToRead::default(), "".to_string(), Picker::new((8, 8)), TestApiClient::new());
+    //
+    //    press_key(&mut manga_reader, KeyCode::Char('w'));
+    //
+    //    let expected_event = timeout(Duration::from_millis(250), manga_reader.local_action_rx.recv())
+    //        .await
+    //        .unwrap()
+    //        .unwrap();
+    //
+    //    assert_eq!(expected_event, MangaReaderActions::SearchNextChapter);
+    //}
+    //
+    //#[tokio::test]
+    //async fn it_sends_search_previous_chapter_event_on_b_key_press() {
+    //    let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
+    //        MangaReader::new(ChapterToRead::default(), "".to_string(), Picker::new((8, 8)), TestApiClient::new());
+    //
+    //    press_key(&mut manga_reader, KeyCode::Char('b'));
+    //
+    //    let expected_event = timeout(Duration::from_millis(250), manga_reader.local_action_rx.recv())
+    //        .await
+    //        .unwrap()
+    //        .unwrap();
+    //
+    //    assert_eq!(MangaReaderActions::SearchPreviousChapter, expected_event);
+    //}
+    //
+    //#[tokio::test]
+    //async fn it_searches_chapter_and_sends_successful_result() {
+    //    let expected = ChapterToRead {
+    //        id: "next_chapter_id".to_string(),
+    //        title: "some_title".to_string(),
+    //        number: 2.0,
+    //        language: Languages::default(),
+    //        volume_number: Some("1".to_string()),
+    //        num_page_bookmarked: None,
+    //        pages_url: vec!["http://localhost".parse().unwrap()],
+    //    };
+    //
+    //    let api_client = TestApiClient::with_response(expected.clone());
+    //
+    //    let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
+    //        MangaReader::new(ChapterToRead::default(), "some_id".to_string(), Picker::new((8, 8)), api_client);
+    //
+    //    manga_reader.search_chapter("some_id".to_string());
+    //
+    //    let result = timeout(Duration::from_millis(250), manga_reader.local_event_rx.recv())
+    //        .await
+    //        .unwrap()
+    //        .unwrap();
+    //
+    //    assert_eq!(result, MangaReaderEvents::LoadChapter(expected));
+    //}
+    //
+    //#[tokio::test]
+    //async fn it_searches_chapter_and_sends_error_event() {
+    //    let api_client = TestApiClient::with_failing_request();
+    //
+    //    let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
+    //        MangaReader::new(ChapterToRead::default(), "some_id".to_string(), Picker::new((8, 8)), api_client);
+    //
+    //    manga_reader.search_chapter("some_id".to_string());
+    //
+    //    let result = timeout(Duration::from_millis(250), manga_reader.local_event_rx.recv())
+    //        .await
+    //        .unwrap()
+    //        .unwrap();
+    //
+    //    assert_eq!(result, MangaReaderEvents::ErrorSearchingChapter);
+    //}
+    //
+    //#[test]
+    //fn it_loads_chapter_found_and_sets_state_as_default() {
+    //    let expected = ChapterToRead {
+    //        id: "id_before".to_string(),
+    //        title: "some_title".to_string(),
+    //        language: Languages::default(),
+    //        number: 1.0,
+    //        num_page_bookmarked: None,
+    //        volume_number: Some("1".to_string()),
+    //        pages_url: vec![],
+    //    };
+    //
+    //    let api_client = TestApiClient::with_response(expected.clone());
+    //
+    //    let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
+    //        MangaReader::new(ChapterToRead::default(), "some_id".to_string(), Picker::new((8, 8)), api_client);
+    //
+    //    manga_reader.state = State::SearchingChapter;
+    //
+    //    manga_reader.load_chapter(expected.clone());
+    //
+    //    assert_eq!(expected, manga_reader.current_chapter);
+    //    assert_eq!(manga_reader.state, State::default());
+    //}
+    //
+    //#[test]
+    //fn it_resets_pages_after_chapter_was_found() {
+    //    let api_client = TestApiClient::new();
+    //
+    //    let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
+    //        MangaReader::new(ChapterToRead::default(), "some_id".to_string(), Picker::new((8, 8)), api_client);
+    //
+    //    manga_reader.pages = vec![Page::new(), Page::new()];
+    //    manga_reader.pages_list.pages = vec![PagesItem::new(1), PagesItem::new(1)];
+    //    manga_reader.page_list_state.list_state.select(Some(1));
+    //
+    //    manga_reader.load_chapter(ChapterToRead::default());
+    //
+    //    assert!(manga_reader.pages.is_empty());
+    //    assert!(manga_reader.pages_list.pages.is_empty());
+    //    assert!(manga_reader.page_list_state.list_state.selected.is_none());
+    //}
+    //
+    //#[tokio::test]
+    //async fn it_send_event_to_search_pages_after_chapter_was_loaded() {
+    //    let api_client = TestApiClient::new();
+    //    let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
+    //        MangaReader::new(ChapterToRead::default(), "".to_string(), Picker::new((8, 8)), api_client);
+    //
+    //    manga_reader.load_chapter(ChapterToRead::default());
+    //
+    //    let expected = MangaReaderEvents::FetchPages;
+    //
+    //    let result = timeout(Duration::from_millis(250), manga_reader.local_event_rx.recv())
+    //        .await
+    //        .unwrap()
+    //        .unwrap();
+    //
+    //    assert_eq!(expected, result)
+    //}
+    //
+    //#[tokio::test]
+    //async fn it_send_event_to_save_reading_status_to_database_after_chapter_was_loaded() {
+    //    let api_client = TestApiClient::new();
+    //
+    //    let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
+    //        MangaReader::new(ChapterToRead::default(), "".to_string(), Picker::new((8, 8)), api_client);
+    //
+    //    let new_chapter: ChapterToRead = ChapterToRead {
+    //        id: "chapter_to_save".to_string(),
+    //        ..Default::default()
+    //    };
+    //
+    //    manga_reader.load_chapter(new_chapter);
+    //
+    //    let expected = MangaReaderEvents::SaveReadingToDatabase;
+    //
+    //    let mut events: Vec<MangaReaderEvents> = vec![];
+    //
+    //    manga_reader.local_event_rx.recv_many(&mut events, 3).await;
+    //
+    //    events.iter().find(|result| **result == expected).expect("expected event was not sent");
+    //}
+    //
+    //#[test]
+    //fn it_save_reading_history() -> Result<(), rusqlite::Error> {
+    //    let mut conn = Connection::open_in_memory()?;
+    //
+    //    let test_database = Database::new(&conn);
+    //
+    //    test_database.setup()?;
+    //
+    //    let chapter: ChapterToRead = ChapterToRead {
+    //        id: "chapter_to_save".to_string(),
+    //        ..Default::default()
+    //    };
+    //
+    //    let manga_reader: MangaReader<TestApiClient, TrackerTest> =
+    //        MangaReader::new(chapter, "".to_string(), Picker::new((8, 8)), TestApiClient::new());
+    //
+    //    let id_chapter_saved = manga_reader.save_reading_history(&mut conn)?;
+    //
+    //    let has_been_saved: bool =
+    //        conn.query_row("SELECT is_read FROM chapters WHERE id = ?1", [id_chapter_saved], |row| row.get(0))?;
+    //
+    //    assert!(has_been_saved);
+    //
+    //    Ok(())
+    //}
+    //
+    //#[test]
+    //fn it_loads_chapter_on_event() {
+    //    let chapter_to_load = ChapterToRead {
+    //        id: "new_chapter_id".to_string(),
+    //        ..Default::default()
+    //    };
+    //
+    //    let api_client = TestApiClient::new();
+    //
+    //    let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
+    //        MangaReader::new(ChapterToRead::default(), "some_id".to_string(), Picker::new((8, 8)), api_client);
+    //
+    //    manga_reader
+    //        .local_event_tx
+    //        .send(MangaReaderEvents::LoadChapter(chapter_to_load.clone()))
+    //        .ok();
+    //
+    //    manga_reader.tick();
+    //
+    //    assert_eq!(manga_reader.current_chapter.id, chapter_to_load.id);
+    //}
+    //
+    //#[test]
+    //fn it_is_set_as_error_searching_chapter_on_event() {
+    //    let api_client = TestApiClient::new();
+    //
+    //    let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
+    //        MangaReader::new(ChapterToRead::default(), "some_id".to_string(), Picker::new((8, 8)), api_client);
+    //
+    //    manga_reader.local_event_tx.send(MangaReaderEvents::ErrorSearchingChapter).ok();
+    //
+    //    manga_reader.tick();
+    //
+    //    assert_eq!(manga_reader.state, State::ErrorSearchingChapter);
+    //}
+    //
+    //#[derive(Default, Debug)]
+    //struct TestDatabase {
+    //    should_fail: bool,
+    //    bookmarked: bool,
+    //}
+    //
+    //impl TestDatabase {
+    //    pub fn new() -> Self {
+    //        Self {
+    //            should_fail: false,
+    //            bookmarked: false,
+    //        }
+    //    }
+    //
+    //    pub fn was_bookmarked(self) -> bool {
+    //        self.bookmarked
+    //    }
+    //}
+    //
+    //impl Bookmark for TestDatabase {
+    //    fn bookmark(&mut self, _chapter_to_bookmark: ChapterToBookmark<'_>) -> Result<(), Box<dyn std::error::Error>> {
+    //        if self.should_fail {
+    //            return Err("cannot bookmark chapter".into());
+    //        }
+    //        self.bookmarked = true;
+    //        Ok(())
+    //    }
+    //}
+    //
+    //#[test]
+    //fn it_sets_current_chapter_as_bookmarked_and_sets_state_as_bookmarked() {
+    //    let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
+    //        MangaReader::new(ChapterToRead::default(), "".to_string(), Picker::new((8, 8)), TestApiClient::new());
+    //
+    //    let mut database = TestDatabase::new();
+    //
+    //    manga_reader.set_current_chapter_bookmarked(Some(2), &mut database);
+    //
+    //    assert!(database.was_bookmarked());
+    //    assert_eq!(Some(2), manga_reader.page_list_state.page_bookmarked);
+    //    assert_eq!(State::ManualBookmark, manga_reader.state)
+    //}
+    //
+    //#[test]
+    //fn when_pages_list_is_rendered_it_selects_page_with_num_page_bookmarked_and_highlights_it() {
+    //    let chapter_to_read: ChapterToRead = ChapterToRead {
+    //        num_page_bookmarked: Some(1),
+    //        ..Default::default()
+    //    };
+    //
+    //    let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
+    //        MangaReader::new(chapter_to_read, "".to_string(), Picker::new((8, 8)), TestApiClient::new());
+    //
+    //    manga_reader.pages_list = PagesList::new(vec![PagesItem::new(0), PagesItem::new(1)]);
+    //
+    //    let area = Rect::new(0, 0, 10, 10);
+    //    let mut buf = Buffer::empty(area);
+    //
+    //    StatefulWidget::render(manga_reader.pages_list.clone(), area, &mut buf, &mut manga_reader.page_list_state);
+    //
+    //    assert_eq!(1, manga_reader.page_list_state.list_state.selected.expect("should not be none"));
+    //}
+    //
+    //#[tokio::test]
+    //async fn it_does_not_send_event_to_bookmark_chapter_on_m_key_press_if_autobookmarking_is_true() {
+    //    let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
+    //        MangaReader::new(ChapterToRead::default(), "".to_string(), Picker::new((8, 8)), TestApiClient::new());
+    //
+    //    manga_reader.set_auto_bookmark();
+    //
+    //    press_key(&mut manga_reader, KeyCode::Char('m'));
+    //
+    //    assert!(manga_reader.local_action_rx.is_empty());
+    //}
+    //
+    //#[tokio::test]
+    //async fn it_sends_event_go_manga_page_on_exit() {
+    //    let (tx, mut rx) = unbounded_channel::<Events>();
+    //    let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
+    //        MangaReader::new(ChapterToRead::default(), "".to_string(), Picker::new((8, 8)), TestApiClient::new())
+    //            .with_global_sender(tx);
+    //
+    //    manga_reader.exit();
+    //
+    //    let expected = Events::GoBackMangaPage;
+    //
+    //    let result = timeout(Duration::from_millis(250), rx.recv()).await.unwrap().unwrap();
+    //
+    //    assert_eq!(expected, result)
+    //}
+    //
+    //#[tokio::test]
+    //async fn it_sends_event_to_log_manga_tracking_error() -> Result<(), Box<dyn Error>> {
+    //    let chapter: ChapterToRead = ChapterToRead {
+    //        id: "some_id".to_string(),
+    //        title: "some_title".to_string(),
+    //        number: 1.0,
+    //        volume_number: Some(2.to_string()),
+    //        ..Default::default()
+    //    };
+    //
+    //    let mut manga_reader: MangaReader<TestApiClient, TrackerTest> =
+    //        MangaReader::new(chapter.clone(), "".to_string(), Picker::new((8, 8)), TestApiClient::new())
+    //            .with_manga_title("some_title".to_string());
+    //
+    //    let expected_error_message = "some_error_message";
+    //
+    //    let tracker = TrackerTest::failing_with_error_message(expected_error_message);
+    //
+    //    manga_reader.track_manga_reading_history(Some(tracker));
+    //
+    //    let expected = MangaReaderEvents::ErrorTrackingReadingProgress(expected_error_message.to_string());
+    //
+    //    let result = timeout(Duration::from_millis(500), manga_reader.local_event_rx.recv())
+    //        .await?
+    //        .expect("should send event");
+    //
+    //    assert_eq!(expected, result);
+    //
+    //    Ok(())
+    //}
 }

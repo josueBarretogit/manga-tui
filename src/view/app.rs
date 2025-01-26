@@ -12,12 +12,13 @@ use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use self::feed::Feed;
 use self::home::Home;
 use self::manga::MangaPage;
-use self::reader::{ChapterToRead, ListOfChapters, MangaReader, SearchChapter, SearchMangaPanel};
+use self::reader::{ListOfChapters, MangaReader};
 use self::search::{InputMode, SearchPage};
-use super::widgets::search::MangaItem;
 use super::widgets::Component;
 use crate::backend::manga_provider::mangadex::ApiClient;
-use crate::backend::manga_provider::{HomePageMangaProvider, Manga, MangaPageProvider};
+use crate::backend::manga_provider::{
+    ChapterToRead, HomePageMangaProvider, Manga, MangaPageProvider, MangaProvider, SearchChapterById, SearchMangaPanel,
+};
 use crate::backend::tracker::MangaTracker;
 use crate::backend::tui::{Action, Events};
 use crate::config::MangaTuiConfig;
@@ -39,7 +40,7 @@ pub struct MangaToRead {
 
 pub struct App<T, S>
 where
-    T: ApiClient + SearchChapter + SearchMangaPanel + HomePageMangaProvider + MangaPageProvider,
+    T: ApiClient + MangaProvider,
     S: MangaTracker,
 {
     pub global_action_tx: UnboundedSender<Action>,
@@ -63,7 +64,7 @@ where
 
 impl<T, S> Component for App<T, S>
 where
-    T: ApiClient + SearchChapter + SearchMangaPanel + HomePageMangaProvider + MangaPageProvider,
+    T: ApiClient + MangaProvider,
     S: MangaTracker,
 {
     type Actions = Action;
@@ -97,11 +98,9 @@ where
 
             Events::GoSearchMangasAuthor(author) => {
                 self.go_search_page();
-                self.search_page.search_mangas_of_author(author);
             },
             Events::GoSearchMangasArtist(artist) => {
                 self.go_search_page();
-                self.search_page.search_mangas_of_artist(artist);
             },
             Events::GoBackMangaPage => {
                 if self.current_tab == SelectedPage::ReaderTab && self.manga_reader_page.is_some() {
@@ -124,8 +123,18 @@ where
     fn clean_up(&mut self) {}
 }
 
-impl<T: ApiClient + SearchChapter + SearchMangaPanel + HomePageMangaProvider + MangaPageProvider, S: MangaTracker> App<T, S> {
-    pub fn new(api_client: T, manga_tracker: Option<S>, picker: Option<Picker>) -> Self {
+impl<T, S> App<T, S>
+where
+    T: ApiClient + MangaProvider,
+    S: MangaTracker,
+{
+    pub fn new(
+        api_client: T,
+        manga_tracker: Option<S>,
+        picker: Option<Picker>,
+        filters_state: T::FiltersState,
+        filter_widget: T::Widget,
+    ) -> Self {
         let (global_action_tx, global_action_rx) = unbounded_channel::<Action>();
         let (global_event_tx, global_event_rx) = unbounded_channel::<Events>();
 
@@ -136,7 +145,7 @@ impl<T: ApiClient + SearchChapter + SearchMangaPanel + HomePageMangaProvider + M
         App {
             picker,
             current_tab: SelectedPage::default(),
-            search_page: SearchPage::new(picker, api_client.clone(), manga_tracker.clone())
+            search_page: SearchPage::new(picker, Arc::clone(&provider), manga_tracker.clone(), filters_state, filter_widget)
                 .with_global_sender(global_event_tx.clone()),
             feed_page: Feed::new()
                 .with_global_sender(global_event_tx.clone())
@@ -414,8 +423,8 @@ mod tests {
     //use crate::global::test_utils::TrackerTest;
     //use crate::view::widgets::press_key;
     //
-    //fn tick<T: ApiClient + SearchChapter + SearchMangaPanel + HomePageMangaProvider + MangaPageProvider, S: MangaTracker>(app:
-    // &mut App<T, S>) {    let max_amoun_ticks = 10;
+    //fn tick<T:ApiClient+  MangaProvider, S:
+    // MangaTracker>(app: &mut App<T, S>) {    let max_amoun_ticks = 10;
     //    let mut count = 0;
     //
     //    loop {

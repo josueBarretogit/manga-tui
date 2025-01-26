@@ -1,22 +1,14 @@
-use std::io::Cursor;
-
-use bytes::Bytes;
-use image::io::Reader;
-use image::DynamicImage;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Style, Stylize};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Paragraph, Widget};
 use ratatui::Frame;
-use tokio::sync::mpsc::UnboundedSender;
-use tokio::task::JoinSet;
 use tui_input::Input;
 
-use crate::backend::filter::Languages;
 use crate::backend::manga_provider::mangadex::api_responses::Data;
+use crate::backend::manga_provider::mangadex::filter::{TagListItem, TagListItemState};
+use crate::backend::manga_provider::Languages;
 use crate::common::{Artist, Author, Manga};
-use crate::view::widgets::filter_widget::state::{TagListItem, TagListItemState};
-use crate::view::widgets::ImageHandler;
 
 pub fn set_tags_style(tag: &str) -> Span<'_> {
     match tag.to_lowercase().as_str() {

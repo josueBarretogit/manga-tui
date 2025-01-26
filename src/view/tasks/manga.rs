@@ -9,42 +9,13 @@ use tokio::sync::mpsc::UnboundedSender;
 use crate::backend::database::{save_history, ChapterToSaveHistory, Database, MangaReadingHistorySave};
 use crate::backend::download::DownloadChapter;
 use crate::backend::error_log::{write_to_error_log, ErrorType};
-use crate::backend::filter::Languages;
 use crate::backend::manga_provider::mangadex::api_responses::{AggregateChapterResponse, ChapterPagesResponse, ChapterResponse};
 use crate::backend::manga_provider::mangadex::{ApiClient, MangadexClient};
+use crate::backend::manga_provider::Languages;
 use crate::config::{DownloadType, ImageQuality, MangaTuiConfig};
 use crate::view::app::MangaToRead;
-use crate::view::pages::manga::{ChapterOrder, MangaPageEvents};
-use crate::view::pages::reader::{ChapterToRead, ListOfChapters};
-
-pub async fn search_chapters_operation(
-    manga_id: String,
-    page: u32,
-    language: Languages,
-    chapter_order: ChapterOrder,
-    tx: UnboundedSender<MangaPageEvents>,
-) {
-    //#[cfg(test)]
-    //let api_client = MockMangadexClient::new();
-    //
-    //#[cfg(not(test))]
-    //let api_client = MangadexClient::global();
-    //
-    //let response = api_client.get_manga_chapters(&manga_id, page, language, chapter_order).await;
-    //
-    //match response {
-    //    Ok(chapters_response) => {
-    //        let data: Result<ChapterResponse, reqwest::Error> = chapters_response.json().await;
-    //        if let Ok(chapters) = data {
-    //            tx.send(MangaPageEvents::LoadChapters(Some(chapters))).ok();
-    //        }
-    //    },
-    //    Err(e) => {
-    //        write_to_error_log(ErrorType::Error(Box::new(e)));
-    //        tx.send(MangaPageEvents::LoadChapters(None)).ok();
-    //    },
-    //}
-}
+use crate::view::pages::manga::MangaPageEvents;
+use crate::view::pages::reader::ListOfChapters;
 
 pub struct DownloadArgs<'a> {
     chapter_to_download: DownloadChapter,
@@ -80,33 +51,33 @@ async fn download_chapter_raw_images(
     chapter_id: String,
     data: DownloadArgs<'_>,
 ) -> Result<PathBuf, Box<dyn Error>> {
-    let chapter_directory = data.chapter_to_download.make_chapter_directory(data.directory_to_download)?;
-    let total_pages = data.files.len();
-
-    for (index, chapter_page_file_name) in data.files.into_iter().enumerate() {
-        let extension = Path::new(&chapter_page_file_name).extension().unwrap().to_str().unwrap();
-
-        let endpoint: Url = format!("{}/{}", data.endpoint, chapter_page_file_name)
-            .parse()
-            .unwrap_or("http://localhost".parse().unwrap());
-
-        if let Ok(response) = api_client.get_chapter_page(endpoint).await {
-            if let Ok(bytes) = response.bytes().await {
-                data.chapter_to_download.create_image_file(
-                    &bytes,
-                    &chapter_directory,
-                    format!("{}.{}", index + 1, extension).into(),
-                )?;
-            }
-        }
-        if data.should_report_progress {
-            data.sender_report_download_progress
-                .send(MangaPageEvents::SetDownloadProgress(index as f64 / total_pages as f64, chapter_id.clone()))
-                .ok();
-        }
-    }
-
-    Ok(chapter_directory)
+    //let chapter_directory = data.chapter_to_download.make_chapter_directory(data.directory_to_download)?;
+    //let total_pages = data.files.len();
+    //
+    //for (index, chapter_page_file_name) in data.files.into_iter().enumerate() {
+    //    let extension = Path::new(&chapter_page_file_name).extension().unwrap().to_str().unwrap();
+    //
+    //    let endpoint: Url = format!("{}/{}", data.endpoint, chapter_page_file_name)
+    //        .parse()
+    //        .unwrap_or("http://localhost".parse().unwrap());
+    //
+    //    if let Ok(response) = api_client.get_chapter_page(endpoint).await {
+    //        if let Ok(bytes) = response.bytes().await {
+    //            data.chapter_to_download.create_image_file(
+    //                &bytes,
+    //                &chapter_directory,
+    //                format!("{}.{}", index + 1, extension).into(),
+    //            )?;
+    //        }
+    //    }
+    //    if data.should_report_progress {
+    //        data.sender_report_download_progress
+    //            .send(MangaPageEvents::SetDownloadProgress(index as f64 / total_pages as f64, chapter_id.clone()))
+    //            .ok();
+    //    }
+    //}
+    //
+    Ok(PathBuf::default())
 }
 
 async fn download_chapter_cbz(
@@ -114,33 +85,33 @@ async fn download_chapter_cbz(
     chapter_id: String,
     data: DownloadArgs<'_>,
 ) -> Result<PathBuf, Box<dyn Error>> {
-    let (mut zip_writer, cbz_path) = data.chapter_to_download.create_cbz_file(data.directory_to_download)?;
-    let total_pages = data.files.len();
-
-    for (index, file_name) in data.files.into_iter().enumerate() {
-        let extension = Path::new(&file_name).extension().unwrap().to_str().unwrap();
-
-        let endpoint: Url = format!("{}/{}", data.endpoint, file_name)
-            .parse()
-            .unwrap_or("http://localhost".parse().unwrap());
-
-        if let Ok(response) = api_client.get_chapter_page(endpoint).await {
-            if let Ok(bytes) = response.bytes().await {
-                let file_name = format!("{}.{}", index + 1, extension);
-                data.chapter_to_download.insert_into_cbz(&mut zip_writer, &file_name, &bytes);
-            }
-        }
-
-        if data.should_report_progress {
-            data.sender_report_download_progress
-                .send(MangaPageEvents::SetDownloadProgress(index as f64 / total_pages as f64, chapter_id.clone()))
-                .ok();
-        }
-    }
-
-    zip_writer.finish()?;
-
-    Ok(cbz_path)
+    //let (mut zip_writer, cbz_path) = data.chapter_to_download.create_cbz_file(data.directory_to_download)?;
+    //let total_pages = data.files.len();
+    //
+    //for (index, file_name) in data.files.into_iter().enumerate() {
+    //    let extension = Path::new(&file_name).extension().unwrap().to_str().unwrap();
+    //
+    //    let endpoint: Url = format!("{}/{}", data.endpoint, file_name)
+    //        .parse()
+    //        .unwrap_or("http://localhost".parse().unwrap());
+    //
+    //    if let Ok(response) = api_client.get_chapter_page(endpoint).await {
+    //        if let Ok(bytes) = response.bytes().await {
+    //            let file_name = format!("{}.{}", index + 1, extension);
+    //            data.chapter_to_download.insert_into_cbz(&mut zip_writer, &file_name, &bytes);
+    //        }
+    //    }
+    //
+    //    if data.should_report_progress {
+    //        data.sender_report_download_progress
+    //            .send(MangaPageEvents::SetDownloadProgress(index as f64 / total_pages as f64, chapter_id.clone()))
+    //            .ok();
+    //    }
+    //}
+    //
+    //zip_writer.finish()?;
+    //
+    Ok(PathBuf::default())
 }
 
 async fn download_chapter_epub(
@@ -148,34 +119,34 @@ async fn download_chapter_epub(
     chapter_id: String,
     data: DownloadArgs<'_>,
 ) -> Result<PathBuf, Box<dyn Error>> {
-    let (mut epub_builder, mut epub_file, epub_path) = data.chapter_to_download.create_epub_file(data.directory_to_download)?;
-    let total_pages = data.files.len();
-
-    for (index, file_name) in data.files.into_iter().enumerate() {
-        let extension = Path::new(&file_name).extension().unwrap().to_str().unwrap();
-
-        let endpoint: Url = format!("{}/{}", data.endpoint, file_name)
-            .parse()
-            .unwrap_or("http://localhost".parse().unwrap());
-
-        if let Ok(response) = api_client.get_chapter_page(endpoint).await {
-            if let Ok(bytes) = response.bytes().await {
-                let file_name = format!("{}.{}", index + 1, extension);
-                data.chapter_to_download
-                    .insert_into_epub(&mut epub_builder, &file_name, extension, index, &bytes);
-            }
-        }
-
-        if data.should_report_progress {
-            data.sender_report_download_progress
-                .send(MangaPageEvents::SetDownloadProgress(index as f64 / total_pages as f64, chapter_id.clone()))
-                .ok();
-        }
-    }
-
-    epub_builder.generate(&mut epub_file)?;
-
-    Ok(epub_path)
+    //let (mut epub_builder, mut epub_file, epub_path) = data.chapter_to_download.create_epub_file(data.directory_to_download)?;
+    //let total_pages = data.files.len();
+    //
+    //for (index, file_name) in data.files.into_iter().enumerate() {
+    //    let extension = Path::new(&file_name).extension().unwrap().to_str().unwrap();
+    //
+    //    let endpoint: Url = format!("{}/{}", data.endpoint, file_name)
+    //        .parse()
+    //        .unwrap_or("http://localhost".parse().unwrap());
+    //
+    //    if let Ok(response) = api_client.get_chapter_page(endpoint).await {
+    //        if let Ok(bytes) = response.bytes().await {
+    //            let file_name = format!("{}.{}", index + 1, extension);
+    //            data.chapter_to_download
+    //                .insert_into_epub(&mut epub_builder, &file_name, extension, index, &bytes);
+    //        }
+    //    }
+    //
+    //    if data.should_report_progress {
+    //        data.sender_report_download_progress
+    //            .send(MangaPageEvents::SetDownloadProgress(index as f64 / total_pages as f64, chapter_id.clone()))
+    //            .ok();
+    //    }
+    //}
+    //
+    //epub_builder.generate(&mut epub_file)?;
+    //
+    Ok(PathBuf::default())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -352,54 +323,6 @@ pub struct ChapterArgs {
     pub number: f64,
     pub volume_number: Option<String>,
     pub img_url: Option<String>,
-}
-
-/// These function looks very similar  to the implementation `impl FetchChapterBookmarked for MangadexClient` but where it is called
-/// provides with data that reduce one api call
-pub async fn read_chapter(chapter: &ChapterArgs) -> Result<(ChapterToRead, MangaToRead), Box<dyn std::error::Error>> {
-    let chapter_response: ChapterPagesResponse =
-        MangadexClient::global().get_chapter_pages(&chapter.id_chapter).await?.json().await?;
-
-    let aggregate_res: AggregateChapterResponse = MangadexClient::global()
-        .search_chapters_aggregate(&chapter.manga_id, chapter.language)
-        .await?
-        .json()
-        .await?;
-
-    let connection = Database::get_connection()?;
-    save_history(
-        MangaReadingHistorySave {
-            id: &chapter.manga_id,
-            title: &chapter.title,
-            img_url: chapter.img_url.as_deref(),
-            chapter: ChapterToSaveHistory {
-                id: &chapter.id_chapter,
-                title: &chapter.chapter_title,
-                translated_language: chapter.language.as_iso_code(),
-            },
-        },
-        &connection,
-    )?;
-
-    let config = MangaTuiConfig::get();
-
-    let chapter_to_read: ChapterToRead = ChapterToRead {
-        id: chapter.id_chapter.clone(),
-        title: chapter.chapter_title.clone(),
-        number: chapter.number,
-        volume_number: chapter.volume_number.clone(),
-        language: chapter.language,
-        num_page_bookmarked: None,
-        pages_url: chapter_response.get_files_based_on_quality_as_url(config.image_quality),
-    };
-
-    let manga_to_read: MangaToRead = MangaToRead {
-        title: chapter.title.clone(),
-        manga_id: chapter.manga_id.clone(),
-        list: ListOfChapters::from(aggregate_res),
-    };
-
-    Ok((chapter_to_read, manga_to_read))
 }
 
 #[cfg(test)]

@@ -6,7 +6,7 @@ use once_cell::sync::Lazy;
 use rusqlite::{params, Connection, OptionalExtension};
 use strum::{Display, EnumIter};
 
-use super::filter::Languages;
+use super::manga_provider::Languages;
 use super::AppDirectories;
 use crate::view::widgets::feed::FeedTabs;
 

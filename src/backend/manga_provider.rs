@@ -1,14 +1,23 @@
 use std::error::Error;
+use std::fmt::Display;
 use std::future::Future;
 use std::io::Cursor;
 
 use bytes::Bytes;
 use image::{DynamicImage, ImageReader};
 use manga_tui::SearchTerm;
+use mangadex::filter::FilterListItem;
 use ratatui::style::{Color, Style, Stylize};
 use ratatui::text::Span;
+use reqwest::Url;
+use serde::Deserialize;
+use strum::{Display, EnumIter, IntoEnumIterator};
 
-use super::filter::Languages;
+use super::database::ChapterBookmarked;
+use super::tui::Events;
+use crate::global::PREFERRED_LANGUAGE;
+use crate::view::pages::reader::ListOfChapters;
+use crate::view::widgets::StatefulWidgetFrame;
 
 pub mod mangadex;
 
@@ -66,7 +75,7 @@ pub struct RecentlyAddedManga {
     pub cover_img_url: Option<String>,
 }
 
-#[derive(Debug, Default, PartialEq, Eq, Clone)]
+#[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
 pub enum MangaStatus {
     #[default]
     Ongoing,
@@ -83,6 +92,147 @@ impl From<MangaStatus> for Span<'_> {
             MangaStatus::Cancelled => Span::raw(" 🟠 cancelled"),
             MangaStatus::Completed => Span::raw(" 🔵 completed"),
         }
+    }
+}
+#[derive(Debug, Display, EnumIter, Default, Clone, Copy, PartialEq, Eq, Deserialize)]
+pub enum Languages {
+    French,
+    #[default]
+    English,
+    Spanish,
+    #[strum(to_string = "Spanish (latam)")]
+    SpanishLa,
+    Italian,
+    Japanese,
+    Korean,
+    #[strum(to_string = "Portuguese (brazil)")]
+    BrazilianPortuguese,
+    #[strum(to_string = "Portuguese")]
+    Portuguese,
+    #[strum(to_string = "Chinese (traditional)")]
+    TraditionalChinese,
+    #[strum(to_string = "Chinese (simplified)")]
+    SimplifiedChinese,
+    Russian,
+    German,
+    Burmese,
+    Arabic,
+    Bulgarian,
+    Vietnamese,
+    Croatian,
+    Hungarian,
+    Dutch,
+    Mongolian,
+    Turkish,
+    Ukrainian,
+    Thai,
+    Catalan,
+    Indonesian,
+    Filipino,
+    Hindi,
+    Romanian,
+    Hebrew,
+    Polish,
+    Persian,
+    // Some language that is missing from this `list`
+    Unkown,
+}
+
+impl From<FilterListItem> for Languages {
+    fn from(value: FilterListItem) -> Self {
+        Self::iter()
+            .find(|lang| value.name == format!("{} {}", lang.as_emoji(), lang.as_human_readable()))
+            .unwrap_or_default()
+    }
+}
+
+impl Languages {
+    pub fn as_emoji(self) -> &'static str {
+        match self {
+            Self::Mongolian => "🇲🇳",
+            Self::Polish => "🇵🇱",
+            Self::Persian => "🇮🇷",
+            Self::Romanian => "🇷🇴",
+            Self::Hungarian => "🇭🇺",
+            Self::Hebrew => "🇮🇱",
+            Self::Filipino => "🇵🇭",
+            Self::Catalan => "",
+            Self::Hindi => "🇮🇳",
+            Self::Indonesian => "🇮🇩",
+            Self::Thai => "🇹🇭",
+            Self::Turkish => "🇹🇷",
+            Self::SimplifiedChinese => "🇨🇳",
+            Self::TraditionalChinese => "🇨🇳",
+            Self::Italian => "🇮🇹",
+            Self::Vietnamese => "🇻🇳",
+            Self::English => "🇺🇸",
+            Self::Dutch => "🇳🇱",
+            Self::French => "🇫🇷",
+            Self::Korean => "🇰🇷",
+            Self::German => "🇩🇪",
+            Self::Arabic => "🇸🇦",
+            Self::Spanish => "🇪🇸",
+            Self::Russian => "🇷🇺",
+            Self::Japanese => "🇯🇵",
+            Self::Burmese => "🇲🇲",
+            Self::Croatian => "🇭🇷",
+            Self::SpanishLa => "🇲🇽",
+            Self::Bulgarian => "🇧🇬",
+            Self::Ukrainian => "🇺🇦",
+            Self::BrazilianPortuguese => "🇧🇷",
+            Self::Portuguese => "🇵🇹",
+            Self::Unkown => unreachable!(),
+        }
+    }
+
+    pub fn get_preferred_lang() -> &'static Languages {
+        PREFERRED_LANGUAGE.get_or_init(Self::default)
+    }
+
+    pub fn as_human_readable(self) -> String {
+        self.to_string()
+    }
+
+    pub fn as_iso_code(self) -> &'static str {
+        match self {
+            Self::Mongolian => "mn",
+            Self::Persian => "fa",
+            Self::Polish => "pl",
+            Self::Romanian => "ro",
+            Self::Hungarian => "hu",
+            Self::Hebrew => "he",
+            Self::Filipino => "fi",
+            Self::Catalan => "ca",
+            Self::Hindi => "hi",
+            Self::Indonesian => "id",
+            Self::Turkish => "tr",
+            Self::Spanish => "es",
+            Self::French => "fr",
+            Self::English => "en",
+            Self::Japanese => "ja",
+            Self::Dutch => "nl",
+            Self::Korean => "ko",
+            Self::German => "de",
+            Self::Arabic => "ar",
+            Self::BrazilianPortuguese => "pt-br",
+            Self::Portuguese => "pt",
+            Self::Russian => "ru",
+            Self::Burmese => "my",
+            Self::Croatian => "hr",
+            Self::SpanishLa => "es-la",
+            Self::Bulgarian => "bg",
+            Self::Ukrainian => "uk",
+            Self::Vietnamese => "vi",
+            Self::TraditionalChinese => "zh-hk",
+            Self::Italian => "it",
+            Self::SimplifiedChinese => "zh",
+            Self::Thai => "th",
+            Languages::Unkown => "",
+        }
+    }
+
+    pub fn try_from_iso_code(code: &str) -> Option<Self> {
+        Self::iter().find(|lang| lang.as_iso_code() == code)
     }
 }
 
@@ -108,9 +258,30 @@ pub struct Manga {
     pub cover_img_url: Option<String>,
     pub cover_img_url_lower_quality: Option<String>,
     pub languages: Vec<Languages>,
-    pub rating: f32,
-    pub artist: Artist,
-    pub author: Author,
+    /// Most mangas providers show the rating of the manga, if they dont then 0.0 should be used
+    /// instead
+    pub rating: f64,
+    /// Some manga providers provide the artist of the manga
+    pub artist: Option<Artist>,
+    /// Some manga providers provide the author of the manga
+    pub author: Option<Artist>,
+}
+
+/// Optional values exist because some manga providers dont include them when using their search
+/// functionality
+#[derive(Debug, Default, PartialEq, Clone)]
+pub struct SearchManga {
+    pub id: String,
+    pub title: String,
+    pub genres: Vec<Genres>,
+    pub description: Option<String>,
+    pub status: Option<MangaStatus>,
+    pub cover_img_url: Option<String>,
+    pub languages: Vec<Languages>,
+    /// Some manga providers provide the artist of the manga
+    pub artist: Option<Artist>,
+    /// Some manga providers provide the author of the manga
+    pub author: Option<Artist>,
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
@@ -125,11 +296,20 @@ pub struct Chapter {
     pub publication_date: String,
 }
 
-#[derive(Debug, Default, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone, Copy)]
 pub enum ChapterOrderBy {
     Ascending,
     #[default]
     Descending,
+}
+
+impl ChapterOrderBy {
+    pub fn toggle(self) -> Self {
+        match self {
+            ChapterOrderBy::Ascending => ChapterOrderBy::Descending,
+            ChapterOrderBy::Descending => ChapterOrderBy::Ascending,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -170,15 +350,92 @@ impl Pagination {
         }
     }
 
+    pub fn can_go_next_page(&self) -> bool {
+        self.current_page * self.items_per_page < self.total_items
+    }
+
+    pub fn can_go_previous_page(&self) -> bool {
+        self.current_page != 1
+    }
+
     pub fn get_total_pages(&self) -> u32 {
         self.total_items.div_ceil(self.items_per_page)
     }
+
+    /// Used when searching for the first time
+    pub fn from_total_items(total_items: u32) -> Self {
+        Self {
+            current_page: 1,
+            items_per_page: 16,
+            total_items,
+        }
+    }
+}
+
+#[derive(Debug, Default, PartialEq, Clone)]
+pub struct GetChaptersResponse {
+    pub chapters: Vec<Chapter>,
+    pub total_chapters: u32,
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct ChapterFilters {
     pub order: ChapterOrderBy,
     pub language: Languages,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct ChapterToRead {
+    pub id: String,
+    pub title: String,
+    pub number: f64,
+    /// This is string because it could also be "none" for chapters with no volume associated
+    pub volume_number: Option<String>,
+    pub num_page_bookmarked: Option<u32>,
+    pub language: Languages,
+    pub pages_url: Vec<Url>,
+}
+
+impl Display for ChapterToRead {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            r#"
+     id: {},
+     title: {},
+     number: {},
+     volume: {}
+     Page bookmarked: {}
+     language: {},
+        "#,
+            self.id,
+            self.title,
+            self.number,
+            self.volume_number.clone().unwrap_or("none".to_string()),
+            self.num_page_bookmarked.unwrap_or(0),
+            self.language,
+        )
+    }
+}
+
+impl Default for ChapterToRead {
+    fn default() -> Self {
+        Self {
+            id: String::default(),
+            number: 1.0,
+            title: String::default(),
+            volume_number: Some("1".to_string()),
+            pages_url: vec![],
+            language: Languages::default(),
+            num_page_bookmarked: None,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone, Default)]
+pub struct MangaPanel {
+    pub image_decoded: DynamicImage,
+    pub dimensions: (u32, u32),
 }
 
 pub trait GetRawImage {
@@ -197,18 +454,45 @@ pub trait DecodeBytesToImage: GetRawImage + Clone + Send + 'static + Sync {
     }
 }
 
+pub trait SearchChapterById: Send + Clone + 'static {
+    fn search_chapter(
+        &self,
+        chapter_id: &str,
+        manga_id: &str,
+    ) -> impl Future<Output = Result<ChapterToRead, Box<dyn Error>>> + Send;
+}
+
+pub trait FetchChapterBookmarked: Send + Clone + 'static {
+    fn fetch_chapter_bookmarked(
+        &self,
+        chapter: ChapterBookmarked,
+    ) -> impl Future<Output = Result<(ChapterToRead, ListOfChapters), Box<dyn Error>>> + Send;
+}
+
+pub trait GoToReadChapter: Send + Clone + 'static + Sync {
+    fn read_chapter(
+        &self,
+        chapter_id: &str,
+        manga_id: &str,
+    ) -> impl Future<Output = Result<(ChapterToRead, ListOfChapters), Box<dyn Error>>> + Send;
+}
+
+pub trait SearchMangaPanel: Send + Clone + 'static {
+    fn search_manga_panel(&self, endpoint: Url) -> impl Future<Output = Result<MangaPanel, Box<dyn Error>>> + Send;
+}
+
 pub trait SearchMangaById: Clone + Send + 'static + Sync {
     fn get_manga_by_id(&self, manga_id: &str) -> impl Future<Output = Result<Manga, Box<dyn Error>>> + Send;
 }
 
-pub trait DownloadChapter: Clone + Send + 'static + Sync {
-    fn download_one_chapter<F: Fn() + Send + 'static>(
-        &self,
-        chapter: Chapter,
-        on_page_progress: F,
-    ) -> impl Future<Output = Result<(), Box<dyn Error>>> + Send;
-    fn download_all_chapters(&self, chapter: Vec<Chapter>) -> impl Future<Output = Result<(), Box<dyn Error>>> + Send;
-}
+//pub trait DownloadChapter: Clone + Send + 'static + Sync {
+//    fn download_one_chapter<F: Fn() + Send + 'static>(
+//        &self,
+//        chapter: Chapter,
+//        on_page_progress: F,
+//    ) -> impl Future<Output = Result<(), Box<dyn Error>>> + Send;
+//    fn download_all_chapters(&self, chapter: Vec<Chapter>) -> impl Future<Output = Result<(), Box<dyn Error>>> + Send;
+//}
 
 /// Most manga websites have a section where the top 10 mangas of the month are on display in their
 /// homepage, as well as the recently added mangas
@@ -217,20 +501,51 @@ pub trait HomePageMangaProvider: DecodeBytesToImage + SearchMangaById + Clone + 
     fn get_recently_added_mangas(&self) -> impl Future<Output = Result<Vec<RecentlyAddedManga>, Box<dyn Error>>> + Send;
 }
 
-pub trait MangaPageProvider: DecodeBytesToImage + Clone + Send + 'static + Sync {
+pub trait MangaPageProvider: DecodeBytesToImage + GoToReadChapter + FetchChapterBookmarked + Clone + Send + 'static + Sync {
     fn get_chapters(
         &self,
         manga_id: &str,
         filters: ChapterFilters,
         pagination: Pagination,
-    ) -> impl Future<Output = Result<(Vec<Chapter>, Pagination), Box<dyn Error>>> + Send;
+    ) -> impl Future<Output = Result<GetChaptersResponse, Box<dyn Error>>> + Send;
     //fn get_all_chapters(&self) -> impl Future<Output = Result<Vec<Chapter>, Box<dyn Error>>> + Send;
     //fn get_chapter_by_id(&self, chapter_id: &str) -> impl Future<Output = Result<Chapter, Box<dyn Error>>> + Send;
 }
 
-//pub trait SearchPageProvider: SearchMangaCover + SearchMangaById + Clone + Send + 'static + Sync {
-//    fn search_mangas(&self, search_term: SearchTerm) -> impl Future<Output = Result<Vec<PopularManga>, Box<dyn Error>>> + Send;
-//}
+pub trait ReaderPageProvider: SearchMangaPanel + SearchChapterById {}
+
+pub trait EventHandler {
+    fn handle_events(&mut self, events: Events);
+}
+
+pub trait FiltersProvider: EventHandler + Clone {
+    fn toggle(&mut self);
+    fn is_open(&self) -> bool;
+    fn is_typing(&self) -> bool;
+}
+
+pub trait FiltersWidget: StatefulWidgetFrame<State = Self::FilterState> {
+    type FilterState;
+}
+
+#[derive(Debug, Default, PartialEq, Clone)]
+pub struct GetMangasResponse {
+    pub mangas: Vec<SearchManga>,
+    pub total_mangas: u32,
+}
+
+pub trait SearchPageProvider: DecodeBytesToImage + SearchMangaById + Clone + Send + 'static + Sync {
+    type FiltersState: FiltersProvider + Send;
+    type Widget: FiltersWidget<FilterState = Self::FiltersState> + Clone;
+    fn search_mangas(
+        &self,
+        search_term: Option<SearchTerm>,
+        filters: Self::FiltersState,
+        pagination: Pagination,
+    ) -> impl Future<Output = Result<GetMangasResponse, Box<dyn Error>>> + Send;
+}
+
+pub trait MangaProvider: HomePageMangaProvider + MangaPageProvider + SearchPageProvider + ReaderPageProvider + Send + Sync {}
 
 #[cfg(test)]
 pub mod mock {

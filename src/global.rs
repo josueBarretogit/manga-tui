@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 use once_cell::sync::{Lazy, OnceCell};
 use ratatui::style::{Style, Stylize};
 
-use crate::backend::filter::Languages;
+use crate::backend::manga_provider::Languages;
 
 pub static PREFERRED_LANGUAGE: OnceCell<Languages> = OnceCell::new();
 
