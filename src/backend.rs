@@ -10,8 +10,8 @@ use crate::config::{MangaTuiConfig, CONFIG};
 use crate::logger::ILogger;
 
 pub mod database;
-pub mod download;
 pub mod error_log;
+pub mod manga_downloader;
 pub mod manga_provider;
 pub mod migration;
 pub mod release_notifier;

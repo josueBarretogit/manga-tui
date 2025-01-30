@@ -445,6 +445,7 @@ where
                         tx.send(SearchPageEvents::GoToMangaPage(res)).ok();
                     },
                     Err(e) => {
+                        write_to_error_log(e.into());
                         tx.send(SearchPageEvents::FailedGoToMangaPage).ok();
                     },
                 }

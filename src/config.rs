@@ -13,7 +13,7 @@ use toml::Table;
 use crate::backend::AppDirectories;
 use crate::logger::ILogger;
 
-#[derive(Default, Debug, Serialize, Deserialize, Display, EnumIter, Clone, Copy)]
+#[derive(Default, Debug, Serialize, Deserialize, Display, EnumIter, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum DownloadType {
     #[default]

@@ -7,8 +7,8 @@ use reqwest::Url;
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::backend::database::{save_history, ChapterToSaveHistory, Database, MangaReadingHistorySave};
-use crate::backend::download::DownloadChapter;
 use crate::backend::error_log::{write_to_error_log, ErrorType};
+use crate::backend::manga_downloader::DownloadChapter;
 use crate::backend::manga_provider::mangadex::api_responses::{AggregateChapterResponse, ChapterPagesResponse, ChapterResponse};
 use crate::backend::manga_provider::mangadex::MangadexClient;
 use crate::backend::manga_provider::Languages;

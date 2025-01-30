@@ -4,7 +4,7 @@ use std::future::Future;
 use std::io::Cursor;
 
 use bytes::Bytes;
-use image::{DynamicImage, ImageReader};
+use image::{DynamicImage, GenericImageView, ImageReader};
 use manga_tui::SearchTerm;
 use mangadex::filter::FilterListItem;
 use ratatui::style::{Color, Style, Stylize};
@@ -15,6 +15,7 @@ use strum::{Display, EnumIter, IntoEnumIterator};
 
 use super::database::ChapterBookmarked;
 use super::tui::Events;
+use crate::config::{DownloadType, ImageQuality};
 use crate::global::PREFERRED_LANGUAGE;
 use crate::view::pages::reader::ListOfChapters;
 use crate::view::widgets::StatefulWidgetFrame;
@@ -449,11 +450,25 @@ pub struct MangaPanel {
     pub dimensions: (u32, u32),
 }
 
+/// Struct mainly used to download a chapter, thats why extension is needed
+#[derive(Debug, PartialEq, Clone, Default)]
+pub struct ChapterPage {
+    pub bytes: Bytes,
+    pub extension: String,
+}
+
+/// Struct mainly used to download a chapter, thats why extension is needed
+#[derive(Debug, PartialEq, Clone)]
+pub struct ChapterPageUrl {
+    pub url: Url,
+    pub extension: String,
+}
+
 pub trait GetRawImage {
     fn get_raw_image(&self, url: &str) -> impl Future<Output = Result<Bytes, Box<dyn Error>>> + Send;
 }
 
-pub trait DecodeBytesToImage: GetRawImage + Clone + Send + 'static + Sync {
+pub trait DecodeBytesToImage: GetRawImage + Clone + Send + Sync {
     fn get_image(&self, cover_img_url: &str) -> impl Future<Output = Result<DynamicImage, Box<dyn Error>>> + Send {
         Box::pin(async {
             let raw_image_bytes = self.get_raw_image(cover_img_url).await?;
@@ -465,7 +480,7 @@ pub trait DecodeBytesToImage: GetRawImage + Clone + Send + 'static + Sync {
     }
 }
 
-pub trait SearchChapterById: Send + Clone + 'static {
+pub trait SearchChapterById: Send + Clone {
     fn search_chapter(
         &self,
         chapter_id: &str,
@@ -473,7 +488,7 @@ pub trait SearchChapterById: Send + Clone + 'static {
     ) -> impl Future<Output = Result<ChapterToRead, Box<dyn Error>>> + Send;
 }
 
-pub trait FetchChapterBookmarked: Send + Clone + 'static {
+pub trait FetchChapterBookmarked: Send + Clone + Sync {
     fn fetch_chapter_bookmarked(
         &self,
         chapter: ChapterBookmarked,
@@ -488,42 +503,70 @@ pub trait GoToReadChapter: Send + Clone + 'static + Sync {
     ) -> impl Future<Output = Result<(ChapterToRead, ListOfChapters), Box<dyn Error>>> + Send;
 }
 
-pub trait SearchMangaPanel: Send + Clone + 'static {
-    fn search_manga_panel(&self, endpoint: Url) -> impl Future<Output = Result<MangaPanel, Box<dyn Error>>> + Send;
+pub trait SearchMangaPanel: DecodeBytesToImage + Send + Clone {
+    fn search_manga_panel(&self, endpoint: Url) -> impl Future<Output = Result<MangaPanel, Box<dyn Error>>> + Send {
+        Box::pin(async move {
+            let image_decoded = self.get_image(endpoint.as_str()).await?;
+
+            let dimensions = image_decoded.dimensions();
+
+            Ok(MangaPanel {
+                image_decoded,
+                dimensions,
+            })
+        })
+    }
 }
 
-pub trait SearchMangaById: Clone + Send + 'static + Sync {
+pub trait SearchMangaById: Clone + Send + Sync {
     fn get_manga_by_id(&self, manga_id: &str) -> impl Future<Output = Result<Manga, Box<dyn Error>>> + Send;
 }
 
-//pub trait DownloadChapter: Clone + Send + 'static + Sync {
-//    fn download_one_chapter<F: Fn() + Send + 'static>(
-//        &self,
-//        chapter: Chapter,
-//        on_page_progress: F,
-//    ) -> impl Future<Output = Result<(), Box<dyn Error>>> + Send;
-//    fn download_all_chapters(&self, chapter: Vec<Chapter>) -> impl Future<Output = Result<(), Box<dyn Error>>> + Send;
-//}
+pub trait GetChapterPages {
+    fn get_chapter_pages_url(
+        &self,
+        chapter_id: &str,
+        manga_id: &str,
+        image_quality: ImageQuality,
+    ) -> impl Future<Output = Result<Vec<Url>, Box<dyn Error>>> + Send;
+
+    fn get_chapter_pages_url_with_extension(
+        &self,
+        chapter_id: &str,
+        manga_id: &str,
+        image_quality: ImageQuality,
+    ) -> impl Future<Output = Result<Vec<ChapterPageUrl>, Box<dyn Error>>> + Send;
+
+    /// `on_progress` is used to indicate how many pages have been fetched
+    fn get_chapter_pages_with_progress<F: Fn(f64, &str) + 'static + Send>(
+        &self,
+        chapter_id: &str,
+        manga_id: &str,
+        image_quality: ImageQuality,
+        on_progress: F,
+    ) -> impl Future<Output = Result<Vec<ChapterPage>, Box<dyn Error>>> + Send;
+}
 
 /// Most manga websites have a section where the top 10 mangas of the month are on display in their
 /// homepage, as well as the recently added mangas
-pub trait HomePageMangaProvider: DecodeBytesToImage + SearchMangaById + Clone + Send + 'static + Sync {
+pub trait HomePageMangaProvider: DecodeBytesToImage + SearchMangaById + Clone + Send + Sync + 'static {
     fn get_popular_mangas(&self) -> impl Future<Output = Result<Vec<PopularManga>, Box<dyn Error>>> + Send;
     fn get_recently_added_mangas(&self) -> impl Future<Output = Result<Vec<RecentlyAddedManga>, Box<dyn Error>>> + Send;
 }
 
-pub trait MangaPageProvider: DecodeBytesToImage + GoToReadChapter + FetchChapterBookmarked + Clone + Send + 'static + Sync {
+pub trait MangaPageProvider:
+    DecodeBytesToImage + GoToReadChapter + GetChapterPages + FetchChapterBookmarked + Clone + Send + Sync
+{
     fn get_chapters(
         &self,
         manga_id: &str,
         filters: ChapterFilters,
         pagination: Pagination,
     ) -> impl Future<Output = Result<GetChaptersResponse, Box<dyn Error>>> + Send;
-    //fn get_all_chapters(&self) -> impl Future<Output = Result<Vec<Chapter>, Box<dyn Error>>> + Send;
-    //fn get_chapter_by_id(&self, chapter_id: &str) -> impl Future<Output = Result<Chapter, Box<dyn Error>>> + Send;
+    fn get_all_chapters(&self) -> impl Future<Output = Result<Vec<Chapter>, Box<dyn Error>>> + Send;
 }
 
-pub trait ReaderPageProvider: SearchMangaPanel + SearchChapterById + Send + Sync {}
+pub trait ReaderPageProvider: SearchMangaPanel + SearchChapterById + Send + Sync + 'static {}
 
 pub trait EventHandler {
     fn handle_events(&mut self, events: Events);
@@ -548,13 +591,13 @@ pub struct GetMangasResponse {
     pub total_mangas: u32,
 }
 
-pub trait SearchPageProvider: DecodeBytesToImage + SearchMangaById + Clone + Send + 'static + Sync {
+pub trait SearchPageProvider: DecodeBytesToImage + SearchMangaById + Clone + Send + Sync + 'static {
     /// The filter state that will be used in api calls, needs to be `Send` in order to do so
     type InnerState: Send + Clone;
     /// Struct which handles the key events of the user
     type FiltersHandler: FiltersHandler<InnerState = Self::InnerState>;
     /// The widget used to show the filters to the user
-    type Widget: FiltersWidget<FilterState = Self::FiltersHandler> + Clone;
+    type Widget: FiltersWidget<FilterState = Self::FiltersHandler>;
 
     fn search_mangas(
         &self,
@@ -564,7 +607,7 @@ pub trait SearchPageProvider: DecodeBytesToImage + SearchMangaById + Clone + Sen
     ) -> impl Future<Output = Result<GetMangasResponse, Box<dyn Error>>> + Send;
 }
 
-pub trait FeedPageProvider: SearchMangaById + Clone + Send + Sync {
+pub trait FeedPageProvider: SearchMangaById + Clone + Send + Sync + 'static {
     fn get_latest_chapters(&self, manga_id: &str) -> impl Future<Output = Result<Vec<LatestChapter>, Box<dyn Error>>> + Send;
 }
 

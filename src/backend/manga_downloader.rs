@@ -1,5 +1,6 @@
+use std::error::Error;
 use std::fs::{create_dir, create_dir_all, File};
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use bytes::Bytes;
@@ -7,6 +8,85 @@ use epub_builder::{EpubBuilder, EpubContent, ZipLibrary};
 use manga_tui::{exists, SanitizedFilename};
 use zip::write::SimpleFileOptions;
 use zip::ZipWriter;
+
+use super::manga_provider::{ChapterPage, Languages};
+use crate::config::DownloadType;
+
+pub mod raw_images;
+pub mod zip_downloader;
+
+#[derive(Debug, PartialEq, Clone, Default)]
+pub struct ChapterToDownload {
+    pub chapter_id: String,
+    pub manga_id: String,
+    pub manga_title: String,
+    pub chapter_title: String,
+    pub chapter_number: String,
+    pub volume_number: Option<String>,
+    pub language: Languages,
+    pub scanlator: String,
+    pub download_type: DownloadType,
+    pub pages: Vec<ChapterPage>,
+}
+
+impl ChapterToDownload {
+    pub fn new(
+        chapter_id: String,
+        manga_id: String,
+        manga_title: String,
+        chapter_title: String,
+        chapter_number: String,
+        language: Languages,
+        scanlator: String,
+        download_type: DownloadType,
+        volume_number: Option<String>,
+        pages: Vec<ChapterPage>,
+    ) -> Self {
+        Self {
+            chapter_id,
+            manga_id,
+            manga_title,
+            chapter_title,
+            chapter_number,
+            language,
+            scanlator,
+            download_type,
+            volume_number,
+            pages,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone, Default)]
+pub struct ChapterToDownloadSanitized {
+    pub chapter_id: String,
+    pub manga_id: String,
+    pub manga_title: SanitizedFilename,
+    pub chapter_title: SanitizedFilename,
+    pub chapter_number: String,
+    pub volume_number: Option<String>,
+    pub language: Languages,
+    pub scanlator: SanitizedFilename,
+    pub download_type: DownloadType,
+    pub pages: Vec<ChapterPage>,
+}
+
+impl From<ChapterToDownload> for ChapterToDownloadSanitized {
+    fn from(value: ChapterToDownload) -> Self {
+        Self {
+            chapter_id: value.chapter_id,
+            manga_id: value.manga_id,
+            manga_title: value.manga_title.into(),
+            chapter_title: value.chapter_title.into(),
+            chapter_number: value.chapter_number,
+            volume_number: value.volume_number,
+            language: value.language,
+            scanlator: value.scanlator.into(),
+            download_type: value.download_type,
+            pages: value.pages,
+        }
+    }
+}
 
 /// xml template to build epub files
 static EPUB_FILE_TEMPLATE: &str = r#"
@@ -25,8 +105,29 @@ static EPUB_FILE_TEMPLATE: &str = r#"
                             </html>
 "#;
 
-pub trait Downloader {
-    fn save_chapter_in_file_system(&self, file_system: impl Write + Read);
+pub trait MangaDownloader {
+    /// The `base_directory` where the pages will be saved, for `raw_images`
+    fn make_manga_base_directory_name(&self, base_directory: &Path, chapter: &ChapterToDownloadSanitized) -> PathBuf {
+        let base_directory = base_directory
+            .join(format!("{} {}", chapter.manga_title, chapter.manga_id))
+            .join(chapter.language.as_human_readable());
+
+        PathBuf::from(base_directory)
+    }
+    fn create_manga_base_directory(&self, base_directory: &Path) -> Result<(), Box<dyn Error>> {
+        if !exists!(base_directory) {
+            create_dir_all(base_directory)?
+        }
+        Ok(())
+    }
+
+    fn make_chapter_name(&self, chapter: &ChapterToDownloadSanitized) -> PathBuf {
+        PathBuf::from(format!(
+            "Ch {} {} {} {}",
+            chapter.chapter_number, chapter.chapter_title, chapter.scanlator, chapter.chapter_id
+        ))
+    }
+    fn save_chapter_in_file_system(self, base_directory: &Path, chapter: ChapterToDownloadSanitized) -> Result<(), Box<dyn Error>>;
 }
 
 #[derive(Debug, Clone)]
