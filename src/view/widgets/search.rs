@@ -1,7 +1,7 @@
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Margin, Rect};
 use ratatui::style::Style;
-use ratatui::text::{Line, Span};
+use ratatui::text::Line;
 use ratatui::widgets::{Block, Paragraph, StatefulWidget, StatefulWidgetRef, Widget, Wrap};
 use ratatui_image::Image;
 use throbber_widgets_tui::{Throbber, ThrobberState};
@@ -16,7 +16,7 @@ pub struct MangaPreview<'a> {
     title: &'a str,
     description: &'a str,
     genres: &'a Vec<Genres>,
-    status: Option<MangaStatus>,
+    status: MangaStatus,
     can_display_images: bool,
     loader_state: ThrobberState,
 }
@@ -28,7 +28,7 @@ impl<'a> MangaPreview<'a> {
         title: &'a str,
         description: &'a str,
         genres: &'a Vec<Genres>,
-        status: Option<MangaStatus>,
+        status: MangaStatus,
         can_display_images: bool,
         loader_state: ThrobberState,
     ) -> Self {
@@ -101,7 +101,7 @@ impl<'a> MangaPreview<'a> {
         let layout = Layout::vertical([Constraint::Percentage(20), Constraint::Percentage(80)]);
         let [details_area, tags_area] = layout.areas(area);
 
-        //Paragraph::new(Line::from_iter(vec![content_rating, status])).render(details_area, buf);
+        Paragraph::new(Line::from_iter(vec![self.status])).render(details_area, buf);
 
         Paragraph::new(Line::from_iter(self.genres.clone()))
             .wrap(Wrap { trim: true })

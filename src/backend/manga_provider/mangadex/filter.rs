@@ -284,10 +284,6 @@ impl<T: SendEventOnSuccess> FilterListDynamic<T> {
         self.items = None;
     }
 
-    fn set_search_term(&mut self, search: &str) {
-        self.search_bar = search.into();
-    }
-
     fn toggle(&mut self) {
         if let Some(items) = self.items.as_mut() {
             if let Some(index) = self.state.selected() {

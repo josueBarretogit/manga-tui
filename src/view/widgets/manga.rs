@@ -85,7 +85,13 @@ impl Widget for ChapterItem {
                         .wrap(Wrap { trim: true })
                         .render(scanlator_area, buf);
 
-                    Paragraph::new(self.chapter.publication_date)
+                    let today = chrono::offset::Local::now().date_naive();
+
+                    let parse_date = chrono::DateTime::parse_from_rfc3339(&self.chapter.publication_date).unwrap_or_default();
+
+                    let difference = today - parse_date.date_naive();
+
+                    Paragraph::new(display_dates_since_publication(difference.num_days()))
                         .style(self.style)
                         .wrap(Wrap { trim: true })
                         .render(readable_at_area, buf);
@@ -169,14 +175,9 @@ impl ChaptersListWidget {
     pub fn from_response(response: Vec<Chapter>) -> Self {
         let mut chapters: Vec<ChapterItem> = vec![];
 
-        let today = chrono::offset::Local::now().date_naive();
         for chap in response {
             chapters.push(ChapterItem::new(chap));
         }
-
-        //let parse_date = chrono::DateTime::parse_from_rfc3339(&chapter.attributes.readable_at).unwrap_or_default();
-
-        //let difference = today - parse_date.date_naive();
 
         Self { chapters }
     }

@@ -1,7 +1,7 @@
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Margin, Rect};
 use ratatui::style::{Color, Style};
-use ratatui::text::Line;
+use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Paragraph, StatefulWidget, Widget, Wrap};
 use ratatui_image::Image;
 use throbber_widgets_tui::{Throbber, ThrobberState};
@@ -54,11 +54,18 @@ impl CarrouselItemPopularManga {
 
         let [tags_area, description_area] = layout.areas(area);
 
+        let [tags_area, status_area] =
+            Layout::horizontal([Constraint::Percentage(80), Constraint::Percentage(20)]).areas(tags_area);
+
         Block::bordered().title(self.manga.title.clone()).render(area, buf);
 
         Paragraph::new(Line::from_iter(self.manga.genres.clone()))
             .wrap(Wrap { trim: true })
             .render(tags_area, buf);
+
+        Paragraph::new(Line::from(Span::from(self.manga.status)))
+            .wrap(Wrap { trim: true })
+            .render(status_area, buf);
 
         Paragraph::new(self.manga.description.clone())
             .wrap(Wrap { trim: true })
@@ -79,7 +86,6 @@ pub struct PopularMangaCarrousel {
     pub items: Vec<CarrouselItemPopularManga>,
     pub current_item_visible_index: usize,
     pub state: CarrouselState,
-    pub img_area: Rect,
     pub can_display_images: bool,
 }
 
@@ -120,11 +126,8 @@ impl PopularMangaCarrousel {
             items.push(CarrouselItemPopularManga::from_response(manga))
         }
 
-        let img_area = Rect::default();
-
         Self {
             items,
-            img_area,
             can_display_images,
             current_item_visible_index: 0,
             state: CarrouselState::Displaying,

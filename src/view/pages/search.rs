@@ -359,13 +359,6 @@ where
     }
 
     fn render_filters(&mut self, area: Rect, frame: &mut Frame<'_>) {
-        let filter_instructions = Line::from(vec![
-            "Close ".into(),
-            Span::raw("<f>").style(*INSTRUCTIONS_STYLE),
-            " Reset filters ".into(),
-            Span::raw("<r>").style(*INSTRUCTIONS_STYLE),
-        ]);
-
         self.filter_widget.render(area, frame, &mut self.filter_state);
     }
 

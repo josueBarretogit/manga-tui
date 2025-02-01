@@ -4,7 +4,14 @@ use std::path::PathBuf;
 
 use super::MangaDownloader;
 
+#[derive(Debug)]
 pub struct RawImagesDownloader {}
+
+impl RawImagesDownloader {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
 
 impl MangaDownloader for RawImagesDownloader {
     /// Overwriting the default implementation in order to make the chapter the `base_directory`
@@ -22,7 +29,7 @@ impl MangaDownloader for RawImagesDownloader {
     }
 
     fn save_chapter_in_file_system(
-        self,
+        &self,
         base_directory: &std::path::Path,
         chapter: super::ChapterToDownloadSanitized,
     ) -> Result<(), Box<dyn std::error::Error>> {

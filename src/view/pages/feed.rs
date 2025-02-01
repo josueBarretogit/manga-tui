@@ -46,7 +46,6 @@ pub enum FeedActions {
 
 #[derive(Debug, PartialEq)]
 pub enum FeedEvents {
-    SearchingFinalized,
     SearchHistory,
     SearchRecentChapters,
     LoadLatestChapters(String, Option<Vec<LatestChapter>>),
@@ -250,7 +249,6 @@ where
         }
         if let Ok(local_event) = self.local_event_rx.try_recv() {
             match local_event {
-                FeedEvents::SearchingFinalized => self.state = FeedState::DisplayingHistory,
                 FeedEvents::ErrorSearchingMangaData => self.display_error_searching_manga(),
                 FeedEvents::SearchHistory => self.search_history(),
                 FeedEvents::LoadHistory(maybe_history) => self.load_history(maybe_history),
@@ -380,13 +378,6 @@ where
         }
     }
 
-    fn change_tab(&mut self) {
-        match self.tabs {
-            FeedTabs::History => self.tabs = FeedTabs::PlantToRead,
-            FeedTabs::PlantToRead => self.tabs = FeedTabs::History,
-        }
-    }
-
     pub fn go_to_manga_page(&mut self) {
         if let Some(history) = self.history.as_mut() {
             if let Some(currently_selected_manga) = history.get_current_manga_selected() {
@@ -417,10 +408,6 @@ where
 
     fn toggle_focus_search_bar(&mut self) {
         self.is_typing = !self.is_typing;
-    }
-
-    fn set_items_per_page(&mut self, items_per_page: u32) {
-        self.items_per_page = items_per_page;
     }
 
     fn switch_tabs(&mut self) {

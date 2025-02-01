@@ -15,7 +15,7 @@ use strum::{Display, EnumIter, IntoEnumIterator};
 
 use super::database::ChapterBookmarked;
 use super::tui::Events;
-use crate::config::{DownloadType, ImageQuality};
+use crate::config::ImageQuality;
 use crate::global::PREFERRED_LANGUAGE;
 use crate::view::pages::reader::ListOfChapters;
 use crate::view::widgets::StatefulWidgetFrame;
@@ -265,7 +265,7 @@ pub struct Manga {
     /// Some manga providers provide the artist of the manga
     pub artist: Option<Artist>,
     /// Some manga providers provide the author of the manga
-    pub author: Option<Artist>,
+    pub author: Option<Author>,
 }
 
 /// Optional values exist because some manga providers dont include them when using their search
@@ -276,13 +276,13 @@ pub struct SearchManga {
     pub title: String,
     pub genres: Vec<Genres>,
     pub description: Option<String>,
-    pub status: Option<MangaStatus>,
+    pub status: MangaStatus,
     pub cover_img_url: Option<String>,
     pub languages: Vec<Languages>,
     /// Some manga providers provide the artist of the manga
     pub artist: Option<Artist>,
     /// Some manga providers provide the author of the manga
-    pub author: Option<Artist>,
+    pub author: Option<Author>,
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
@@ -464,6 +464,12 @@ pub struct ChapterPageUrl {
     pub extension: String,
 }
 
+#[derive(Debug, Clone, Copy, Display)]
+pub enum MangaProviders {
+    #[strum(to_string = "mangadex")]
+    Mangadex,
+}
+
 pub trait GetRawImage {
     fn get_raw_image(&self, url: &str) -> impl Future<Output = Result<Bytes, Box<dyn Error>>> + Send;
 }
@@ -522,7 +528,7 @@ pub trait SearchMangaById: Clone + Send + Sync {
     fn get_manga_by_id(&self, manga_id: &str) -> impl Future<Output = Result<Manga, Box<dyn Error>>> + Send;
 }
 
-pub trait GetChapterPages {
+pub trait GetChapterPages: Send + Sync {
     fn get_chapter_pages_url(
         &self,
         chapter_id: &str,
@@ -537,6 +543,7 @@ pub trait GetChapterPages {
         image_quality: ImageQuality,
     ) -> impl Future<Output = Result<Vec<ChapterPageUrl>, Box<dyn Error>>> + Send;
 
+    /// Used this method to get the pages with `bytes` and `extension`
     /// `on_progress` is used to indicate how many pages have been fetched
     fn get_chapter_pages_with_progress<F: Fn(f64, &str) + 'static + Send>(
         &self,
@@ -563,7 +570,11 @@ pub trait MangaPageProvider:
         filters: ChapterFilters,
         pagination: Pagination,
     ) -> impl Future<Output = Result<GetChaptersResponse, Box<dyn Error>>> + Send;
-    fn get_all_chapters(&self) -> impl Future<Output = Result<Vec<Chapter>, Box<dyn Error>>> + Send;
+    fn get_all_chapters(
+        &self,
+        manga_id: &str,
+        language: Languages,
+    ) -> impl Future<Output = Result<Vec<Chapter>, Box<dyn Error>>> + Send;
 }
 
 pub trait ReaderPageProvider: SearchMangaPanel + SearchChapterById + Send + Sync + 'static {}
@@ -614,6 +625,7 @@ pub trait FeedPageProvider: SearchMangaById + Clone + Send + Sync + 'static {
 pub trait MangaProvider:
     HomePageMangaProvider + MangaPageProvider + SearchPageProvider + ReaderPageProvider + FeedPageProvider + Send + Sync
 {
+    fn name() -> MangaProviders;
 }
 
 #[cfg(test)]

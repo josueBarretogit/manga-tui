@@ -11,7 +11,7 @@ use ratatui::Frame;
 use ratatui_image::picker::Picker;
 use ratatui_image::protocol::Protocol;
 use ratatui_image::{Image, Resize};
-use strum::{Display, EnumIs};
+use strum::EnumIs;
 use throbber_widgets_tui::{Throbber, ThrobberState};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
@@ -22,21 +22,17 @@ use crate::backend::database::{
     ChapterToSaveHistory, Database, MangaReadingHistorySave, RetrieveBookmark, SetChapterDownloaded, DBCONN,
 };
 use crate::backend::error_log::{self, write_to_error_log, ErrorType};
-use crate::backend::manga_downloader::raw_images::RawImagesDownloader;
-use crate::backend::manga_downloader::{ChapterToDownload, ChapterToDownloadSanitized, DownloadChapter, MangaDownloader};
-use crate::backend::manga_provider::mangadex::api_responses::{ChapterResponse, MangaStatisticsResponse};
 use crate::backend::manga_provider::{
-    ChapterFilters, ChapterOrderBy, ChapterToRead, FetchChapterBookmarked, GetChaptersResponse, Languages, Manga,
-    MangaPageProvider, Pagination,
+    ChapterFilters, ChapterOrderBy, ChapterToRead, GetChaptersResponse, Languages, Manga, MangaPageProvider, Pagination,
 };
 use crate::backend::tracker::{track_manga, MangaTracker};
 use crate::backend::tui::Events;
 use crate::backend::AppDirectories;
 use crate::common::format_error_message_tracking_reading_history;
-use crate::config::{DownloadType, MangaTuiConfig};
+use crate::config::MangaTuiConfig;
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
 use crate::view::app::MangaToRead;
-use crate::view::tasks::manga::{ChapterArgs, DownloadAllChapters};
+use crate::view::tasks::manga::{download_all_chapters, download_single_chapter};
 use crate::view::widgets::manga::{
     ChapterItem, ChaptersListWidget, DownloadAllChaptersState, DownloadAllChaptersWidget, DownloadPhase,
 };
@@ -87,8 +83,6 @@ pub enum MangaPageActions {
     ScrollDownAvailbleLanguages,
     ScrollUpAvailbleLanguages,
     SearchByLanguage,
-    GoMangasAuthor,
-    GoMangasArtist,
     SearchNextChapterPage,
     SearchPreviousChapterPage,
     BookMarkChapterSelected,
@@ -107,7 +101,6 @@ pub enum MangaPageEvents {
     DownloadAllChaptersError,
     /// Percentage, id chapter
     SetDownloadProgress(f64, String),
-    SaveChapterToFileSystem(ChapterToDownload),
     StartDownloadProgress(f64),
     SetDownloadAllChaptersProgress,
     FinishedDownloadingAllChapters,
@@ -146,17 +139,6 @@ where
     download_all_chapters_state: DownloadAllChaptersState,
     manga_tracker: Option<S>,
     manga_provider: Arc<T>,
-}
-
-struct MangaStatistics {
-    rating: f64,
-    follows: u64,
-}
-
-impl MangaStatistics {
-    fn new(rating: f64, follows: u64) -> Self {
-        Self { rating, follows }
-    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -269,25 +251,20 @@ where
 
         let [manga_information_area, manga_chapters_area] = layout.areas(area);
 
-        let statistics = if self.manga.rating == 0.0 {
-            Span::raw(format!("⭐ {} ", self.manga.rating.round()))
-        } else {
-            Span::raw("⭐ follows : ")
+        let statistics = Span::raw(format!("Rating ⭐ {} ", self.manga.rating.ceil()));
+
+        let authors = match &self.manga.author {
+            Some(author) => format!("Author : {} ", author.name),
+            None => format!(""),
         };
-
-        //let author_and_artist = Span::raw(format!("Author : {} | Artist : {}", self.manga.author.name, self.manga.artist.name));
-
-        let go_to_author_artist_instructions = Span::raw("<c>/<v>").style(*INSTRUCTIONS_STYLE);
+        let artist = match &self.manga.artist {
+            Some(artist) => format!("Artist : {} ", artist.name),
+            None => format!(""),
+        };
 
         Block::bordered()
             .title_top(self.manga.title.clone())
-            .title_bottom(Line::from(vec![
-                statistics,
-                " ".into(),
-                //author_and_artist,
-                " | More about author/artist ".into(),
-                go_to_author_artist_instructions,
-            ]))
+            .title_bottom(Line::from(vec![statistics, " ".into(), Span::raw(authors), Span::raw(artist)]))
             .render(manga_information_area, buf);
 
         self.render_details(manga_information_area, frame.buffer_mut());
@@ -299,9 +276,16 @@ where
         let layout = Layout::vertical([Constraint::Percentage(20), Constraint::Percentage(80)]).margin(1);
         let [tags_area, description_area] = layout.areas(area);
 
+        let [tags_area, status_area] =
+            Layout::horizontal([Constraint::Percentage(80), Constraint::Percentage(20)]).areas(tags_area);
+
         Paragraph::new(Line::from_iter(self.manga.genres.clone()))
             .wrap(Wrap { trim: true })
             .render(tags_area, buf);
+
+        Paragraph::new(Line::from(Span::from(self.manga.status)))
+            .wrap(Wrap { trim: true })
+            .render(status_area, buf);
 
         Paragraph::new(self.manga.description.clone())
             .wrap(Wrap { trim: true })
@@ -502,12 +486,6 @@ where
                     KeyCode::Char('a') => {
                         self.local_action_tx.send(MangaPageActions::AskDownloadAllChapters).ok();
                     },
-                    KeyCode::Char('c') => {
-                        self.local_action_tx.send(MangaPageActions::GoMangasAuthor).ok();
-                    },
-                    KeyCode::Char('v') => {
-                        self.local_action_tx.send(MangaPageActions::GoMangasArtist).ok();
-                    },
                     KeyCode::Char('l') => {
                         self.local_action_tx.send(MangaPageActions::ToggleAvailableLanguagesList).ok();
                     },
@@ -575,7 +553,7 @@ where
         }
     }
 
-    fn get_current_selected_chapter(&self) -> Option<&ChapterItem> {
+    fn _get_current_selected_chapter(&self) -> Option<&ChapterItem> {
         match self.chapters.as_ref() {
             Some(chapters_data) => match chapters_data.state.selected {
                 Some(selected_chapter_index) => return chapters_data.widget.chapters.get(selected_chapter_index),
@@ -585,7 +563,6 @@ where
         }
     }
 
-    /// Remember to mark reading status in database
     fn read_chapter(&mut self) {
         if self.picker.is_none() {
             return;
@@ -761,11 +738,12 @@ where
         });
     }
 
-    fn get_pages_to_download_chapter_selected(&mut self) {
+    fn download_chapter_selected(&mut self) {
         let manga_id = self.manga.id.clone();
         let manga_title = self.manga.title.clone();
         let tx = self.local_event_tx.clone();
         let client = Arc::clone(&self.manga_provider);
+        let manga_tracker = self.manga_tracker.clone();
 
         self.state = PageState::DownloadingChapters;
         if let Some(chapter) = self.get_current_selected_chapter_mut() {
@@ -773,99 +751,19 @@ where
                 return;
             }
             chapter.set_normal_state();
-
-            let chapter_title = chapter.chapter.title.clone();
-            let number = chapter.chapter.chapter_number.clone();
-            let volume_number = chapter.chapter.volume_number.clone();
-            let scanlator = chapter.chapter.scanlator.as_ref().cloned().unwrap_or_default();
-            let chapter_id = chapter.chapter.id.clone();
-            let lang = chapter.chapter.language;
             chapter.download_loading_state = Some(0.001);
             let config = MangaTuiConfig::get();
 
-            self.tasks.spawn(async move {
-                let sender_report_progress = tx.clone();
-                let pages_bytes = client
-                    .get_chapter_pages_with_progress(&chapter_id, &manga_id, config.image_quality, move |percentage, chapter_id| {
-                        sender_report_progress
-                            .send(MangaPageEvents::SetDownloadProgress(percentage, chapter_id.to_string()))
-                            .ok();
-                    })
-                    .await;
-                match pages_bytes {
-                    Ok(pages) => {
-                        let chapter_to_download: ChapterToDownload = ChapterToDownload::new(
-                            chapter_id,
-                            manga_id,
-                            manga_title,
-                            chapter_title,
-                            number,
-                            lang,
-                            scanlator,
-                            config.download_type,
-                            volume_number,
-                            pages,
-                        );
-                        tx.send(MangaPageEvents::SaveChapterToFileSystem(chapter_to_download)).ok();
-                    },
-                    Err(e) => {
-                        write_to_error_log(e.into());
-                        tx.send(MangaPageEvents::DownloadError(chapter_id)).ok();
-                    },
-                }
-            });
+            tokio::spawn(download_single_chapter(
+                client,
+                manga_tracker,
+                manga_id,
+                manga_title,
+                chapter.chapter.clone(),
+                config.clone(),
+                tx,
+            ));
         }
-    }
-
-    fn save_chapter_in_file_system(&self, chapter: ChapterToDownload) {
-        let config = MangaTuiConfig::get();
-        let chapter_number = chapter.chapter_number.clone();
-        let volume = chapter.volume_number.clone();
-        if config.track_reading_when_download {
-            // clone chapter title so that it can be used inside `track_manga` error
-            // closure
-            let chapter_title_error = chapter.chapter_title.clone();
-            let manga_title = self.manga.title.clone();
-            track_manga(
-                self.manga_tracker.clone(),
-                self.manga.title.clone(),
-                // This conversion is needed so that we take into account chapters
-                // like 1.2, 10.1 etc
-                chapter_number.parse::<f64>().unwrap_or(0.0) as u32,
-                volume.and_then(|vol| vol.parse().ok()),
-                move |error| {
-                    write_to_error_log(
-                        format_error_message_tracking_reading_history(chapter_title_error.clone(), manga_title.clone(), error)
-                            .into(),
-                    );
-                },
-            );
-        }
-        let tx = self.local_event_tx.clone();
-
-        let chapter_id = chapter.chapter_id.clone();
-        let chapter_title = chapter.chapter_title.clone();
-        let chapter: ChapterToDownloadSanitized = chapter.into();
-
-        match chapter.download_type {
-            DownloadType::Cbz => {},
-            DownloadType::Raw => {},
-            DownloadType::Epub => {},
-        }
-        let raw_images_downloader = RawImagesDownloader {};
-
-        match raw_images_downloader.save_chapter_in_file_system(&AppDirectories::MangaDownloads.get_full_path(), chapter) {
-            Ok(()) => {
-                tx.send(MangaPageEvents::SaveChapterDownloadStatus(chapter_id.clone(), chapter_title))
-                    .ok();
-                tx.send(MangaPageEvents::ChapterFinishedDownloading(chapter_id)).ok();
-            },
-            Err(e) => {
-                write_to_error_log(e.into());
-                tx.send(MangaPageEvents::DownloadError(chapter_id)).ok();
-            },
-        };
-        //
     }
 
     fn set_chapter_finished_downloading(&mut self, chapter_id: String) {
@@ -897,22 +795,6 @@ where
         }
     }
 
-    fn go_mangas_author(&mut self) {
-        //self.global_event_tx
-        //    .as_ref()
-        //    .unwrap()
-        //    .send(Events::GoSearchMangasAuthor(self.manga.author.clone()))
-        //    .ok();
-    }
-
-    fn go_mangas_artist(&mut self) {
-        //self.global_event_tx
-        //    .as_ref()
-        //    .unwrap()
-        //    .send(Events::GoSearchMangasArtist(self.manga.artist.clone()))
-        //    .ok();
-    }
-
     fn set_download_progress_for_chapter(&mut self, progress: f64, id_chapter: String) {
         if let Some(chapters) = self.chapters.as_mut() {
             if let Some(chap) = chapters.widget.chapters.iter_mut().find(|chap| chap.chapter.id == id_chapter) {
@@ -922,20 +804,20 @@ where
     }
 
     fn set_chapter_download_error(&mut self, chapter_id: String) {
-        //if let Some(chapters) = self.chapters.as_mut() {
-        //    if let Some(chapter) = chapters.widget.chapters.iter_mut().find(|chap| chap.id == chapter_id) {
-        //        chapter.set_download_error();
-        //    }
-        //}
+        if let Some(chapters) = self.chapters.as_mut() {
+            if let Some(chapter) = chapters.widget.chapters.iter_mut().find(|chap| chap.chapter.id == chapter_id) {
+                chapter.set_download_error();
+            }
+        }
     }
 
     fn set_chapter_read_error(&mut self, chapter_id: String) {
-        //self.state = PageState::DisplayingChapters;
-        //if let Some(chapters) = self.chapters.as_mut() {
-        //    if let Some(chapter) = chapters.widget.chapters.iter_mut().find(|chap| chap.id == chapter_id) {
-        //        chapter.set_read_error();
-        //    }
-        //}
+        self.state = PageState::DisplayingChapters;
+        if let Some(chapters) = self.chapters.as_mut() {
+            if let Some(chapter) = chapters.widget.chapters.iter_mut().find(|chap| chap.chapter.id == chapter_id) {
+                chapter.set_read_error();
+            }
+        }
     }
 
     fn load_chapters(&mut self, response: Option<GetChaptersResponse>) {
@@ -980,36 +862,15 @@ where
     }
 
     fn confirm_download_all_chapters(&mut self) {
-        //self.download_all_chapters_state.fetch_chapters_data();
-        //let manga_id = self.manga.id.clone();
-        //let manga_title = self.manga.title.clone();
-        //let lang = self.get_current_selected_language();
-        //let tx = self.local_event_tx.clone();
-        //self.tasks.spawn(async move {
-        //    #[cfg(not(test))]
-        //    let api_client = MangadexClient::global().clone();
-        //
-        //    #[cfg(test)]
-        //    let api_client = crate::backend::fetch::fake_api_client::MockMangadexClient::new();
-        //
-        //    let config = MangaTuiConfig::get();
-        //
-        //    let download_all_chapters_process = download_all_chapters(api_client, DownloadAllChapters {
-        //        sender: tx.clone(),
-        //        manga_id,
-        //        manga_title,
-        //        image_quality: config.image_quality,
-        //        directory_to_download: AppDirectories::MangaDownloads.get_full_path(),
-        //        file_format: config.download_type,
-        //        language: lang,
-        //    })
-        //    .await;
-        //
-        //    if let Err(e) = download_all_chapters_process {
-        //        tx.send(MangaPageEvents::DownloadAllChaptersError).ok();
-        //        write_to_error_log(ErrorType::Error(e));
-        //    }
-        //});
+        self.download_all_chapters_state.fetch_chapters_data();
+        let manga_id = self.manga.id.clone();
+        let manga_title = self.manga.title.clone();
+        let lang = self.get_current_selected_language();
+        let tx = self.local_event_tx.clone();
+        let client = Arc::clone(&self.manga_provider);
+        let config = MangaTuiConfig::get();
+        self.tasks
+            .spawn(download_all_chapters(client, manga_id, manga_title, lang, config.clone(), tx));
     }
 
     fn cancel_download_all_chapters(&mut self) {
@@ -1193,9 +1054,7 @@ where
                 MangaPageEvents::CheckChapterStatus => {
                     self.check_chapters_read();
                 },
-                MangaPageEvents::SaveChapterToFileSystem(chapter_to_download) => {
-                    self.save_chapter_in_file_system(chapter_to_download)
-                },
+
                 MangaPageEvents::ReadSuccesful(chapter_to_read, list) => {
                     self.state = PageState::DisplayingChapters;
                     let volume = chapter_to_read.clone().volume_number.and_then(|vol| vol.parse::<u32>().ok());
@@ -1282,8 +1141,6 @@ where
             MangaPageActions::ScrollDownAvailbleLanguages => self.scroll_language_down(),
             MangaPageActions::ScrollUpAvailbleLanguages => self.scroll_language_up(),
             MangaPageActions::ToggleAvailableLanguagesList => self.toggle_available_languages_list(),
-            MangaPageActions::GoMangasArtist => self.go_mangas_artist(),
-            MangaPageActions::GoMangasAuthor => self.go_mangas_author(),
             MangaPageActions::ScrollChapterUp => self.scroll_chapter_up(),
             MangaPageActions::ScrollChapterDown => self.scroll_chapter_down(),
             MangaPageActions::ToggleOrder => {
@@ -1297,7 +1154,7 @@ where
                 }
             },
 
-            MangaPageActions::DownloadChapter => self.get_pages_to_download_chapter_selected(),
+            MangaPageActions::DownloadChapter => self.download_chapter_selected(),
         }
     }
 
