@@ -19,7 +19,7 @@ use super::{
 };
 use crate::backend::database::ChapterBookmarked;
 use crate::config::ImageQuality;
-use crate::global::USER_AGENT;
+use crate::global::APP_USER_AGENT;
 use crate::view::pages::reader::ListOfChapters;
 use crate::view::widgets::StatefulWidgetFrame;
 
@@ -53,7 +53,7 @@ impl MangadexClient {
     pub fn new(api_url_base: Url, cover_img_url_base: Url) -> Self {
         let client = Client::builder()
             .timeout(StdDuration::from_secs(10))
-            .user_agent(&*USER_AGENT)
+            .user_agent(&*APP_USER_AGENT)
             .build()
             .unwrap();
 
@@ -217,9 +217,7 @@ impl HomePageMangaProvider for MangadexClient {
             .await?;
 
         if response.status() != StatusCode::OK {
-            return Err(
-                format!("Could not get popular mangas on mangadex, more details about the requrest : {:#?}", response).into()
-            );
+            return Err(format!("Could not get popular mangas on mangadex, more details about the request: {:#?}", response).into());
         }
 
         let response: SearchMangaResponse = response.json().await?;
@@ -296,7 +294,15 @@ impl SearchMangaById for MangadexClient {
 
         let title = manga.data.attributes.title.into();
 
-        let genres: Vec<Genres> = manga.data.attributes.tags.into_iter().map(Genres::from).collect();
+        let mut genres: Vec<Genres> = manga.data.attributes.tags.into_iter().map(Genres::from).collect();
+
+        let content_rating = match manga.data.attributes.content_rating.as_str() {
+            "suggestive" => Rating::Moderate,
+            "pornographic" | "erotica" => Rating::Nsfw,
+            _ => Rating::Normal,
+        };
+
+        genres.push(Genres::new(manga.data.attributes.content_rating, content_rating));
 
         let description = manga
             .data
@@ -391,7 +397,17 @@ impl GetChapterPages for MangadexClient {
         image_quality: ImageQuality,
     ) -> Result<Vec<ChapterPageUrl>, Box<dyn Error>> {
         let endpoint = format!("{}/at-home/server/{chapter_id}", self.api_url_base);
-        let response: ChapterPagesResponse = self.client.get(endpoint).send().await?.json().await?;
+        let response = self.client.get(endpoint).send().await?;
+
+        if response.status() != StatusCode::OK {
+            return Err(format!(
+                "Could not get the pages url for chapter with id {chapter_id} on mangadex, details about the response : {:#?}",
+                response
+            )
+            .into());
+        }
+
+        let response: ChapterPagesResponse = response.json().await?;
 
         let base_url = response.get_image_url_endpoint(image_quality);
 
@@ -419,7 +435,16 @@ impl GetChapterPages for MangadexClient {
         image_quality: ImageQuality,
     ) -> Result<Vec<Url>, Box<dyn Error>> {
         let endpoint = format!("{}/at-home/server/{chapter_id}", self.api_url_base);
-        let response: ChapterPagesResponse = self.client.get(endpoint).send().await?.json().await?;
+        let response = self.client.get(endpoint).send().await?;
+
+        if response.status() != StatusCode::OK {
+            return Err(format!(
+                "Could not get pages url for chapter {chapter_id} on mangadex, details about the response : {:#?}",
+                response
+            )
+            .into());
+        }
+        let response: ChapterPagesResponse = response.json().await?;
 
         let base_url = response.get_image_url_endpoint(image_quality);
 
@@ -435,7 +460,7 @@ impl GetChapterPages for MangadexClient {
             .collect())
     }
 
-    async fn get_chapter_pages_with_progress<F: Fn(f64, &str) + 'static + Send>(
+    async fn get_chapter_pages<F: Fn(f64, &str) + 'static + Send>(
         &self,
         chapter_id: &str,
         manga_id: &str,
@@ -491,6 +516,7 @@ impl MangaPageProvider for MangadexClient {
                 ("contentRating[]", "pornographic"),
                 ("order[volume]", order),
                 ("order[chapter]", order),
+                ("includeExternalUrl", "0"),
                 ("translatedLanguage[]", filters.language.as_iso_code()),
             ])
             .send()
@@ -545,14 +571,40 @@ impl MangaPageProvider for MangadexClient {
     async fn get_all_chapters(&self, manga_id: &str, language: Languages) -> Result<Vec<Chapter>, Box<dyn Error>> {
         let language = language.as_iso_code();
 
-        let order = "order[volume]=asc&order[chapter]=asc";
+        let endpoint = format!("{}/manga/{manga_id}/feed", self.api_url_base);
 
-        let endpoint = format!(
-            "{}/manga/{manga_id}/feed?limit=300&offset=0&{order}&translatedLanguage[]={language}&includes[]=scanlation_group&includeExternalUrl=0&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&contentRating[]=pornographic",
-            self.api_url_base
-        );
+        let response = self
+            .client
+            .get(endpoint)
+            .query(&[
+                // According to https://api.mangadex.org/docs/2-limitations limit is restricted to
+                // 500 max
+                ("limit", "500"),
+                ("offset", "0"),
+                ("order[volume]", "asc"),
+                ("order[chapter]", "asc"),
+                ("translatedLanguage[]", language),
+                ("includes[]", "scanlation_group"),
+                ("includeExternalUrl", "0"),
+                ("contentRating[]", "safe"),
+                ("contentRating[]", "suggestive"),
+                ("contentRating[]", "erotica"),
+                ("contentRating[]", "pornographic"),
+            ])
+            .timeout(StdDuration::from_secs(10))
+            .send()
+            .await?;
 
-        let response: ChapterResponse = self.client.get(endpoint).timeout(StdDuration::from_secs(10)).send().await?.json().await?;
+        if response.status() != StatusCode::OK {
+            return Err(format!(
+                "Could not get all chapters for manga with id {manga_id} on mangadex, details about the response: {:#?}",
+                response
+            )
+            .into());
+        }
+
+        let response: ChapterResponse = response.json().await?;
+
         let response: Vec<Chapter> = response
             .data
             .into_iter()
@@ -592,7 +644,19 @@ impl MangaPageProvider for MangadexClient {
 impl SearchChapterById for MangadexClient {
     async fn search_chapter(&self, chapter_id: &str, _manga_id: &str) -> Result<ChapterToRead, Box<dyn std::error::Error>> {
         let endpoint = format!("{}/chapter/{chapter_id}", self.api_url_base);
-        let response: OneChapterResponse = self.client.get(endpoint).send().await?.json().await?;
+
+        let response = self.client.get(endpoint).send().await?;
+
+        if response.status() != StatusCode::OK {
+            return Err(format!(
+                "Could not get chapter of id {chapter_id} on mangadex, details about the request: {:#?}",
+                response
+            )
+            .into());
+        }
+
+        let response: OneChapterResponse = response.json().await?;
+
         let pages_url = self.get_chapter_pages_url(chapter_id, "", self.image_quality).await?;
 
         let language = Languages::try_from_iso_code(response.data.attributes.translated_language.as_str()).unwrap_or_default();

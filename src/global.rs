@@ -13,7 +13,7 @@ pub static ERROR_STYLE: Lazy<Style> = Lazy::new(|| Style::default().bold().under
 
 pub static CURRENT_LIST_ITEM_STYLE: Lazy<Style> = Lazy::new(|| Style::default().on_blue());
 
-pub static USER_AGENT: LazyLock<String> = LazyLock::new(|| {
+pub static APP_USER_AGENT: LazyLock<String> = LazyLock::new(|| {
     format!(
         "manga-tui/{} ({}/{}/{})",
         env!("CARGO_PKG_VERSION"),

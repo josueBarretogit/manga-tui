@@ -20,7 +20,7 @@ static EPUB_FILE_TEMPLATE: &str = r#"
                             </html>
 "#;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct EpubDownloader {}
 
 impl EpubDownloader {

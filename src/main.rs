@@ -86,8 +86,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         _ => None,
     };
 
+    let config = MangaTuiConfig::get();
+
     let mangadex_client = MangadexClient::new(API_URL_BASE.parse().unwrap(), COVER_IMG_URL_BASE.parse().unwrap())
-        .with_image_quality(MangaTuiConfig::get().image_quality);
+        .with_image_quality(config.image_quality);
 
     logger.inform("Checking mangadex status...");
 

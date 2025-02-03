@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use super::MangaDownloader;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RawImagesDownloader {}
 
 impl RawImagesDownloader {

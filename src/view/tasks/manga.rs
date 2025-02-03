@@ -49,9 +49,8 @@ pub async fn download_all_chapters(
 
                 sleep(Duration::from_secs(download_chapter_delay));
                 tokio::spawn(async move {
-                    let chapter_pages_response = client
-                        .get_chapter_pages_with_progress(&chapter.id, &manga_id, config.image_quality, |_, _| {})
-                        .await;
+                    let chapter_pages_response =
+                        client.get_chapter_pages(&chapter.id, &manga_id, config.image_quality, |_, _| {}).await;
                     match chapter_pages_response {
                         Ok(pages) => {
                             let original_chapter_title = chapter.title.clone();
@@ -124,7 +123,7 @@ pub async fn download_single_chapter(
 ) {
     let sender_report_progress = tx.clone();
     let pages_bytes = client
-        .get_chapter_pages_with_progress(&chapter.id, &manga_id, config.image_quality, move |percentage, chapter_id| {
+        .get_chapter_pages(&chapter.id, &manga_id, config.image_quality, move |percentage, chapter_id| {
             sender_report_progress
                 .send(MangaPageEvents::SetDownloadProgress(percentage, chapter_id.to_string()))
                 .ok();

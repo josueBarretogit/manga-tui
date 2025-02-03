@@ -545,7 +545,7 @@ pub trait GetChapterPages: Send + Sync {
 
     /// Used this method to get the pages with `bytes` and `extension`
     /// `on_progress` is used to indicate how many pages have been fetched
-    fn get_chapter_pages_with_progress<F: Fn(f64, &str) + 'static + Send>(
+    fn get_chapter_pages<F: Fn(f64, &str) + 'static + Send>(
         &self,
         chapter_id: &str,
         manga_id: &str,

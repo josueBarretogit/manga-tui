@@ -6,7 +6,7 @@ use zip::ZipWriter;
 
 use super::MangaDownloader;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CbzDownloader {}
 
 impl CbzDownloader {
