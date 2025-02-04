@@ -12,10 +12,10 @@ use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use self::feed::Feed;
 use self::home::Home;
 use self::manga::MangaPage;
-use self::reader::{ListOfChapters, MangaReader};
+use self::reader::MangaReader;
 use self::search::{InputMode, SearchPage};
 use super::widgets::Component;
-use crate::backend::manga_provider::{ChapterToRead, Manga, MangaProvider};
+use crate::backend::manga_provider::{ChapterToRead, ListOfChapters, Manga, MangaProvider};
 use crate::backend::tracker::MangaTracker;
 use crate::backend::tui::{Action, Events};
 use crate::config::MangaTuiConfig;
@@ -393,141 +393,153 @@ where
         };
     }
 
-    //#[cfg(test)]
-    //fn with_manga_page(mut self) -> Self {
-    //    self.manga_page = Some(MangaPage::new(crate::backend::manga_provider::Manga::default(), self.picker.as_ref().cloned()));
-    //
-    //    self
-    //}
+    #[cfg(test)]
+    fn with_manga_page(mut self) -> Self {
+        self.manga_page = Some(MangaPage::new(crate::backend::manga_provider::Manga::default(), None, self.api_client.clone()));
+
+        self
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    //
-    //use pretty_assertions::assert_eq;
-    //
-    //use self::reader::{SortedVolumes, Volumes};
-    //use super::*;
-    //use crate::backend::fetch::fake_api_client::MockMangadexClient;
-    //use crate::backend::filter::Languages;
-    //use crate::backend::tracker::MangaTracker;
-    //use crate::global::test_utils::TrackerTest;
-    //use crate::view::widgets::press_key;
-    //
-    //fn tick<T:ApiClient+  MangaProvider, S:
-    // MangaTracker>(app: &mut App<T, S>) {    let max_amoun_ticks = 10;
-    //    let mut count = 0;
-    //
-    //    loop {
-    //        if let Ok(event) = app.global_event_rx.try_recv() {
-    //            app.handle_events(event);
-    //        }
-    //
-    //        if count > max_amoun_ticks {
-    //            break;
-    //        }
-    //        count += 1;
-    //    }
-    //}
-    //
-    //#[test]
-    //fn goes_to_home_page() {
-    //    let mut app: App<MockMangadexClient, TrackerTest> = App::new(MockMangadexClient::new(), None, None);
-    //
-    //    let first_event = app.global_event_rx.blocking_recv().expect("no event was sent");
-    //
-    //    assert_eq!(Events::GoToHome, first_event);
-    //    assert_eq!(app.current_tab, SelectedPage::Home);
-    //}
-    //
-    //#[test]
-    //fn can_go_to_search_page_by_pressing_i() {
-    //    let mut app: App<MockMangadexClient, TrackerTest> = App::new(MockMangadexClient::new(), None, None);
-    //
-    //    press_key(&mut app, KeyCode::Char('i'));
-    //
-    //    tick(&mut app);
-    //
-    //    assert_eq!(app.current_tab, SelectedPage::Search);
-    //}
-    //
-    //#[test]
-    //fn can_go_to_home_by_pressing_u() {
-    //    let mut app: App<MockMangadexClient, TrackerTest> = App::new(MockMangadexClient::new(), None, None);
-    //
-    //    app.go_search_page();
-    //
-    //    press_key(&mut app, KeyCode::Char('u'));
-    //
-    //    tick(&mut app);
-    //
-    //    assert_eq!(app.current_tab, SelectedPage::Home);
-    //}
-    //
-    //#[test]
-    //fn can_go_to_feed_by_pressing_o() {
-    //    let mut app: App<MockMangadexClient, TrackerTest> = App::new(MockMangadexClient::new(), None, None);
-    //
-    //    press_key(&mut app, KeyCode::Char('o'));
-    //
-    //    tick(&mut app);
-    //
-    //    assert_eq!(app.current_tab, SelectedPage::Feed);
-    //}
-    //
-    //#[test]
-    //fn doesnt_listen_to_key_events_if_it_is_downloading_all_chapters() {
-    //    let mut app: App<MockMangadexClient, TrackerTest> = App::new(MockMangadexClient::new(), None, None).with_manga_page();
-    //
-    //    app.manga_page.as_mut().unwrap().start_downloading_all_chapters();
-    //
-    //    press_key(&mut app, KeyCode::Char('o'));
-    //    press_key(&mut app, KeyCode::Char('i'));
-    //    press_key(&mut app, KeyCode::F(2));
-    //
-    //    tick(&mut app);
-    //
-    //    assert_eq!(app.current_tab, SelectedPage::Home)
-    //}
-    //
-    //#[test]
-    //fn reader_page_is_initialized_corectly() {
-    //    let mut app: App<MockMangadexClient, TrackerTest> = App::new(MockMangadexClient::new(), None, Some(Picker::new((8, 8))));
-    //
-    //    let chapter_to_read = ChapterToRead {
-    //        id: "some_id".to_string(),
-    //        title: "some_title".to_string(),
-    //        number: 1.0,
-    //        volume_number: Some("1".to_string()),
-    //        num_page_bookmarked: None,
-    //        language: Languages::default(),
-    //        pages_url: vec!["http://localhost:3000".parse().unwrap()],
-    //    };
-    //
-    //    let list_of_chapter: ListOfChapters = ListOfChapters {
-    //        volumes: SortedVolumes::new(vec![Volumes {
-    //            volume: "1".to_string(),
-    //            ..Default::default()
-    //        }]),
-    //    };
-    //
-    //    let manga_tracker = TrackerTest::new();
-    //
-    //    app.go_to_read_chapter(
-    //        chapter_to_read,
-    //        MangaToRead {
-    //            title: "some_title".to_string(),
-    //            manga_id: "some_manga_id".to_string(),
-    //            list: list_of_chapter.clone(),
-    //        },
-    //        Some(manga_tracker),
-    //    );
-    //
-    //    let reader_page = app.manga_reader_page.unwrap();
-    //
-    //    assert!(reader_page.global_event_tx.is_some());
-    //    assert_eq!(reader_page.list_of_chapters, list_of_chapter);
-    //    assert_eq!(SelectedPage::ReaderTab, app.current_tab);
-    //    assert!(reader_page.manga_tracker.is_some());
-    //}
+
+    use pretty_assertions::assert_eq;
+
+    use super::*;
+    use crate::backend::manga_provider::mock::{MockFilterState, MockFiltersHandler, MockMangaPageProvider, MockWidgetFilter};
+    use crate::backend::manga_provider::{Languages, SortedVolumes, Volumes};
+    use crate::backend::tracker::MangaTracker;
+    use crate::global::test_utils::TrackerTest;
+    use crate::view::widgets::press_key;
+
+    fn tick<T: MangaProvider, S: MangaTracker>(app: &mut App<T, S>) {
+        let max_amoun_ticks = 10;
+        let mut count = 0;
+
+        loop {
+            if let Ok(event) = app.global_event_rx.try_recv() {
+                app.handle_events(event);
+            }
+
+            if count > max_amoun_ticks {
+                break;
+            }
+            count += 1;
+        }
+    }
+
+    #[test]
+    fn goes_to_home_page() {
+        let mut app: App<MockMangaPageProvider, TrackerTest> =
+            App::new(MockMangaPageProvider::new(), None, None, MockFiltersHandler::new(MockFilterState {}), MockWidgetFilter {});
+
+        let first_event = app.global_event_rx.blocking_recv().expect("no event was sent");
+
+        assert_eq!(Events::GoToHome, first_event);
+        assert_eq!(app.current_tab, SelectedPage::Home);
+    }
+
+    #[test]
+    fn can_go_to_search_page_by_pressing_i() {
+        let mut app: App<MockMangaPageProvider, TrackerTest> =
+            App::new(MockMangaPageProvider::new(), None, None, MockFiltersHandler::new(MockFilterState {}), MockWidgetFilter {});
+
+        press_key(&mut app, KeyCode::Char('i'));
+
+        tick(&mut app);
+
+        assert_eq!(app.current_tab, SelectedPage::Search);
+    }
+
+    #[test]
+    fn can_go_to_home_by_pressing_u() {
+        let mut app: App<MockMangaPageProvider, TrackerTest> =
+            App::new(MockMangaPageProvider::new(), None, None, MockFiltersHandler::new(MockFilterState {}), MockWidgetFilter {});
+
+        app.go_search_page();
+
+        press_key(&mut app, KeyCode::Char('u'));
+
+        tick(&mut app);
+
+        assert_eq!(app.current_tab, SelectedPage::Home);
+    }
+
+    #[test]
+    fn can_go_to_feed_by_pressing_o() {
+        let mut app: App<MockMangaPageProvider, TrackerTest> =
+            App::new(MockMangaPageProvider::new(), None, None, MockFiltersHandler::new(MockFilterState {}), MockWidgetFilter {});
+
+        press_key(&mut app, KeyCode::Char('o'));
+
+        tick(&mut app);
+
+        assert_eq!(app.current_tab, SelectedPage::Feed);
+    }
+
+    #[test]
+    fn doesnt_listen_to_key_events_if_it_is_downloading_all_chapters() {
+        let mut app: App<MockMangaPageProvider, TrackerTest> =
+            App::new(MockMangaPageProvider::new(), None, None, MockFiltersHandler::new(MockFilterState {}), MockWidgetFilter {})
+                .with_manga_page();
+
+        app.manga_page.as_mut().unwrap().start_downloading_all_chapters();
+
+        press_key(&mut app, KeyCode::Char('o'));
+        press_key(&mut app, KeyCode::Char('i'));
+        press_key(&mut app, KeyCode::F(2));
+
+        tick(&mut app);
+
+        assert_eq!(app.current_tab, SelectedPage::Home)
+    }
+
+    #[test]
+    fn reader_page_is_initialized_corectly() {
+        let mut app: App<MockMangaPageProvider, TrackerTest> = App::new(
+            MockMangaPageProvider::new(),
+            None,
+            Some(Picker::new((8, 8))),
+            MockFiltersHandler::new(MockFilterState {}),
+            MockWidgetFilter {},
+        )
+        .with_manga_page();
+
+        let chapter_to_read = ChapterToRead {
+            id: "some_id".to_string(),
+            title: "some_title".to_string(),
+            number: 1.0,
+            volume_number: Some("1".to_string()),
+            num_page_bookmarked: None,
+            language: Languages::default(),
+            pages_url: vec!["http://localhost:3000".parse().unwrap()],
+        };
+
+        let list_of_chapter: ListOfChapters = ListOfChapters {
+            volumes: SortedVolumes::new(vec![Volumes {
+                volume: "1".to_string(),
+                ..Default::default()
+            }]),
+        };
+
+        let manga_tracker = TrackerTest::new();
+
+        app.go_to_read_chapter(
+            chapter_to_read,
+            MangaToRead {
+                title: "some_title".to_string(),
+                manga_id: "some_manga_id".to_string(),
+                list: list_of_chapter.clone(),
+            },
+            Some(manga_tracker),
+        );
+
+        let reader_page = app.manga_reader_page.unwrap();
+
+        assert!(reader_page.global_event_tx.is_some());
+        assert_eq!(reader_page.list_of_chapters, list_of_chapter);
+        assert_eq!(SelectedPage::ReaderTab, app.current_tab);
+        assert!(reader_page.manga_tracker.is_some());
+    }
 }

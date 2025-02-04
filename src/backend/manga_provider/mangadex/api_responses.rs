@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use reqwest::Url;
 use serde::{Deserialize, Deserializer, Serialize};
 
-use crate::backend::manga_provider::Genres;
+use crate::backend::manga_provider::{ChapterReader, Genres, ListOfChapters, SortedChapters, SortedVolumes, Volumes};
 use crate::config::ImageQuality;
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -243,12 +243,12 @@ pub struct Rating {
 #[serde(rename_all = "camelCase")]
 pub struct AggregateChapterResponse {
     pub result: String,
-    pub volumes: HashMap<String, Volumes>,
+    pub volumes: HashMap<String, VolumesMangadex>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Volumes {
+pub struct VolumesMangadex {
     pub volume: String,
     pub count: i32,
     #[serde(deserialize_with = "deserialize_aggregate_chapters")]
@@ -260,6 +260,35 @@ pub struct Volumes {
 enum VecOrHashMap {
     Hash(HashMap<String, Chapters>),
     Vec(Vec<Chapters>),
+}
+
+impl From<AggregateChapterResponse> for ListOfChapters {
+    fn from(value: AggregateChapterResponse) -> Self {
+        let mut volumes: Vec<Volumes> = vec![];
+
+        for (vol_key, vol) in value.volumes {
+            let chapters: Vec<ChapterReader> = vol
+                .chapters
+                .into_iter()
+                .map(|(number, chap)| ChapterReader {
+                    id: if let Some(first) = chap.others.first() { first.clone() } else { chap.id },
+                    number,
+                    volume: vol_key.clone(),
+                })
+                .collect();
+
+            let sorted = SortedChapters::new(chapters);
+
+            volumes.push(Volumes {
+                chapters: sorted,
+                volume: vol_key,
+            });
+        }
+
+        ListOfChapters {
+            volumes: SortedVolumes::new(volumes),
+        }
+    }
 }
 
 /// Sometimes when the manga has volume 0 the field `chapters` is not a `HashMap` but a `Vec<Chapters>`
@@ -449,7 +478,7 @@ mod tests {
 
         let image_quality = ImageQuality::High;
 
-        let expected: Url = format!("{}/{}/{}/high_quality1.jpg", response.base_url, "data-saver", response.chapter.hash)
+        let expected: Url = format!("{}/{}/{}/high_quality1.jpg", response.base_url, "data", response.chapter.hash)
             .parse()
             .unwrap();
 

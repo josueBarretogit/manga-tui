@@ -49,3 +49,54 @@ impl MangaDownloader for CbzDownloader {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::error::Error;
+
+    use fake::faker::name::en::Name;
+    use fake::Fake;
+    use uuid::Uuid;
+
+    use super::*;
+    use crate::backend::manga_downloader::ChapterToDownloadSanitized;
+    use crate::backend::manga_provider::{ChapterPage, Languages};
+    use crate::backend::AppDirectories;
+    use crate::config::DownloadType;
+
+    #[test]
+    #[ignore]
+    fn it_downloads_a_chapter() -> Result<(), Box<dyn Error>> {
+        let chapter: ChapterToDownloadSanitized = ChapterToDownloadSanitized {
+            chapter_id: Uuid::new_v4().to_string(),
+            manga_id: Uuid::new_v4().to_string(),
+            manga_title: Name().fake::<String>().into(),
+            chapter_title: Name().fake::<String>().into(),
+            chapter_number: "2".to_string(),
+            volume_number: Some("3".to_string()),
+            language: Languages::default(),
+            scanlator: Name().fake::<String>().into(),
+            download_type: DownloadType::Cbz,
+            pages: vec![
+                ChapterPage {
+                    bytes: include_bytes!("../../../data_test/images/1.jpg").to_vec().into(),
+                    extension: "jpg".to_string(),
+                },
+                ChapterPage {
+                    bytes: include_bytes!("../../../data_test/images/2.jpg").to_vec().into(),
+                    extension: "jpg".to_string(),
+                },
+                ChapterPage {
+                    bytes: include_bytes!("../../../data_test/images/3.jpg").to_vec().into(),
+                    extension: "jpg".to_string(),
+                },
+            ],
+        };
+
+        let downloader = CbzDownloader::new();
+
+        downloader.save_chapter_in_file_system(&AppDirectories::MangaDownloads.get_full_path(), chapter)?;
+
+        Ok(())
+    }
+}

@@ -14,13 +14,12 @@ use reqwest::{Client, Response, Url};
 use super::{
     Artist, Author, Chapter, ChapterPage, ChapterPageUrl, ChapterToRead, DecodeBytesToImage, FeedPageProvider,
     FetchChapterBookmarked, Genres, GetChapterPages, GetChaptersResponse, GetMangasResponse, GetRawImage, GoToReadChapter,
-    HomePageMangaProvider, Languages, MangaPageProvider, MangaProvider, MangaProviders, MangaStatus, PopularManga, Rating,
-    ReaderPageProvider, RecentlyAddedManga, SearchChapterById, SearchMangaById, SearchMangaPanel, SearchPageProvider,
+    HomePageMangaProvider, Languages, ListOfChapters, MangaPageProvider, MangaProvider, MangaProviders, MangaStatus, PopularManga,
+    Rating, ReaderPageProvider, RecentlyAddedManga, SearchChapterById, SearchMangaById, SearchMangaPanel, SearchPageProvider,
 };
 use crate::backend::database::ChapterBookmarked;
 use crate::config::ImageQuality;
 use crate::global::APP_USER_AGENT;
-use crate::view::pages::reader::ListOfChapters;
 use crate::view::widgets::StatefulWidgetFrame;
 
 pub mod api_responses;

@@ -491,49 +491,42 @@ where
 
 #[cfg(test)]
 mod tests {
-    //use pretty_assertions::assert_eq;
-    //
-    //use super::*;
-    //use crate::backend::api_responses::Data;
-    //use crate::backend::manga_provider::mock::MockMangaPageProvider;
-    //
-    //#[test]
-    //fn searches_popular_manga_cover_after_mangas_are_loaded_if_picker_is_some() {
-    //    let mut home: Home<MockMangaPageProvider> = Home::new(Some(Picker::new((8, 8))), MockMangaPageProvider::new());
-    //
-    //    home.load_popular_mangas(Some(vec![PopularManga::default()]));
-    //
-    //    let event = home.local_event_rx.blocking_recv().expect("no event was");
-    //
-    //    assert_eq!(event, HomeEvents::SearchPopularMangasCover)
-    //}
-    //#[test]
-    //fn searches_recently_added_manga_cover_after_mangas_are_loaded_if_picker_is_some() {
-    //    let mut home: Home<MockMangaPageProvider> = Home::new(Some(Picker::new((8, 8))), MockMangaPageProvider::new());
-    //
-    //    home.load_recently_added_mangas(Some(SearchMangaResponse {
-    //        data: vec![Data::default()],
-    //        ..Default::default()
-    //    }));
-    //
-    //    let event = home.local_event_rx.blocking_recv().expect("no event was");
-    //
-    //    assert_eq!(event, HomeEvents::SearchRecentlyCover)
-    //}
-    //
-    //#[test]
-    //fn doesnt_search_manga_cover_if_picker_is_none() {
-    //    let mut home: Home<MockMangaPageProvider> = Home::new(Some(Picker::new((8, 8))), MockMangaPageProvider::new());
-    //
-    //    home.load_popular_mangas(Some(vec![PopularManga::default()]));
-    //
-    //    assert!(home.local_event_rx.is_empty());
-    //
-    //    home.load_recently_added_mangas(Some(SearchMangaResponse {
-    //        data: vec![Data::default()],
-    //        ..Default::default()
-    //    }));
-    //
-    //    assert!(home.local_event_rx.is_empty());
-    //}
+    use pretty_assertions::assert_eq;
+
+    use super::*;
+    use crate::backend::manga_provider::mock::MockMangaPageProvider;
+
+    #[test]
+    fn searches_popular_manga_cover_after_mangas_are_loaded_if_picker_is_some() {
+        let mut home: Home<MockMangaPageProvider> = Home::new(Some(Picker::new((8, 8))), MockMangaPageProvider::new().into());
+
+        home.load_popular_mangas(Some(vec![PopularManga::default()]));
+
+        let event = home.local_event_rx.blocking_recv().expect("no event was");
+
+        assert_eq!(event, HomeEvents::SearchPopularMangasCover)
+    }
+    #[test]
+    fn searches_recently_added_manga_cover_after_mangas_are_loaded_if_picker_is_some() {
+        let mut home: Home<MockMangaPageProvider> = Home::new(Some(Picker::new((8, 8))), MockMangaPageProvider::new().into());
+
+        home.load_recently_added_mangas(Some(vec![RecentlyAddedManga::default()]));
+
+        let event = home.local_event_rx.blocking_recv().expect("no event was");
+
+        assert_eq!(event, HomeEvents::SearchRecentlyCover)
+    }
+
+    #[test]
+    fn doesnt_search_manga_cover_if_picker_is_none() {
+        let mut home: Home<MockMangaPageProvider> = Home::new(None, MockMangaPageProvider::new().into());
+
+        home.load_popular_mangas(Some(vec![PopularManga::default()]));
+
+        assert!(home.local_event_rx.is_empty());
+
+        home.load_recently_added_mangas(Some(vec![RecentlyAddedManga::default()]));
+
+        assert!(home.local_event_rx.is_empty());
+    }
 }

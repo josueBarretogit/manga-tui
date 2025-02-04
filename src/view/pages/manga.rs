@@ -16,14 +16,14 @@ use throbber_widgets_tui::{Throbber, ThrobberState};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
-use super::reader::ListOfChapters;
 use crate::backend::database::{
     get_chapters_history_status, save_history, set_chapter_downloaded, Bookmark, ChapterBookmarked, ChapterToBookmark,
     ChapterToSaveHistory, Database, MangaReadingHistorySave, RetrieveBookmark, SetChapterDownloaded, DBCONN,
 };
 use crate::backend::error_log::{self, write_to_error_log, ErrorType};
 use crate::backend::manga_provider::{
-    ChapterFilters, ChapterOrderBy, ChapterToRead, GetChaptersResponse, Languages, Manga, MangaPageProvider, Pagination,
+    ChapterFilters, ChapterOrderBy, ChapterToRead, GetChaptersResponse, Languages, ListOfChapters, Manga, MangaPageProvider,
+    Pagination,
 };
 use crate::backend::tracker::{track_manga, MangaTracker};
 use crate::backend::tui::Events;
@@ -1175,627 +1175,597 @@ where
 
 #[cfg(test)]
 mod test {
-    //use std::time::Duration;
-    //
-    //use pretty_assertions::assert_eq;
-    //use tokio::time::timeout;
-    //
-    //use self::mpsc::unbounded_channel;
-    //use super::*;
-    //use crate::backend::api_responses::ChapterData;
-    //use crate::backend::database::ChapterBookmarked;
-    //use crate::backend::tracker::MangaTracker;
-    //use crate::global::test_utils::TrackerTest;
-    //use crate::view::widgets::press_key;
-    //
-    //fn get_chapters_response() -> ChapterResponse {
-    //    ChapterResponse {
-    //        data: vec![ChapterData::default(), ChapterData::default(), ChapterData::default()],
-    //        total: 30,
-    //        ..Default::default()
-    //    }
-    //}
-    //
-    //fn render_chapters<T: MangaTracker>(manga_page: &mut MangaPage<T>) {
-    //    let area = Rect::new(0, 0, 50, 50);
-    //    let mut buf = Buffer::empty(area);
-    //    let chapters = manga_page.chapters.as_mut().unwrap();
-    //    StatefulWidget::render(chapters.widget.clone(), area, &mut buf, &mut chapters.state);
-    //}
-    //
-    //fn render_available_languages_list<T: MangaTracker>(manga_page: &mut MangaPage<T>) {
-    //    let area = Rect::new(0, 0, 50, 50);
-    //    let mut buf = Buffer::empty(area);
-    //    let languages: Vec<String> = manga_page.manga.available_languages.iter().map(|lang| lang.as_human_readable()).collect();
-    //    let list = List::new(languages);
-    //
-    //    StatefulWidget::render(list, area, &mut buf, &mut manga_page.available_languages_state);
-    //}
-    //
-    //#[tokio::test]
-    //async fn key_events_trigger_expected_actions() {
-    //    let mut manga_page: MangaPage<TrackerTest> = MangaPage::new(Manga::default(), None);
-    //
-    //    // Scroll down chapters list
-    //    press_key(&mut manga_page, KeyCode::Char('j'));
-    //    let action = manga_page.local_action_rx.recv().await.unwrap();
-    //
-    //    assert_eq!(MangaPageActions::ScrollChapterDown, action);
-    //
-    //    // Scroll up chapters list
-    //    press_key(&mut manga_page, KeyCode::Char('k'));
-    //    let action = manga_page.local_action_rx.recv().await.unwrap();
-    //
-    //    assert_eq!(MangaPageActions::ScrollChapterUp, action);
-    //
-    //    // toggle chapter order
-    //    press_key(&mut manga_page, KeyCode::Char('t'));
-    //    let action = manga_page.local_action_rx.recv().await.unwrap();
-    //
-    //    assert_eq!(MangaPageActions::ToggleOrder, action);
-    //
-    //    // Go next chapter page
-    //    press_key(&mut manga_page, KeyCode::Char('w'));
-    //    let action = manga_page.local_action_rx.recv().await.unwrap();
-    //
-    //    assert_eq!(MangaPageActions::SearchNextChapterPage, action);
-    //
-    //    // Go previous chapter page
-    //    press_key(&mut manga_page, KeyCode::Char('b'));
-    //    let action = manga_page.local_action_rx.recv().await.unwrap();
-    //
-    //    assert_eq!(MangaPageActions::SearchPreviousChapterPage, action);
-    //
-    //    // Open available_languages list
-    //    press_key(&mut manga_page, KeyCode::Char('l'));
-    //    let action = manga_page.local_action_rx.recv().await.unwrap();
-    //
-    //    assert_eq!(MangaPageActions::ToggleAvailableLanguagesList, action);
-    //
-    //    manga_page.toggle_available_languages_list();
-    //
-    //    // scroll down available languages list
-    //    press_key(&mut manga_page, KeyCode::Char('j'));
-    //    let action = manga_page.local_action_rx.recv().await.unwrap();
-    //
-    //    assert_eq!(MangaPageActions::ScrollDownAvailbleLanguages, action);
-    //
-    //    // scroll down available languages list
-    //    press_key(&mut manga_page, KeyCode::Char('k'));
-    //    let action = manga_page.local_action_rx.recv().await.unwrap();
-    //
-    //    assert_eq!(MangaPageActions::ScrollUpAvailbleLanguages, action);
-    //
-    //    // search by a language selected
-    //    press_key(&mut manga_page, KeyCode::Char('s'));
-    //    let action = manga_page.local_action_rx.recv().await.unwrap();
-    //
-    //    assert_eq!(MangaPageActions::SearchByLanguage, action);
-    //
-    //    // close available languages list
-    //    press_key(&mut manga_page, KeyCode::Esc);
-    //    let action = manga_page.local_action_rx.recv().await.unwrap();
-    //
-    //    assert_eq!(MangaPageActions::ToggleAvailableLanguagesList, action);
-    //
-    //    manga_page.toggle_available_languages_list();
-    //
-    //    // download chapter
-    //    press_key(&mut manga_page, KeyCode::Char('d'));
-    //    let action = manga_page.local_action_rx.recv().await.unwrap();
-    //
-    //    assert_eq!(MangaPageActions::DownloadChapter, action);
-    //
-    //    // start download all chapter proccess
-    //    press_key(&mut manga_page, KeyCode::Char('a'));
-    //    let action = manga_page.local_action_rx.recv().await.unwrap();
-    //
-    //    assert_eq!(MangaPageActions::AskDownloadAllChapters, action);
-    //
-    //    manga_page.ask_download_all_chapters();
-    //
-    //    // confirm download all chapters
-    //    press_key(&mut manga_page, KeyCode::Enter);
-    //    let action = manga_page.local_action_rx.recv().await.unwrap();
-    //
-    //    assert_eq!(MangaPageActions::ConfirmDownloadAll, action);
-    //
-    //    manga_page.confirm_download_all_chapters();
-    //
-    //    // cancel download all chapters operation
-    //    press_key(&mut manga_page, KeyCode::Esc);
-    //    let action = manga_page.local_action_rx.recv().await.unwrap();
-    //
-    //    assert_eq!(MangaPageActions::CancelDownloadAll, action);
-    //
-    //    manga_page.cancel_download_all_chapters();
-    //
-    //    // read a chapter
-    //    press_key(&mut manga_page, KeyCode::Char('r'));
-    //    let action = manga_page.local_action_rx.recv().await.unwrap();
-    //
-    //    assert_eq!(MangaPageActions::ReadChapter, action);
-    //
-    //    // see more about author
-    //    press_key(&mut manga_page, KeyCode::Char('c'));
-    //    let action = manga_page.local_action_rx.recv().await.unwrap();
-    //
-    //    assert_eq!(MangaPageActions::GoMangasAuthor, action);
-    //
-    //    // see more about artist
-    //    press_key(&mut manga_page, KeyCode::Char('v'));
-    //    let action = manga_page.local_action_rx.recv().await.unwrap();
-    //
-    //    assert_eq!(MangaPageActions::GoMangasArtist, action);
-    //}
-    //
-    //#[tokio::test]
-    //async fn listen_to_key_events_based_on_conditions() {
-    //    let mut manga_page: MangaPage<TrackerTest> = MangaPage::new(Manga::default(), None);
-    //
-    //    assert!(!manga_page.is_list_languages_open);
-    //    manga_page.handle_events(Events::Key(KeyCode::Char('j').into()));
-    //
-    //    let action = manga_page.local_action_rx.recv().await.unwrap();
-    //
-    //    assert_eq!(MangaPageActions::ScrollChapterDown, action);
-    //
-    //    manga_page.toggle_available_languages_list();
-    //    manga_page.handle_events(Events::Key(KeyCode::Char('j').into()));
-    //
-    //    let action = manga_page.local_action_rx.recv().await.unwrap();
-    //
-    //    assert_eq!(MangaPageActions::ScrollDownAvailbleLanguages, action);
-    //
-    //    manga_page.toggle_available_languages_list();
-    //    manga_page.ask_download_all_chapters();
-    //
-    //    manga_page.handle_events(Events::Key(KeyCode::Enter.into()));
-    //
-    //    let action = manga_page.local_action_rx.recv().await.unwrap();
-    //
-    //    assert_eq!(MangaPageActions::ConfirmDownloadAll, action);
-    //}
-    //
-    //async fn manga_page_initialized_correctly<T: MangaTracker>(manga_page: &mut MangaPage<T>) {
-    //    assert_eq!(manga_page.chapter_language, Languages::default());
-    //
-    //    assert_eq!(ChapterOrder::default(), manga_page.chapter_order);
-    //
-    //    assert_eq!(PageState::SearchingChapters, manga_page.state);
-    //
-    //    assert!(!manga_page.is_list_languages_open);
-    //
-    //    let first_event = manga_page.local_event_rx.recv().await.unwrap();
-    //    let second_event = manga_page.local_event_rx.recv().await.unwrap();
-    //
-    //    assert!(first_event == MangaPageEvents::FethStatistics || first_event == MangaPageEvents::SearchChapters);
-    //    assert!(second_event == MangaPageEvents::FethStatistics || second_event == MangaPageEvents::SearchChapters);
-    //}
-    //
-    //#[tokio::test]
-    //async fn handle_events() {
-    //    let mut manga_page: MangaPage<TrackerTest> = MangaPage::new(Manga::default(), None);
-    //
-    //    manga_page_initialized_correctly(&mut manga_page).await;
-    //}
-    //
-    //#[tokio::test]
-    //async fn handle_key_events() {
-    //    let mut manga_page: MangaPage<TrackerTest> = MangaPage::new(Manga::default(), None);
-    //    manga_page.state = PageState::SearchingChapters;
-    //    manga_page.manga.available_languages =
-    //        vec![Languages::default(), Languages::Spanish, Languages::German, Languages::Japanese];
-    //
-    //    assert_eq!(ChapterOrder::default(), manga_page.chapter_order);
-    //
-    //    let action = MangaPageActions::ToggleOrder;
-    //    manga_page.update(action);
-    //
-    //    // when searching chapters avoid triggering another search by toggling order
-    //    assert_eq!(ChapterOrder::default(), manga_page.chapter_order);
-    //
-    //    manga_page.state = PageState::DisplayingChapters;
-    //    manga_page.load_chapters(Some(get_chapters_response()));
-    //    render_chapters(&mut manga_page);
-    //
-    //    let action = MangaPageActions::ToggleOrder;
-    //    manga_page.update(action);
-    //
-    //    assert_eq!(ChapterOrder::Ascending, manga_page.chapter_order);
-    //
-    //    let action = MangaPageActions::ScrollChapterDown;
-    //    manga_page.update(action);
-    //
-    //    assert_eq!(1, manga_page.get_index_chapter_selected());
-    //
-    //    let action = MangaPageActions::ScrollChapterUp;
-    //    manga_page.update(action);
-    //
-    //    assert_eq!(0, manga_page.get_index_chapter_selected());
-    //
-    //    let action = MangaPageActions::SearchNextChapterPage;
-    //    manga_page.update(action);
-    //
-    //    assert_eq!(2, manga_page.get_chapter_data().page);
-    //
-    //    let action = MangaPageActions::SearchPreviousChapterPage;
-    //    manga_page.update(action);
-    //
-    //    assert_eq!(1, manga_page.get_chapter_data().page);
-    //
-    //    let action = MangaPageActions::ToggleAvailableLanguagesList;
-    //    manga_page.update(action);
-    //
-    //    assert!(manga_page.is_list_languages_open);
-    //
-    //    let action = MangaPageActions::ScrollUpAvailbleLanguages;
-    //    manga_page.update(action);
-    //
-    //    render_available_languages_list(&mut manga_page);
-    //
-    //    assert_eq!(3, manga_page.available_languages_state.selected().unwrap());
-    //
-    //    manga_page.available_languages_state.select(Some(1));
-    //
-    //    let action = MangaPageActions::ScrollDownAvailbleLanguages;
-    //    manga_page.update(action);
-    //
-    //    assert_eq!(2, manga_page.available_languages_state.selected().unwrap());
-    //
-    //    let action = MangaPageActions::SearchByLanguage;
-    //    manga_page.update(action);
-    //
-    //    assert_eq!(PageState::SearchingChapters, manga_page.state);
-    //    assert!(manga_page.chapters.is_none());
-    //
-    //    let action = MangaPageActions::ToggleAvailableLanguagesList;
-    //    manga_page.update(action);
-    //
-    //    assert!(!manga_page.is_list_languages_open);
-    //
-    //    let action = MangaPageActions::AskDownloadAllChapters;
-    //    manga_page.update(action);
-    //
-    //    assert!(manga_page.download_process_started());
-    //
-    //    let action = MangaPageActions::ConfirmDownloadAll;
-    //    manga_page.update(action);
-    //
-    //    assert_eq!(DownloadPhase::FetchingChaptersData, manga_page.download_all_chapters_state.phase);
-    //
-    //    let action = MangaPageActions::CancelDownloadAll;
-    //    manga_page.update(action);
-    //
-    //    assert!(!manga_page.download_process_started());
-    //}
-    //
-    //#[test]
-    //fn doesnt_go_to_reader_if_picker_is_none() {
-    //    let mut manga_page: MangaPage<TrackerTest> = MangaPage::new(Manga::default(), None);
-    //
-    //    manga_page.load_chapters(Some(get_chapters_response()));
-    //
-    //    render_chapters(&mut manga_page);
-    //
-    //    manga_page.scroll_chapter_down();
-    //
-    //    manga_page.read_chapter();
-    //}
-    //
-    //#[test]
-    //fn doesnt_search_manga_cover_if_picker_is_none() {
-    //    let mut manga_page: MangaPage<TrackerTest> = MangaPage::new(Manga::default(), None);
-    //
-    //    manga_page.search_cover();
-    //}
-    //
-    //#[derive(Default, Clone)]
-    //struct ChapterTest {
-    //    id: String,
-    //    was_bookmarked: bool,
-    //}
-    //
-    //#[derive(Default, Clone)]
-    //struct TestDatabase {
-    //    should_fail: bool,
-    //    chapter: ChapterTest,
-    //    chapter_bookmarked: Option<ChapterBookmarked>,
-    //}
-    //
-    //impl TestDatabase {
-    //    fn new() -> Self {
-    //        Self {
-    //            should_fail: false,
-    //            chapter: ChapterTest::default(),
-    //            chapter_bookmarked: None,
-    //        }
-    //    }
-    //
-    //    fn with_bookmarked_chapter(chapter: ChapterBookmarked) -> Self {
-    //        Self {
-    //            should_fail: false,
-    //            chapter: ChapterTest::default(),
-    //            chapter_bookmarked: Some(chapter),
-    //        }
-    //    }
-    //
-    //    fn was_bookmarked(&self) -> bool {
-    //        self.chapter.was_bookmarked
-    //    }
-    //}
-    //
-    //impl Bookmark for TestDatabase {
-    //    fn bookmark(&mut self, _chapter_to_bookmark: ChapterToBookmark) -> Result<(), Box<dyn std::error::Error>> {
-    //        self.chapter.was_bookmarked = true;
-    //        Ok(())
-    //    }
-    //}
-    //
-    //impl RetrieveBookmark for TestDatabase {
-    //    fn get_bookmarked(&self, _manga_id: &str) -> Result<Option<ChapterBookmarked>, Box<dyn std::error::Error>> {
-    //        Ok(self.chapter_bookmarked.clone())
-    //    }
-    //}
-    //
-    //#[tokio::test]
-    //async fn it_sends_event_to_bookmark_currently_selected_chapter_on_key_press_if_auto_bookmark_is_false() {
-    //    let mut manga_page: MangaPage<TrackerTest> = MangaPage::new(Manga::default(), None);
-    //    manga_page.handle_events(Events::Key(KeyCode::Char('m').into()));
-    //
-    //    let result = timeout(Duration::from_millis(250), manga_page.local_action_rx.recv())
-    //        .await
-    //        .unwrap()
-    //        .unwrap();
-    //
-    //    assert_eq!(MangaPageActions::BookMarkChapterSelected, result)
-    //}
-    //
-    //#[tokio::test]
-    //async fn it_does_not_send_event_bookmark_chapter_selected_if_auto_bookmark_is_true() {
-    //    let mut manga_page: MangaPage<TrackerTest> = MangaPage::new(Manga::default(), None).auto_bookmark(true);
-    //    manga_page.handle_events(Events::Key(KeyCode::Char('m').into()));
-    //
-    //    assert!(manga_page.local_action_rx.is_empty());
-    //}
-    //
-    //#[test]
-    //fn it_bookmarks_currently_selected_chapter() {
-    //    let mut manga_page: MangaPage<TrackerTest> = MangaPage::new(Manga::default(), None);
-    //
-    //    let chapter_to_bookmark: ChapterItem = ChapterItem {
-    //        id: "id_chapter_bookmarked".to_string(),
-    //        ..Default::default()
-    //    };
-    //
-    //    let mut list_state = tui_widget_list::ListState::default();
-    //
-    //    list_state.select(Some(0));
-    //
-    //    manga_page.chapters = Some(ChaptersData {
-    //        widget: ChaptersListWidget {
-    //            chapters: vec![chapter_to_bookmark, ChapterItem::default()],
-    //        },
-    //        state: list_state,
-    //        ..Default::default()
-    //    });
-    //
-    //    let mut test_database = TestDatabase::new();
-    //
-    //    manga_page.bookmark_current_chapter_selected(&mut test_database);
-    //
-    //    let bookmarked_chapter = manga_page
-    //        .chapters
-    //        .as_ref()
-    //        .unwrap()
-    //        .widget
-    //        .chapters
-    //        .iter()
-    //        .find(|chap| chap.id == "id_chapter_bookmarked")
-    //        .unwrap();
-    //
-    //    assert!(bookmarked_chapter.is_bookmarked);
-    //}
-    //
-    //#[test]
-    //fn it_only_bookmarks_one_chapter_at_a_time() {
-    //    let mut manga_page: MangaPage<TrackerTest> = MangaPage::new(Manga::default(), None);
-    //
-    //    let mut list_state = tui_widget_list::ListState::default();
-    //
-    //    list_state.select(Some(0));
-    //
-    //    manga_page.chapters = Some(ChaptersData {
-    //        widget: ChaptersListWidget {
-    //            chapters: vec![
-    //                ChapterItem {
-    //                    is_bookmarked: true,
-    //                    ..Default::default()
-    //                },
-    //                ChapterItem {
-    //                    is_bookmarked: true,
-    //                    ..Default::default()
-    //                },
-    //            ],
-    //        },
-    //        state: list_state,
-    //        ..Default::default()
-    //    });
-    //
-    //    let mut test_database = TestDatabase::new();
-    //
-    //    manga_page.bookmark_current_chapter_selected(&mut test_database);
-    //
-    //    let chapters = manga_page.get_chapter_data();
-    //
-    //    assert!(chapters.widget.chapters[0].is_bookmarked);
-    //    assert!(!chapters.widget.chapters[1].is_bookmarked);
-    //}
-    //
-    //// clear all the events from initialization
-    //fn flush_events<T: MangaTracker>(manga_page: &mut MangaPage<T>) {
-    //    while manga_page.local_event_rx.try_recv().is_ok() {}
-    //}
-    //
-    //#[tokio::test]
-    //async fn it_sends_event_to_fetch_chapter_bookmarked_if_there_is_any() {
-    //    let mut manga_page: MangaPage<TrackerTest> = MangaPage::new(Manga::default(), None);
-    //
-    //    flush_events(&mut manga_page);
-    //
-    //    let expected = ChapterBookmarked {
-    //        id: "chapter_bookmarked".to_string(),
-    //        ..Default::default()
-    //    };
-    //
-    //    let test_database = TestDatabase::with_bookmarked_chapter(expected.clone());
-    //
-    //    let expected = MangaPageEvents::FetchChapterBookmarked(expected);
-    //
-    //    manga_page.get_chapter_bookmarked_from_db(test_database);
-    //
-    //    let result = timeout(Duration::from_millis(250), manga_page.local_event_rx.recv())
-    //        .await
-    //        .unwrap()
-    //        .unwrap();
-    //
-    //    assert_eq!(expected, result);
-    //}
-    //
-    //#[test]
-    //fn it_is_set_as_bookmark_not_found_when_no_chapter_is_bookmarked() {
-    //    let mut manga_page: MangaPage<TrackerTest> = MangaPage::new(Manga::default(), None);
-    //
-    //    flush_events(&mut manga_page);
-    //
-    //    let test_database = TestDatabase::new();
-    //
-    //    manga_page.get_chapter_bookmarked_from_db(test_database);
-    //
-    //    assert_eq!(manga_page.bookmark_state.phase, BookmarkPhase::NotFoundDatabase);
-    //}
-    //
-    //#[derive(Clone)]
-    //struct TestApiClient {
-    //    should_fail: bool,
-    //    response: (ChapterToRead, MangaToRead),
-    //}
-    //
-    //impl TestApiClient {
-    //    pub fn with_response(response: (ChapterToRead, MangaToRead)) -> Self {
-    //        Self {
-    //            should_fail: false,
-    //            response,
-    //        }
-    //    }
-    //
-    //    pub fn with_failing_response() -> Self {
-    //        Self {
-    //            should_fail: true,
-    //            response: (Default::default(), Default::default()),
-    //        }
-    //    }
-    //}
-    //
-    //impl FetchChapterBookmarked for TestApiClient {
-    //    async fn fetch_chapter_bookmarked(
-    //        &self,
-    //        _chapter: ChapterBookmarked,
-    //    ) -> Result<(ChapterToRead, MangaToRead), Box<dyn Error>> {
-    //        if self.should_fail {
-    //            return Err("should fail".into());
-    //        }
-    //        Ok(self.response.clone())
-    //    }
-    //}
-    //
-    //#[tokio::test]
-    //async fn it_send_event_to_read_bookmark_chapter_by_pressing_tab() {
-    //    let mut manga_page: MangaPage<TrackerTest> = MangaPage::new(Manga::default(), None);
-    //    manga_page.handle_events(Events::Key(KeyCode::Tab.into()));
-    //
-    //    let expected = MangaPageActions::GoToReadBookmarkedChapter;
-    //
-    //    let result = timeout(Duration::from_millis(250), manga_page.local_action_rx.recv())
-    //        .await
-    //        .unwrap()
-    //        .unwrap();
-    //
-    //    assert_eq!(expected, result)
-    //}
-    //
-    //#[tokio::test]
-    //async fn it_sends_event_to_go_reader_page_from_bookmarked_chapter() {
-    //    let (tx, _) = unbounded_channel();
-    //    let mut manga_page: MangaPage<TrackerTest> = MangaPage::new(Manga::default(), None).with_global_sender(tx);
-    //
-    //    flush_events(&mut manga_page);
-    //    let chapter_bookmarked: ChapterBookmarked = ChapterBookmarked {
-    //        id: "bookmarked".to_string(),
-    //        ..Default::default()
-    //    };
-    //
-    //    let response = (
-    //        ChapterToRead {
-    //            id: "bookmarked".to_string(),
-    //            ..Default::default()
-    //        },
-    //        MangaToRead::default(),
-    //    );
-    //
-    //    let expected = MangaPageEvents::ReadChapterBookmarked(response.0.clone(), response.1.clone());
-    //
-    //    let api_client = TestApiClient::with_response(response);
-    //
-    //    manga_page.fetch_chapter_bookmarked(chapter_bookmarked, api_client);
-    //
-    //    let result = timeout(Duration::from_millis(250), manga_page.local_event_rx.recv())
-    //        .await
-    //        .unwrap()
-    //        .unwrap();
-    //
-    //    assert_eq!(manga_page.bookmark_state.phase, BookmarkPhase::SearchingFromApi);
-    //    assert_eq!(expected, result)
-    //}
-    //
-    //#[tokio::test]
-    //async fn it_sends_event_chapter_bookmarked_failed_to_fetch() {
-    //    let (tx, _) = unbounded_channel();
-    //    let mut manga_page: MangaPage<TrackerTest> = MangaPage::new(Manga::default(), None).with_global_sender(tx);
-    //
-    //    flush_events(&mut manga_page);
-    //
-    //    let api_client = TestApiClient::with_failing_response();
-    //
-    //    manga_page.fetch_chapter_bookmarked(ChapterBookmarked::default(), api_client);
-    //
-    //    let expected = MangaPageEvents::FetchBookmarkFailed;
-    //
-    //    let result = timeout(Duration::from_millis(250), manga_page.local_event_rx.recv())
-    //        .await
-    //        .unwrap()
-    //        .unwrap();
-    //
-    //    assert_eq!(expected, result);
-    //}
-    //
-    //#[tokio::test]
-    //async fn if_manga_tracking_fails_it_sends_event_to_write_error_to_error_log_file() -> Result<(), Box<dyn Error>> {
-    //    let expected_error_message = "some_error_message";
-    //    let failing_tracker = TrackerTest::failing_with_error_message(&expected_error_message);
-    //
-    //    let mut manga_page: MangaPage<TrackerTest> = MangaPage::new(Manga::default(), Some(Picker::new((1, 2))));
-    //
-    //    flush_events(&mut manga_page);
-    //
-    //    manga_page.track_manga(Some(failing_tracker), "manga-test".to_string(), 1, Some(3));
-    //
-    //    let expected = MangaPageEvents::TrackingFailed(expected_error_message.to_string());
-    //
-    //    let result = timeout(Duration::from_millis(500), manga_page.local_event_rx.recv()).await?.unwrap();
-    //
-    //    assert_eq!(expected, result);
-    //
-    //    Ok(())
-    //}
+    use std::error::Error;
+    use std::time::Duration;
+
+    use pretty_assertions::assert_eq;
+    use tokio::time::timeout;
+
+    use self::mpsc::unbounded_channel;
+    use super::*;
+    use crate::backend::database::ChapterBookmarked;
+    use crate::backend::manga_provider::mock::MockMangaPageProvider;
+    use crate::backend::manga_provider::Chapter;
+    use crate::backend::tracker::MangaTracker;
+    use crate::global::test_utils::TrackerTest;
+    use crate::view::widgets::press_key;
+
+    fn get_chapters_response() -> GetChaptersResponse {
+        GetChaptersResponse {
+            chapters: vec![Chapter::default(), Chapter::default()],
+            total_chapters: 30,
+        }
+    }
+
+    fn render_chapters<T: MangaPageProvider, S: MangaTracker>(manga_page: &mut MangaPage<T, S>) {
+        let area = Rect::new(0, 0, 50, 50);
+        let mut buf = Buffer::empty(area);
+        let chapters = manga_page.chapters.as_mut().unwrap();
+        StatefulWidget::render(chapters.widget.clone(), area, &mut buf, &mut chapters.state);
+    }
+
+    fn render_available_languages_list<T: MangaPageProvider, S: MangaTracker>(manga_page: &mut MangaPage<T, S>) {
+        let area = Rect::new(0, 0, 50, 50);
+        let mut buf = Buffer::empty(area);
+        let languages: Vec<String> = manga_page.manga.languages.iter().map(|lang| lang.as_human_readable()).collect();
+        let list = List::new(languages);
+
+        StatefulWidget::render(list, area, &mut buf, &mut manga_page.available_languages_state);
+    }
+
+    #[tokio::test]
+    async fn key_events_trigger_expected_actions() {
+        let mut manga_page: MangaPage<MockMangaPageProvider, TrackerTest> =
+            MangaPage::new(Manga::default(), None, MockMangaPageProvider::new().into());
+
+        // Scroll down chapters list
+        press_key(&mut manga_page, KeyCode::Char('j'));
+        let action = manga_page.local_action_rx.recv().await.unwrap();
+
+        assert_eq!(MangaPageActions::ScrollChapterDown, action);
+
+        // Scroll up chapters list
+        press_key(&mut manga_page, KeyCode::Char('k'));
+        let action = manga_page.local_action_rx.recv().await.unwrap();
+
+        assert_eq!(MangaPageActions::ScrollChapterUp, action);
+
+        // toggle chapter order
+        press_key(&mut manga_page, KeyCode::Char('t'));
+        let action = manga_page.local_action_rx.recv().await.unwrap();
+
+        assert_eq!(MangaPageActions::ToggleOrder, action);
+
+        // Go next chapter page
+        press_key(&mut manga_page, KeyCode::Char('w'));
+        let action = manga_page.local_action_rx.recv().await.unwrap();
+
+        assert_eq!(MangaPageActions::SearchNextChapterPage, action);
+
+        // Go previous chapter page
+        press_key(&mut manga_page, KeyCode::Char('b'));
+        let action = manga_page.local_action_rx.recv().await.unwrap();
+
+        assert_eq!(MangaPageActions::SearchPreviousChapterPage, action);
+
+        // Open available_languages list
+        press_key(&mut manga_page, KeyCode::Char('l'));
+        let action = manga_page.local_action_rx.recv().await.unwrap();
+
+        assert_eq!(MangaPageActions::ToggleAvailableLanguagesList, action);
+
+        manga_page.toggle_available_languages_list();
+
+        // scroll down available languages list
+        press_key(&mut manga_page, KeyCode::Char('j'));
+        let action = manga_page.local_action_rx.recv().await.unwrap();
+
+        assert_eq!(MangaPageActions::ScrollDownAvailbleLanguages, action);
+
+        // scroll down available languages list
+        press_key(&mut manga_page, KeyCode::Char('k'));
+        let action = manga_page.local_action_rx.recv().await.unwrap();
+
+        assert_eq!(MangaPageActions::ScrollUpAvailbleLanguages, action);
+
+        // search by a language selected
+        press_key(&mut manga_page, KeyCode::Char('s'));
+        let action = manga_page.local_action_rx.recv().await.unwrap();
+
+        assert_eq!(MangaPageActions::SearchByLanguage, action);
+
+        // close available languages list
+        press_key(&mut manga_page, KeyCode::Esc);
+        let action = manga_page.local_action_rx.recv().await.unwrap();
+
+        assert_eq!(MangaPageActions::ToggleAvailableLanguagesList, action);
+
+        manga_page.toggle_available_languages_list();
+
+        // download chapter
+        press_key(&mut manga_page, KeyCode::Char('d'));
+        let action = manga_page.local_action_rx.recv().await.unwrap();
+
+        assert_eq!(MangaPageActions::DownloadChapter, action);
+
+        // start download all chapter proccess
+        press_key(&mut manga_page, KeyCode::Char('a'));
+        let action = manga_page.local_action_rx.recv().await.unwrap();
+
+        assert_eq!(MangaPageActions::AskDownloadAllChapters, action);
+
+        manga_page.ask_download_all_chapters();
+
+        // confirm download all chapters
+        press_key(&mut manga_page, KeyCode::Enter);
+        let action = manga_page.local_action_rx.recv().await.unwrap();
+
+        assert_eq!(MangaPageActions::ConfirmDownloadAll, action);
+
+        manga_page.confirm_download_all_chapters();
+
+        // cancel download all chapters operation
+        press_key(&mut manga_page, KeyCode::Esc);
+        let action = manga_page.local_action_rx.recv().await.unwrap();
+
+        assert_eq!(MangaPageActions::CancelDownloadAll, action);
+
+        manga_page.cancel_download_all_chapters();
+
+        // read a chapter
+        press_key(&mut manga_page, KeyCode::Char('r'));
+        let action = manga_page.local_action_rx.recv().await.unwrap();
+
+        assert_eq!(MangaPageActions::ReadChapter, action);
+    }
+
+    #[tokio::test]
+    async fn listen_to_key_events_based_on_conditions() {
+        let mut manga_page: MangaPage<MockMangaPageProvider, TrackerTest> =
+            MangaPage::new(Manga::default(), None, MockMangaPageProvider::new().into());
+
+        assert!(!manga_page.is_list_languages_open);
+        manga_page.handle_events(Events::Key(KeyCode::Char('j').into()));
+
+        let action = manga_page.local_action_rx.recv().await.unwrap();
+
+        assert_eq!(MangaPageActions::ScrollChapterDown, action);
+
+        manga_page.toggle_available_languages_list();
+        manga_page.handle_events(Events::Key(KeyCode::Char('j').into()));
+
+        let action = manga_page.local_action_rx.recv().await.unwrap();
+
+        assert_eq!(MangaPageActions::ScrollDownAvailbleLanguages, action);
+
+        manga_page.toggle_available_languages_list();
+        manga_page.ask_download_all_chapters();
+
+        manga_page.handle_events(Events::Key(KeyCode::Enter.into()));
+
+        let action = manga_page.local_action_rx.recv().await.unwrap();
+
+        assert_eq!(MangaPageActions::ConfirmDownloadAll, action);
+    }
+
+    async fn manga_page_initialized_correctly<T: MangaPageProvider, S: MangaTracker>(manga_page: &mut MangaPage<T, S>) {
+        assert_eq!(manga_page.chapter_filters.language, Languages::default());
+
+        assert_eq!(ChapterOrderBy::default(), manga_page.chapter_filters.order);
+
+        assert_eq!(PageState::SearchingChapters, manga_page.state);
+
+        assert!(!manga_page.is_list_languages_open);
+
+        let first_event = manga_page.local_event_rx.recv().await.unwrap();
+
+        assert!(first_event == MangaPageEvents::SearchChapters);
+    }
+
+    #[tokio::test]
+    async fn handle_events() {
+        let mut manga_page: MangaPage<MockMangaPageProvider, TrackerTest> =
+            MangaPage::new(Manga::default(), None, MockMangaPageProvider::new().into());
+
+        manga_page_initialized_correctly(&mut manga_page).await;
+    }
+
+    #[tokio::test]
+    async fn handle_key_events() {
+        let mut manga_page: MangaPage<MockMangaPageProvider, TrackerTest> =
+            MangaPage::new(Manga::default(), None, MockMangaPageProvider::new().into());
+        manga_page.state = PageState::SearchingChapters;
+
+        manga_page.manga.languages = vec![Languages::default(), Languages::Spanish, Languages::German, Languages::Japanese];
+
+        let action = MangaPageActions::ToggleOrder;
+        manga_page.update(action);
+
+        // when searching chapters avoid triggering another search by toggling order
+        assert_eq!(ChapterOrderBy::Descending, manga_page.chapter_filters.order);
+
+        manga_page.state = PageState::DisplayingChapters;
+        manga_page.load_chapters(Some(get_chapters_response()));
+        render_chapters(&mut manga_page);
+
+        let action = MangaPageActions::ToggleOrder;
+        manga_page.update(action);
+
+        assert_eq!(ChapterOrderBy::Ascending, manga_page.chapter_filters.order);
+
+        let action = MangaPageActions::ScrollChapterDown;
+        manga_page.update(action);
+
+        assert_eq!(1, manga_page.get_index_chapter_selected());
+
+        let action = MangaPageActions::ScrollChapterUp;
+        manga_page.update(action);
+
+        assert_eq!(0, manga_page.get_index_chapter_selected());
+
+        let action = MangaPageActions::SearchNextChapterPage;
+        manga_page.update(action);
+
+        assert_eq!(2, manga_page.get_chapter_data().pagination.current_page);
+
+        let action = MangaPageActions::SearchPreviousChapterPage;
+        manga_page.update(action);
+
+        assert_eq!(1, manga_page.get_chapter_data().pagination.current_page);
+
+        let action = MangaPageActions::ToggleAvailableLanguagesList;
+        manga_page.update(action);
+
+        assert!(manga_page.is_list_languages_open);
+
+        let action = MangaPageActions::ScrollUpAvailbleLanguages;
+        manga_page.update(action);
+
+        render_available_languages_list(&mut manga_page);
+
+        assert_eq!(3, manga_page.available_languages_state.selected().unwrap());
+
+        manga_page.available_languages_state.select(Some(1));
+
+        let action = MangaPageActions::ScrollDownAvailbleLanguages;
+        manga_page.update(action);
+
+        assert_eq!(2, manga_page.available_languages_state.selected().unwrap());
+
+        let action = MangaPageActions::SearchByLanguage;
+        manga_page.update(action);
+
+        assert_eq!(PageState::SearchingChapters, manga_page.state);
+        assert!(manga_page.chapters.is_none());
+
+        let action = MangaPageActions::ToggleAvailableLanguagesList;
+        manga_page.update(action);
+
+        assert!(!manga_page.is_list_languages_open);
+
+        let action = MangaPageActions::AskDownloadAllChapters;
+        manga_page.update(action);
+
+        assert!(manga_page.download_process_started());
+
+        let action = MangaPageActions::ConfirmDownloadAll;
+        manga_page.update(action);
+
+        assert_eq!(DownloadPhase::FetchingChaptersData, manga_page.download_all_chapters_state.phase);
+
+        let action = MangaPageActions::CancelDownloadAll;
+        manga_page.update(action);
+
+        assert!(!manga_page.download_process_started());
+    }
+
+    #[test]
+    fn doesnt_go_to_reader_if_picker_is_none() {
+        let mut manga_page: MangaPage<MockMangaPageProvider, TrackerTest> =
+            MangaPage::new(Manga::default(), None, MockMangaPageProvider::new().into());
+
+        manga_page.load_chapters(Some(get_chapters_response()));
+
+        render_chapters(&mut manga_page);
+
+        manga_page.scroll_chapter_down();
+
+        manga_page.read_chapter();
+    }
+
+    #[test]
+    fn doesnt_search_manga_cover_if_picker_is_none() {
+        let mut manga_page: MangaPage<MockMangaPageProvider, TrackerTest> =
+            MangaPage::new(Manga::default(), None, MockMangaPageProvider::new().into());
+
+        manga_page.search_cover();
+    }
+
+    #[derive(Default, Clone)]
+    struct ChapterTest {
+        id: String,
+        was_bookmarked: bool,
+    }
+
+    #[derive(Default, Clone)]
+    struct TestDatabase {
+        should_fail: bool,
+        chapter: ChapterTest,
+        chapter_bookmarked: Option<ChapterBookmarked>,
+    }
+
+    impl TestDatabase {
+        fn new() -> Self {
+            Self {
+                should_fail: false,
+                chapter: ChapterTest::default(),
+                chapter_bookmarked: None,
+            }
+        }
+
+        fn with_bookmarked_chapter(chapter: ChapterBookmarked) -> Self {
+            Self {
+                should_fail: false,
+                chapter: ChapterTest::default(),
+                chapter_bookmarked: Some(chapter),
+            }
+        }
+
+        fn was_bookmarked(&self) -> bool {
+            self.chapter.was_bookmarked
+        }
+    }
+
+    impl Bookmark for TestDatabase {
+        fn bookmark(&mut self, _chapter_to_bookmark: ChapterToBookmark) -> Result<(), Box<dyn std::error::Error>> {
+            self.chapter.was_bookmarked = true;
+            Ok(())
+        }
+    }
+
+    impl RetrieveBookmark for TestDatabase {
+        fn get_bookmarked(&self, _manga_id: &str) -> Result<Option<ChapterBookmarked>, Box<dyn std::error::Error>> {
+            Ok(self.chapter_bookmarked.clone())
+        }
+    }
+
+    #[tokio::test]
+    async fn it_sends_event_to_bookmark_currently_selected_chapter_on_key_press_if_auto_bookmark_is_false() {
+        let mut manga_page: MangaPage<MockMangaPageProvider, TrackerTest> =
+            MangaPage::new(Manga::default(), None, MockMangaPageProvider::new().into());
+        manga_page.handle_events(Events::Key(KeyCode::Char('m').into()));
+
+        let result = timeout(Duration::from_millis(250), manga_page.local_action_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(MangaPageActions::BookMarkChapterSelected, result)
+    }
+
+    #[tokio::test]
+    async fn it_does_not_send_event_bookmark_chapter_selected_if_auto_bookmark_is_true() {
+        let mut manga_page: MangaPage<MockMangaPageProvider, TrackerTest> =
+            MangaPage::new(Manga::default(), None, MockMangaPageProvider::new().into()).auto_bookmark(true);
+        manga_page.handle_events(Events::Key(KeyCode::Char('m').into()));
+
+        assert!(manga_page.local_action_rx.is_empty());
+    }
+
+    #[test]
+    fn it_bookmarks_currently_selected_chapter() {
+        let mut manga_page: MangaPage<MockMangaPageProvider, TrackerTest> =
+            MangaPage::new(Manga::default(), None, MockMangaPageProvider::new().into());
+
+        let chapter_to_bookmark: ChapterItem = ChapterItem {
+            chapter: Chapter {
+                id: "id_chapter_bookmarked".to_string(),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let mut list_state = tui_widget_list::ListState::default();
+
+        list_state.select(Some(0));
+
+        manga_page.chapters = Some(ChaptersData {
+            widget: ChaptersListWidget {
+                chapters: vec![chapter_to_bookmark, ChapterItem::default()],
+            },
+            state: list_state,
+            ..Default::default()
+        });
+
+        let mut test_database = TestDatabase::new();
+
+        manga_page.bookmark_current_chapter_selected(&mut test_database);
+
+        let bookmarked_chapter = manga_page
+            .chapters
+            .as_ref()
+            .unwrap()
+            .widget
+            .chapters
+            .iter()
+            .find(|chap| chap.chapter.id == "id_chapter_bookmarked")
+            .unwrap();
+
+        assert!(bookmarked_chapter.is_bookmarked);
+    }
+
+    #[test]
+    fn it_only_bookmarks_one_chapter_at_a_time() {
+        let mut manga_page: MangaPage<MockMangaPageProvider, TrackerTest> =
+            MangaPage::new(Manga::default(), None, MockMangaPageProvider::new().into());
+
+        let mut list_state = tui_widget_list::ListState::default();
+
+        list_state.select(Some(0));
+
+        manga_page.chapters = Some(ChaptersData {
+            widget: ChaptersListWidget {
+                chapters: vec![
+                    ChapterItem {
+                        is_bookmarked: true,
+                        ..Default::default()
+                    },
+                    ChapterItem {
+                        is_bookmarked: true,
+                        ..Default::default()
+                    },
+                ],
+            },
+            state: list_state,
+            ..Default::default()
+        });
+
+        let mut test_database = TestDatabase::new();
+
+        manga_page.bookmark_current_chapter_selected(&mut test_database);
+
+        let chapters = manga_page.get_chapter_data();
+
+        assert!(chapters.widget.chapters[0].is_bookmarked);
+        assert!(!chapters.widget.chapters[1].is_bookmarked);
+    }
+
+    // clear all the events from initialization
+    fn flush_events<T: MangaPageProvider, S: MangaTracker>(manga_page: &mut MangaPage<T, S>) {
+        while manga_page.local_event_rx.try_recv().is_ok() {}
+    }
+
+    #[tokio::test]
+    async fn it_sends_event_to_fetch_chapter_bookmarked_if_there_is_any() {
+        let mut manga_page: MangaPage<MockMangaPageProvider, TrackerTest> =
+            MangaPage::new(Manga::default(), None, MockMangaPageProvider::new().into());
+
+        flush_events(&mut manga_page);
+
+        let expected = ChapterBookmarked {
+            id: "chapter_bookmarked".to_string(),
+            ..Default::default()
+        };
+
+        let test_database = TestDatabase::with_bookmarked_chapter(expected.clone());
+
+        let expected = MangaPageEvents::FetchChapterBookmarked(expected);
+
+        manga_page.get_chapter_bookmarked_from_db(test_database);
+
+        let result = timeout(Duration::from_millis(250), manga_page.local_event_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(expected, result);
+    }
+
+    #[test]
+    fn it_is_set_as_bookmark_not_found_when_no_chapter_is_bookmarked() {
+        let mut manga_page: MangaPage<MockMangaPageProvider, TrackerTest> =
+            MangaPage::new(Manga::default(), None, MockMangaPageProvider::new().into());
+
+        flush_events(&mut manga_page);
+
+        let test_database = TestDatabase::new();
+
+        manga_page.get_chapter_bookmarked_from_db(test_database);
+
+        assert_eq!(manga_page.bookmark_state.phase, BookmarkPhase::NotFoundDatabase);
+    }
+
+    #[tokio::test]
+    async fn it_send_event_to_read_bookmark_chapter_by_pressing_tab() {
+        let mut manga_page: MangaPage<MockMangaPageProvider, TrackerTest> =
+            MangaPage::new(Manga::default(), None, MockMangaPageProvider::new().into());
+        manga_page.handle_events(Events::Key(KeyCode::Tab.into()));
+
+        let expected = MangaPageActions::GoToReadBookmarkedChapter;
+
+        let result = timeout(Duration::from_millis(250), manga_page.local_action_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(expected, result)
+    }
+
+    #[tokio::test]
+    async fn it_sends_event_to_go_reader_page_from_bookmarked_chapter() {
+        let (tx, _) = unbounded_channel();
+
+        let response = (
+            ChapterToRead {
+                id: "bookmarked".to_string(),
+                ..Default::default()
+            },
+            ListOfChapters::default(),
+        );
+        let mut manga_page: MangaPage<MockMangaPageProvider, TrackerTest> = MangaPage::new(
+            Manga::default(),
+            None,
+            MockMangaPageProvider::with_response_fetch_chapter_bookmark_response(response.clone()).into(),
+        )
+        .with_global_sender(tx);
+
+        flush_events(&mut manga_page);
+        let chapter_bookmarked: ChapterBookmarked = ChapterBookmarked {
+            id: "bookmarked".to_string(),
+            ..Default::default()
+        };
+
+        let expected = MangaPageEvents::ReadChapterBookmarked(response.0.clone(), response.1.clone());
+
+        manga_page.fetch_chapter_bookmarked(chapter_bookmarked);
+
+        let result = timeout(Duration::from_millis(250), manga_page.local_event_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(manga_page.bookmark_state.phase, BookmarkPhase::SearchingFromApi);
+        assert_eq!(expected, result)
+    }
+
+    #[tokio::test]
+    async fn it_sends_event_chapter_bookmarked_failed_to_fetch() {
+        let (tx, _) = unbounded_channel();
+        let mut manga_page: MangaPage<MockMangaPageProvider, TrackerTest> =
+            MangaPage::new(Manga::default(), None, MockMangaPageProvider::with_failing_response().into()).with_global_sender(tx);
+
+        flush_events(&mut manga_page);
+
+        manga_page.fetch_chapter_bookmarked(ChapterBookmarked::default());
+
+        let expected = MangaPageEvents::FetchBookmarkFailed;
+
+        let result = timeout(Duration::from_millis(250), manga_page.local_event_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(expected, result);
+    }
+
+    #[tokio::test]
+    async fn if_manga_tracking_fails_it_sends_event_to_write_error_to_error_log_file() -> Result<(), Box<dyn Error>> {
+        let expected_error_message = "some_error_message";
+        let failing_tracker = TrackerTest::failing_with_error_message(&expected_error_message);
+
+        let mut manga_page: MangaPage<MockMangaPageProvider, TrackerTest> =
+            MangaPage::new(Manga::default(), Some(Picker::new((1, 2))), MockMangaPageProvider::new().into());
+
+        flush_events(&mut manga_page);
+
+        manga_page.track_manga(Some(failing_tracker), "manga-test".to_string(), 1, Some(3));
+
+        let expected = MangaPageEvents::TrackingFailed(expected_error_message.to_string());
+
+        let result = timeout(Duration::from_millis(500), manga_page.local_event_rx.recv()).await?.unwrap();
+
+        assert_eq!(expected, result);
+
+        Ok(())
+    }
 }

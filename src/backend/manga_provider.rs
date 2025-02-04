@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::error::Error;
 use std::fmt::Display;
 use std::future::Future;
@@ -5,7 +6,7 @@ use std::io::Cursor;
 
 use bytes::Bytes;
 use image::{DynamicImage, GenericImageView, ImageReader};
-use manga_tui::SearchTerm;
+use manga_tui::{SearchTerm, SortedVec};
 use mangadex::filter::FilterListItem;
 use ratatui::style::{Color, Style, Stylize};
 use ratatui::text::Span;
@@ -17,7 +18,6 @@ use super::database::ChapterBookmarked;
 use super::tui::Events;
 use crate::config::ImageQuality;
 use crate::global::PREFERRED_LANGUAGE;
-use crate::view::pages::reader::ListOfChapters;
 use crate::view::widgets::StatefulWidgetFrame;
 
 pub mod mangadex;
@@ -408,6 +408,139 @@ pub struct ChapterToRead {
     pub pages_url: Vec<Url>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub struct SortedChapters(SortedVec<ChapterReader>);
+
+/// Volumes will have this order : "0", "1", "2" ... up until "none" which is chapter with no
+/// volume
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub struct SortedVolumes(SortedVec<Volumes>);
+
+impl ListOfChapters {
+    pub fn get_next_chapter(&self, volume: Option<&str>, chapter_number: f64) -> Option<ChapterReader> {
+        let volume_number = volume.unwrap_or("none");
+
+        let volume = self.volumes.as_slice().iter().find(|vol| vol.volume == volume_number)?;
+
+        let next_chapter = volume.chapters.search_next_chapter(&chapter_number.to_string());
+
+        match next_chapter {
+            Some(chap) => Some(chap),
+            None => {
+                let next_volume = self.volumes.search_next_volume(volume_number)?;
+
+                next_volume.chapters.search_next_chapter(&chapter_number.to_string())
+            },
+        }
+    }
+
+    pub fn get_previous_chapter_in_previous_volume(&self, volume: &str, chapter_number: f64) -> Option<ChapterReader> {
+        let previous_volume = self.volumes.search_previous_volume(volume).filter(|vol| vol.volume != volume)?;
+
+        previous_volume
+            .chapters
+            .as_slice()
+            .last()
+            .cloned()
+            .filter(|chapter| chapter.number != chapter_number.to_string())
+    }
+
+    pub fn get_previous_chapter(&self, volume: Option<&str>, chapter_number: f64) -> Option<ChapterReader> {
+        let volume_number = volume.unwrap_or("none");
+
+        let volumes = self.volumes.as_slice().iter().find(|vol| vol.volume == volume_number)?;
+
+        let chapters = volumes.chapters.as_slice();
+
+        let current_index = chapters.iter().position(|chap| chap.number == chapter_number.to_string());
+
+        match current_index {
+            Some(index) => {
+                let previous_chapter = chapters
+                    .get(index.saturating_sub(1))
+                    .cloned()
+                    .filter(|chap| chap.number != chapter_number.to_string());
+
+                previous_chapter.or_else(|| self.get_previous_chapter_in_previous_volume(volume_number, chapter_number))
+            },
+            None => self.get_previous_chapter_in_previous_volume(volume_number, chapter_number),
+        }
+    }
+}
+
+impl SortedVolumes {
+    pub fn new(volumes: Vec<Volumes>) -> Self {
+        Self(SortedVec::sorted_by(volumes, |a, b| {
+            if a.volume == "none" && b.volume.parse::<u32>().is_ok() {
+                Ordering::Greater
+            } else if a.volume.parse::<u32>().is_ok() && b.volume == "none" {
+                Ordering::Less
+            } else {
+                a.volume.parse::<u32>().unwrap_or(0).cmp(&b.volume.parse().unwrap_or(0))
+            }
+        }))
+    }
+
+    pub fn search_next_volume(&self, volume: &str) -> Option<Volumes> {
+        let volumes = self.as_slice();
+        let position = volumes.iter().position(|vol| vol.volume == volume);
+
+        position.and_then(|index| volumes.get(index + 1).cloned())
+    }
+
+    pub fn search_previous_volume(&self, volume: &str) -> Option<Volumes> {
+        let volumes = self.as_slice();
+
+        let position = volumes.iter().position(|vol| vol.volume == volume);
+
+        position.and_then(|index| volumes.get(index.saturating_sub(1)).cloned())
+    }
+
+    pub fn as_slice(&self) -> &[Volumes] {
+        self.0.as_slice()
+    }
+}
+
+impl SortedChapters {
+    pub fn new(chapters: Vec<ChapterReader>) -> Self {
+        Self(SortedVec::sorted_by(chapters, |a, b| {
+            a.number.parse::<f64>().unwrap_or(0.0).total_cmp(&b.number.parse().unwrap_or(0.0))
+        }))
+    }
+
+    pub fn search_next_chapter(&self, current: &str) -> Option<ChapterReader> {
+        let chapters = self.as_slice();
+        let position = chapters.iter().position(|chap| chap.number == current);
+
+        match position {
+            Some(index) => chapters.get(index + 1).cloned(),
+            None => chapters.iter().next().cloned(),
+        }
+    }
+
+    pub fn as_slice(&self) -> &[ChapterReader] {
+        self.0.as_slice()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub struct ChapterReader {
+    pub id: String,
+    pub number: String,
+    pub volume: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub struct Volumes {
+    pub volume: String,
+    pub chapters: SortedChapters,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub struct ListOfChapters {
+    pub volumes: SortedVolumes,
+}
+
 impl Display for ChapterToRead {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -630,26 +763,294 @@ pub trait MangaProvider:
 
 #[cfg(test)]
 pub mod mock {
-    //use super::{HomePageMangaProvider, PopularManga, RecentlyAddedManga};
-    //
-    //#[derive(Clone)]
-    //pub struct MockMangaPageProvider {}
-    //
-    //impl MockMangaPageProvider {
-    //    pub fn new() -> Self {
-    //        Self {}
-    //    }
-    //}
-    //
-    //impl HomePageMangaProvider for MockMangaPageProvider {
-    //    async fn get_popular_mangas(&self) -> Result<Vec<PopularManga>, Box<dyn std::error::Error>> {
-    //        Ok(vec![PopularManga::default()])
-    //    }
-    //
-    //    async fn get_recently_added_mangas(&self) -> Result<Vec<RecentlyAddedManga>, Box<dyn std::error::Error>> {
-    //        Ok(vec![RecentlyAddedManga::default()])
-    //    }
-    //}
+
+    use super::*;
+
+    #[derive(Debug, Clone)]
+    pub struct MockMangaPageProvider {
+        pub should_fail: bool,
+        pub fetch_chapter_bookmark_response: (ChapterToRead, ListOfChapters),
+        pub latest_chapter_response: Vec<LatestChapter>,
+    }
+
+    impl MockMangaPageProvider {
+        pub fn new() -> Self {
+            Self {
+                should_fail: false,
+                fetch_chapter_bookmark_response: (ChapterToRead::default(), ListOfChapters::default()),
+                latest_chapter_response: vec![],
+            }
+        }
+
+        pub fn with_response_fetch_chapter_bookmark_response(response: (ChapterToRead, ListOfChapters)) -> Self {
+            Self {
+                should_fail: false,
+                fetch_chapter_bookmark_response: response,
+                latest_chapter_response: vec![],
+            }
+        }
+
+        pub fn with_latest_chapter_response(response: Vec<LatestChapter>) -> Self {
+            Self {
+                should_fail: false,
+                fetch_chapter_bookmark_response: (ChapterToRead::default(), ListOfChapters::default()),
+                latest_chapter_response: response,
+            }
+        }
+
+        pub fn with_failing_response() -> Self {
+            Self {
+                should_fail: true,
+                fetch_chapter_bookmark_response: (Default::default(), Default::default()),
+                latest_chapter_response: vec![],
+            }
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct MockFilterState {}
+
+    #[derive(Debug, Clone)]
+    pub struct MockFiltersHandler {
+        is_open: bool,
+        pub state: MockFilterState,
+    }
+
+    impl MockFiltersHandler {
+        pub fn new(state: MockFilterState) -> Self {
+            Self {
+                is_open: false,
+                state,
+            }
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct MockWidgetFilter {}
+
+    impl EventHandler for MockFiltersHandler {
+        fn handle_events(&mut self, events: Events) {}
+    }
+
+    impl FiltersHandler for MockFiltersHandler {
+        type InnerState = MockFilterState;
+
+        fn toggle(&mut self) {
+            self.is_open = !self.is_open;
+        }
+
+        fn is_open(&self) -> bool {
+            self.is_open
+        }
+
+        fn is_typing(&self) -> bool {
+            self.is_open
+        }
+
+        fn get_state(&self) -> &Self::InnerState {
+            &self.state
+        }
+    }
+
+    impl StatefulWidgetFrame for MockWidgetFilter {
+        type State = MockFiltersHandler;
+
+        fn render(&mut self, area: ratatui::prelude::Rect, frame: &mut ratatui::Frame<'_>, state: &mut Self::State) {}
+    }
+    impl FiltersWidget for MockWidgetFilter {
+        type FilterState = MockFiltersHandler;
+    }
+
+    impl HomePageMangaProvider for MockMangaPageProvider {
+        async fn get_popular_mangas(&self) -> Result<Vec<PopularManga>, Box<dyn std::error::Error>> {
+            Ok(vec![PopularManga::default()])
+        }
+
+        async fn get_recently_added_mangas(&self) -> Result<Vec<RecentlyAddedManga>, Box<dyn std::error::Error>> {
+            Ok(vec![RecentlyAddedManga::default()])
+        }
+    }
+
+    impl GetRawImage for MockMangaPageProvider {
+        async fn get_raw_image(&self, url: &str) -> Result<Bytes, Box<dyn Error>> {
+            Ok(include_bytes!("../../data_test/images/1.jpg").to_vec().into())
+        }
+    }
+
+    impl SearchMangaById for MockMangaPageProvider {
+        async fn get_manga_by_id(&self, manga_id: &str) -> Result<Manga, Box<dyn Error>> {
+            Ok(Manga::default())
+        }
+    }
+    impl SearchChapterById for MockMangaPageProvider {
+        async fn search_chapter(&self, chapter_id: &str, manga_id: &str) -> Result<ChapterToRead, Box<dyn Error>> {
+            Ok(ChapterToRead::default())
+        }
+    }
+
+    impl DecodeBytesToImage for MockMangaPageProvider {}
+
+    impl GoToReadChapter for MockMangaPageProvider {
+        async fn read_chapter(&self, chapter_id: &str, manga_id: &str) -> Result<(ChapterToRead, ListOfChapters), Box<dyn Error>> {
+            todo!()
+        }
+    }
+    impl GetChapterPages for MockMangaPageProvider {
+        async fn get_chapter_pages_url(
+            &self,
+            chapter_id: &str,
+            manga_id: &str,
+            image_quality: ImageQuality,
+        ) -> Result<Vec<Url>, Box<dyn Error>> {
+            todo!()
+        }
+
+        async fn get_chapter_pages_url_with_extension(
+            &self,
+            chapter_id: &str,
+            manga_id: &str,
+            image_quality: ImageQuality,
+        ) -> Result<Vec<ChapterPageUrl>, Box<dyn Error>> {
+            Ok(vec![])
+        }
+
+        async fn get_chapter_pages<F: Fn(f64, &str) + 'static + Send>(
+            &self,
+            chapter_id: &str,
+            manga_id: &str,
+            image_quality: ImageQuality,
+            on_progress: F,
+        ) -> Result<Vec<ChapterPage>, Box<dyn Error>> {
+            Ok(vec![])
+        }
+    }
+
+    impl FetchChapterBookmarked for MockMangaPageProvider {
+        async fn fetch_chapter_bookmarked(
+            &self,
+            chapter: ChapterBookmarked,
+        ) -> Result<(ChapterToRead, ListOfChapters), Box<dyn Error>> {
+            if self.should_fail {
+                return Err("should fail".into());
+            }
+            Ok(self.fetch_chapter_bookmark_response.clone())
+        }
+    }
+
+    impl MangaPageProvider for MockMangaPageProvider {
+        async fn get_chapters(
+            &self,
+            manga_id: &str,
+            filters: ChapterFilters,
+            pagination: Pagination,
+        ) -> Result<GetChaptersResponse, Box<dyn Error>> {
+            Ok(GetChaptersResponse {
+                chapters: vec![],
+                total_chapters: 100,
+            })
+        }
+
+        async fn get_all_chapters(&self, manga_id: &str, language: Languages) -> Result<Vec<Chapter>, Box<dyn Error>> {
+            Ok(vec![])
+        }
+    }
+
+    impl SearchPageProvider for MockMangaPageProvider {
+        type FiltersHandler = MockFiltersHandler;
+        type InnerState = MockFilterState;
+        type Widget = MockWidgetFilter;
+
+        async fn search_mangas(
+            &self,
+            search_term: Option<SearchTerm>,
+            filters: Self::InnerState,
+            pagination: Pagination,
+        ) -> Result<GetMangasResponse, Box<dyn Error>> {
+            todo!()
+        }
+    }
+
+    impl SearchMangaPanel for MockMangaPageProvider {}
+
+    impl ReaderPageProvider for MockMangaPageProvider {}
+
+    impl FeedPageProvider for MockMangaPageProvider {
+        async fn get_latest_chapters(&self, manga_id: &str) -> Result<Vec<LatestChapter>, Box<dyn Error>> {
+            if self.should_fail {
+                return Err("must fail".into());
+            }
+            Ok(self.latest_chapter_response.clone())
+        }
+    }
+
+    impl MangaProvider for MockMangaPageProvider {
+        fn name() -> MangaProviders {
+            MangaProviders::Mangadex
+        }
+    }
+
+    #[derive(Clone)]
+    pub struct ReaderPageProvierMock {
+        should_fail: bool,
+        response: ChapterToRead,
+        panel_response: MangaPanel,
+    }
+
+    impl ReaderPageProvierMock {
+        pub fn new() -> Self {
+            Self {
+                should_fail: false,
+                response: ChapterToRead::default(),
+                panel_response: MangaPanel::default(),
+            }
+        }
+
+        pub fn with_response(response: ChapterToRead) -> Self {
+            Self {
+                should_fail: false,
+                response,
+                panel_response: MangaPanel::default(),
+            }
+        }
+
+        pub fn with_failing_request() -> Self {
+            Self {
+                should_fail: true,
+                response: ChapterToRead::default(),
+                panel_response: MangaPanel::default(),
+            }
+        }
+
+        pub fn with_page_response(response: MangaPanel) -> Self {
+            Self {
+                should_fail: true,
+                response: ChapterToRead::default(),
+                panel_response: response,
+            }
+        }
+    }
+
+    impl GetRawImage for ReaderPageProvierMock {
+        async fn get_raw_image(&self, _url: &str) -> Result<Bytes, Box<dyn Error>> {
+            Ok(include_bytes!("../../data_test/images/1.jpg").to_vec().into())
+        }
+    }
+
+    impl DecodeBytesToImage for ReaderPageProvierMock {}
+
+    impl SearchChapterById for ReaderPageProvierMock {
+        async fn search_chapter(&self, _chapter_id: &str, _manga_id: &str) -> Result<ChapterToRead, Box<dyn Error>> {
+            if self.should_fail { Err("should_fail".into()) } else { Ok(self.response.clone()) }
+        }
+    }
+
+    impl SearchMangaPanel for ReaderPageProvierMock {
+        async fn search_manga_panel(&self, _endpoint: Url) -> Result<MangaPanel, Box<dyn Error>> {
+            if self.should_fail { Err("must_failt".into()) } else { Ok(self.panel_response.clone()) }
+        }
+    }
+
+    impl ReaderPageProvider for ReaderPageProvierMock {}
 }
 
 #[cfg(test)]
@@ -701,5 +1102,290 @@ mod tests {
         let pagination = Pagination::new(1, 109, 16);
 
         assert_eq!(7, pagination.get_total_pages())
+    }
+
+    #[test]
+    fn sorted_chapter_searches_next_chapter() {
+        let chapter_to_search: ChapterReader = ChapterReader {
+            id: "second_chapter".to_string(),
+            number: "2".to_string(),
+            volume: "1".to_string(),
+        };
+
+        let chapters = SortedChapters::new(vec![
+            ChapterReader {
+                id: "some_id".to_string(),
+                number: "1".to_string(),
+                volume: "1".to_string(),
+            },
+            chapter_to_search.clone(),
+        ]);
+
+        let result = chapters.search_next_chapter("1").expect("should find next chapter");
+        let not_found = chapters.search_next_chapter("2");
+
+        assert_eq!(chapter_to_search, result);
+        assert!(not_found.is_none());
+    }
+
+    #[test]
+    fn sorted_volumes_searches_next_volume() {
+        let volume_to_search: Volumes = Volumes {
+            volume: "2".to_string(),
+            chapters: SortedChapters::new(vec![ChapterReader::default()]),
+        };
+
+        let other: Volumes = Volumes {
+            volume: "1".to_string(),
+            chapters: SortedChapters::new(vec![ChapterReader::default()]),
+        };
+
+        let no_volume: Volumes = Volumes {
+            volume: "none".to_string(),
+            chapters: SortedChapters::new(vec![ChapterReader::default()]),
+        };
+
+        let volumes: Vec<Volumes> = vec![volume_to_search.clone(), no_volume, other];
+
+        let volumes = dbg!(SortedVolumes::new(volumes));
+
+        let result = volumes.search_next_volume("1").expect("should search next volume");
+        let not_found = volumes.search_next_volume("none");
+
+        assert_eq!(volume_to_search, result);
+        assert!(not_found.is_none());
+    }
+
+    #[test]
+    fn sorted_volumes_searches_previous_volume() {
+        let volume_to_search: Volumes = Volumes {
+            volume: "1".to_string(),
+            chapters: SortedChapters::new(vec![ChapterReader::default()]),
+        };
+
+        let other: Volumes = Volumes {
+            volume: "3".to_string(),
+            chapters: SortedChapters::new(vec![ChapterReader::default()]),
+        };
+
+        let volumes: Vec<Volumes> = vec![volume_to_search.clone(), other];
+
+        let volumes = SortedVolumes::new(volumes);
+
+        let result = volumes.search_previous_volume("3").expect("should search previous volume");
+        let not_found = volumes.search_previous_volume("4");
+
+        assert_eq!(volume_to_search, result);
+        assert!(not_found.is_none());
+    }
+
+    #[test]
+    fn it_searches_next_chapter_in_the_list_of_chapters() {
+        let mut list_of_volumes: Vec<Volumes> = vec![];
+        let mut list_of_chapters: Vec<ChapterReader> = vec![];
+
+        let chapter_to_search = ChapterReader {
+            id: "".to_string(),
+            number: "2".to_string(),
+            volume: "1".to_string(),
+        };
+
+        list_of_chapters.push(ChapterReader {
+            id: "".to_string(),
+            number: "1".to_string(),
+            volume: "1".to_string(),
+        });
+
+        list_of_chapters.push(chapter_to_search.clone());
+
+        list_of_volumes.push(Volumes {
+            volume: "1".to_string(),
+            chapters: SortedChapters::new(list_of_chapters),
+        });
+
+        let list = ListOfChapters {
+            volumes: SortedVolumes::new(list_of_volumes),
+        };
+
+        let list = dbg!(list);
+
+        let next_chapter = list.get_next_chapter(Some("1"), 1.0).expect("should get next chapter");
+        let not_found = list.get_next_chapter(Some("1"), 2.0);
+
+        assert_eq!(chapter_to_search, next_chapter);
+        assert!(not_found.is_none());
+    }
+
+    #[test]
+    fn it_searches_next_chapter_in_the_list_of_chapters_decimal_chapter() {
+        let mut list_of_volumes: Vec<Volumes> = vec![];
+        let mut list_of_chapters: Vec<ChapterReader> = vec![];
+
+        let chapter_to_search = ChapterReader {
+            id: "".to_string(),
+            number: "1.3".to_string(),
+            volume: "1".to_string(),
+        };
+
+        list_of_chapters.push(chapter_to_search.clone());
+
+        list_of_chapters.push(ChapterReader {
+            id: "".to_string(),
+            number: "1.1".to_string(),
+            volume: "1".to_string(),
+        });
+
+        list_of_volumes.push(Volumes {
+            volume: "1".to_string(),
+            chapters: SortedChapters::new(list_of_chapters),
+        });
+
+        let list = dbg!(ListOfChapters {
+            volumes: SortedVolumes::new(list_of_volumes),
+        });
+
+        let next_chapter = list.get_next_chapter(Some("1"), 1.1).expect("should get next chapter");
+        let not_found = list.get_next_chapter(Some("1"), 1.3);
+
+        assert_eq!(chapter_to_search, next_chapter);
+        assert!(not_found.is_none());
+    }
+
+    #[test]
+    fn list_of_chapters_searches_chapter_which_is_in_next_volume() {
+        let mut list_of_volumes: Vec<Volumes> = vec![];
+        let mut list_of_chapters: Vec<ChapterReader> = vec![];
+
+        let chapter_to_search = ChapterReader {
+            id: "".to_string(),
+            number: "2".to_string(),
+            volume: "2".to_string(),
+        };
+
+        list_of_chapters.push(ChapterReader {
+            id: "".to_string(),
+            number: "1".to_string(),
+            volume: "1".to_string(),
+        });
+
+        list_of_volumes.push(Volumes {
+            volume: "1".to_string(),
+            chapters: SortedChapters::new(list_of_chapters),
+        });
+
+        list_of_volumes.push(Volumes {
+            volume: "2".to_string(),
+            chapters: SortedChapters::new(vec![chapter_to_search.clone()]),
+        });
+
+        let list = dbg!(ListOfChapters {
+            volumes: SortedVolumes::new(list_of_volumes),
+        });
+
+        let next_chapter = list.get_next_chapter(Some("1"), 1.0).expect("should get next chapter");
+        let not_found = list.get_next_chapter(Some("2"), 2.0);
+
+        assert_eq!(chapter_to_search, next_chapter);
+        assert!(not_found.is_none());
+    }
+
+    #[test]
+    fn list_of_chapters_searches_previous_chapter() {
+        let mut list_of_volumes: Vec<Volumes> = vec![];
+        let mut list_of_chapters: Vec<ChapterReader> = vec![];
+
+        let chapter_to_search = ChapterReader {
+            number: "1".to_string(),
+            volume: "1".to_string(),
+            ..Default::default()
+        };
+
+        list_of_chapters.push(ChapterReader {
+            number: "2".to_string(),
+            volume: "1".to_string(),
+            ..Default::default()
+        });
+
+        list_of_chapters.push(chapter_to_search.clone());
+
+        list_of_volumes.push(Volumes {
+            volume: "1".to_string(),
+            chapters: SortedChapters::new(list_of_chapters),
+        });
+
+        let list = ListOfChapters {
+            volumes: SortedVolumes::new(list_of_volumes),
+        };
+
+        let list = dbg!(list);
+
+        let previous = list.get_previous_chapter(Some("1"), 2.0).expect("should get previous chapter");
+        let from_first_chapter = list.get_previous_chapter(Some("1"), 1.0);
+
+        assert_eq!(chapter_to_search, previous);
+        assert!(from_first_chapter.is_none());
+    }
+
+    #[test]
+    fn list_of_chapters_searches_previous_which_is_in_previos_volume() {
+        let mut list_of_volumes: Vec<Volumes> = vec![];
+        let mut list_of_chapters: Vec<ChapterReader> = vec![];
+
+        let chapter_to_search_1 = ChapterReader {
+            number: "1".to_string(),
+            volume: "1".to_string(),
+            ..Default::default()
+        };
+
+        let chapter_to_search_2 = ChapterReader {
+            number: "2".to_string(),
+            volume: "1".to_string(),
+            ..Default::default()
+        };
+
+        list_of_chapters.push(ChapterReader {
+            number: "3".to_string(),
+            volume: "2".to_string(),
+            ..Default::default()
+        });
+
+        list_of_chapters.push(ChapterReader {
+            number: "3.2".to_string(),
+            volume: "2".to_string(),
+            ..Default::default()
+        });
+        list_of_chapters.push(ChapterReader {
+            number: "4".to_string(),
+            volume: "2".to_string(),
+            ..Default::default()
+        });
+
+        list_of_volumes.push(Volumes {
+            volume: "1".to_string(),
+            chapters: SortedChapters::new(vec![chapter_to_search_1.clone(), chapter_to_search_2.clone()]),
+        });
+
+        list_of_volumes.push(Volumes {
+            volume: "2".to_string(),
+            chapters: SortedChapters::new(list_of_chapters),
+        });
+
+        let list = dbg!(ListOfChapters {
+            volumes: SortedVolumes::new(list_of_volumes),
+        });
+
+        let previous_2 = list
+            .get_previous_chapter(Some("2"), 3.0)
+            .expect("should get previous chapter in previous volume");
+
+        let previous_1 = list
+            .get_previous_chapter(Some("1"), 2.0)
+            .expect("should get previous chapter in previous volume");
+
+        let not_found = list.get_previous_chapter(Some("3"), 1.0);
+
+        assert_eq!(chapter_to_search_2, previous_2);
+        assert_eq!(chapter_to_search_1, previous_1);
+        assert!(not_found.is_none());
     }
 }

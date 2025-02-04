@@ -52,33 +52,50 @@ impl MangaDownloader for RawImagesDownloader {
 #[cfg(test)]
 mod tests {
     use std::error::Error;
-    use std::path::Path;
+
+    use fake::faker::name::en::Name;
+    use fake::Fake;
+    use uuid::Uuid;
 
     use super::*;
     use crate::backend::manga_downloader::ChapterToDownloadSanitized;
-    use crate::backend::manga_provider::Languages;
+    use crate::backend::manga_provider::{ChapterPage, Languages};
+    use crate::backend::AppDirectories;
+    use crate::config::DownloadType;
 
     #[test]
-    fn it_creates_base_directory_raw_images() -> Result<(), Box<dyn Error>> {
-        let raw_images_downloader = RawImagesDownloader {};
-
-        let test_chapter: ChapterToDownloadSanitized = ChapterToDownloadSanitized {
-            chapter_id: "chapter id".to_string(),
-            manga_id: "manga id".to_string(),
-            manga_title: "some manga title".to_string().into(),
-            chapter_title: "some chapter title".to_string().into(),
-            chapter_number: "3".to_string(),
-            volume_number: None,
+    #[ignore]
+    fn it_downloads_a_chapter() -> Result<(), Box<dyn Error>> {
+        let chapter: ChapterToDownloadSanitized = ChapterToDownloadSanitized {
+            chapter_id: Uuid::new_v4().to_string(),
+            manga_id: Uuid::new_v4().to_string(),
+            manga_title: Name().fake::<String>().into(),
+            chapter_title: Name().fake::<String>().into(),
+            chapter_number: "2".to_string(),
+            volume_number: Some("3".to_string()),
             language: Languages::default(),
-            scanlator: "".to_string().into(),
-            download_type: crate::config::DownloadType::Cbz,
-            pages: vec![],
+            scanlator: Name().fake::<String>().into(),
+            download_type: DownloadType::Cbz,
+            pages: vec![
+                ChapterPage {
+                    bytes: include_bytes!("../../../data_test/images/1.jpg").to_vec().into(),
+                    extension: "jpg".to_string(),
+                },
+                ChapterPage {
+                    bytes: include_bytes!("../../../data_test/images/2.jpg").to_vec().into(),
+                    extension: "jpg".to_string(),
+                },
+                ChapterPage {
+                    bytes: include_bytes!("../../../data_test/images/3.jpg").to_vec().into(),
+                    extension: "jpg".to_string(),
+                },
+            ],
         };
 
-        let expected = Path::new("./test/some manga title manga id/English/Ch 3 some chapter title chapter id");
-        let result = raw_images_downloader.make_manga_base_directory_name(Path::new("./test"), &test_chapter);
+        let downloader = RawImagesDownloader::new();
 
-        assert_eq!(expected, result);
+        downloader.save_chapter_in_file_system(&AppDirectories::MangaDownloads.get_full_path(), chapter)?;
+
         Ok(())
     }
 }
