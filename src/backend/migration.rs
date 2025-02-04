@@ -279,7 +279,7 @@ mod tests {
     use uuid::Uuid;
 
     use super::*;
-    use crate::backend::filter::Languages;
+    use crate::backend::manga_provider::Languages;
     use crate::logger::DefaultLogger;
 
     #[test]
