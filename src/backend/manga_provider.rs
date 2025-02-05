@@ -21,6 +21,7 @@ use crate::global::PREFERRED_LANGUAGE;
 use crate::view::widgets::StatefulWidgetFrame;
 
 pub mod mangadex;
+pub mod manganato;
 
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
 pub enum Rating {
@@ -64,7 +65,8 @@ pub struct PopularManga {
     pub title: String,
     pub genres: Vec<Genres>,
     pub description: String,
-    pub status: MangaStatus,
+    /// Some manga provider may or may not provide this information from their popular titles
+    pub status: Option<MangaStatus>,
     pub cover_img_url: Option<String>,
 }
 
@@ -601,6 +603,8 @@ pub struct ChapterPageUrl {
 pub enum MangaProviders {
     #[strum(to_string = "mangadex")]
     Mangadex,
+    #[strum(to_string = "manganato")]
+    Manganato,
 }
 
 pub trait GetRawImage {

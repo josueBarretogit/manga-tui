@@ -262,7 +262,7 @@ impl HomePageMangaProvider for MangadexClient {
                     description: manga.attributes.description.map(|desc| desc.en.unwrap_or_default()).unwrap_or_default(),
                     genres,
                     title: manga.attributes.title.into(),
-                    status,
+                    status: Some(status),
                     cover_img_url,
                 }
             })

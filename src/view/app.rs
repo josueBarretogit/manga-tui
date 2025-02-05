@@ -15,6 +15,7 @@ use self::manga::MangaPage;
 use self::reader::MangaReader;
 use self::search::{InputMode, SearchPage};
 use super::widgets::Component;
+use crate::backend::manga_provider::manganato::{ManganatoProvider, MANGANATO_BASE_URL};
 use crate::backend::manga_provider::{ChapterToRead, ListOfChapters, Manga, MangaProvider};
 use crate::backend::tracker::MangaTracker;
 use crate::backend::tui::{Action, Events};
@@ -49,7 +50,7 @@ where
     pub manga_page: Option<MangaPage<T, S>>,
     pub manga_reader_page: Option<MangaReader<T, S>>,
     pub search_page: SearchPage<T, S>,
-    pub home_page: Home<T>,
+    pub home_page: Home<ManganatoProvider>,
     pub feed_page: Feed<T>,
     api_client: Arc<T>,
     manga_tracker: Option<S>,
@@ -141,7 +142,8 @@ where
             feed_page: Feed::new()
                 .with_global_sender(global_event_tx.clone())
                 .with_api_client(Arc::clone(&provider)),
-            home_page: Home::new(picker, Arc::clone(&provider)).with_global_sender(global_event_tx.clone()),
+            home_page: Home::new(picker, Arc::new(ManganatoProvider::new(MANGANATO_BASE_URL.parse().unwrap())))
+                .with_global_sender(global_event_tx.clone()),
             manga_page: None,
             manga_reader_page: None,
             global_action_tx,
