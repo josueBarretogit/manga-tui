@@ -15,7 +15,8 @@ use super::{
     Artist, Author, Chapter, ChapterPage, ChapterPageUrl, ChapterToRead, DecodeBytesToImage, FeedPageProvider,
     FetchChapterBookmarked, Genres, GetChapterPages, GetChaptersResponse, GetMangasResponse, GetRawImage, GoToReadChapter,
     HomePageMangaProvider, Languages, ListOfChapters, MangaPageProvider, MangaProvider, MangaProviders, MangaStatus, PopularManga,
-    Rating, ReaderPageProvider, RecentlyAddedManga, SearchChapterById, SearchMangaById, SearchMangaPanel, SearchPageProvider,
+    ProviderIdentity, Rating, ReaderPageProvider, RecentlyAddedManga, SearchChapterById, SearchMangaById, SearchMangaPanel,
+    SearchPageProvider,
 };
 use crate::backend::database::ChapterBookmarked;
 use crate::config::ImageQuality;
@@ -799,7 +800,7 @@ impl SearchPageProvider for MangadexClient {
                     author,
                     cover_img_url,
                     languages,
-                    status,
+                    status: Some(status),
                 }
             })
             .collect();
@@ -860,11 +861,13 @@ impl FeedPageProvider for MangadexClient {
     }
 }
 
-impl MangaProvider for MangadexClient {
-    fn name() -> super::MangaProviders {
+impl ProviderIdentity for MangadexClient {
+    fn name(&self) -> MangaProviders {
         MangaProviders::Mangadex
     }
 }
+
+impl MangaProvider for MangadexClient {}
 
 #[cfg(test)]
 mod test {

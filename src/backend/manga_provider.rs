@@ -278,7 +278,7 @@ pub struct SearchManga {
     pub title: String,
     pub genres: Vec<Genres>,
     pub description: Option<String>,
-    pub status: MangaStatus,
+    pub status: Option<MangaStatus>,
     pub cover_img_url: Option<String>,
     pub languages: Vec<Languages>,
     /// Some manga providers provide the artist of the manga
@@ -350,6 +350,20 @@ impl Pagination {
             items_per_page,
             total_items: total_chapters,
         }
+    }
+
+    pub fn from_first_page(items_per_page: u32) -> Self {
+        Self {
+            current_page: 1,
+            items_per_page,
+            // Total items should be set later after a search
+            total_items: 300,
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.current_page = 1;
+        self.total_items = 100;
     }
 
     pub fn go_next_page(&mut self) {
@@ -739,7 +753,7 @@ pub struct GetMangasResponse {
     pub total_mangas: u32,
 }
 
-pub trait SearchPageProvider: DecodeBytesToImage + SearchMangaById + Clone + Send + Sync + 'static {
+pub trait SearchPageProvider: DecodeBytesToImage + SearchMangaById + ProviderIdentity + Clone + Send + Sync + 'static {
     /// The filter state that will be used in api calls, needs to be `Send` in order to do so
     type InnerState: Send + Clone;
     /// Struct which handles the key events of the user
@@ -755,14 +769,17 @@ pub trait SearchPageProvider: DecodeBytesToImage + SearchMangaById + Clone + Sen
     ) -> impl Future<Output = Result<GetMangasResponse, Box<dyn Error>>> + Send;
 }
 
-pub trait FeedPageProvider: SearchMangaById + Clone + Send + Sync + 'static {
+pub trait FeedPageProvider: SearchMangaById + ProviderIdentity + Clone + Send + Sync + 'static {
     fn get_latest_chapters(&self, manga_id: &str) -> impl Future<Output = Result<Vec<LatestChapter>, Box<dyn Error>>> + Send;
+}
+
+pub trait ProviderIdentity {
+    fn name(&self) -> MangaProviders;
 }
 
 pub trait MangaProvider:
     HomePageMangaProvider + MangaPageProvider + SearchPageProvider + ReaderPageProvider + FeedPageProvider + Send + Sync
 {
-    fn name() -> MangaProviders;
 }
 
 #[cfg(test)]
@@ -978,6 +995,12 @@ pub mod mock {
 
     impl ReaderPageProvider for MockMangaPageProvider {}
 
+    impl ProviderIdentity for MockMangaPageProvider {
+        fn name(&self) -> MangaProviders {
+            MangaProviders::Mangadex
+        }
+    }
+
     impl FeedPageProvider for MockMangaPageProvider {
         async fn get_latest_chapters(&self, manga_id: &str) -> Result<Vec<LatestChapter>, Box<dyn Error>> {
             if self.should_fail {
@@ -987,11 +1010,7 @@ pub mod mock {
         }
     }
 
-    impl MangaProvider for MockMangaPageProvider {
-        fn name() -> MangaProviders {
-            MangaProviders::Mangadex
-        }
-    }
+    impl MangaProvider for MockMangaPageProvider {}
 
     #[derive(Clone)]
     pub struct ReaderPageProvierMock {

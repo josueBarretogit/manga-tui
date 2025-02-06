@@ -59,22 +59,9 @@ impl StatefulWidgetFrame for MangadexFilterWidget {
 
     fn render(&mut self, area: Rect, frame: &mut Frame<'_>, state: &mut Self::State) {
         let buf = frame.buffer_mut();
-        let popup_area = centered_rect(area, 80, 70);
-
-        Clear.render(popup_area, buf);
-
-        let filter_instructions = Line::from(vec![
-            "Close ".into(),
-            Span::raw("<f>").style(*INSTRUCTIONS_STYLE),
-            " Reset filters ".into(),
-            Span::raw("<r>").style(*INSTRUCTIONS_STYLE),
-        ]);
-
-        Block::bordered().title(filter_instructions).render(popup_area, buf);
-
         let [tabs_area, current_filter_area] = Layout::vertical([Constraint::Percentage(20), Constraint::Percentage(80)])
             .margin(2)
-            .areas(popup_area);
+            .areas(area);
 
         let tabs: Vec<Line<'_>> = FILTERS
             .iter()

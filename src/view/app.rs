@@ -15,8 +15,10 @@ use self::manga::MangaPage;
 use self::reader::MangaReader;
 use self::search::{InputMode, SearchPage};
 use super::widgets::Component;
+use crate::backend::manga_provider::manganato::filter_state::{ManganatoFilterState, ManganatoFiltersProvider};
+use crate::backend::manga_provider::manganato::filter_widget::ManganatoFilterWidget;
 use crate::backend::manga_provider::manganato::{ManganatoProvider, MANGANATO_BASE_URL};
-use crate::backend::manga_provider::{ChapterToRead, ListOfChapters, Manga, MangaProvider};
+use crate::backend::manga_provider::{ChapterToRead, ListOfChapters, Manga, MangaProvider, Pagination};
 use crate::backend::tracker::MangaTracker;
 use crate::backend::tui::{Action, Events};
 use crate::config::MangaTuiConfig;
@@ -49,7 +51,7 @@ where
     pub current_tab: SelectedPage,
     pub manga_page: Option<MangaPage<T, S>>,
     pub manga_reader_page: Option<MangaReader<T, S>>,
-    pub search_page: SearchPage<T, S>,
+    pub search_page: SearchPage<ManganatoProvider, S>,
     pub home_page: Home<ManganatoProvider>,
     pub feed_page: Feed<T>,
     api_client: Arc<T>,
@@ -134,16 +136,24 @@ where
 
         let provider = Arc::new(api_client);
 
+        let manganato = Arc::new(ManganatoProvider::new(MANGANATO_BASE_URL.parse().unwrap()));
+
         App {
             picker,
             current_tab: SelectedPage::default(),
-            search_page: SearchPage::new(picker, Arc::clone(&provider), manga_tracker.clone(), filters_state, filter_widget)
-                .with_global_sender(global_event_tx.clone()),
+            search_page: SearchPage::new(
+                picker,
+                Arc::clone(&manganato),
+                manga_tracker.clone(),
+                ManganatoFiltersProvider::new(ManganatoFilterState {}),
+                ManganatoFilterWidget {},
+                Pagination::from_first_page(24),
+            )
+            .with_global_sender(global_event_tx.clone()),
             feed_page: Feed::new()
                 .with_global_sender(global_event_tx.clone())
                 .with_api_client(Arc::clone(&provider)),
-            home_page: Home::new(picker, Arc::new(ManganatoProvider::new(MANGANATO_BASE_URL.parse().unwrap())))
-                .with_global_sender(global_event_tx.clone()),
+            home_page: Home::new(picker, Arc::clone(&manganato)).with_global_sender(global_event_tx.clone()),
             manga_page: None,
             manga_reader_page: None,
             global_action_tx,

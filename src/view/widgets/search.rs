@@ -16,7 +16,7 @@ pub struct MangaPreview<'a> {
     title: &'a str,
     description: &'a str,
     genres: &'a Vec<Genres>,
-    status: MangaStatus,
+    status: Option<MangaStatus>,
     can_display_images: bool,
     loader_state: ThrobberState,
 }
@@ -28,7 +28,7 @@ impl<'a> MangaPreview<'a> {
         title: &'a str,
         description: &'a str,
         genres: &'a Vec<Genres>,
-        status: MangaStatus,
+        status: Option<MangaStatus>,
         can_display_images: bool,
         loader_state: ThrobberState,
     ) -> Self {
@@ -101,7 +101,9 @@ impl<'a> MangaPreview<'a> {
         let layout = Layout::vertical([Constraint::Percentage(20), Constraint::Percentage(80)]);
         let [details_area, tags_area] = layout.areas(area);
 
-        Paragraph::new(Line::from_iter(vec![self.status])).render(details_area, buf);
+        if let Some(status) = &self.status {
+            Paragraph::new(Line::from_iter(vec![status.clone()])).render(details_area, buf);
+        }
 
         Paragraph::new(Line::from_iter(self.genres.clone()))
             .wrap(Wrap { trim: true })
