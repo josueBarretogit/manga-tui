@@ -6,7 +6,7 @@ use http::{HeaderMap, HeaderValue, StatusCode};
 use reqwest::{Client, Url};
 use serde_json::Value;
 
-use crate::global::USER_AGENT;
+use crate::global::APP_USER_AGENT;
 use crate::logger::ILogger;
 
 #[derive(Debug)]
@@ -27,7 +27,7 @@ impl ReleaseNotifier {
         let client = Client::builder()
             .timeout(Duration::from_secs(10))
             .default_headers(default_headers)
-            .user_agent(&*USER_AGENT)
+            .user_agent(&*APP_USER_AGENT)
             .build()
             .unwrap();
 
@@ -98,7 +98,7 @@ mod tests {
                 when.method(GET)
                     .header("X-GitHub-Api-Version", "2022-11-28")
                     .header("Accept", "application/vnd.github+json")
-                    .header("User-Agent", &*USER_AGENT)
+                    .header("User-Agent", &*APP_USER_AGENT)
                     .path_contains("releases/latest");
                 then.status(200).json_body(json!({ "name" : release }));
             })

@@ -1,13 +1,11 @@
 #[cfg(test)]
 use crossterm::event::KeyCode;
-use image::DynamicImage;
 use ratatui::layout::Rect;
 use ratatui::Frame;
 
 use crate::backend::tui::Events;
 
 pub mod feed;
-pub mod filter_widget;
 pub mod home;
 pub mod manga;
 pub mod reader;
@@ -27,11 +25,6 @@ pub trait Component {
 pub trait StatefulWidgetFrame {
     type State;
     fn render(&mut self, area: Rect, frame: &mut Frame<'_>, state: &mut Self::State);
-}
-
-pub trait ImageHandler: Send + 'static {
-    fn load(image: DynamicImage, id: String) -> Self;
-    fn not_found(id: String) -> Self;
 }
 
 #[cfg(test)]
