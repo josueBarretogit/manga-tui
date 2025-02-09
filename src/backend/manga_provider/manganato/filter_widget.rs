@@ -1,3 +1,4 @@
+use ratatui::layout::Margin;
 use ratatui::widgets::Widget;
 
 use super::filter_state::ManganatoFiltersProvider;
@@ -16,6 +17,12 @@ impl StatefulWidgetFrame for ManganatoFilterWidget {
 
     fn render(&mut self, area: ratatui::prelude::Rect, frame: &mut ratatui::Frame<'_>, state: &mut Self::State) {
         let buf = frame.buffer_mut();
-        "no filters available on manganato".render(area, buf);
+        "no filters available on manganato".render(
+            area.inner(Margin {
+                horizontal: 2,
+                vertical: 2,
+            }),
+            buf,
+        );
     }
 }

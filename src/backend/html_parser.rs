@@ -1,9 +1,15 @@
+use std::error::Error;
+
 /// Intended to represent html, not just a string
 #[derive(Debug, Clone)]
 pub struct HtmlElement(String);
 
 pub mod scraper;
 
+pub trait ParseHtml: Sized {
+    type ParseError: Error;
+    fn parse_html(html: HtmlElement) -> Result<Self, Self::ParseError>;
+}
 impl HtmlElement {
     pub fn new(raw_str: String) -> Self {
         Self(raw_str)

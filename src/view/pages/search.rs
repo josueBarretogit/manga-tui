@@ -372,7 +372,7 @@ where
             Span::raw("<r>").style(*INSTRUCTIONS_STYLE),
         ]);
 
-        Block::bordered().title(filter_instructions).render(area, buf);
+        Block::bordered().title(filter_instructions).render(popup_area, buf);
 
         self.filter_widget.render(popup_area, frame, &mut self.filter_state);
     }

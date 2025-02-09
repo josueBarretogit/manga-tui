@@ -49,7 +49,7 @@ where
     pub global_event_rx: UnboundedReceiver<Events>,
     pub state: AppState,
     pub current_tab: SelectedPage,
-    pub manga_page: Option<MangaPage<T, S>>,
+    pub manga_page: Option<MangaPage<ManganatoProvider, S>>,
     pub manga_reader_page: Option<MangaReader<T, S>>,
     pub search_page: SearchPage<ManganatoProvider, S>,
     pub home_page: Home<ManganatoProvider>,
@@ -285,7 +285,7 @@ where
 
         let config = MangaTuiConfig::get();
 
-        let manga_page = MangaPage::new(manga, self.picker, self.api_client.clone().into())
+        let manga_page = MangaPage::new(manga, self.picker, Arc::new(ManganatoProvider::new(MANGANATO_BASE_URL.parse().unwrap())))
             .with_global_sender(self.global_event_tx.clone())
             .auto_bookmark(config.auto_bookmark)
             .with_manga_tracker(self.manga_tracker.clone());
@@ -407,7 +407,11 @@ where
 
     #[cfg(test)]
     fn with_manga_page(mut self) -> Self {
-        self.manga_page = Some(MangaPage::new(crate::backend::manga_provider::Manga::default(), None, self.api_client.clone()));
+        self.manga_page = Some(MangaPage::new(
+            crate::backend::manga_provider::Manga::default(),
+            None,
+            Arc::new(ManganatoProvider::new(MANGANATO_BASE_URL.parse().unwrap())),
+        ));
 
         self
     }

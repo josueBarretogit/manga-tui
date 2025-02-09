@@ -27,6 +27,7 @@ pub mod manganato;
 pub enum Rating {
     #[default]
     Normal,
+    Doujinshi,
     Moderate,
     Nsfw,
 }
@@ -35,6 +36,7 @@ impl Rating {
     pub fn style(&self) -> Style {
         match self {
             Self::Moderate => Style::new().black().bg(Color::Yellow),
+            Self::Doujinshi => Style::new().black().bg(Color::Blue),
             Self::Normal => Style::new(),
             Self::Nsfw => Style::new().black().bg(Color::Red),
         }
@@ -259,11 +261,10 @@ pub struct Manga {
     pub description: String,
     pub status: MangaStatus,
     pub cover_img_url: Option<String>,
-    pub cover_img_url_lower_quality: Option<String>,
     pub languages: Vec<Languages>,
     /// Most mangas providers show the rating of the manga, if they dont then 0.0 should be used
     /// instead
-    pub rating: f64,
+    pub rating: String,
     /// Some manga providers provide the artist of the manga
     pub artist: Option<Artist>,
     /// Some manga providers provide the author of the manga

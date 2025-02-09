@@ -251,7 +251,7 @@ where
 
         let [manga_information_area, manga_chapters_area] = layout.areas(area);
 
-        let statistics = Span::raw(format!("Rating ⭐ {} ", self.manga.rating.ceil()));
+        let statistics = Span::raw(format!("Rating ⭐ {} ", self.manga.rating));
 
         let authors = match &self.manga.author {
             Some(author) => format!("Author : {} ", author.name),
@@ -917,7 +917,7 @@ where
         }
         let tx = self.local_event_tx.clone();
         let client = Arc::clone(&self.manga_provider);
-        let file_name = self.manga.cover_img_url_lower_quality.as_ref().cloned();
+        let file_name = self.manga.cover_img_url.as_ref().cloned();
 
         if let Some(url) = file_name {
             self.tasks.spawn(async move {

@@ -322,15 +322,13 @@ impl SearchMangaById for MangadexClient {
         let mut cover_img_url: Option<String> = Option::default();
         let mut author: Option<Author> = Option::default();
         let mut artist: Option<Artist> = Option::default();
-        let mut cover_img_url_lower_quality: Option<String> = Option::default();
 
         for rel in &manga.data.relationships {
             if let Some(attributes) = &rel.attributes {
                 match rel.type_field.as_str() {
                     "cover_art" => {
                         let file_name = attributes.file_name.as_ref().unwrap().to_string();
-                        cover_img_url = Some(self.make_cover_img_url(&id, &file_name));
-                        cover_img_url_lower_quality = Some(self.make_cover_img_url_lower_quality(&id, &file_name));
+                        cover_img_url = Some(self.make_cover_img_url_lower_quality(&id, &file_name));
                     },
                     "author" => {
                         let name = rel.attributes.as_ref().unwrap().name.as_ref().cloned().unwrap_or_default();
@@ -361,7 +359,17 @@ impl SearchMangaById for MangadexClient {
             .collect();
 
         let rating = self.get_manga_statistics(&id).await.ok().unwrap_or_default();
-        let rating = rating.statistics.get(&id).cloned().unwrap_or_default().rating.average.unwrap_or_default();
+        let rating = rating
+            .statistics
+            .get(&id)
+            .cloned()
+            .unwrap_or_default()
+            .rating
+            .average
+            .unwrap_or_default()
+            .ceil();
+
+        let rating = format!("{rating} out of 10");
 
         Ok(super::Manga {
             rating,
@@ -371,7 +379,6 @@ impl SearchMangaById for MangadexClient {
             description,
             status,
             cover_img_url,
-            cover_img_url_lower_quality,
             languages,
             artist,
             author,

@@ -1,29 +1,28 @@
 use std::error::Error;
-use std::time::Duration;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use filter_state::{ManganatoFilterState, ManganatoFiltersProvider};
 use filter_widget::ManganatoFilterWidget;
-use http::header::{ACCEPT, ACCEPT_ENCODING, ACCEPT_LANGUAGE, CONTENT_TYPE, REFERER};
+use http::header::{ACCEPT, ACCEPT_ENCODING, ACCEPT_LANGUAGE, REFERER};
 use http::{HeaderMap, HeaderValue, StatusCode};
 use manga_tui::SearchTerm;
 use reqwest::{Client, Url};
-use response::{GetPopularMangasResponse, NewAddedMangas, SearchMangaResponse, ToolTipItem};
+use response::{GetPopularMangasResponse, MangaPageData, NewAddedMangas, SearchMangaResponse, ToolTipItem};
+use tokio::sync::Mutex;
 
 use super::{
-    DecodeBytesToImage, GetMangasResponse, GetRawImage, HomePageMangaProvider, PopularManga, ProviderIdentity, RecentlyAddedManga,
-    SearchMangaById, SearchPageProvider,
+    DecodeBytesToImage, FetchChapterBookmarked, Genres, GetChapterPages, GetMangasResponse, GetRawImage, GoToReadChapter,
+    HomePageMangaProvider, Languages, MangaPageProvider, PopularManga, ProviderIdentity, RecentlyAddedManga, SearchMangaById,
+    SearchPageProvider,
 };
-use crate::backend::html_parser::HtmlElement;
+use crate::backend::html_parser::{HtmlElement, ParseHtml};
 
 pub static MANGANATO_BASE_URL: &str = "https://manganato.com";
 
 pub mod filter_state;
 pub mod filter_widget;
 pub mod response;
-
-trait FromHtml: Sized {
-    fn from_html(html: HtmlElement) -> Result<Self, Box<dyn Error>>;
-}
 
 #[derive(Clone, Debug)]
 pub struct ManganatoProvider {
@@ -85,7 +84,28 @@ impl DecodeBytesToImage for ManganatoProvider {}
 
 impl SearchMangaById for ManganatoProvider {
     async fn get_manga_by_id(&self, manga_id: &str) -> Result<super::Manga, Box<dyn Error>> {
-        todo!()
+        let response = self.client.get(manga_id).send().await?;
+
+        if response.status() != StatusCode::OK {
+            return Err(format!("Could not get manga with url {manga_id} on manganato, status code {}", response.status()).into());
+        }
+
+        let doc = response.text().await?;
+
+        let manga = MangaPageData::parse_html(HtmlElement::new(doc))?;
+
+        Ok(super::Manga {
+            id: manga_id.to_string(),
+            title: manga.title,
+            genres: manga.genres.into_iter().map(Genres::from).collect(),
+            description: manga.description,
+            status: manga.status.into(),
+            cover_img_url: Some(manga.cover_url.clone()),
+            languages: vec![Languages::English],
+            rating: manga.rating,
+            artist: None,
+            author: None,
+        })
     }
 }
 
@@ -99,7 +119,7 @@ impl HomePageMangaProvider for ManganatoProvider {
 
         let doc = response.text().await?;
 
-        let response = GetPopularMangasResponse::from_html(HtmlElement::new(doc))?;
+        let response = GetPopularMangasResponse::parse_html(HtmlElement::new(doc))?;
 
         Ok(response.mangas.into_iter().map(PopularManga::from).collect())
     }
@@ -108,17 +128,19 @@ impl HomePageMangaProvider for ManganatoProvider {
         let response = self.client.get(self.base_url.clone()).send().await?;
 
         if response.status() != StatusCode::OK {
-            return Err("could not find recently added mangas on manganato".into());
+            return Err(format!("could not find recently added mangas on manganato, status code : {}", response.status()).into());
         }
 
         let doc = response.text().await?;
 
-        let new_mangas = NewAddedMangas::from_html(HtmlElement::new(doc))?;
+        let new_mangas = NewAddedMangas::parse_html(HtmlElement::new(doc))?;
 
-        let tool_tip_response = self.client.get(format!("{}/home_tooltips_json", self.base_url)).send().await?;
+        let tool_tip_response = self.client.get(format!("{}/homepage_tooltips_json", self.base_url)).send().await?;
 
         if tool_tip_response.status() != StatusCode::OK {
-            return Err("could not find recently added mangas on manganato".into());
+            return Err(
+                format!("could not find recently added mangas on manganato, status code : {}", tool_tip_response.status()).into()
+            );
         }
 
         let tool_tip_response: Vec<ToolTipItem> = tool_tip_response.json().await?;
@@ -171,9 +193,76 @@ impl SearchPageProvider for ManganatoProvider {
 
         let doc = response.text().await?;
 
-        let result = SearchMangaResponse::from_html(HtmlElement::new(doc))?;
+        let result = SearchMangaResponse::parse_html(HtmlElement::new(doc))?;
 
         Ok(GetMangasResponse::from(result))
+    }
+}
+
+impl GoToReadChapter for ManganatoProvider {
+    async fn read_chapter(
+        &self,
+        chapter_id: &str,
+        manga_id: &str,
+    ) -> Result<(super::ChapterToRead, super::ListOfChapters), Box<dyn Error>> {
+        todo!()
+    }
+}
+
+impl GetChapterPages for ManganatoProvider {
+    async fn get_chapter_pages<F: Fn(f64, &str) + 'static + Send>(
+        &self,
+        chapter_id: &str,
+        manga_id: &str,
+        image_quality: crate::config::ImageQuality,
+        on_progress: F,
+    ) -> Result<Vec<super::ChapterPage>, Box<dyn Error>> {
+        todo!()
+    }
+
+    async fn get_chapter_pages_url(
+        &self,
+        chapter_id: &str,
+        manga_id: &str,
+        image_quality: crate::config::ImageQuality,
+    ) -> Result<Vec<Url>, Box<dyn Error>> {
+        todo!()
+    }
+
+    async fn get_chapter_pages_url_with_extension(
+        &self,
+        chapter_id: &str,
+        manga_id: &str,
+        image_quality: crate::config::ImageQuality,
+    ) -> Result<Vec<super::ChapterPageUrl>, Box<dyn Error>> {
+        todo!()
+    }
+}
+
+impl FetchChapterBookmarked for ManganatoProvider {
+    async fn fetch_chapter_bookmarked(
+        &self,
+        chapter: crate::backend::database::ChapterBookmarked,
+    ) -> Result<(super::ChapterToRead, super::ListOfChapters), Box<dyn Error>> {
+        todo!()
+    }
+}
+
+impl MangaPageProvider for ManganatoProvider {
+    async fn get_chapters(
+        &self,
+        manga_id: &str,
+        filters: super::ChapterFilters,
+        pagination: super::Pagination,
+    ) -> Result<super::GetChaptersResponse, Box<dyn Error>> {
+        Ok(super::GetChaptersResponse {
+            chapters: vec![],
+            total_chapters: 10,
+        })
+    }
+
+    async fn get_all_chapters(&self, manga_id: &str, language: Languages) -> Result<Vec<super::Chapter>, Box<dyn Error>> {
+        Ok(vec![])
     }
 }
 
