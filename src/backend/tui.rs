@@ -9,12 +9,9 @@ use ratatui_image::picker::{Picker, ProtocolType};
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::task::JoinHandle;
 
-use super::fetch::ApiClient;
+use super::manga_provider::{ChapterToRead, Manga, MangaProvider};
 use super::tracker::MangaTracker;
-use crate::common::{Artist, Author};
 use crate::view::app::{App, AppState, MangaToRead};
-use crate::view::pages::reader::{ChapterToRead, SearchChapter, SearchMangaPanel};
-use crate::view::widgets::search::MangaItem;
 use crate::view::widgets::Component;
 
 pub enum Action {
@@ -27,12 +24,10 @@ pub enum Events {
     Tick,
     Key(KeyEvent),
     Mouse(MouseEvent),
-    GoToMangaPage(MangaItem),
+    GoToMangaPage(Manga),
     GoBackMangaPage,
     GoToHome,
     GoSearchPage,
-    GoSearchMangasAuthor(Author),
-    GoSearchMangasArtist(Artist),
     GoFeedPage,
     ReadChapter(ChapterToRead, MangaToRead),
 }
@@ -93,12 +88,14 @@ fn get_picker() -> Option<Picker> {
 }
 
 ///Start app's main loop
-pub async fn run_app(
+pub async fn run_app<T: MangaProvider>(
     mut terminal: Terminal<impl Backend>,
-    api_client: impl ApiClient + SearchChapter + SearchMangaPanel,
+    api_client: T,
     manga_tracker: Option<impl MangaTracker>,
+    filter_state: T::FiltersHandler,
+    filter_widget: T::Widget,
 ) -> Result<(), Box<dyn Error>> {
-    let mut app = App::new(api_client, manga_tracker, get_picker());
+    let mut app = App::new(api_client, manga_tracker, get_picker(), filter_state, filter_widget);
 
     let tick_rate = std::time::Duration::from_millis(250);
 

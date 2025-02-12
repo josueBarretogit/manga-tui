@@ -8,7 +8,7 @@ use clap::{crate_version, Parser, Subcommand};
 use strum::IntoEnumIterator;
 
 use crate::backend::error_log::write_to_error_log;
-use crate::backend::filter::Languages;
+use crate::backend::manga_provider::Languages;
 use crate::backend::secrets::anilist::{AnilistCredentials, AnilistStorage};
 use crate::backend::secrets::SecretStorage;
 use crate::backend::tracker::anilist::{self, BASE_ANILIST_API_URL};
