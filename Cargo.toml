@@ -25,7 +25,7 @@ tui-widget-list = "0.13.0"
 crossterm = { version = "0.28.1", features = ["event-stream"] }
 directories = "5.0.1"
 image = "0.25.4"
-reqwest = { version = "0.12.4", features = ["json"] }
+reqwest = { version = "0.12.4", features = ["json", "native-tls", "cookies", "http2", "gzip", "deflate"] }
 tokio = { version = "1.42.0", features = ["full"] }
 serde = { version = "1.0.210", features = ["derive"] }
 strum = "0.26.3"
@@ -47,6 +47,7 @@ keyring = { version = "3", features = ["apple-native", "windows-native",  "sync-
 log = { version = "0.4", features = ["std", "serde"] }
 pretty_env_logger = "0.4" 
 scraper = "0.22.0"
+regex = "1.11.1"
 
 [dev-dependencies]
 httpmock = "0.7.0-rc.1"

@@ -1,19 +1,58 @@
+use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::Display;
 use std::num::ParseIntError;
 
+use regex::Regex;
 use scraper::selectable::Selectable;
 use scraper::{html, Selector};
 use serde::{Deserialize, Serialize};
 
+use super::ManganatoProvider;
+use crate::backend::html_parser::scraper::AsSelector;
 use crate::backend::html_parser::{HtmlElement, ParseHtml};
 use crate::backend::manga_provider::{
-    Genres, GetMangasResponse, Languages, MangaStatus, PopularManga, Rating, RecentlyAddedManga, SearchManga,
+    Chapter, ChapterReader, Genres, GetMangasResponse, Languages, ListOfChapters, MangaStatus, PopularManga, Rating, SearchManga,
+    SortedChapters, SortedVolumes, Volumes,
 };
+
+pub(super) fn extract_id_from_url<T: AsRef<str>>(url: T) -> String {
+    let as_string: &str = url.as_ref();
+    let as_string = as_string.split("/").last().unwrap_or_default();
+    as_string.to_string()
+}
+
+#[derive(Debug, Default, Clone, PartialEq)]
+struct ChapterTitle<'a> {
+    title: Option<&'a str>,
+    volume_number: Option<&'a str>,
+    number: &'a str,
+}
+
+fn extract_chapter_title(raw_title: &str) -> ChapterTitle<'_> {
+    let volume_regex = Regex::new(r"Vol\.(\d+)").unwrap();
+    let title_regex = Regex::new(r"Chapter \d+: (.+)").unwrap();
+    let number_regex = Regex::new(r"Chapter (\d+(\.\d+)?)").unwrap();
+
+    let volume = volume_regex.captures(raw_title).and_then(|caps| caps.get(1)).map(|m| m.as_str());
+
+    let title = title_regex.captures(raw_title).and_then(|caps| caps.get(1)).map(|m| m.as_str());
+
+    let number = number_regex
+        .captures(raw_title)
+        .and_then(|caps| caps.get(1))
+        .map(|m| m.as_str())
+        .unwrap_or("0");
+    ChapterTitle {
+        title,
+        volume_number: volume,
+        number,
+    }
+}
 
 #[derive(Debug, Default)]
 pub(super) struct PopularMangaItem {
-    pub(super) manga_page_url: String,
+    pub(super) id: String,
     pub(super) title: String,
     pub(super) cover_img_url: String,
     pub(super) additional_data: String,
@@ -76,7 +115,7 @@ impl ParseHtml for PopularMangaItem {
         let cover_img_url = img_element.attr("src").ok_or("Could not find the cover img url")?;
 
         Ok(Self {
-            manga_page_url: manga_page_url.to_string(),
+            id: manga_page_url.to_string(),
             title: title.to_string(),
             cover_img_url: cover_img_url.to_string(),
             additional_data: format!("Latest chapter: {additiona_info}"),
@@ -87,7 +126,7 @@ impl ParseHtml for PopularMangaItem {
 impl From<PopularMangaItem> for PopularManga {
     fn from(value: PopularMangaItem) -> Self {
         PopularManga {
-            id: value.manga_page_url.to_string(),
+            id: value.id.to_string(),
             title: value.title.to_string(),
             genres: vec![],
             description: value.additional_data,
@@ -121,15 +160,15 @@ impl ParseHtml for GetPopularMangasResponse {
     }
 }
 
-#[derive(Debug, Default, Clone)]
-pub(super) struct NewMangaAddedToolTip {
-    pub(super) manga_page_url: String,
+#[derive(Debug, Default, Clone, PartialEq)]
+pub(super) struct NewMangaAddedItem {
     pub(super) id: String,
+    pub(super) id_tooltip: String,
 }
 
 #[derive(Debug, Default, Clone)]
 pub(super) struct NewAddedMangas {
-    pub(super) mangas: Vec<NewMangaAddedToolTip>,
+    pub(super) mangas: Vec<NewMangaAddedItem>,
 }
 
 #[derive(Debug)]
@@ -152,30 +191,37 @@ impl Display for NewAddedMangasError {
 
 impl Error for NewAddedMangasError {}
 
+impl ParseHtml for NewMangaAddedItem {
+    type ParseError = NewAddedMangasError;
+
+    fn parse_html(html: HtmlElement) -> Result<Self, Self::ParseError> {
+        let div = html::Html::parse_fragment(html.as_str());
+        let a_selector = "a".as_selector();
+        let a_tag = div.select(&a_selector).next().ok_or("no a tag found")?;
+        let id_tool_tip = a_tag.attr("data-tooltip").ok_or("no tooltip attribute found")?;
+
+        let id_tooltip = id_tool_tip.split("_").last().ok_or("no tooltip id found")?.to_string();
+
+        let id = a_tag.attr("href").ok_or("no href attribute found on a tag")?;
+
+        let id = id.to_string();
+
+        Ok(Self { id_tooltip, id })
+    }
+}
+
 impl ParseHtml for NewAddedMangas {
     type ParseError = NewAddedMangasError;
 
     fn parse_html(html: HtmlElement) -> Result<Self, Self::ParseError> {
         let doc = html::Html::parse_document(html.as_str());
 
-        let selector = Selector::parse(".panel-newest-content > a").unwrap();
+        let selector = ".panel-content-homepage > div".as_selector();
 
-        let mut mangas: Vec<Result<NewMangaAddedToolTip, Self::ParseError>> = vec![];
+        let mut mangas: Vec<Result<NewMangaAddedItem, <NewMangaAddedItem as ParseHtml>::ParseError>> = vec![];
 
         for child in doc.select(&selector).take(5) {
-            let new_manga: Result<NewMangaAddedToolTip, Self::ParseError> = {
-                let tool_tip = child.attr("data-tooltip").ok_or("")?;
-
-                let id = tool_tip.split("_").last().ok_or("")?;
-                let manga_page_url = child.attr("href").ok_or("")?;
-
-                Ok(NewMangaAddedToolTip {
-                    id: id.to_string(),
-                    manga_page_url: manga_page_url.to_string(),
-                })
-            };
-
-            mangas.push(new_manga);
+            mangas.push(NewMangaAddedItem::parse_html(HtmlElement::new(child.html())));
         }
 
         Ok(NewAddedMangas {
@@ -195,7 +241,7 @@ pub(super) struct ToolTipItem {
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(super) struct SearchMangaItem {
-    pub(super) manga_page_url: String,
+    pub(super) id: String,
     pub(super) cover_url: String,
     pub(super) title: String,
     pub(super) rating: String,
@@ -245,9 +291,9 @@ impl ParseHtml for SearchMangaResponse {
 
         // at this point search contains mangas
 
-        let selector_div_containing_mangas = Selector::parse(".panel-content-genres > *").unwrap();
+        let selector_div_containing_mangas = ".panel-content-genres > *".as_selector();
 
-        let selector_total_mangas = Selector::parse(".panel-page-number > .group-qty > a").unwrap();
+        let selector_total_mangas = ".panel-page-number > .group-qty > a".as_selector();
 
         let mut mangas: Vec<Result<SearchMangaItem, <SearchMangaItem as ParseHtml>::ParseError>> = vec![];
 
@@ -326,7 +372,7 @@ impl ParseHtml for SearchMangaItem {
         let description = div.select(&description_selector).next().map(|desc| desc.inner_html().trim().to_string());
 
         Ok(Self {
-            manga_page_url: manga_page_url.to_string(),
+            id: manga_page_url.to_string(),
             title: title.to_string(),
             cover_url: cover_url.to_string(),
             rating: rating.inner_html(),
@@ -339,13 +385,13 @@ impl ParseHtml for SearchMangaItem {
 impl From<SearchMangaItem> for SearchManga {
     fn from(value: SearchMangaItem) -> Self {
         Self {
-            id: value.manga_page_url,
+            id: value.id,
             title: value.title,
             genres: vec![],
             description: value.description,
             status: None,
-            cover_img_url: Some(value.cover_url),
-            languages: vec![Languages::English],
+            cover_img_url: value.cover_url,
+            languages: ManganatoProvider::MANGANATO_MANGA_LANGUAGE.into(),
             artist: None,
             author: None,
         }
@@ -523,6 +569,275 @@ impl From<ManganatoStatus> for MangaStatus {
     }
 }
 
+#[derive(Debug)]
+pub(super) struct ChapterParseError {
+    reason: String,
+}
+
+impl<T: Into<String>> From<T> for ChapterParseError {
+    fn from(value: T) -> Self {
+        let reason: String = value.into();
+        Self { reason }
+    }
+}
+
+impl Display for ChapterParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Could not parse html to get chapter on manganato, reason: {}", self.reason)
+    }
+}
+
+impl Error for ChapterParseError {}
+
+/// On the website the title of the chapter looks like this:
+#[derive(Debug, Default, Clone, PartialEq)]
+pub(super) struct ManganatoChapter {
+    pub(super) page_url: String,
+    pub(super) title: Option<String>,
+    pub(super) number: String,
+    pub(super) volume: Option<String>,
+    pub(super) uploaded_at: String,
+}
+
+#[derive(Debug, Default, Clone, PartialEq)]
+pub(super) struct ManganatoChaptersResponse {
+    pub(super) chapters: Vec<ManganatoChapter>,
+    pub(super) total_chapters: u32,
+}
+
+impl ParseHtml for ManganatoChapter {
+    type ParseError = ChapterParseError;
+
+    fn parse_html(html: HtmlElement) -> Result<Self, Self::ParseError> {
+        let li = html::Html::parse_fragment(html.as_str());
+        let a_selector = "a".as_selector();
+
+        let a_tag = li.select(&a_selector).next().ok_or("no a tag found")?;
+
+        let id = a_tag.attr("href").ok_or("no href on tag a")?;
+
+        let raw_title = a_tag.inner_html().trim().to_string();
+
+        let title_parts = extract_chapter_title(&raw_title);
+
+        let uploaded_at_selector = ".chapter-time".as_selector();
+        let uploaded_at = li
+            .select(&uploaded_at_selector)
+            .next()
+            .ok_or("no span with uploaded at selector")?
+            .inner_html();
+
+        Ok(Self {
+            page_url: id.to_string(),
+            title: title_parts.title.map(|title| title.to_string()),
+            number: title_parts.number.to_string(),
+            volume: title_parts.volume_number.map(|vol| vol.to_string()),
+            uploaded_at,
+        })
+    }
+}
+
+impl ParseHtml for ManganatoChaptersResponse {
+    type ParseError = ChapterParseError;
+
+    fn parse_html(html: HtmlElement) -> Result<Self, Self::ParseError> {
+        let div = html::Html::parse_fragment(html.as_str());
+        let chapters_selector = Selector::parse(".row-content-chapter > li").unwrap();
+
+        let mut chapters: Vec<Result<ManganatoChapter, <ManganatoChapter as ParseHtml>::ParseError>> = vec![];
+
+        for li_chapter in div.select(&chapters_selector) {
+            chapters.push(ManganatoChapter::parse_html(HtmlElement::new(li_chapter.html())));
+        }
+
+        let chapters: Vec<ManganatoChapter> = chapters.into_iter().map(|may| may.unwrap()).collect();
+
+        let total_chapters = chapters.len() as u32;
+
+        Ok(Self {
+            chapters,
+            total_chapters,
+        })
+    }
+}
+
+#[derive(Debug)]
+pub(super) struct ChapterPageError {
+    reason: String,
+}
+
+impl<T: Into<String>> From<T> for ChapterPageError {
+    fn from(value: T) -> Self {
+        let reason: String = value.into();
+        Self { reason }
+    }
+}
+
+impl Display for ChapterPageError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Could not parse html to get chapter page on manganato, reason: {}", self.reason)
+    }
+}
+
+impl Error for ChapterPageError {}
+
+#[derive(Debug, Default, Clone, PartialEq)]
+pub(super) struct ChapterUrls {
+    pub(super) urls: Vec<String>,
+}
+
+#[derive(Debug, Default, Clone, PartialEq)]
+pub(super) struct ChapterPageResponse {
+    pub(super) title: Option<String>,
+    pub(super) number: String,
+    pub(super) volume_number: Option<String>,
+    pub(super) pages_url: ChapterUrls,
+    pub(super) chapters_list: ChaptersList,
+}
+
+#[derive(Debug, Default, Clone, PartialEq)]
+pub(super) struct ChaptersListItem {
+    pub(super) page_url: String,
+    pub(super) number: String,
+    pub(super) title: Option<String>,
+    pub(super) volume_number: Option<String>,
+}
+
+#[derive(Debug, Default, Clone, PartialEq)]
+pub(super) struct ChaptersList {
+    pub(super) chapters: Vec<ChaptersListItem>,
+}
+
+impl ParseHtml for ChapterUrls {
+    type ParseError = ChapterPageError;
+
+    fn parse_html(html: HtmlElement) -> Result<Self, Self::ParseError> {
+        let mut urls: Vec<String> = vec![];
+        let doc = html::Html::parse_document(html.as_str());
+
+        let img_selector = ".container-chapter-reader img".as_selector();
+
+        for img in doc.select(&img_selector) {
+            let url = img.attr("src").unwrap_or_default();
+            urls.push(url.to_string());
+        }
+
+        Ok(Self { urls })
+    }
+}
+
+impl ParseHtml for ChaptersList {
+    type ParseError = ChapterPageError;
+
+    fn parse_html(html: HtmlElement) -> Result<Self, Self::ParseError> {
+        let mut chapters: Vec<ChaptersListItem> = vec![];
+        let doc = html::Html::parse_document(html.as_str());
+
+        let base_url_selector = ".panel-breadcrumb".as_selector();
+
+        let div_with_base_url = doc.select(&base_url_selector).next().ok_or("no title tag was found")?;
+
+        let base_page_url = div_with_base_url
+            .select(&":last-child".as_selector())
+            .next()
+            .ok_or("no a tag found")?
+            .attr("href")
+            .ok_or("no href was found")?;
+
+        let remove_chapter_id: String = base_page_url.split("/").last().unwrap().to_string();
+        let base_page_url = base_page_url.replace(&remove_chapter_id, "");
+
+        let chapters_list_selector = ".navi-change-chapter".as_selector();
+
+        let select_containing_chapters = doc
+            .select(&chapters_list_selector)
+            .next()
+            .ok_or("the select containing the chapter list was not found")?;
+
+        for item in select_containing_chapters.select(&"option".as_selector()) {
+            let inner_html = item.inner_html();
+            let title_parts = extract_chapter_title(&inner_html);
+
+            chapters.push(ChaptersListItem {
+                page_url: format!("{base_page_url}chapter-{}", title_parts.number),
+                number: title_parts.number.to_string(),
+                title: title_parts.title.map(|title| title.to_string()),
+                volume_number: title_parts.volume_number.map(|num| num.to_string()),
+            });
+        }
+
+        Ok(ChaptersList { chapters })
+    }
+}
+
+impl ParseHtml for ChapterPageResponse {
+    type ParseError = ChapterPageError;
+
+    fn parse_html(html: HtmlElement) -> Result<Self, Self::ParseError> {
+        let doc = html::Html::parse_document(html.as_str());
+
+        let title_selector_div = ".panel-breadcrumb".as_selector();
+
+        let div_with_title = doc.select(&title_selector_div).next().ok_or("no title tag was found")?;
+
+        let a_containing_title_and_url = div_with_title
+            .select(&":last-child".as_selector())
+            .next()
+            .ok_or("no a tag found")?
+            .inner_html();
+
+        let title_parts = extract_chapter_title(&a_containing_title_and_url);
+
+        Ok(Self {
+            title: title_parts.title.map(|title| title.to_string()),
+            number: title_parts.number.to_string(),
+            volume_number: title_parts.volume_number.map(|vol| vol.to_string()),
+            pages_url: ChapterUrls::parse_html(HtmlElement::new(html.as_str()))?,
+            chapters_list: ChaptersList::parse_html(HtmlElement::new(html.as_str()))?,
+        })
+    }
+}
+
+impl From<ChaptersList> for ListOfChapters {
+    fn from(value: ChaptersList) -> Self {
+        let mut volumes: HashMap<String, Vec<ChapterReader>> = HashMap::new();
+        for chap in value.chapters {
+            match chap.volume_number {
+                Some(vol_number) => {
+                    let already_existing_volume = volumes.entry(vol_number.clone()).or_insert(vec![]);
+
+                    already_existing_volume.push(ChapterReader {
+                        volume: vol_number,
+                        number: chap.number,
+                        id: chap.page_url,
+                    });
+                },
+                None => {
+                    let already_existing_volume = volumes.entry("none".to_string()).or_insert(vec![]);
+
+                    already_existing_volume.push(ChapterReader {
+                        volume: "none".to_string(),
+                        number: chap.number,
+                        id: chap.page_url,
+                    });
+                },
+            }
+        }
+
+        let mut volumes_to_sort: Vec<Volumes> = vec![];
+
+        for vol in volumes {
+            volumes_to_sort.push(Volumes {
+                volume: vol.0,
+                chapters: SortedChapters::new(vol.1),
+            });
+        }
+
+        Self {
+            volumes: SortedVolumes::new(volumes_to_sort),
+        }
+    }
+}
 #[cfg(test)]
 mod tests {
     use std::error::Error;
@@ -530,6 +845,64 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use super::*;
+
+    #[test]
+    fn it_extracts_id_from_url() {
+        let url = "https://manganato.com/manga-ck979419";
+
+        assert_eq!("manga-ck979419", extract_id_from_url(url));
+
+        let url = "https://chapmanganato.to/manga-pe992361";
+
+        assert_eq!("manga-pe992361", extract_id_from_url(url));
+
+        let url = "https://chapmanganato.to/manga-gv952204";
+
+        assert_eq!("manga-gv952204", extract_id_from_url(url));
+    }
+
+    #[test]
+    fn it_extract_chapter_title() {
+        let title = "Vol.1 Chapter 6";
+
+        let expected = ChapterTitle {
+            volume_number: Some("1"),
+            number: "6",
+            title: None,
+        };
+
+        assert_eq!(expected, extract_chapter_title(title));
+
+        let title = "Vol.10 Chapter 20: Hostile Relationship";
+
+        let expected = ChapterTitle {
+            volume_number: Some("10"),
+            number: "20",
+            title: Some("Hostile Relationship"),
+        };
+
+        assert_eq!(expected, extract_chapter_title(title));
+
+        let title = "Chapter 71.1";
+
+        let expected = ChapterTitle {
+            volume_number: None,
+            number: "71.1",
+            title: None,
+        };
+
+        assert_eq!(expected, extract_chapter_title(title));
+
+        let title = "Chapter 86: Once I Realized It, I Was In A Game";
+
+        let expected = ChapterTitle {
+            volume_number: None,
+            number: "86",
+            title: Some("Once I Realized It, I Was In A Game"),
+        };
+
+        assert_eq!(expected, extract_chapter_title(title));
+    }
 
     #[test]
     fn popular_manga_item_parses_from_html() -> Result<(), Box<dyn Error>> {
@@ -555,7 +928,7 @@ mod tests {
 
         let popular_manga = PopularMangaItem::parse_html(HtmlElement::new(html.to_string()))?;
 
-        assert_eq!(popular_manga.manga_page_url, "https://manganato.com/manga-sn995770");
+        assert_eq!(popular_manga.id, "https://manganato.com/manga-sn995770");
         assert_eq!(popular_manga.title, "Yuusha Party O Oida Sareta Kiyou Binbou");
         assert_eq!(popular_manga.cover_img_url, "https://avt.mkklcdnv6temp.com/fld/90/v/14-1733306029-nw.webp");
         assert_eq!(popular_manga.additional_data, "Latest chapter: Chapter 30.1");
@@ -618,62 +991,140 @@ mod tests {
     #[test]
     fn latest_manga_update_parses_from_html() -> Result<(), Box<dyn Error>> {
         let html = r#"
-                    <div class="panel-newest-content">
-                        <a data-tooltip="sticky_55557" class="tooltip" href="https://manganato.com/manga-df1006914">
-                            <img class="img-loading" src="https://avt.mkklcdnv6temp.com/fld/12/z/19-1738684967-nw.webp"
+                <div class="panel-content-homepage">
+                    <h1 class="content-homepage-title">READ MANGA ONLINE - LATEST UPDATES</h1>
+                    <div class="content-homepage-item">
+                        <a rel="nofollow" data-tooltip="sticky_54452" class=" tooltip item-img bookmark_check "
+                            data-id="NTQ0NTI=" href="https://chapmanganato.to/manga-ca1005809"
+                            title="Until I Break My Husband’s Family">
+                            <img class="img-loading" src="https://avt.mkklcdnv6temp.com/fld/75/r/18-1733381622-nw.webp"
                                 onerror="javascript:this.src='https://manganato.com/themes/hm/images/404_not_found.png';"
-                                alt="Gokinjo JK Isezaki-san wa Isekaigaeri no Daiseijo" /> 
-                        </a>
-                        <a
-                            data-tooltip="sticky_55535" class="tooltip" href="https://manganato.com/manga-dj1006892">
-                            <img class="img-loading" src="https://avt.mkklcdnv6temp.com/fld/12/d/19-1737905848.jpg"
-                                onerror="javascript:this.src='https://manganato.com/themes/hm/images/404_not_found.png';"
-                                alt="This is But a Hell of a Dream" /> 
-                        </a>
-                        <a data-tooltip="sticky_55534"
-                            class="tooltip" href="https://manganato.com/manga-di1006891"> <img class="img-loading"
-                                src="https://avt.mkklcdnv6temp.com/fld/12/c/19-1737905712-nw.webp"
-                                onerror="javascript:this.src='https://manganato.com/themes/hm/images/404_not_found.png';"
-                                alt="Revenge Agent Hizumi-san" /> 
-                        </a>
-                        <a data-tooltip="sticky_55508" class="tooltip"
-                            href="https://manganato.com/manga-di1006865"> <img class="img-loading"
-                                src="https://avt.mkklcdnv6temp.com/fld/11/c/19-1737731251.jpg"
-                                onerror="javascript:this.src='https://manganato.com/themes/hm/images/404_not_found.png';"
-                                alt="The Saintess And The Curse" /> 
-                        </a>
-                        <a data-tooltip="sticky_55490" class="tooltip"
-                            href="https://manganato.com/manga-dm1006847"> <img class="img-loading"
-                                src="https://avt.mkklcdnv6temp.com/fld/10/j/19-1737559942.jpg"
-                                onerror="javascript:this.src='https://manganato.com/themes/hm/images/404_not_found.png';"
-                                alt="The Peculiar Room" /> 
-                        </a>
-                        <a data-tooltip="sticky_55482" class="tooltip"
-                            href="https://manganato.com/manga-de1006839"> <img class="img-loading"
-                                src="https://avt.mkklcdnv6temp.com/fld/10/b/19-1737519016.jpg"
-                                onerror="javascript:this.src='https://manganato.com/themes/hm/images/404_not_found.png';"
-                                alt="Regression of the Yong Clan Heir" /> 
-                        </a>
-                        <a data-tooltip="sticky_55469"
-                            class="tooltip" href="https://manganato.com/manga-dr1006826"> <img class="img-loading"
-                                src="https://avt.mkklcdnv6temp.com/fld/9/o/19-1737470368.jpg"
-                                onerror="javascript:this.src='https://manganato.com/themes/hm/images/404_not_found.png';"
-                                alt="The Genius Wants to be Ordinary!" /> 
-                        </a>
-                        <a data-tooltip="sticky_55458"
-                            class="tooltip" href="https://manganato.com/manga-dg1006815"> <img class="img-loading"
-                                src="https://avt.mkklcdnv6temp.com/fld/9/d/19-1737383386-nw.webp"
-                                onerror="javascript:this.src='https://manganato.com/themes/hm/images/404_not_found.png';"
-                                alt="Tenshi no Saezuri" /> 
-                        </a>
+                                alt="Until I Break My Husband’s Family" />
+                            <em class="item-rate">4.2</em> </a>
+                        <div class="content-homepage-item-right">
+                            <h3 class="item-title">
+                                <a rel="nofollow" data-tooltip="sticky_54452" class="tooltip a-h text-nowrap"
+                                    href="https://chapmanganato.to/manga-ca1005809"
+                                    title="Until I Break My Husband’s Family">Until I Break My Husband’s Family</a>
+                            </h3>
+                            <span class="text-nowrap item-author" title="Loreen Author">Loreen</span>
+                            <p class="a-h item-chapter">
+                                <a rel="nofollow" class="text-nowrap"
+                                    href="https://chapmanganato.to/manga-ca1005809/chapter-12"
+                                    title="Until I Break My Husband’s Family Chapter 12">Chapter 12</a>
+                                <i class="fn-cover-item-time" data-fn-time="1739265335">Feb 11,2025</i>
+                            </p>
+                            <p class="a-h item-chapter">
+                                <a rel="nofollow" class="text-nowrap"
+                                    href="https://chapmanganato.to/manga-ca1005809/chapter-11"
+                                    title="Until I Break My Husband’s Family Chapter 11">Chapter 11</a>
+                                <i class="fn-cover-item-time" data-fn-time="1738596877">Feb 03,2025</i>
+                            </p>
+                            <p class="a-h item-chapter">
+                                <a rel="nofollow" class="text-nowrap"
+                                    href="https://chapmanganato.to/manga-ca1005809/chapter-10"
+                                    title="Until I Break My Husband’s Family Chapter 10">Chapter 10</a>
+                                <i class="fn-cover-item-time" data-fn-time="1738585778">Feb 03,2025</i>
+                            </p>
+                        </div>
                     </div>
-        "#;
+                    <div class="content-homepage-item">
+                        <a rel="nofollow" data-tooltip="sticky_53713" class=" tooltip item-img bookmark_check "
+                            data-id="NTM3MTM=" href="https://chapmanganato.to/manga-bn1005070"
+                            title="Do as You Please (_chut_)">
+                            <img class="img-loading" src="https://avt.mkklcdnv6temp.com/fld/46/j/18-1733329988-nw.webp"
+                                onerror="javascript:this.src='https://manganato.com/themes/hm/images/404_not_found.png';"
+                                alt="Do as You Please (_chut_)" />
+                            <em class="item-rate">3.9</em> </a>
+                        <div class="content-homepage-item-right">
+                            <h3 class="item-title">
+                                <a rel="nofollow" data-tooltip="sticky_53713" class="tooltip a-h text-nowrap"
+                                    href="https://chapmanganato.to/manga-bn1005070" title="Do as You Please (_chut_)">Do
+                                    As You Please (_Chut_)</a>
+                            </h3>
+                            <span class="text-nowrap item-author" title="_chut_ , 出途 Author">_chut_ , 出途</span>
+                            <p class="a-h item-chapter">
+                                <a rel="nofollow" class="text-nowrap"
+                                    href="https://chapmanganato.to/manga-bn1005070/chapter-9"
+                                    title="Do as You Please (_chut_) Chapter 9">Chapter 9</a>
+                                <i class="fn-cover-item-time" data-fn-time="1739265302">Feb 11,2025</i>
+                            </p>
+                            <p class="a-h item-chapter">
+                                <a rel="nofollow" class="text-nowrap"
+                                    href="https://chapmanganato.to/manga-bn1005070/chapter-8"
+                                    title="Do as You Please (_chut_) Chapter 8">Chapter 8</a>
+                                <i class="fn-cover-item-time" data-fn-time="1738069283">Jan 28,2025</i>
+                            </p>
+                            <p class="a-h item-chapter">
+                                <a rel="nofollow" class="text-nowrap"
+                                    href="https://chapmanganato.to/manga-bn1005070/chapter-7"
+                                    title="Do as You Please (_chut_) Chapter 7">Chapter 7</a>
+                                <i class="fn-cover-item-time" data-fn-time="1736145038">Jan 06,2025</i>
+                            </p>
+                        </div>
+                    </div>
+                    <div class="content-homepage-item">
+                        <a rel="nofollow" data-tooltip="sticky_50081" class=" tooltip item-img bookmark_check "
+                            data-id="NTAwODE=" href="https://chapmanganato.to/manga-yd1001438"
+                            title="Legal Pirate Parfait">
+                            <img class="img-loading" src="https://avt.mkklcdnv6temp.com/fld/7/j/17-1733321452-nw.webp"
+                                onerror="javascript:this.src='https://manganato.com/themes/hm/images/404_not_found.png';"
+                                alt="Legal Pirate Parfait" />
+                            <em class="item-rate">4</em> </a>
+                        <div class="content-homepage-item-right">
+                            <h3 class="item-title">
+                                <a rel="nofollow" data-tooltip="sticky_50081" class="tooltip a-h text-nowrap"
+                                    href="https://chapmanganato.to/manga-yd1001438" title="Legal Pirate Parfait">Legal
+                                    Pirate Parfait</a>
+                            </h3>
+                            <span class="text-nowrap item-author" title="BonesBloodFlesh (뼈피살) Author">BonesBloodFlesh
+                                (뼈피살)</span>
+                            <p class="a-h item-chapter">
+                                <a rel="nofollow" class="text-nowrap"
+                                    href="https://chapmanganato.to/manga-yd1001438/chapter-63"
+                                    title="Legal Pirate Parfait Chapter 63: I Shall Enact Destruction">Chapter 63: I
+                                    Shall Enact Destruction</a>
+                                <i class="fn-cover-item-time" data-fn-time="1739265294">Feb 11,2025</i>
+                            </p>
+                            <p class="a-h item-chapter">
+                                <a rel="nofollow" class="text-nowrap"
+                                    href="https://chapmanganato.to/manga-yd1001438/chapter-62"
+                                    title="Legal Pirate Parfait Chapter 62: Encounter In The Grass">Chapter 62:
+                                    Encounter In The Grass</a>
+                                <i class="fn-cover-item-time" data-fn-time="1738670853">Feb 04,2025</i>
+                            </p>
+                            <p class="a-h item-chapter">
+                                <a rel="nofollow" class="text-nowrap"
+                                    href="https://chapmanganato.to/manga-yd1001438/chapter-61"
+                                    title="Legal Pirate Parfait Chapter 61: A Jewel That Grants Wishes">Chapter 61: A
+                                    Jewel That Grants Wishes</a>
+                                <i class="fn-cover-item-time" data-fn-time="1738058829">Jan 28,2025</i>
+                            </p>
+                        </div>
+                    </div>
+                    <a href="https://manganato.com/genre-all" class="content-homepage-more a-h">
+                        << MORE>>
+                    </a>
+                </div>
+
+                "#;
 
         let new_added_mangas = NewAddedMangas::parse_html(HtmlElement::new(html.to_string()))?;
 
-        assert_eq!(new_added_mangas.mangas[0].id, "55557");
-        assert_eq!(new_added_mangas.mangas[1].id, "55535");
-        assert_eq!(new_added_mangas.mangas.len(), 5);
+        let expected = NewMangaAddedItem {
+            id_tooltip: "54452".to_string(),
+            id: "https://chapmanganato.to/manga-ca1005809".to_string(),
+        };
+
+        assert_eq!(
+            expected,
+            *new_added_mangas
+                .mangas
+                .iter()
+                .find(|man| man.id == expected.id)
+                .ok_or("expected manga was not parsed from html")?
+        );
+        assert_eq!(new_added_mangas.mangas.len(), 3);
 
         Ok(())
     }
@@ -789,7 +1240,7 @@ mod tests {
         let search_manga_response = SearchMangaResponse::parse_html(HtmlElement::new(html.to_string()))?;
 
         let expected1 = SearchMangaItem {
-            manga_page_url: "https://chapmanganato.to/manga-hp984972".to_string(),
+            id: "https://chapmanganato.to/manga-hp984972".to_string(),
             title: "National School Prince Is A Girl".to_string(),
             latest_chapters: "Chapter 504".to_string(),
             rating: "4.7".to_string(),
@@ -797,20 +1248,9 @@ mod tests {
             description: Some("Fu Jiu appears to be a normal lad in high school on the surface.".to_string()),
         };
 
-        //let expected2 = SearchMangaItem {
-        //    manga_page_url: "https://chapmanganato.to/manga-hs985227".to_string(),
-        //    title: "Villains Are Destined to Die".to_string(),
-        //    latest_chapters: "Latest chapters: Chapter 162 Chapter 161 ".to_string(),
-        //    rating: "4.9".to_string(),
-        //    cover_url: "https://avt.mkklcdnv6temp.com/fld/96/y/10-1732803814-nw.webp".to_string(),
-        //    updated_at: "Updated : Sep 13,2024 - 16:34".to_string(),
-        //    authors: Some("Gwon Gyeoeul".to_string()),
-        //};
-
         assert!(search_manga_response.mangas.len() > 2);
         assert_eq!(search_manga_response.total_mangas, 3);
         assert_eq!(expected1, search_manga_response.mangas[0]);
-        //assert_eq!(expected2, search_manga_response.mangas[1]);
 
         let not_found_html = "<h1>not found</h1>".to_string();
 
@@ -997,5 +1437,380 @@ mod tests {
 
         assert_eq!(expected, result);
         Ok(())
+    }
+
+    #[test]
+    fn chaptes_is_parsed_from_html() -> Result<(), Box<dyn Error>> {
+        let html = r#"
+                <div class="panel-story-chapter-list">
+                    <p class="row-title-chapter">
+                        <span class="row-title-chapter-name">Chapter name</span>
+                        <span class="row-title-chapter-view">View</span>
+                        <span class="row-title-chapter-time">Uploaded</span>
+                    </p>
+                    <ul class="row-content-chapter">
+                        <li class="a-h">
+                            <a rel="nofollow" class="chapter-name text-nowrap"
+                                href="https://chapmanganato.to/manga-jv986530/chapter-3"
+                                title="My Death Flags Show No Sign of Ending chapter Chapter 3: Self-Performed Rescue Act"
+                                title="My Death Flags Show No Sign of Ending Chapter 3: Self-Performed Rescue Act">Chapter
+                                3: Self-Performed Rescue Act</a>
+                            <span class="chapter-view text-nowrap">248</span>
+                            <span class="chapter-time text-nowrap fn-cover-item-time" data-fn-time="1599562556"
+                                title="Sep 08,2020 10:09">Sep 08,2020</span>
+                        </li>
+                        <li class="a-h">
+                            <a rel="nofollow" class="chapter-name text-nowrap"
+                                href="https://chapmanganato.to/manga-jv986530/chapter-2"
+                                title="My Death Flags Show No Sign of Ending chapter Chapter 2: Save the Heroine's Mother!"
+                                title="My Death Flags Show No Sign of Ending Chapter 2: Save the Heroine's Mother!">Vol.2 Chapter 2: Save The Heroine's Mother!</a>
+                            <span class="chapter-view text-nowrap">270</span>
+                            <span class="chapter-time text-nowrap fn-cover-item-time" data-fn-time="1599562482"
+                                title="Sep 08,2020 10:09">Sep 08,2020</span>
+                        </li>
+                        <li class="a-h">
+                        <a rel="nofollow" class="chapter-name text-nowrap" href="https://chapmanganato.to/manga-jv986530/chapter-1" title="My Death Flags Show No Sign of Ending chapter Chapter 1: Once I Realized It, I Was In A Game">Chapter 1: Once I Realized It, I Was In A Game</a>
+                        <span class="chapter-view text-nowrap">371</span>
+                        <span class="chapter-time text-nowrap fn-cover-item-time" data-fn-time="1599532412" title="Sep 08,2020 02:09">Sep 08,2020</span>
+                                </li>
+                    </ul>
+                </div>
+        "#;
+
+        let expected_chapter: ManganatoChapter = ManganatoChapter {
+            page_url: "https://chapmanganato.to/manga-jv986530/chapter-1".to_string(),
+            title: Some("Once I Realized It, I Was In A Game".to_string()),
+            number: "1".to_string(),
+            volume: None,
+            uploaded_at: "Sep 08,2020".to_string(),
+        };
+
+        let expected_chapter2: ManganatoChapter = ManganatoChapter {
+            page_url: "https://chapmanganato.to/manga-jv986530/chapter-2".to_string(),
+            title: Some("Save The Heroine's Mother!".to_string()),
+            number: "2".to_string(),
+            volume: Some("2".to_string()),
+            uploaded_at: "Sep 08,2020".to_string(),
+        };
+
+        let result = ManganatoChaptersResponse::parse_html(HtmlElement::new(html))?;
+
+        let chapter = result
+            .chapters
+            .iter()
+            .find(|chap| chap.page_url == expected_chapter.page_url)
+            .ok_or("Expected chapter was not parsed")?;
+
+        assert_eq!(expected_chapter, *chapter);
+
+        let chapter = result
+            .chapters
+            .iter()
+            .find(|chap| chap.page_url == expected_chapter2.page_url)
+            .ok_or("Expected chapter was not parsed")?;
+
+        assert_eq!(expected_chapter2, *chapter);
+
+        assert_eq!(3, result.total_chapters);
+
+        let html = "<h1> the div containing the chapters is not there</h1>";
+
+        let result = ManganatoChaptersResponse::parse_html(HtmlElement::new(html))?;
+
+        assert_eq!(0, result.total_chapters);
+
+        Ok(())
+    }
+
+    #[test]
+    fn chapter_page_is_parsed_from_html() -> Result<(), Box<dyn Error>> {
+        let html = r#"
+        <div class="container">
+            <div class="panel-breadcrumb">
+                <a class="a-h" href="https://manganato.com/" title="Read Manga Online">Read Manga Online</a>
+                <span>»</span>
+                <a class="a-h" href="https://manganato.com/manga-zt1003076" title="Tonari no Kurokawa-san">Tonari No
+                    Kurokawa-San</a>
+                <span>»</span>
+                <a class="a-h" href="https://chapmanganato.to/manga-zt1003076/chapter-11"
+                    title="Chapter 11: A Heart-Pounding Outing!">Chapter 11: A Heart-Pounding Outing!</a>
+            </div>
+
+            <div class="panel-navigation">
+                <select class="navi-change-chapter">
+                    <option data-c="8">Chapter 8: After School Crisis (Part 2)</option>
+                    <option data-c="7">Chapter 7: After School Crisis (Part 1)</option>
+                    <option data-c="6">Chapter 6: I Want To Exchange</option>
+                    <option data-c="5">Chapter 5: Crossed Feelings</option>
+                    <option data-c="4">Chapter 4: I'm Just Curious</option>
+                    <option data-c="3">Chapter 3: It's Not Naughty!</option>
+                    <option data-c="2">Chapter 2: She's A Friend</option>
+                    <option data-c="1">Chapter 1: Is She The Heroine?</option>
+                </select>
+                <div class="navi-change-chapter-btn"><a rel="nofollow" class="navi-change-chapter-btn-prev a-h"
+                        href="https://chapmanganato.to/manga-zt1003076/chapter-10"><i></i>PREV CHAPTER</a><a
+                        rel="nofollow" class="navi-change-chapter-btn-next a-h"
+                        href="https://chapmanganato.to/manga-zt1003076/chapter-12">NEXT CHAPTER<i></i></a></div>
+            </div>
+
+            <div class="panel-chapter-info-top">
+                <h1>TONARI NO KUROKAWA-SAN CHAPTER 11: A HEART-POUNDING OUTING!</h1>
+                <div class="server-image">
+                    <p class="server-image-caption">Image shows slow or error, you should choose another IMAGE SERVER
+                    </p>
+                    <span style="font-size: 12px;">
+                        <span style="display: block;">
+                            <span class="server-image-name">IMAGES SERVER: </span>
+                            <a rel="nofollow" class="server-image-btn isactive">1</a>
+                            <a data-l='https://chapmanganato.to/content_server_s2' rel="nofollow"
+                                class="server-image-btn a-h">2</a>
+                        </span>
+                        <span style="display: block;">
+                            <span class="server-image-name" style="margin-left: 10px;">LOAD ALL IMAGES AT ONCE:</span>
+                            <label class="label-switch label-switch-on"
+                                data-l="https://chapmanganato.to/content_lazyload_on">
+                                <span class="switch-front"></span>
+                                <span class="switch-end"></span>
+                            </label>
+                        </span>
+                        <span style="display: block;">
+                            <span class="server-image-name">IMAGES MARGIN: </span>
+                            <select class="server-cbb-content-margin">
+                                <option value="0">0</option>
+                                <option value="1">1</option>
+                                <option value="2">2</option>
+                                <option value="3">3</option>
+                                <option value="4">4</option>
+                                <option value="5">5</option>
+                                <option value="6">6</option>
+                                <option value="7">7</option>
+                                <option value="8">8</option>
+                                <option value="9">9</option>
+                                <option value="10">10</option>
+                            </select>
+                        </span>
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <div class="container-chapter-reader">
+            <div
+                style="text-align: center; max-width: 620px; max-height: 310px; margin: 10px auto; overflow: hidden; display: block;">
+                <div style="max-width: 300px; max-height: 300px; float: left; overflow: hidden;">
+                    <div id="bg_162325351"></div>
+                    <script data-cfasync="false" type="text/javascript"
+                        src="//platform.bidgear.com/ads.php?domainid=1623&sizeid=2&zoneid=5351"></script>
+                </div>
+                <div style="max-width: 300px; max-height: 310px; float: left; margin-left: 20px;">
+                    <div>
+                        <script data-ssr="1" data-cfasync="false" async type="text/javascript"
+                            src="//fz.untenseleopold.com/t67a0d5a4bec30/42238"></script>
+                    </div>
+                </div>
+            </div><img
+                src="https://v9.mkklcdnv6tempv3.com/img/tab_29/05/17/19/zt1003076/chapter_11_a_heartpounding_outing/1-1733210232-o.webp"
+                alt="Tonari no Kurokawa-san Chapter 11: A Heart-Pounding Outing! page 1 - MangaNato.com"
+                title="Tonari no Kurokawa-san Chapter 11: A Heart-Pounding Outing! page 1 - MangaNato.com" /><img
+                src="https://v9.mkklcdnv6tempv3.com/img/tab_29/05/17/19/zt1003076/chapter_11_a_heartpounding_outing/2-1733210234-o.webp"
+                alt="Tonari no Kurokawa-san Chapter 11: A Heart-Pounding Outing! page 2 - MangaNato.com"
+                title="Tonari no Kurokawa-san Chapter 11: A Heart-Pounding Outing! page 2 - MangaNato.com" /><img
+                src="https://v9.mkklcdnv6tempv3.com/img/tab_29/05/17/19/zt1003076/chapter_11_a_heartpounding_outing/3-1733210235-o.webp"
+                alt="Tonari no Kurokawa-san Chapter 11: A Heart-Pounding Outing! page 3 - MangaNato.com"
+                title="Tonari no Kurokawa-san Chapter 11: A Heart-Pounding Outing! page 3 - MangaNato.com" /><img
+                src="https://v9.mkklcdnv6tempv3.com/img/tab_29/05/17/19/zt1003076/chapter_11_a_heartpounding_outing/4-1733210235-o.webp"
+                alt="Tonari no Kurokawa-san Chapter 11: A Heart-Pounding Outing! page 4 - MangaNato.com"
+                title="Tonari no Kurokawa-san Chapter 11: A Heart-Pounding Outing! page 4 - MangaNato.com" />
+            <div
+                style="text-align: center; max-width: 620px; max-height: 310px; margin: 10px auto; overflow: hidden; display: block;">
+                <div style="max-width: 300px; max-height: 300px; float: left; overflow: hidden;">
+                    <div id="bg_162322284"></div>
+                    <script data-cfasync="false" type="text/javascript"
+                        src="//platform.bidgear.com/ads.php?domainid=1623&sizeid=2&zoneid=2284"></script>
+                </div>
+                <div style="max-width: 300px; max-height: 310px; float: left; margin-left: 20px;">
+                    <div id="pf-6966-1">
+                        <script>window.pubfuturetag = window.pubfuturetag || []; window.pubfuturetag.push({unit: "658261d2a4aa62003d239fd7", id: "pf-6966-1"})</script>
+                    </div>
+                </div>
+            </div><img
+                src="https://v9.mkklcdnv6tempv3.com/img/tab_29/05/17/19/zt1003076/chapter_11_a_heartpounding_outing/5-1733210235-o.webp"
+                alt="Tonari no Kurokawa-san Chapter 11: A Heart-Pounding Outing! page 5 - MangaNato.com"
+                title="Tonari no Kurokawa-san Chapter 11: A Heart-Pounding Outing! page 5 - MangaNato.com" /><img
+                src="https://v9.mkklcdnv6tempv3.com/img/tab_29/05/17/19/zt1003076/chapter_11_a_heartpounding_outing/6-1733210236-o.webp"
+                alt="Tonari no Kurokawa-san Chapter 11: A Heart-Pounding Outing! page 6 - MangaNato.com"
+                title="Tonari no Kurokawa-san Chapter 11: A Heart-Pounding Outing! page 6 - MangaNato.com" /><img
+                src="https://v9.mkklcdnv6tempv3.com/img/tab_29/05/17/19/zt1003076/chapter_11_a_heartpounding_outing/7-1733210238-o.webp"
+                alt="Tonari no Kurokawa-san Chapter 11: A Heart-Pounding Outing! page 7 - MangaNato.com"
+                title="Tonari no Kurokawa-san Chapter 11: A Heart-Pounding Outing! page 7 - MangaNato.com" />
+        </div>
+        <div class="panel-breadcrumb">
+                <span>
+                    <a class="a-h" href="https://manganato.com/" title="Read Manga Online">
+                        <span>Read Manga Online</span>
+                    </a>
+                </span>
+                <span>»</span>
+                <span>
+                    <a class="a-h" href="https://manganato.com/manga-zt1003076" title="Tonari no Kurokawa-san">
+                        <span>Tonari No Kurokawa-San</span>
+                    </a>
+                </span>
+                <span>»</span>
+                <span>
+                    <a class="a-h" href="https://chapmanganato.to/manga-zt1003076/chapter-11"
+                        title="Chapter 11: A Heart-Pounding Outing!">
+                        <span>Chapter 11: A Heart-Pounding Outing!</span>
+                    </a>
+                </span>
+            </div>
+        "#;
+
+        let result = ChapterPageResponse::parse_html(HtmlElement::new(html))?;
+
+        assert!(result.pages_url.urls.iter().find(|url| *url == "https://v9.mkklcdnv6tempv3.com/img/tab_29/05/17/19/zt1003076/chapter_11_a_heartpounding_outing/1-1733210232-o.webp").is_some());
+
+        let expected_chapter_list_item = ChaptersListItem {
+            page_url: "https://chapmanganato.to/manga-zt1003076/chapter-1".to_string(),
+            title: Some("Is She The Heroine?".to_string()),
+            number: "1".to_string(),
+            volume_number: None,
+        };
+
+        let chapter_item_result = assert_eq!(
+            Some(&expected_chapter_list_item),
+            result
+                .chapters_list
+                .chapters
+                .iter()
+                .find(|chap| chap.page_url == "https://chapmanganato.to/manga-zt1003076/chapter-1")
+        );
+
+        assert_eq!(Some("A Heart-Pounding Outing!".to_string()), result.title);
+
+        Ok(())
+    }
+
+    #[test]
+    fn chapter_list_is_parsed_from_html() -> Result<(), Box<dyn Error>> {
+        //On the website the select which contains the chapter list appears two times so when
+        //parsing the html there shouldnt be duplicates
+        // see for reference : https://chapmanganato.to/manga-ve998587/chapter-17
+        let html = r#"
+            <div class="panel-breadcrumb">
+                <a class="a-h" href="https://manganato.com/" title="Read Manga Online">Read Manga Online</a>
+                <span>»</span>
+                <a class="a-h" href="https://manganato.com/manga-zt1003076" title="Tonari no Kurokawa-san">Tonari No
+                    Kurokawa-San</a>
+                <span>»</span>
+                <a class="a-h" href="https://chapmanganato.to/manga-zt1003076/chapter-11"
+                    title="Chapter 11: A Heart-Pounding Outing!">Chapter 11: A Heart-Pounding Outing!</a>
+            </div>
+            <div class="panel-navigation">
+                <select class="navi-change-chapter">
+                    <option data-c="8">Chapter 8</option>
+                    <option data-c="7">Chapter 7</option>
+                    <option data-c="6">Chapter 6</option>
+                    <option data-c="5">Chapter 5</option>
+                    <option data-c="4">Chapter 4</option>
+                    <option data-c="3">Chapter 3</option>
+                    <option data-c="2">Chapter 2</option>
+                    <option data-c="1">Chapter 1</option>
+                </select>
+                <div class="navi-change-chapter-btn"><a rel="nofollow" class="navi-change-chapter-btn-prev a-h"
+                        href="https://chapmanganato.to/manga-ve998587/chapter-17"><i></i>PREV CHAPTER</a></div>
+            </div>
+            <div class="panel-navigation">
+                <select class="navi-change-chapter">
+                    <option data-c="8">Chapter 8</option>
+                    <option data-c="7">Chapter 7</option>
+                    <option data-c="6">Chapter 6</option>
+                    <option data-c="5">Chapter 5</option>
+                    <option data-c="4">Chapter 4</option>
+                    <option data-c="3">Chapter 3</option>
+                    <option data-c="2">Chapter 2</option>
+                    <option data-c="1">Chapter 1</option>
+                </select>
+                <div class="navi-change-chapter-btn"><a rel="nofollow" class="navi-change-chapter-btn-prev a-h"
+                        href="https://chapmanganato.to/manga-ve998587/chapter-17"><i></i>PREV CHAPTER</a></div>
+            </div>
+
+        "#;
+
+        let chapter_list = ChaptersList::parse_html(HtmlElement::new(html))?;
+
+        assert_eq!(8, chapter_list.chapters.len());
+
+        Ok(())
+    }
+
+    #[test]
+    fn chapter_list_to_list_of_chapters_conversio() {
+        let chapter_list = ChaptersList {
+            chapters: vec![
+                ChaptersListItem {
+                    page_url: "some_url1".to_string(),
+                    title: None,
+                    number: "1".to_string(),
+                    volume_number: None,
+                },
+                ChaptersListItem {
+                    page_url: "some_url2".to_string(),
+                    title: None,
+                    number: "2".to_string(),
+                    volume_number: Some("1".to_string()),
+                },
+                ChaptersListItem {
+                    page_url: "some_url3".to_string(),
+                    title: None,
+                    number: "3".to_string(),
+                    volume_number: Some("1".to_string()),
+                },
+                ChaptersListItem {
+                    page_url: "some_url4".to_string(),
+                    title: None,
+                    number: "4".to_string(),
+                    volume_number: Some("2".to_string()),
+                },
+            ],
+        };
+
+        let expected = ListOfChapters {
+            volumes: SortedVolumes::new(vec![
+                Volumes {
+                    volume: "none".to_string(),
+                    chapters: SortedChapters::new(vec![ChapterReader {
+                        id: "some_url1".to_string(),
+                        number: "1".to_string(),
+                        volume: "none".to_string(),
+                    }]),
+                },
+                Volumes {
+                    volume: "1".to_string(),
+                    chapters: SortedChapters::new(vec![
+                        ChapterReader {
+                            id: "some_url2".to_string(),
+                            number: "2".to_string(),
+                            volume: "1".to_string(),
+                        },
+                        ChapterReader {
+                            id: "some_url3".to_string(),
+                            number: "3".to_string(),
+                            volume: "1".to_string(),
+                        },
+                    ]),
+                },
+                Volumes {
+                    volume: "2".to_string(),
+                    chapters: SortedChapters::new(vec![ChapterReader {
+                        id: "some_url4".to_string(),
+                        number: "4".to_string(),
+                        volume: "2".to_string(),
+                    }]),
+                },
+            ]),
+        };
+
+        assert_eq!(expected, ListOfChapters::from(chapter_list));
     }
 }

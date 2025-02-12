@@ -689,7 +689,7 @@ where
                 manga_id: &manga_id,
                 chapter_title: &chapter_selected.chapter.title,
                 manga_title: &manga_title,
-                manga_cover_url: cover_img_url.as_deref(),
+                manga_cover_url: Some(&cover_img_url),
                 translated_language: chapter_language,
                 page_number: None,
             };
@@ -740,6 +740,7 @@ where
 
     fn download_chapter_selected(&mut self) {
         let manga_id = self.manga.id.clone();
+        let id_safe_for_download = self.manga.id_safe_for_download.clone();
         let manga_title = self.manga.title.clone();
         let tx = self.local_event_tx.clone();
         let client = Arc::clone(&self.manga_provider);
@@ -758,6 +759,7 @@ where
                 client,
                 manga_tracker,
                 manga_id,
+                id_safe_for_download,
                 manga_title,
                 chapter.chapter.clone(),
                 config.clone(),
@@ -785,7 +787,7 @@ where
                 title: &title,
                 manga_id: &self.manga.id,
                 manga_title: &self.manga.title,
-                img_url: self.manga.cover_img_url.as_deref(),
+                img_url: Some(&self.manga.cover_img_url),
             },
             conn,
         );
@@ -864,13 +866,21 @@ where
     fn confirm_download_all_chapters(&mut self) {
         self.download_all_chapters_state.fetch_chapters_data();
         let manga_id = self.manga.id.clone();
+        let manga_id_safe_for_download = self.manga.id_safe_for_download.clone();
         let manga_title = self.manga.title.clone();
         let lang = self.get_current_selected_language();
         let tx = self.local_event_tx.clone();
         let client = Arc::clone(&self.manga_provider);
         let config = MangaTuiConfig::get();
-        self.tasks
-            .spawn(download_all_chapters(client, manga_id, manga_title, lang, config.clone(), tx));
+        self.tasks.spawn(download_all_chapters(
+            client,
+            manga_id,
+            manga_id_safe_for_download,
+            manga_title,
+            lang,
+            config.clone(),
+            tx,
+        ));
     }
 
     fn cancel_download_all_chapters(&mut self) {
@@ -917,21 +927,19 @@ where
         }
         let tx = self.local_event_tx.clone();
         let client = Arc::clone(&self.manga_provider);
-        let file_name = self.manga.cover_img_url.as_ref().cloned();
+        let url = self.manga.cover_img_url.clone();
 
-        if let Some(url) = file_name {
-            self.tasks.spawn(async move {
-                let response = client.get_image(&url).await;
-                match response {
-                    Ok(res) => {
-                        tx.send(MangaPageEvents::LoadCover(res)).ok();
-                    },
-                    Err(e) => {
-                        write_to_error_log(e.into());
-                    },
-                }
-            });
-        }
+        self.tasks.spawn(async move {
+            let response = client.get_image(&url).await;
+            match response {
+                Ok(res) => {
+                    tx.send(MangaPageEvents::LoadCover(res)).ok();
+                },
+                Err(e) => {
+                    write_to_error_log(e.into());
+                },
+            }
+        });
     }
 
     fn load_cover(&mut self, img: DynamicImage) {
@@ -977,7 +985,7 @@ where
                 MangaReadingHistorySave {
                     id: &self.manga.id,
                     title: &self.manga.title,
-                    img_url: self.manga.cover_img_url.as_deref(),
+                    img_url: Some(&self.manga.cover_img_url),
                     chapter: ChapterToSaveHistory {
                         id: &chapter.id,
                         title: &chapter.title,

@@ -15,10 +15,7 @@ use self::manga::MangaPage;
 use self::reader::MangaReader;
 use self::search::{InputMode, SearchPage};
 use super::widgets::Component;
-use crate::backend::manga_provider::manganato::filter_state::{ManganatoFilterState, ManganatoFiltersProvider};
-use crate::backend::manga_provider::manganato::filter_widget::ManganatoFilterWidget;
-use crate::backend::manga_provider::manganato::{ManganatoProvider, MANGANATO_BASE_URL};
-use crate::backend::manga_provider::{ChapterToRead, ListOfChapters, Manga, MangaProvider, Pagination};
+use crate::backend::manga_provider::{ChapterToRead, ListOfChapters, Manga, MangaProvider, MangaProviders, Pagination};
 use crate::backend::tracker::MangaTracker;
 use crate::backend::tui::{Action, Events};
 use crate::config::MangaTuiConfig;
@@ -49,10 +46,10 @@ where
     pub global_event_rx: UnboundedReceiver<Events>,
     pub state: AppState,
     pub current_tab: SelectedPage,
-    pub manga_page: Option<MangaPage<ManganatoProvider, S>>,
+    pub manga_page: Option<MangaPage<T, S>>,
     pub manga_reader_page: Option<MangaReader<T, S>>,
-    pub search_page: SearchPage<ManganatoProvider, S>,
-    pub home_page: Home<ManganatoProvider>,
+    pub search_page: SearchPage<T, S>,
+    pub home_page: Home<T>,
     pub feed_page: Feed<T>,
     api_client: Arc<T>,
     manga_tracker: Option<S>,
@@ -134,26 +131,29 @@ where
 
         global_event_tx.send(Events::GoToHome).ok();
 
-        let provider = Arc::new(api_client);
+        let which_provider = api_client.name();
 
-        let manganato = Arc::new(ManganatoProvider::new(MANGANATO_BASE_URL.parse().unwrap()));
+        let provider = Arc::new(api_client);
 
         App {
             picker,
             current_tab: SelectedPage::default(),
             search_page: SearchPage::new(
                 picker,
-                Arc::clone(&manganato),
+                Arc::clone(&provider),
                 manga_tracker.clone(),
-                ManganatoFiltersProvider::new(ManganatoFilterState {}),
-                ManganatoFilterWidget {},
-                Pagination::from_first_page(24),
+                filters_state,
+                filter_widget,
+                Pagination::from_first_page(match which_provider {
+                    MangaProviders::Mangadex => 10,
+                    MangaProviders::Manganato => 24,
+                }),
             )
             .with_global_sender(global_event_tx.clone()),
             feed_page: Feed::new()
                 .with_global_sender(global_event_tx.clone())
                 .with_api_client(Arc::clone(&provider)),
-            home_page: Home::new(picker, Arc::clone(&manganato)).with_global_sender(global_event_tx.clone()),
+            home_page: Home::new(picker, Arc::clone(&provider)).with_global_sender(global_event_tx.clone()),
             manga_page: None,
             manga_reader_page: None,
             global_action_tx,
@@ -285,7 +285,7 @@ where
 
         let config = MangaTuiConfig::get();
 
-        let manga_page = MangaPage::new(manga, self.picker, Arc::new(ManganatoProvider::new(MANGANATO_BASE_URL.parse().unwrap())))
+        let manga_page = MangaPage::new(manga, self.picker, Arc::clone(&self.api_client))
             .with_global_sender(self.global_event_tx.clone())
             .auto_bookmark(config.auto_bookmark)
             .with_manga_tracker(self.manga_tracker.clone());
@@ -302,7 +302,7 @@ where
             chapter_to_read,
             manga_to_read.manga_id,
             self.picker.as_ref().cloned().unwrap(),
-            self.api_client.clone(),
+            Arc::clone(&self.api_client),
         )
         .with_global_sender(self.global_event_tx.clone())
         .with_list_of_chapters(manga_to_read.list)
@@ -407,11 +407,8 @@ where
 
     #[cfg(test)]
     fn with_manga_page(mut self) -> Self {
-        self.manga_page = Some(MangaPage::new(
-            crate::backend::manga_provider::Manga::default(),
-            None,
-            Arc::new(ManganatoProvider::new(MANGANATO_BASE_URL.parse().unwrap())),
-        ));
+        self.manga_page =
+            Some(MangaPage::new(crate::backend::manga_provider::Manga::default(), None, Arc::clone(&self.api_client)));
 
         self
     }

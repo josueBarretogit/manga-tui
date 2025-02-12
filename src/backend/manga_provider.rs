@@ -256,11 +256,14 @@ pub struct Artist {
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct Manga {
     pub id: String,
+    /// This is necessary because on mangadex ids are Uuids which are safe to be used in file
+    /// names, but when the manga providers is a website the id cannot be a url, like `https://chapmanganato.to/manga-zt1003076/chapter-11`
+    pub id_safe_for_download: String,
     pub title: String,
     pub genres: Vec<Genres>,
     pub description: String,
     pub status: MangaStatus,
-    pub cover_img_url: Option<String>,
+    pub cover_img_url: String,
     pub languages: Vec<Languages>,
     /// Most mangas providers show the rating of the manga, if they dont then 0.0 should be used
     /// instead
@@ -280,7 +283,7 @@ pub struct SearchManga {
     pub genres: Vec<Genres>,
     pub description: Option<String>,
     pub status: Option<MangaStatus>,
-    pub cover_img_url: Option<String>,
+    pub cover_img_url: String,
     pub languages: Vec<Languages>,
     /// Some manga providers provide the artist of the manga
     pub artist: Option<Artist>,
@@ -291,6 +294,9 @@ pub struct SearchManga {
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct Chapter {
     pub id: String,
+    /// This is necessary because on mangadex ids are Uuids which are safe to be used in file
+    /// names, but when the manga providers is a website the id cannot be a url, like `https://chapmanganato.to/manga-zt1003076/chapter-11`
+    pub id_safe_for_download: String,
     pub manga_id: String,
     pub title: String,
     pub language: Languages,
@@ -389,6 +395,17 @@ impl Pagination {
 
     pub fn get_total_pages(&self) -> u32 {
         self.total_items.div_ceil(self.items_per_page)
+    }
+
+    /// Used for client side pagination through a slice
+    pub fn from_index(&self) -> usize {
+        ((self.current_page - 1) * self.items_per_page) as usize
+    }
+
+    /// Used for client side pagination through a slice
+    pub fn to_index(&self, total: usize) -> usize {
+        let to = (self.current_page * self.items_per_page) as usize;
+        to.min(total)
     }
 
     /// Used when searching for the first time
@@ -680,14 +697,7 @@ pub trait SearchMangaById: Clone + Send + Sync {
     fn get_manga_by_id(&self, manga_id: &str) -> impl Future<Output = Result<Manga, Box<dyn Error>>> + Send;
 }
 
-pub trait GetChapterPages: Send + Sync {
-    fn get_chapter_pages_url(
-        &self,
-        chapter_id: &str,
-        manga_id: &str,
-        image_quality: ImageQuality,
-    ) -> impl Future<Output = Result<Vec<Url>, Box<dyn Error>>> + Send;
-
+pub trait GetChapterPages: GetRawImage + Send + Sync {
     fn get_chapter_pages_url_with_extension(
         &self,
         chapter_id: &str,
@@ -703,7 +713,26 @@ pub trait GetChapterPages: Send + Sync {
         manga_id: &str,
         image_quality: ImageQuality,
         on_progress: F,
-    ) -> impl Future<Output = Result<Vec<ChapterPage>, Box<dyn Error>>> + Send;
+    ) -> impl Future<Output = Result<Vec<ChapterPage>, Box<dyn Error>>> + Send {
+        Box::pin(async move {
+            let pages_url = self.get_chapter_pages_url_with_extension(chapter_id, manga_id, image_quality).await?;
+            let mut pages: Vec<ChapterPage> = vec![];
+            let total_pages = pages_url.len();
+
+            for (index, page) in pages_url.into_iter().enumerate() {
+                let maybe_bytes = self.get_raw_image(page.url.as_str()).await;
+                if let Ok(bytes) = maybe_bytes {
+                    pages.push(ChapterPage {
+                        bytes,
+                        extension: page.extension,
+                    });
+                }
+                on_progress(index as f64 / total_pages as f64, chapter_id);
+            }
+
+            Ok(pages)
+        })
+    }
 }
 
 /// Most manga websites have a section where the top 10 mangas of the month are on display in their
@@ -774,6 +803,7 @@ pub trait FeedPageProvider: SearchMangaById + ProviderIdentity + Clone + Send + 
     fn get_latest_chapters(&self, manga_id: &str) -> impl Future<Output = Result<Vec<LatestChapter>, Box<dyn Error>>> + Send;
 }
 
+/// For implementing very specific things for each manga provider
 pub trait ProviderIdentity {
     fn name(&self) -> MangaProviders;
 }
@@ -918,15 +948,6 @@ pub mod mock {
         }
     }
     impl GetChapterPages for MockMangaPageProvider {
-        async fn get_chapter_pages_url(
-            &self,
-            chapter_id: &str,
-            manga_id: &str,
-            image_quality: ImageQuality,
-        ) -> Result<Vec<Url>, Box<dyn Error>> {
-            todo!()
-        }
-
         async fn get_chapter_pages_url_with_extension(
             &self,
             chapter_id: &str,
@@ -984,9 +1005,9 @@ pub mod mock {
 
         async fn search_mangas(
             &self,
-            search_term: Option<SearchTerm>,
-            filters: Self::InnerState,
-            pagination: Pagination,
+            _search_term: Option<SearchTerm>,
+            _filters: Self::InnerState,
+            _pagination: Pagination,
         ) -> Result<GetMangasResponse, Box<dyn Error>> {
             todo!()
         }
@@ -1003,7 +1024,7 @@ pub mod mock {
     }
 
     impl FeedPageProvider for MockMangaPageProvider {
-        async fn get_latest_chapters(&self, manga_id: &str) -> Result<Vec<LatestChapter>, Box<dyn Error>> {
+        async fn get_latest_chapters(&self, _manga_id: &str) -> Result<Vec<LatestChapter>, Box<dyn Error>> {
             if self.should_fail {
                 return Err("must fail".into());
             }

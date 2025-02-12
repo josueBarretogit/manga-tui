@@ -11,8 +11,9 @@ pub trait ParseHtml: Sized {
     fn parse_html(html: HtmlElement) -> Result<Self, Self::ParseError>;
 }
 impl HtmlElement {
-    pub fn new(raw_str: String) -> Self {
-        Self(raw_str)
+    pub fn new<T: Into<String>>(raw_str: T) -> Self {
+        let s: String = raw_str.into();
+        Self(s)
     }
 
     pub fn as_str(&self) -> &str {

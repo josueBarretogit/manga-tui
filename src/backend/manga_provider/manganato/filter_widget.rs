@@ -15,7 +15,7 @@ impl FiltersWidget for ManganatoFilterWidget {
 impl StatefulWidgetFrame for ManganatoFilterWidget {
     type State = ManganatoFiltersProvider;
 
-    fn render(&mut self, area: ratatui::prelude::Rect, frame: &mut ratatui::Frame<'_>, state: &mut Self::State) {
+    fn render(&mut self, area: ratatui::prelude::Rect, frame: &mut ratatui::Frame<'_>, _state: &mut Self::State) {
         let buf = frame.buffer_mut();
         "no filters available on manganato".render(
             area.inner(Margin {

@@ -12,11 +12,10 @@ use manga_tui::SearchTerm;
 use reqwest::{Client, Response, Url};
 
 use super::{
-    Artist, Author, Chapter, ChapterPage, ChapterPageUrl, ChapterToRead, DecodeBytesToImage, FeedPageProvider,
-    FetchChapterBookmarked, Genres, GetChapterPages, GetChaptersResponse, GetMangasResponse, GetRawImage, GoToReadChapter,
-    HomePageMangaProvider, Languages, ListOfChapters, MangaPageProvider, MangaProvider, MangaProviders, MangaStatus, PopularManga,
-    ProviderIdentity, Rating, ReaderPageProvider, RecentlyAddedManga, SearchChapterById, SearchMangaById, SearchMangaPanel,
-    SearchPageProvider,
+    Artist, Author, Chapter, ChapterPageUrl, ChapterToRead, DecodeBytesToImage, FeedPageProvider, FetchChapterBookmarked, Genres,
+    GetChapterPages, GetChaptersResponse, GetMangasResponse, GetRawImage, GoToReadChapter, HomePageMangaProvider, Languages,
+    ListOfChapters, MangaPageProvider, MangaProvider, MangaProviders, MangaStatus, PopularManga, ProviderIdentity, Rating,
+    ReaderPageProvider, RecentlyAddedManga, SearchChapterById, SearchMangaById, SearchMangaPanel, SearchPageProvider,
 };
 use crate::backend::database::ChapterBookmarked;
 use crate::config::ImageQuality;
@@ -118,7 +117,7 @@ impl GetRawImage for MangadexClient {
         let response = self.client.get(url).timeout(StdDuration::from_secs(3)).send().await?;
 
         if response.status() != StatusCode::OK {
-            return Err(format!("Could not get image with url : {url}").into());
+            return Err(format!("Could not get image on mangadex with url : {url}").into());
         }
 
         Ok(response.bytes().await?)
@@ -319,7 +318,7 @@ impl SearchMangaById for MangadexClient {
             _ => MangaStatus::default(),
         };
 
-        let mut cover_img_url: Option<String> = Option::default();
+        let mut cover_img_url: String = String::new();
         let mut author: Option<Author> = Option::default();
         let mut artist: Option<Artist> = Option::default();
 
@@ -328,7 +327,7 @@ impl SearchMangaById for MangadexClient {
                 match rel.type_field.as_str() {
                     "cover_art" => {
                         let file_name = attributes.file_name.as_ref().unwrap().to_string();
-                        cover_img_url = Some(self.make_cover_img_url_lower_quality(&id, &file_name));
+                        cover_img_url = self.make_cover_img_url_lower_quality(&id, &file_name);
                     },
                     "author" => {
                         let name = rel.attributes.as_ref().unwrap().name.as_ref().cloned().unwrap_or_default();
@@ -373,7 +372,8 @@ impl SearchMangaById for MangadexClient {
 
         Ok(super::Manga {
             rating,
-            id,
+            id: id.clone(),
+            id_safe_for_download: id,
             title,
             genres,
             description,
@@ -433,63 +433,6 @@ impl GetChapterPages for MangadexClient {
         }
 
         Ok(pages_url)
-    }
-
-    async fn get_chapter_pages_url(
-        &self,
-        chapter_id: &str,
-        _manga_id: &str,
-        image_quality: ImageQuality,
-    ) -> Result<Vec<Url>, Box<dyn Error>> {
-        let endpoint = format!("{}/at-home/server/{chapter_id}", self.api_url_base);
-        let response = self.client.get(endpoint).send().await?;
-
-        if response.status() != StatusCode::OK {
-            return Err(format!(
-                "Could not get pages url for chapter {chapter_id} on mangadex, details about the response : {:#?}",
-                response
-            )
-            .into());
-        }
-        let response: ChapterPagesResponse = response.json().await?;
-
-        let base_url = response.get_image_url_endpoint(image_quality);
-
-        let image_file_names = match image_quality {
-            ImageQuality::Low => response.chapter.data_saver,
-            ImageQuality::High => response.chapter.data,
-        };
-
-        Ok(image_file_names
-            .into_iter()
-            .map(|file_name| Url::parse(&format!("{base_url}/{file_name}")))
-            .flatten()
-            .collect())
-    }
-
-    async fn get_chapter_pages<F: Fn(f64, &str) + 'static + Send>(
-        &self,
-        chapter_id: &str,
-        manga_id: &str,
-        image_quality: ImageQuality,
-        on_progress: F,
-    ) -> Result<Vec<ChapterPage>, Box<dyn Error>> {
-        let pages_url = self.get_chapter_pages_url_with_extension(chapter_id, manga_id, image_quality).await?;
-        let mut pages: Vec<ChapterPage> = vec![];
-        let total_pages = pages_url.len();
-
-        for (index, page) in pages_url.into_iter().enumerate() {
-            let maybe_bytes = self.get_raw_image(page.url.as_str()).await;
-            if let Ok(bytes) = maybe_bytes {
-                pages.push(ChapterPage {
-                    bytes,
-                    extension: page.extension,
-                });
-            }
-            on_progress(index as f64 / total_pages as f64, chapter_id);
-        }
-
-        Ok(pages)
     }
 }
 
@@ -557,7 +500,8 @@ impl MangaPageProvider for MangadexClient {
                 let publication_date = chapter.attributes.readable_at;
 
                 Chapter {
-                    id,
+                    id: id.clone(),
+                    id_safe_for_download: id,
                     manga_id,
                     title,
                     language,
@@ -632,7 +576,8 @@ impl MangaPageProvider for MangadexClient {
                 let publication_date = chapter.attributes.readable_at;
 
                 Chapter {
-                    id,
+                    id: id.clone(),
+                    id_safe_for_download: id,
                     manga_id,
                     title,
                     language,
@@ -664,7 +609,12 @@ impl SearchChapterById for MangadexClient {
 
         let response: OneChapterResponse = response.json().await?;
 
-        let pages_url = self.get_chapter_pages_url(chapter_id, "", self.image_quality).await?;
+        let pages_url: Vec<Url> = self
+            .get_chapter_pages_url_with_extension(chapter_id, "", self.image_quality)
+            .await?
+            .into_iter()
+            .map(|page| page.url)
+            .collect();
 
         let language = Languages::try_from_iso_code(response.data.attributes.translated_language.as_str()).unwrap_or_default();
 
@@ -761,7 +711,7 @@ impl SearchPageProvider for MangadexClient {
                     _ => MangaStatus::default(),
                 };
 
-                let mut cover_img_url: Option<String> = Option::default();
+                let mut cover_img_url = String::new();
                 let mut author: Option<Author> = Option::default();
                 let mut artist: Option<Artist> = Option::default();
                 for rel in &manga.relationships {
@@ -769,7 +719,7 @@ impl SearchPageProvider for MangadexClient {
                         match rel.type_field.as_str() {
                             "cover_art" => {
                                 let file_name = attributes.file_name.as_ref().unwrap().to_string();
-                                cover_img_url = Some(self.make_cover_img_url_lower_quality(&id, &file_name));
+                                cover_img_url = self.make_cover_img_url_lower_quality(&id, &file_name);
                             },
                             "author" => {
                                 let name = rel.attributes.as_ref().unwrap().name.as_ref().cloned().unwrap_or_default();

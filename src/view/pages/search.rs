@@ -426,7 +426,7 @@ where
                 MangaPlanToReadSave {
                     id: &item.manga.id,
                     title: &item.manga.title,
-                    img_url: item.manga.cover_img_url.as_deref(),
+                    img_url: Some(&item.manga.cover_img_url),
                 },
                 conn,
             );
@@ -615,7 +615,7 @@ where
             .widget
             .mangas
             .iter()
-            .map(|item| (item.manga.cover_img_url.as_ref().cloned().unwrap_or_default(), item.manga.id.clone()))
+            .map(|item| (item.manga.cover_img_url.clone(), item.manga.id.clone()))
             .collect();
 
         let tx = self.local_event_tx.clone();

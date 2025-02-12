@@ -19,6 +19,7 @@ use crate::view::pages::manga::MangaPageEvents;
 pub async fn download_all_chapters(
     client: Arc<impl MangaPageProvider>,
     manga_id: String,
+    manga_id_safe_for_download: String,
     manga_title: String,
     lang: Languages,
     config: MangaTuiConfig,
@@ -43,6 +44,7 @@ pub async fn download_all_chapters(
 
             for chapter in chapters {
                 let manga_id = manga_id.clone();
+                let manga_id_safe_for_download = manga_id_safe_for_download.clone();
                 let manga_title = manga_title.clone();
                 let client = Arc::clone(&client);
                 let inner_tx = tx.clone();
@@ -56,8 +58,8 @@ pub async fn download_all_chapters(
                             let original_chapter_title = chapter.title.clone();
                             let chapter_id = chapter.id.clone();
                             let chapter_to_download: ChapterToDownloadSanitized = ChapterToDownloadSanitized {
-                                chapter_id: chapter.id,
-                                manga_id,
+                                chapter_id: chapter.id_safe_for_download,
+                                manga_id: manga_id_safe_for_download,
                                 manga_title: manga_title.into(),
                                 chapter_title: chapter.title.into(),
                                 chapter_number: chapter.chapter_number,
@@ -116,6 +118,7 @@ pub async fn download_single_chapter(
     client: Arc<impl MangaPageProvider>,
     manga_tracker: Option<impl MangaTracker>,
     manga_id: String,
+    manga_id_safe_for_download: String,
     manga_title: String,
     chapter: Chapter,
     config: MangaTuiConfig,
@@ -137,8 +140,8 @@ pub async fn download_single_chapter(
             let volume_number = chapter.volume_number.clone();
             let manga_title_copy = manga_title.clone();
             let chapter_to_download: ChapterToDownloadSanitized = ChapterToDownloadSanitized {
-                chapter_id: chapter.id,
-                manga_id,
+                chapter_id: chapter.id_safe_for_download,
+                manga_id: manga_id_safe_for_download,
                 manga_title: manga_title.into(),
                 chapter_title: chapter.title.into(),
                 chapter_number: chapter.chapter_number,

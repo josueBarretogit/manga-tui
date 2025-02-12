@@ -8,6 +8,9 @@ use std::time::Duration;
 use backend::manga_provider::mangadex::filter::MangadexFilterProvider;
 use backend::manga_provider::mangadex::filter_widget::MangadexFilterWidget;
 use backend::manga_provider::mangadex::{MangadexClient, API_URL_BASE, COVER_IMG_URL_BASE};
+use backend::manga_provider::manganato::filter_state::{ManganatoFilterState, ManganatoFiltersProvider};
+use backend::manga_provider::manganato::filter_widget::ManganatoFilterWidget;
+use backend::manga_provider::manganato::{ManganatoProvider, MANGANATO_BASE_URL};
 use backend::release_notifier::{ReleaseNotifier, GITHUB_URL};
 use backend::secrets::anilist::AnilistStorage;
 use backend::tracker::anilist::{Anilist, BASE_ANILIST_API_URL};
@@ -118,7 +121,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     color_eyre::install()?;
     stdout().execute(EnableMouseCapture)?;
-    run_app(ratatui::init(), mangadex_client, anilist_client, MangadexFilterProvider::new(), MangadexFilterWidget::new()).await?;
+    run_app(
+        ratatui::init(),
+        ManganatoProvider::new(MANGANATO_BASE_URL.parse().unwrap()),
+        anilist_client,
+        ManganatoFiltersProvider::new(ManganatoFilterState {}),
+        ManganatoFilterWidget {},
+    )
+    .await?;
+    //run_app(ratatui::init(), mangadex_client, anilist_client, MangadexFilterProvider::new(), MangadexFilterWidget::new()).await?;
     ratatui::restore();
     stdout().execute(DisableMouseCapture)?;
 
