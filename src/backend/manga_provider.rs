@@ -258,6 +258,7 @@ pub struct Manga {
     pub id: String,
     /// This is necessary because on mangadex ids are Uuids which are safe to be used in file
     /// names, but when the manga providers is a website the id cannot be a url, like `https://chapmanganato.to/manga-zt1003076/chapter-11`
+    /// so this is only intended to be used when downloading a manga
     pub id_safe_for_download: String,
     pub title: String,
     pub genres: Vec<Genres>,
@@ -296,6 +297,7 @@ pub struct Chapter {
     pub id: String,
     /// This is necessary because on mangadex ids are Uuids which are safe to be used in file
     /// names, but when the manga providers is a website the id cannot be a url, like `https://chapmanganato.to/manga-zt1003076/chapter-11`
+    /// so this is only intended to be used when downloading a chapter
     pub id_safe_for_download: String,
     pub manga_id: String,
     pub title: String,

@@ -730,7 +730,6 @@ impl ParseHtml for ChaptersList {
     type ParseError = ChapterPageError;
 
     fn parse_html(html: HtmlElement) -> Result<Self, Self::ParseError> {
-        let mut chapters: Vec<ChaptersListItem> = vec![];
         let doc = html::Html::parse_document(html.as_str());
 
         let base_url_selector = ".panel-breadcrumb".as_selector();
@@ -754,6 +753,7 @@ impl ParseHtml for ChaptersList {
             .next()
             .ok_or("the select containing the chapter list was not found")?;
 
+        let mut chapters: Vec<ChaptersListItem> = vec![];
         for item in select_containing_chapters.select(&"option".as_selector()) {
             let inner_html = item.inner_html();
             let title_parts = extract_chapter_title(&inner_html);
@@ -1677,7 +1677,7 @@ mod tests {
             volume_number: None,
         };
 
-        let chapter_item_result = assert_eq!(
+        assert_eq!(
             Some(&expected_chapter_list_item),
             result
                 .chapters_list

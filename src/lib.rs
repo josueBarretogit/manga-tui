@@ -79,6 +79,7 @@ impl<T: AsRef<Path>> From<T> for SanitizedFilename {
 }
 
 /// A `Vec` that is guaranteed to be sorted
+/// and whith no duplicates
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SortedVec<T: Debug>(Vec<T>);
 
@@ -86,8 +87,11 @@ impl<T: Debug> SortedVec<T> {
     pub fn sorted_by<F>(mut vec: Vec<T>, by: F) -> Self
     where
         F: FnMut(&T, &T) -> Ordering,
+        T: PartialEq,
     {
         vec.sort_by(by);
+
+        vec.dedup();
 
         Self(vec)
     }
@@ -97,6 +101,7 @@ impl<T: Debug> SortedVec<T> {
         T: Ord,
     {
         vec.sort();
+
         Self(vec)
     }
 
@@ -178,8 +183,12 @@ mod test {
     }
 
     #[test]
-    fn sorted_vec_by_closure() {
+    fn sorted_vec_by_closure_and_with_no_duplicates() {
         let vec: Vec<Sort> = [
+            Sort {
+                number: 2.3,
+                val: "",
+            },
             Sort {
                 number: 2.3,
                 val: "",

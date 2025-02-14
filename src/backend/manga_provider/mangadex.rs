@@ -138,7 +138,6 @@ impl HomePageMangaProvider for MangadexClient {
             .query(&[
                 ("limit", "5"),
                 ("contentRating[]", "safe"),
-                ("contentRating[]", "suggestive"),
                 ("order[createdAt]", "desc"),
                 ("includes[]", "cover_art"),
                 ("includes[]", "artist"),
@@ -207,7 +206,6 @@ impl HomePageMangaProvider for MangadexClient {
                 ("includes[]", "author"),
                 ("order[followedCount]", "desc"),
                 ("contentRating[]", "safe"),
-                ("contentRating[]", "suggestive"),
                 ("hasAvailableChapters", "true"),
                 ("availableTranslatedLanguage[]", language),
                 ("createdAtSince", from_date.as_str()),
@@ -779,6 +777,7 @@ impl FeedPageProvider for MangadexClient {
             .query(&[
                 ("limit", "5"),
                 ("offset", "0"),
+                ("includes[]", "scanlation_group"),
                 ("order[readableAt]", "desc"),
                 ("contentRating[]", "safe"),
                 ("contentRating[]", "suggestive"),
@@ -828,578 +827,499 @@ impl MangaProvider for MangadexClient {}
 
 #[cfg(test)]
 mod test {
-    //use httpmock::Method::GET;
-    //use httpmock::MockServer;
-    //use pretty_assertions::assert_eq;
-    //use reqwest::StatusCode;
-    //use uuid::Uuid;
-    //
-    //use self::api_responses::authors::AuthorsResponse;
-    //use self::api_responses::feed::OneMangaResponse;
-    //use self::api_responses::tags::TagsResponse;
-    //use self::api_responses::{
-    //    AggregateChapterResponse, ChapterPagesResponse, ChapterResponse, MangaStatisticsResponse, OneChapterResponse,
-    //    SearchMangaResponse,
-    //};
-    //use super::*;
-    //use crate::backend::*;
-    //
-    //#[test]
-    //fn expected_mangadex_endpoints() {
-    //    assert_eq!("https://api.mangadex.org", API_URL_BASE);
-    //    assert_eq!("https://uploads.mangadex.org/covers", COVER_IMG_URL_BASE);
-    //}
-    //
-    //#[tokio::test]
-    //async fn search_mangas_mangadex_works() {
-    //    let server = MockServer::start_async().await;
-    //
-    //    let expected = SearchMangaResponse::default();
-    //
-    //    let request = server
-    //        .mock_async(|when, then| {
-    //            when.method(GET)
-    //                .path_contains("/manga")
-    //                .query_param("title", "some title")
-    //                .header_exists("User-Agent")
-    //                .query_param("includes[]", "cover_art")
-    //                .query_param("includes[]", "artist")
-    //                .query_param("includes[]", "author")
-    //                .query_param_exists("limit")
-    //                .query_param_exists("offset");
-    //
-    //            then.status(200).header("content-type", "application/json").json_body_obj(&expected);
-    //        })
-    //        .await;
-    //
-    //    let client = MangadexClient::new(server.base_url().parse().unwrap(), server.base_url().parse().unwrap());
-    //
-    //    let response = client
-    //        .search_mangas(SearchTerm::trimmed_lowercased("some title"), 1, Filters::default())
-    //        .await
-    //        .expect("an issue ocurrend when calling search_mangas");
-    //
-    //    request.assert_async().await;
-    //
-    //    let response = response.json().await.expect("Could not deserialize search_mangas response");
-    //
-    //    assert_eq!(expected, response);
-    //}
-    //
-    //#[tokio::test]
-    //async fn get_cover_image_works() {
-    //    let server = MockServer::start_async().await;
-    //    let client = MangadexClient::new(server.base_url().parse().unwrap(), server.base_url().parse().unwrap());
-    //
-    //    let expected = "some_image_bytes".as_bytes();
-    //    let cover_file_name = "cover_image.png";
-    //
-    //    let request_high_quality_cover = server
-    //        .mock_async(|when, then| {
-    //            when.method(GET)
-    //                .path_contains("id_manga")
-    //                .path_contains("cover_image.png.512.jpg")
-    //                .header_exists("User-Agent");
-    //
-    //            then.status(200).header("content-type", "image/jpeg").body(expected);
-    //        })
-    //        .await;
-    //
-    //    let response = client
-    //        .get_cover_for_manga("id_manga", cover_file_name)
-    //        .await
-    //        .expect("could not get cover for a manga");
-    //
-    //    request_high_quality_cover.assert_async().await;
-    //
-    //    let image_bytes = response.bytes().await.expect("could not get the bytes of the cover");
-    //
-    //    assert_eq!(expected, image_bytes);
-    //
-    //    let request_lower_quality_cover = server
-    //        .mock_async(|when, then| {
-    //            when.method(GET)
-    //                .path_contains("id_manga")
-    //                .path_contains("cover_image.png.256.jpg")
-    //                .header_exists("User-Agent");
-    //
-    //            then.status(200).header("content-type", "image/jpeg").body(expected);
-    //        })
-    //        .await;
-    //
-    //    let response = client
-    //        .get_cover_for_manga_lower_quality("id_manga", cover_file_name)
-    //        .await
-    //        .expect("could not get cover for a manga");
-    //
-    //    request_lower_quality_cover.assert_async().await;
-    //
-    //    let image_bytes = response.bytes().await.expect("could not get the bytes of the cover");
-    //    assert_eq!(expected, image_bytes);
-    //}
-    //
-    //#[tokio::test]
-    //async fn get_manga_chapters_mangadex() {
-    //    let server = MockServer::start_async().await;
-    //    let expected = ChapterResponse::default();
-    //    let default_language = Languages::default();
-    //    let default_chapter_order = ChapterOrder::default();
-    //
-    //    let request = server
-    //        .mock_async(|when, then| {
-    //            when.method(GET)
-    //                .header_exists("User-Agent")
-    //                .path_contains("id_manga")
-    //                .path_contains("feed")
-    //                .query_param("offset", "0")
-    //                .query_param("translatedLanguage[]", default_language.as_iso_code())
-    //                .query_param("order[volume]", default_chapter_order.to_string())
-    //                .query_param("order[chapter]", default_chapter_order.to_string());
-    //
-    //            then.status(200).header("content-type", "application/json").json_body_obj(&expected);
-    //        })
-    //        .await;
-    //
-    //    let client = MangadexClient::new(server.base_url().parse().unwrap(), server.base_url().parse().unwrap());
-    //
-    //    let response = client
-    //        .get_manga_chapters("id_manga", 1, Languages::default(), ChapterOrder::default())
-    //        .await
-    //        .expect("could not get manga chapters");
-    //
-    //    request.assert_async().await;
-    //
-    //    let response: ChapterResponse = response.json().await.expect("Could not deserialize response");
-    //
-    //    assert_eq!(response, expected);
-    //}
-    //
-    //#[tokio::test]
-    //async fn get_chapter_pages_response() {
-    //    let server = MockServer::start_async().await;
-    //    let client = MangadexClient::new(server.base_url().parse().unwrap(), server.base_url().parse().unwrap());
-    //
-    //    let expected = ChapterPagesResponse::default();
-    //
-    //    let request = server
-    //        .mock_async(|when, then| {
-    //            when.method(GET)
-    //                .header_exists("User-Agent")
-    //                .path_contains("id_manga")
-    //                .path_contains("at-home")
-    //                .path_contains("server");
-    //
-    //            then.status(200).header("content-type", "application/json").json_body_obj(&expected);
-    //        })
-    //        .await;
-    //
-    //    let response = client.get_chapter_pages("id_manga").await.expect("Error calling get_chapter_pages");
-    //
-    //    request.assert_async().await;
-    //
-    //    let response: ChapterPagesResponse = response.json().await.expect("Could not deserialize ChapterPagesResponse");
-    //
-    //    assert_eq!(response, expected);
-    //}
-    //
-    //#[tokio::test]
-    //async fn get_chapter_page() {
-    //    let server = MockServer::start_async().await;
-    //    let client = MangadexClient::new(server.base_url().parse().unwrap(), server.base_url().parse().unwrap());
-    //
-    //    let expected = "some_page_bytes";
-    //
-    //    let request = server
-    //        .mock_async(|when, then| {
-    //            when.method(GET).header_exists("User-Agent").path_contains("chapter.png");
-    //
-    //            then.status(200).body(expected.as_bytes());
-    //        })
-    //        .await;
-    //
-    //    let endpoint: Url = format!("{}/{}", server.base_url(), "chapter.png").parse().unwrap();
-    //
-    //    let response = client
-    //        .get_chapter_page(endpoint)
-    //        .await
-    //        .expect("could not send request to get chapter page");
-    //
-    //    request.assert_async().await;
-    //
-    //    let response = response.bytes().await.expect("could not get manga page bytes");
-    //
-    //    assert_eq!(expected, response)
-    //}
-    //
-    //#[tokio::test]
-    //async fn get_manga_statistics() {
-    //    let server = MockServer::start_async().await;
-    //    let client = MangadexClient::new(server.base_url().parse().unwrap(), server.base_url().parse().unwrap());
-    //    let id_manga = "some_id";
-    //    let expected = MangaStatisticsResponse::default();
-    //
-    //    let request = server
-    //        .mock_async(|when, then| {
-    //            when.method(GET)
-    //                .header_exists("User-Agent")
-    //                .path_contains("statistics")
-    //                .path_contains("manga")
-    //                .path_contains(id_manga);
-    //            then.status(200).json_body_obj(&expected);
-    //        })
-    //        .await;
-    //
-    //    let response = client
-    //        .get_manga_statistics(id_manga)
-    //        .await
-    //        .expect("Could not send request to get manga statistics");
-    //
-    //    request.assert_async().await;
-    //
-    //    let response: MangaStatisticsResponse = response.json().await.expect("Could not deserialize MangaStatisticsResponse");
-    //
-    //    assert_eq!(response, expected);
-    //}
-    //
-    //#[tokio::test]
-    //async fn get_popular_mangas_mangadex() {
-    //    let server = MockServer::start_async().await;
-    //    let client = MangadexClient::new(server.base_url().parse().unwrap(), server.base_url().parse().unwrap());
-    //
-    //    let expected = SearchMangaResponse::default();
-    //
-    //    let request = server
-    //        .mock_async(|when, then| {
-    //            when.method(GET)
-    //                .header_exists("User-Agent")
-    //                .path_contains("/manga")
-    //                .query_param("includes[]", "cover_art")
-    //                .query_param("includes[]", "artist")
-    //                .query_param("includes[]", "author")
-    //                .query_param("order[followedCount]", "desc")
-    //                .query_param("contentRating[]", "safe")
-    //                .query_param("contentRating[]", "suggestive")
-    //                .query_param("availableTranslatedLanguage[]", Languages::default().as_iso_code())
-    //                .query_param_exists("createdAtSince");
-    //
-    //            then.status(200).json_body_obj(&expected);
-    //        })
-    //        .await;
-    //
-    //    let response = client
-    //        .get_popular_mangas2()
-    //        .await
-    //        .expect("Could not send request to get manga statistics");
-    //
-    //    request.assert_async().await;
-    //
-    //    let response: SearchMangaResponse = response.json().await.expect("Could not deserialize get_popular_mangas response");
-    //
-    //    assert_eq!(response, expected);
-    //}
-    //
-    //#[tokio::test]
-    //async fn get_recently_added_mangadex() {
-    //    let server = MockServer::start_async().await;
-    //    let client = MangadexClient::new(server.base_url().parse().unwrap(), server.base_url().parse().unwrap());
-    //
-    //    let expected = SearchMangaResponse::default();
-    //
-    //    let request = server
-    //        .mock_async(|when, then| {
-    //            when.method(GET)
-    //                .header_exists("User-Agent")
-    //                .path_contains("/manga")
-    //                .query_param("includes[]", "cover_art")
-    //                .query_param("includes[]", "artist")
-    //                .query_param("includes[]", "author")
-    //                .query_param("limit", "5")
-    //                .query_param("contentRating[]", "safe")
-    //                .query_param("contentRating[]", "suggestive")
-    //                .query_param("order[createdAt]", "desc")
-    //                .query_param("availableTranslatedLanguage[]", Languages::default().as_iso_code());
-    //
-    //            then.status(200).json_body_obj(&expected);
-    //        })
-    //        .await;
-    //
-    //    let response = client
-    //        .get_recently_added()
-    //        .await
-    //        .expect("Could not send request to get recently added mangas");
-    //
-    //    request.assert_async().await;
-    //
-    //    let response: SearchMangaResponse = response.json().await.expect("Could not deserialize get_recently_added response");
-    //
-    //    assert_eq!(response, expected);
-    //}
-    //
-    //#[tokio::test]
-    //async fn get_one_manga_mangadex() {
-    //    let server = MockServer::start_async().await;
-    //    let client = MangadexClient::new(server.base_url().parse().unwrap(), server.base_url().parse().unwrap());
-    //
-    //    let expected = OneMangaResponse::default();
-    //    let manga_id = "some_id";
-    //
-    //    let request = server
-    //        .mock_async(|when, then| {
-    //            when.method(GET)
-    //                .header_exists("User-Agent")
-    //                .path_contains("/manga")
-    //                .path_contains(manga_id)
-    //                .query_param("includes[]", "cover_art")
-    //                .query_param("includes[]", "artist")
-    //                .query_param("includes[]", "author");
-    //
-    //            then.status(200).json_body_obj(&expected);
-    //        })
-    //        .await;
-    //
-    //    let response = client.get_one_manga(manga_id).await.expect("Could not send request to get one manga");
-    //
-    //    request.assert_async().await;
-    //
-    //    let response: OneMangaResponse = response.json().await.expect("Could not deserialize get_one_manga response");
-    //
-    //    assert_eq!(response, expected);
-    //}
-    //
-    //#[tokio::test]
-    //async fn get_latest_chapters_mangadex() {
-    //    let server = MockServer::start_async().await;
-    //    let client = MangadexClient::new(server.base_url().parse().unwrap(), server.base_url().parse().unwrap());
-    //
-    //    let expected = ChapterResponse::default();
-    //    let manga_id = "some_id";
-    //
-    //    let request = server
-    //        .mock_async(|when, then| {
-    //            when.method(GET)
-    //                .header_exists("User-Agent")
-    //                .path_contains("/manga")
-    //                .path_contains(manga_id)
-    //                .path_contains("feed")
-    //                .query_param("limit", ITEMS_PER_PAGE_LATEST_CHAPTERS.to_string())
-    //                .query_param("includes[]", "scanlation_group")
-    //                .query_param("offset", "0")
-    //                .query_param("contentRating[]", "safe")
-    //                .query_param("contentRating[]", "suggestive")
-    //                .query_param("contentRating[]", "erotica")
-    //                .query_param("contentRating[]", "pornographic")
-    //                .query_param("order[readableAt]", "desc");
-    //
-    //            then.status(200).json_body_obj(&expected);
-    //        })
-    //        .await;
-    //
-    //    let response = client
-    //        .get_latest_chapters(manga_id)
-    //        .await
-    //        .expect("Could not send request to get latest chapter of a manga");
-    //
-    //    request.assert_async().await;
-    //
-    //    let response: ChapterResponse = response.json().await.expect("Could not deserialize get_latest_chapters response");
-    //
-    //    assert_eq!(response, expected);
-    //}
-    //
-    //#[tokio::test]
-    //async fn get_tags_mangadex() {
-    //    let server = MockServer::start_async().await;
-    //    let client = MangadexClient::new(server.base_url().parse().unwrap(), server.base_url().parse().unwrap());
-    //
-    //    let expected = TagsResponse::default();
-    //
-    //    let request = server
-    //        .mock_async(|when, then| {
-    //            when.method(GET).header_exists("User-Agent").path_contains("/manga").path_contains("tag");
-    //
-    //            then.status(200).json_body_obj(&expected);
-    //        })
-    //        .await;
-    //
-    //    let response = client.get_tags().await.expect("Could not send request to get mangadex tags");
-    //
-    //    request.assert_async().await;
-    //
-    //    let response: TagsResponse = response.json().await.expect("Could not deserialize get_tags response");
-    //
-    //    assert_eq!(response, expected);
-    //}
-    //
-    //#[tokio::test]
-    //async fn search_author_and_artist_mangadex() {
-    //    let server = MockServer::start_async().await;
-    //    let client = MangadexClient::new(server.base_url().parse().unwrap(), server.base_url().parse().unwrap());
-    //
-    //    let expected = AuthorsResponse::default();
-    //    let search_term = "some_author";
-    //
-    //    let request = server
-    //        .mock_async(|when, then| {
-    //            when.method(GET)
-    //                .header_exists("User-Agent")
-    //                .path_contains("/author")
-    //                .query_param("name", search_term);
-    //
-    //            then.status(200).json_body_obj(&expected);
-    //        })
-    //        .await;
-    //
-    //    let response = client
-    //        .get_authors(SearchTerm::trimmed_lowercased(search_term).unwrap())
-    //        .await
-    //        .expect("Could not send request to get mangadex author / artist");
-    //
-    //    request.assert_async().await;
-    //
-    //    let response: AuthorsResponse = response.json().await.expect("Could not deserialize get_authors response");
-    //
-    //    assert_eq!(response, expected);
-    //}
-    //
-    //#[tokio::test]
-    //async fn get_all_chapters_for_manga_mangadex() {
-    //    let server = MockServer::start_async().await;
-    //    let client = MangadexClient::new(server.base_url().parse().unwrap(), server.base_url().parse().unwrap());
-    //
-    //    let expected = ChapterResponse::default();
-    //    let manga_id = "some_id";
-    //    let language = Languages::default();
-    //
-    //    let request = server
-    //        .mock_async(|when, then| {
-    //            when.method(GET)
-    //                .header_exists("User-Agent")
-    //                .path_contains("/manga")
-    //                .path_contains("feed")
-    //                .path_contains(manga_id)
-    //                .query_param("limit", "300")
-    //                .query_param("offset", "0")
-    //                .query_param("translatedLanguage[]", language.as_iso_code())
-    //                .query_param("includes[]", "scanlation_group")
-    //                .query_param("includeExternalUrl", "0")
-    //                .query_param("order[volume]", "asc")
-    //                .query_param("order[chapter]", "asc")
-    //                .query_param("contentRating[]", "safe")
-    //                .query_param("contentRating[]", "suggestive")
-    //                .query_param("contentRating[]", "erotica")
-    //                .query_param("contentRating[]", "pornographic");
-    //
-    //            then.status(200).json_body_obj(&expected);
-    //        })
-    //        .await;
-    //
-    //    let response = client
-    //        .get_all_chapters_for_manga(manga_id, language)
-    //        .await
-    //        .expect("Could not send request to get all chapters of a manga");
-    //
-    //    request.assert_async().await;
-    //
-    //    let response: ChapterResponse = response.json().await.expect("Could not deserialize get_all_chapters_for_manga response");
-    //
-    //    assert_eq!(response, expected);
-    //}
-    //
-    //#[tokio::test]
-    //async fn check_mangadex_status() {
-    //    let server = MockServer::start_async().await;
-    //    let client = MangadexClient::new(server.base_url().parse().unwrap(), server.base_url().parse().unwrap());
-    //
-    //    let request = server
-    //        .mock_async(|when, then| {
-    //            when.method(GET).header_exists("User-Agent").path_contains("/ping");
-    //
-    //            then.status(200);
-    //        })
-    //        .await;
-    //
-    //    let response = client
-    //        .check_status()
-    //        .await
-    //        .expect("Could not send request to check mangadex status of a manga");
-    //
-    //    request.assert_async().await;
-    //
-    //    assert_eq!(response.status(), StatusCode::OK);
-    //}
-    //
-    //#[tokio::test]
-    //async fn it_searches_all_chapters_in_sequence() {
-    //    let server = MockServer::start_async().await;
-    //    let client = MangadexClient::new(server.base_url().parse().unwrap(), server.base_url().parse().unwrap());
-    //
-    //    let manga_id = Uuid::new_v4().to_string();
-    //
-    //    let expected_response = AggregateChapterResponse::default();
-    //
-    //    let request = server
-    //        .mock_async(|when, then| {
-    //            when.method(GET)
-    //                .header_exists("User-Agent")
-    //                .path_contains("manga")
-    //                .path_contains(&manga_id)
-    //                .path_contains("/aggregate")
-    //                .query_param("translatedLanguage[]", "en");
-    //
-    //            then.status(200).json_body_obj(&expected_response);
-    //        })
-    //        .await;
-    //
-    //    let response = client.search_chapters_aggregate(&manga_id, Languages::default()).await.unwrap();
-    //
-    //    request.assert_async().await;
-    //
-    //    let data_sent: AggregateChapterResponse = response.json().await.expect("error deserializing response");
-    //
-    //    assert_eq!(expected_response, data_sent);
-    //}
-    //
-    //#[tokio::test]
-    //async fn mangadex_client_searches_chapter_by_id() {
-    //    let server = MockServer::start_async().await;
-    //    let client = MangadexClient::new(server.base_url().parse().unwrap(), server.base_url().parse().unwrap());
-    //
-    //    let chapter_id = Uuid::new_v4().to_string();
-    //
-    //    let expected_response = OneChapterResponse::default();
-    //
-    //    let request = server
-    //        .mock_async(|when, then| {
-    //            when.method(GET)
-    //                .header_exists("User-Agent")
-    //                .path_contains("/chapter")
-    //                .path_contains(&chapter_id);
-    //
-    //            then.status(200).json_body_obj(&expected_response);
-    //        })
-    //        .await;
-    //
-    //    let response = client.search_chapters_by_id(&chapter_id).await.expect("error sending request");
-    //
-    //    request.assert_async().await;
-    //
-    //    let data_sent: OneChapterResponse = response.json().await.expect("error deserializing response");
-    //
-    //    assert_eq!(expected_response, data_sent);
-    //}
+    use httpmock::Method::GET;
+    use httpmock::MockServer;
+    use manga_provider::{ChapterFilters, LatestChapter, Manga, Pagination, SearchManga};
+    use pretty_assertions::assert_eq;
+    use reqwest::StatusCode;
+    use uuid::Uuid;
 
-    //#[tokio::test]
-    //async fn test_mangadex() {
-    //    let client = MangadexClient::new(API_URL_BASE.parse().unwrap(), COVER_IMG_URL_BASE.parse().unwrap());
-    //
-    //    //let chapter_id = "296cbc31-af1a-4b5b-a34b-fee2b4cad542";
-    //    //let chapter_id = "046746c9-8872-4797-a112-318642fdb272";
-    //    let chapter_id = "1bb7932c-ca3f-4827-9513-44bd9f0a75e9";
-    //
-    //    let response = client.search_chapters_aggregate(&chapter_id, Languages::SimplifiedChinese).await.unwrap();
-    //
-    //    let data_sent: AggregateChapterResponse = response.json().await.expect("error deserializing response");
-    //
-    //    dbg!(data_sent);
-    //}
+    use self::api_responses::authors::AuthorsResponse;
+    use self::api_responses::feed::OneMangaResponse;
+    use self::api_responses::tags::TagsResponse;
+    use self::api_responses::{
+        AggregateChapterResponse, ChapterPagesResponse, ChapterResponse, MangaStatisticsResponse, OneChapterResponse,
+        SearchMangaResponse,
+    };
+    use super::*;
+    use crate::backend::*;
+
+    #[test]
+    fn expected_mangadex_endpoints() {
+        assert_eq!("https://api.mangadex.org", API_URL_BASE);
+        assert_eq!("https://uploads.mangadex.org/covers", COVER_IMG_URL_BASE);
+    }
+
+    #[tokio::test]
+    async fn it_search_mangas() {
+        let server = MockServer::start_async().await;
+
+        let expected = GetMangasResponse {
+            mangas: vec![SearchManga {
+                id: "some_id".to_string(),
+                title: "No title".to_string(),
+                genres: vec![Genres::default()],
+                description: Some("".to_string()),
+                status: Some(MangaStatus::Ongoing),
+                ..Default::default()
+            }],
+            total_mangas: 5,
+        };
+
+        let response = SearchMangaResponse {
+            total: 5,
+            data: vec![Data {
+                id: "some_id".to_string(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let request = server
+            .mock_async(|when, then| {
+                when.method(GET)
+                    .path_contains("/manga")
+                    .query_param("title", "some title")
+                    .header_exists("User-Agent")
+                    .query_param("includes[]", "cover_art")
+                    .query_param("includes[]", "artist")
+                    .query_param("includes[]", "author")
+                    .query_param_exists("limit")
+                    .query_param_exists("offset");
+
+                then.status(200).header("content-type", "application/json").json_body_obj(&response);
+            })
+            .await;
+
+        let client = MangadexClient::new(server.base_url().parse().unwrap(), server.base_url().parse().unwrap());
+
+        let response = client
+            .search_mangas(SearchTerm::trimmed_lowercased("some title"), Filters::default(), Pagination::from_first_page(1))
+            .await
+            .expect("an issue ocurrend when calling search_mangas");
+
+        request.assert_async().await;
+
+        assert_eq!(expected, response);
+    }
+
+    #[tokio::test]
+    async fn get_cover_image_works() {
+        let server = MockServer::start_async().await;
+        let client = MangadexClient::new(server.base_url().parse().unwrap(), server.base_url().parse().unwrap());
+
+        let expected = "some_image_bytes".as_bytes();
+
+        let request = server
+            .mock_async(|when, then| {
+                when.method(GET).path_contains("id_manga").header_exists("User-Agent");
+
+                then.status(200).header("content-type", "image/jpeg").body(expected);
+            })
+            .await;
+
+        let response = client
+            .get_raw_image(&server.url("/id_manga.jpg"))
+            .await
+            .expect("could not get cover for a manga");
+
+        request.assert_async().await;
+
+        assert_eq!(expected, response);
+    }
+
+    #[tokio::test]
+    async fn get_manga_chapters() {
+        let server = MockServer::start_async().await;
+
+        let expected = GetChaptersResponse {
+            chapters: vec![Chapter {
+                manga_id: "id_manga".to_string(),
+                title: "No title".to_string(),
+                language: Languages::Unkown,
+                chapter_number: "0".to_string(),
+                ..Default::default()
+            }],
+            total_chapters: 1,
+        };
+
+        let response = ChapterResponse {
+            total: 1,
+            data: vec![ChapterData::default()],
+            ..Default::default()
+        };
+
+        let request = server
+            .mock_async(|when, then| {
+                when.method(GET)
+                    .header_exists("User-Agent")
+                    .path_contains("id_manga")
+                    .path_contains("feed")
+                    .query_param("offset", "0")
+                    .query_param("translatedLanguage[]", "en")
+                    .query_param("order[volume]", "desc")
+                    .query_param("order[chapter]", "desc");
+
+                then.status(200).header("content-type", "application/json").json_body_obj(&response);
+            })
+            .await;
+
+        let client = MangadexClient::new(server.base_url().parse().unwrap(), server.base_url().parse().unwrap());
+
+        let response = client
+            .get_chapters("id_manga", ChapterFilters::default(), Pagination::default())
+            .await
+            .expect("could not get manga chapters");
+
+        request.assert_async().await;
+
+        assert_eq!(expected, response);
+    }
+
+    #[tokio::test]
+    async fn get_popular_mangas() {
+        let server = MockServer::start_async().await;
+        let client = MangadexClient::new(server.base_url().parse().unwrap(), server.base_url().parse().unwrap());
+
+        let expected: Vec<PopularManga> = vec![PopularManga {
+            id: "some_id".to_string(),
+            title: "No title".to_string(),
+            genres: vec![Genres::default()],
+            status: Some(MangaStatus::Ongoing),
+            ..Default::default()
+        }];
+
+        let response = SearchMangaResponse {
+            data: vec![Data {
+                id: "some_id".to_string(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let request = server
+            .mock_async(|when, then| {
+                when.method(GET)
+                    .header_exists("User-Agent")
+                    .path_contains("/manga")
+                    .query_param("includes[]", "cover_art")
+                    .query_param("includes[]", "artist")
+                    .query_param("includes[]", "author")
+                    .query_param("order[followedCount]", "desc")
+                    .query_param("contentRating[]", "safe")
+                    .query_param("availableTranslatedLanguage[]", "en")
+                    .query_param_exists("createdAtSince");
+
+                then.status(200).json_body_obj(&response);
+            })
+            .await;
+
+        let response = client.get_popular_mangas().await.expect("Could not send request to get manga statistics");
+
+        request.assert_async().await;
+
+        assert_eq!(expected, response);
+    }
+
+    #[tokio::test]
+    async fn get_recently_added_mangadex() {
+        let server = MockServer::start_async().await;
+        let client = MangadexClient::new(server.base_url().parse().unwrap(), server.base_url().parse().unwrap());
+
+        let expected = vec![RecentlyAddedManga {
+            id: "some_id".to_string(),
+            title: "No title".to_string(),
+            description: "No description".to_string(),
+            ..Default::default()
+        }];
+        let response = SearchMangaResponse {
+            data: vec![Data {
+                id: "some_id".to_string(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let request = server
+            .mock_async(|when, then| {
+                when.method(GET)
+                    .header_exists("User-Agent")
+                    .path_contains("/manga")
+                    .query_param("includes[]", "cover_art")
+                    .query_param("includes[]", "artist")
+                    .query_param("includes[]", "author")
+                    .query_param("limit", "5")
+                    .query_param("contentRating[]", "safe")
+                    .query_param("order[createdAt]", "desc")
+                    .query_param("availableTranslatedLanguage[]", "en");
+
+                then.status(200).json_body_obj(&response);
+            })
+            .await;
+
+        let response = client
+            .get_recently_added_mangas()
+            .await
+            .expect("Could not send request to get recently added mangas");
+
+        request.assert_async().await;
+
+        assert_eq!(expected, response);
+    }
+
+    #[tokio::test]
+    async fn get_manga_page() {
+        let server = MockServer::start_async().await;
+        let client = MangadexClient::new(server.base_url().parse().unwrap(), server.base_url().parse().unwrap());
+
+        let expected = Manga {
+            id: "some_id".to_string(),
+            rating: "0 out of 10".to_string(),
+            id_safe_for_download: "some_id".to_string(),
+            genres: vec![Genres::default()],
+            title: "No title".to_string(),
+            ..Default::default()
+        };
+
+        let response = OneMangaResponse {
+            data: Data {
+                id: "some_id".to_string(),
+                attributes: Attributes {
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let manga_id = "some_id";
+
+        let request = server
+            .mock_async(|when, then| {
+                when.method(GET)
+                    .header_exists("User-Agent")
+                    .path_contains("/manga")
+                    .path_contains(manga_id)
+                    .query_param("includes[]", "cover_art")
+                    .query_param("includes[]", "artist")
+                    .query_param("includes[]", "author");
+
+                then.status(200).json_body_obj(&response);
+            })
+            .await;
+
+        let response = client.get_manga_by_id("some_id").await.unwrap();
+
+        request.assert_async().await;
+
+        assert_eq!(expected, response);
+    }
+
+    #[tokio::test]
+    async fn get_latest_chapters() {
+        let server = MockServer::start_async().await;
+        let client = MangadexClient::new(server.base_url().parse().unwrap(), server.base_url().parse().unwrap());
+
+        let expected = vec![LatestChapter {
+            manga_id: "some_id".to_string(),
+            title: "No title".to_string(),
+            language: Languages::Unkown,
+            chapter_number: "0".to_string(),
+            ..Default::default()
+        }];
+
+        let response = ChapterResponse {
+            data: vec![ChapterData::default()],
+            ..Default::default()
+        };
+        let manga_id = "some_id";
+
+        let request = server
+            .mock_async(|when, then| {
+                when.method(GET)
+                    .header_exists("User-Agent")
+                    .path_contains("/manga")
+                    .path_contains(manga_id)
+                    .path_contains("feed")
+                    .query_param("limit", "5")
+                    .query_param("includes[]", "scanlation_group")
+                    .query_param("offset", "0")
+                    .query_param("contentRating[]", "safe")
+                    .query_param("contentRating[]", "suggestive")
+                    .query_param("contentRating[]", "erotica")
+                    .query_param("contentRating[]", "pornographic")
+                    .query_param("order[readableAt]", "desc");
+
+                then.status(200).json_body_obj(&response);
+            })
+            .await;
+
+        let response = client
+            .get_latest_chapters(manga_id)
+            .await
+            .expect("Could not send request to get latest chapter of a manga");
+
+        request.assert_async().await;
+
+        assert_eq!(expected, response);
+    }
+
+    #[tokio::test]
+    async fn get_tags_mangadex() {
+        let server = MockServer::start_async().await;
+        let client = MangadexClient::new(server.base_url().parse().unwrap(), server.base_url().parse().unwrap());
+
+        let expected = TagsResponse::default();
+
+        let request = server
+            .mock_async(|when, then| {
+                when.method(GET).header_exists("User-Agent").path_contains("/manga").path_contains("tag");
+
+                then.status(200).json_body_obj(&expected);
+            })
+            .await;
+
+        let response = client.get_tags().await.expect("Could not send request to get mangadex tags");
+
+        request.assert_async().await;
+
+        let response: TagsResponse = response.json().await.expect("Could not deserialize get_tags response");
+
+        assert_eq!(response, expected);
+    }
+
+    #[tokio::test]
+    async fn search_author_and_artist_mangadex() {
+        let server = MockServer::start_async().await;
+        let client = MangadexClient::new(server.base_url().parse().unwrap(), server.base_url().parse().unwrap());
+
+        let expected = AuthorsResponse::default();
+        let search_term = "some_author";
+
+        let request = server
+            .mock_async(|when, then| {
+                when.method(GET)
+                    .header_exists("User-Agent")
+                    .path_contains("/author")
+                    .query_param("name", search_term);
+
+                then.status(200).json_body_obj(&expected);
+            })
+            .await;
+
+        let response = client
+            .get_authors(SearchTerm::trimmed_lowercased(search_term).unwrap())
+            .await
+            .expect("Could not send request to get mangadex author / artist");
+
+        request.assert_async().await;
+
+        let response: AuthorsResponse = response.json().await.expect("Could not deserialize get_authors response");
+
+        assert_eq!(response, expected);
+    }
+
+    #[tokio::test]
+    async fn get_all_chapters_for_manga() {
+        let server = MockServer::start_async().await;
+        let client = MangadexClient::new(server.base_url().parse().unwrap(), server.base_url().parse().unwrap());
+
+        let expected = vec![Chapter {
+            manga_id: "some_id".to_string(),
+            title: "No title".to_string(),
+            language: Languages::Unkown,
+            chapter_number: "0".to_string(),
+            ..Default::default()
+        }];
+
+        let response = ChapterResponse {
+            data: vec![ChapterData::default()],
+            ..Default::default()
+        };
+        let manga_id = "some_id";
+
+        let request = server
+            .mock_async(|when, then| {
+                when.method(GET)
+                    .header_exists("User-Agent")
+                    .path_contains("/manga")
+                    .path_contains("feed")
+                    .path_contains(manga_id)
+                    .query_param("limit", "500")
+                    .query_param("offset", "0")
+                    .query_param("translatedLanguage[]", "en")
+                    .query_param("includes[]", "scanlation_group")
+                    .query_param("includeExternalUrl", "0")
+                    .query_param("order[volume]", "asc")
+                    .query_param("order[chapter]", "asc")
+                    .query_param("contentRating[]", "safe")
+                    .query_param("contentRating[]", "suggestive")
+                    .query_param("contentRating[]", "erotica")
+                    .query_param("contentRating[]", "pornographic");
+
+                then.status(200).json_body_obj(&response);
+            })
+            .await;
+
+        let response = client
+            .get_all_chapters(manga_id, Languages::English)
+            .await
+            .expect("Could not send request to get all chapters of a manga");
+
+        request.assert_async().await;
+
+        assert_eq!(expected, response);
+    }
+
+    #[tokio::test]
+    async fn check_mangadex_status() {
+        let server = MockServer::start_async().await;
+        let client = MangadexClient::new(server.base_url().parse().unwrap(), server.base_url().parse().unwrap());
+
+        let request = server
+            .mock_async(|when, then| {
+                when.method(GET).header_exists("User-Agent").path_contains("/ping");
+
+                then.status(200);
+            })
+            .await;
+
+        let response = client
+            .check_status()
+            .await
+            .expect("Could not send request to check mangadex status of a manga");
+
+        request.assert_async().await;
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn it_searches_all_chapters_in_sequence() {
+        let server = MockServer::start_async().await;
+        let client = MangadexClient::new(server.base_url().parse().unwrap(), server.base_url().parse().unwrap());
+
+        let manga_id = Uuid::new_v4().to_string();
+
+        let expected_response = AggregateChapterResponse::default();
+
+        let request = server
+            .mock_async(|when, then| {
+                when.method(GET)
+                    .header_exists("User-Agent")
+                    .path_contains("manga")
+                    .path_contains(&manga_id)
+                    .path_contains("/aggregate")
+                    .query_param("translatedLanguage[]", "en");
+
+                then.status(200).json_body_obj(&expected_response);
+            })
+            .await;
+
+        let response = client.search_list_of_chapters(&manga_id, Languages::English).await.unwrap();
+
+        request.assert_async().await;
+
+        assert_eq!(expected_response, response);
+    }
 }

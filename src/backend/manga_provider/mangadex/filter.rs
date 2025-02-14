@@ -124,7 +124,7 @@ impl Default for FilterList<ContentRatingState> {
                     name: ContentRating::Safe.to_string(),
                 },
                 FilterListItem {
-                    is_selected: true,
+                    is_selected: false,
                     name: ContentRating::Suggestive.to_string(),
                 },
                 FilterListItem {
@@ -1234,7 +1234,7 @@ impl IntoParam for Filters {
 impl Default for Filters {
     fn default() -> Self {
         Self {
-            content_rating: vec![ContentRating::Safe, ContentRating::Suggestive],
+            content_rating: vec![ContentRating::Safe],
             publication_status: vec![],
             sort_by: SortBy::default(),
             tags: Tags(vec![]),
@@ -1291,379 +1291,376 @@ impl Filters {
 /// This test may be changed depending on the Mangadex Api
 #[cfg(test)]
 mod test {
-    //
-    //use super::*;
-    //
-    //#[test]
-    //fn language_from_filter_list_item() {
-    //    let language_formatted = FilterListItem {
-    //        name: format!("{} {}", Languages::Spanish.as_emoji(), Languages::Spanish.as_human_readable()),
-    //        is_selected: false,
-    //    };
-    //
-    //    let conversion: Languages = language_formatted.into();
-    //
-    //    assert_eq!(conversion, Languages::Spanish);
-    //}
-    //
-    //#[test]
-    //fn filter_by_content_rating_works() {
-    //    let content_rating =
-    //        vec![ContentRating::Safe, ContentRating::Erotic, ContentRating::Pornographic, ContentRating::Suggestive];
-    //
-    //    assert_eq!(
-    //        "&contentRating[]=safe&contentRating[]=erotica&contentRating[]=pornographic&contentRating[]=suggestive",
-    //        content_rating.into_param()
-    //    );
-    //}
-    //
-    //#[test]
-    //fn sort_by_works() {
-    //    assert_eq!("&order[relevance]=desc", SortBy::BestMatch.into_param());
-    //
-    //    assert_eq!("&order[createdAt]=asc", SortBy::OldestAdded.into_param());
-    //
-    //    assert_eq!("&order[followedCount]=desc", SortBy::MostFollows.into_param());
-    //
-    //    assert_eq!("&order[followedCount]=asc", SortBy::FewestFollows.into_param());
-    //
-    //    assert_eq!("&order[latestUploadedChapter]=desc", SortBy::LatestUpload.into_param());
-    //
-    //    assert_eq!("&order[latestUploadedChapter]=asc", SortBy::OldestUpload.into_param());
-    //
-    //    assert_eq!("&order[rating]=desc", SortBy::HighestRating.into_param());
-    //
-    //    assert_eq!("&order[rating]=asc", SortBy::LowestRating.into_param());
-    //
-    //    assert_eq!("&order[createdAt]=desc", SortBy::RecentlyAdded.into_param());
-    //
-    //    assert_eq!("&order[year]=asc", SortBy::YearAscending.into_param());
-    //
-    //    assert_eq!("&order[year]=desc", SortBy::YearDescending.into_param());
-    //
-    //    assert_eq!("&order[title]=asc", SortBy::TitleAscending.into_param());
-    //
-    //    assert_eq!("&order[title]=desc", SortBy::TitleDescending.into_param());
-    //}
-    //
-    //#[test]
-    //fn filter_by_magazine_demographic_works() {
-    //    let magazine_demographic = vec![
-    //        MagazineDemographic::Shounen,
-    //        MagazineDemographic::Shoujo,
-    //        MagazineDemographic::Josei,
-    //        MagazineDemographic::Seinen,
-    //    ];
-    //
-    //    assert_eq!(
-    //        "&publicationDemographic[]=shounen&publicationDemographic[]=shoujo&publicationDemographic[]=josei&
-    // publicationDemographic[]=seinen",        magazine_demographic.into_param()
-    //    );
-    //}
-    //
-    //#[test]
-    //fn filter_by_artist_works() {
-    //    let sample_artists: Vec<Artist> = vec![Artist::new("id_artist1".to_string()), Artist::new("id_artist2".to_string())];
-    //    let filter_artist = User::<Artist>::new(sample_artists);
-    //    assert_eq!("&artists[]=id_artist1&artists[]=id_artist2", filter_artist.into_param());
-    //}
-    //
-    //#[test]
-    //fn filter_by_author_works() {
-    //    let sample_authors: Vec<Author> = vec![Author::new("id_author1".to_string()), Author::new("id_author2".to_string())];
-    //    let filter_artist = User::<Author>::new(sample_authors);
-    //    assert_eq!("&authors[]=id_author1&authors[]=id_author2", filter_artist.into_param());
-    //}
-    //
-    //#[test]
-    //fn filter_by_language_works() {
-    //    let _ = PREFERRED_LANGUAGE.set(Languages::default());
-    //
-    //    let default_language: Vec<Languages> = vec![];
-    //    assert_eq!("&availableTranslatedLanguage[]=en", default_language.into_param());
-    //
-    //    let languages: Vec<Languages> =
-    //        vec![Languages::English, Languages::Spanish, Languages::SpanishLa, Languages::BrazilianPortuguese];
-    //
-    //    assert_eq!(
-    //        "&availableTranslatedLanguage[]=en&availableTranslatedLanguage[]=es&availableTranslatedLanguage[]=es-la&
-    // availableTranslatedLanguage[]=pt-br",        languages.into_param()
-    //    );
-    //}
-    //
-    //#[test]
-    //fn filter_by_publication_status_works() {
-    //    let publication_status: Vec<PublicationStatus> =
-    //        vec![PublicationStatus::Ongoing, PublicationStatus::Hiatus, PublicationStatus::Completed,
-    // PublicationStatus::Cancelled];
-    //
-    //    assert_eq!("&status[]=ongoing&status[]=hiatus&status[]=completed&status[]=cancelled", publication_status.into_param());
-    //}
-    //
-    //#[test]
-    //fn filter_by_tags_works() {
-    //    let tags = Tags::new(vec![
-    //        TagData {
-    //            id: "id_tag_included".to_string(),
-    //            state: TagSelection::Included,
-    //        },
-    //        TagData {
-    //            id: "id_tag_excluded".to_string(),
-    //            state: TagSelection::Excluded,
-    //        },
-    //    ]);
-    //
-    //    assert_eq!("&includedTags[]=id_tag_included&excludedTags[]=id_tag_excluded", tags.into_param());
-    //}
-    //
-    //#[test]
-    //fn filters_combined_work() {
-    //    let filters = Filters::default();
-    //
-    //    assert_eq!(
-    //        "&availableTranslatedLanguage[]=en&contentRating[]=safe&contentRating[]=suggestive&order[latestUploadedChapter]=desc",
-    //        filters.into_param()
-    //    );
-    //
-    //    let mut filters = Filters::default();
-    //
-    //    filters.set_tags(vec![TagData::new("id_1".to_string(), TagSelection::Included)]);
-    //
-    //    filters.set_authors(vec![Author::new("id_1".to_string()), Author::new("id_2".to_string())]);
-    //
-    //    filters.set_languages(vec![Languages::French, Languages::Spanish]);
-    //
-    //    assert_eq!(
-    //        "&authors[]=id_1&authors[]=id_2&availableTranslatedLanguage[]=fr&availableTranslatedLanguage[]=es&includedTags[]=id_1&
-    // contentRating[]=safe&contentRating[]=suggestive&order[latestUploadedChapter]=desc",        filters.into_param()
-    //    );
-    //}
-    //
-    //use self::mpsc::unbounded_channel;
-    //use super::*;
-    //use crate::backend::api_responses::authors::Data;
-    //use crate::backend::api_responses::tags::TagsData;
-    //use crate::backend::fetch::fake_api_client::MockMangadexClient;
-    //
-    //#[test]
-    //fn filter_list_works() {
-    //    let mut filter_list: FilterList<MagazineDemographicState> = FilterList::default();
-    //
-    //    filter_list.scroll_down();
-    //
-    //    filter_list.toggle();
-    //
-    //    assert_eq!(Some(0), filter_list.state.selected());
-    //
-    //    assert!(filter_list.items.iter().any(|item| item.is_selected));
-    //
-    //    assert_eq!(1, filter_list.num_filters_active());
-    //
-    //    filter_list.scroll_down();
-    //
-    //    filter_list.toggle();
-    //
-    //    assert_eq!(Some(1), filter_list.state.selected());
-    //
-    //    assert_eq!(2, filter_list.num_filters_active());
-    //
-    //    filter_list.scroll_up();
-    //
-    //    assert_eq!(Some(0), filter_list.state.selected());
-    //}
-    //
-    //#[test]
-    //fn language_filter_list_works() {
-    //    let filter_list: FilterList<LanguageState> = FilterList::default();
-    //
-    //    assert_eq!(
-    //        Languages::default(),
-    //        filter_list
-    //            .items
-    //            .iter()
-    //            .find(|filter_list_item| filter_list_item.is_selected)
-    //            .cloned()
-    //            .unwrap()
-    //            .into()
-    //    );
-    //
-    //    let language_items: Vec<Languages> =
-    //        filter_list.items.into_iter().map(|filter_list_item| filter_list_item.into()).collect();
-    //
-    //    assert!(!language_items.iter().any(|lang| *lang == Languages::Unkown));
-    //}
-    //
-    //#[test]
-    //fn sort_by_state_works() {
-    //    let mut filter_list: FilterList<SortByState> = FilterList::default();
-    //
-    //    filter_list.scroll_down();
-    //    filter_list.toggle_sort_by();
-    //    filter_list.scroll_down();
-    //    filter_list.toggle_sort_by();
-    //
-    //    // for the sort_by filter only one can be selected at a time
-    //    assert_eq!(1, filter_list.num_filters_active());
-    //}
-    //
-    //#[test]
-    //fn filter_list_dynamic_works() {
-    //    let mut filter_list: FilterListDynamic<AuthorState> = FilterListDynamic::default();
-    //
-    //    let mock_response = AuthorsResponse {
-    //        data: vec![Data::default()],
-    //        ..Default::default()
-    //    };
-    //
-    //    assert_eq!(0, filter_list.num_filters_active());
-    //
-    //    filter_list.toggle();
-    //
-    //    filter_list.load_users(Some(mock_response));
-    //
-    //    assert!(filter_list.items.is_some());
-    //
-    //    filter_list.state.select_next();
-    //
-    //    filter_list.toggle();
-    //
-    //    assert!(filter_list.items.as_ref().is_some_and(|items| items.iter().any(|item| item.is_selected)));
-    //
-    //    filter_list.load_users(Some(AuthorsResponse::default()));
-    //
-    //    assert!(filter_list.items.is_none());
-    //}
-    //
-    //#[test]
-    //fn tag_state_works() {
-    //    let mut tag_state = TagsState {
-    //        tags: Some(vec![TagListItem::default(), TagListItem::default()]),
-    //        ..Default::default()
-    //    };
-    //
-    //    tag_state.state.select_next();
-    //
-    //    tag_state.include_tag();
-    //
-    //    assert!(
-    //        tag_state
-    //            .tags
-    //            .as_ref()
-    //            .is_some_and(|tags| tags.iter().any(|tag| tag.state == TagListItemState::Included))
-    //    );
-    //
-    //    tag_state.exclude_tag();
-    //
-    //    assert!(
-    //        tag_state
-    //            .tags
-    //            .as_ref()
-    //            .is_some_and(|tags| tags.iter().any(|tag| tag.state == TagListItemState::Excluded))
-    //    );
-    //}
-    //
-    //// simulate what the user can do
-    //fn next_tab(filter_state: &mut FilterState) {
-    //    filter_state.handle_events(Events::Key(KeyCode::Tab.into()));
-    //}
-    //
-    //fn previous_tab(filter_state: &mut FilterState) {
-    //    filter_state.handle_events(Events::Key(KeyCode::BackTab.into()));
-    //}
-    //
-    //fn scroll_down(filter_state: &mut FilterState) {
-    //    filter_state.handle_events(Events::Key(KeyCode::Char('j').into()));
-    //}
-    //
-    //fn press_s(filter_state: &mut FilterState) {
-    //    filter_state.handle_events(Events::Key(KeyCode::Char('s').into()));
-    //}
-    //
-    //fn start_typing(filter_state: &mut FilterState) {
-    //    filter_state.handle_events(Events::Key(KeyCode::Char('l').into()));
-    //}
-    //
-    //fn type_a_letter(filter_state: &mut FilterState, character: char) {
-    //    filter_state.handle_events(Events::Key(KeyCode::Char(character).into()));
-    //}
-    //
-    //// this action both sets fillter_state.is_open = false and unfocus search_bar input
-    //fn close_filter(filter_state: &mut FilterState) {
-    //    filter_state.handle_events(Events::Key(KeyCode::Esc.into()));
-    //}
-    //
-    //#[test]
-    //fn filter_state() {
-    //    let mut filter_state = FilterState::new();
-    //
-    //    filter_state.is_open = true;
-    //
-    //    let mock_response = TagsResponse {
-    //        data: vec![TagsData::default(), TagsData::default()],
-    //        ..Default::default()
-    //    };
-    //
-    //    filter_state.set_tags_from_response(mock_response);
-    //
-    //    assert!(filter_state.tags_state.tags.is_some());
-    //
-    //    // Go to magazine demographic
-    //    previous_tab(&mut filter_state);
-    //    previous_tab(&mut filter_state);
-    //    previous_tab(&mut filter_state);
-    //
-    //    scroll_down(&mut filter_state);
-    //    press_s(&mut filter_state);
-    //
-    //    assert!(filter_state.magazine_demographic.state.selected().is_some());
-    //
-    //    assert!(filter_state.magazine_demographic.items.iter().any(|item| item.is_selected));
-    //
-    //    // Go to tags
-    //    previous_tab(&mut filter_state);
-    //
-    //    scroll_down(&mut filter_state);
-    //    press_s(&mut filter_state);
-    //
-    //    assert!(
-    //        filter_state
-    //            .tags_state
-    //            .tags
-    //            .as_ref()
-    //            .is_some_and(|tags| tags.iter().any(|tag| tag.state == TagListItemState::Included))
-    //    );
-    //
-    //    assert!(!filter_state.filters.tags.is_empty());
-    //
-    //    // Go to Publication status
-    //    previous_tab(&mut filter_state);
-    //    scroll_down(&mut filter_state);
-    //    press_s(&mut filter_state);
-    //
-    //    assert!(filter_state.publication_status.state.selected().is_some());
-    //    assert!(filter_state.publication_status.items.iter().any(|item| item.is_selected));
-    //
-    //    // Go to tags
-    //    next_tab(&mut filter_state);
-    //    start_typing(&mut filter_state);
-    //
-    //    assert!(filter_state.is_typing);
-    //
-    //    type_a_letter(&mut filter_state, 't');
-    //    type_a_letter(&mut filter_state, 'e');
-    //    type_a_letter(&mut filter_state, 's');
-    //    type_a_letter(&mut filter_state, 't');
-    //    assert_eq!("test", filter_state.tags_state.filter_input.value());
-    //
-    //    // First unfocus the filter bar
-    //    close_filter(&mut filter_state);
-    //
-    //    // then "close" the filter
-    //    close_filter(&mut filter_state);
-    //
-    //    assert!(!filter_state.is_open);
-    //}
-    //
+
+    use pretty_assertions::assert_eq;
+
+    use super::*;
+    use crate::backend::manga_provider::mangadex::authors::Data;
+    use crate::backend::manga_provider::mangadex::tags::TagsData;
+
+    #[test]
+    fn language_from_filter_list_item() {
+        let language_formatted = FilterListItem {
+            name: format!("{} {}", Languages::Spanish.as_emoji(), Languages::Spanish.as_human_readable()),
+            is_selected: false,
+        };
+
+        let conversion: Languages = language_formatted.into();
+
+        assert_eq!(conversion, Languages::Spanish);
+    }
+
+    #[test]
+    fn filter_by_content_rating_works() {
+        let content_rating =
+            vec![ContentRating::Safe, ContentRating::Erotic, ContentRating::Pornographic, ContentRating::Suggestive];
+
+        assert_eq!(
+            "&contentRating[]=safe&contentRating[]=erotica&contentRating[]=pornographic&contentRating[]=suggestive",
+            content_rating.into_param()
+        );
+    }
+
+    #[test]
+    fn sort_by_works() {
+        assert_eq!("&order[relevance]=desc", SortBy::BestMatch.into_param());
+
+        assert_eq!("&order[createdAt]=asc", SortBy::OldestAdded.into_param());
+
+        assert_eq!("&order[followedCount]=desc", SortBy::MostFollows.into_param());
+
+        assert_eq!("&order[followedCount]=asc", SortBy::FewestFollows.into_param());
+
+        assert_eq!("&order[latestUploadedChapter]=desc", SortBy::LatestUpload.into_param());
+
+        assert_eq!("&order[latestUploadedChapter]=asc", SortBy::OldestUpload.into_param());
+
+        assert_eq!("&order[rating]=desc", SortBy::HighestRating.into_param());
+
+        assert_eq!("&order[rating]=asc", SortBy::LowestRating.into_param());
+
+        assert_eq!("&order[createdAt]=desc", SortBy::RecentlyAdded.into_param());
+
+        assert_eq!("&order[year]=asc", SortBy::YearAscending.into_param());
+
+        assert_eq!("&order[year]=desc", SortBy::YearDescending.into_param());
+
+        assert_eq!("&order[title]=asc", SortBy::TitleAscending.into_param());
+
+        assert_eq!("&order[title]=desc", SortBy::TitleDescending.into_param());
+    }
+
+    #[test]
+    fn filter_by_magazine_demographic_works() {
+        let magazine_demographic = vec![
+            MagazineDemographic::Shounen,
+            MagazineDemographic::Shoujo,
+            MagazineDemographic::Josei,
+            MagazineDemographic::Seinen,
+        ];
+
+        assert_eq!(
+            "&publicationDemographic[]=shounen&publicationDemographic[]=shoujo&publicationDemographic[]=josei&publicationDemographic[]=seinen",
+            magazine_demographic.into_param()
+        );
+    }
+
+    #[test]
+    fn filter_by_artist_works() {
+        let sample_artists: Vec<ArtistFilterState> =
+            vec![ArtistFilterState::new("id_artist1".to_string()), ArtistFilterState::new("id_artist2".to_string())];
+        let filter_artist = User::<ArtistFilterState>::new(sample_artists);
+        assert_eq!("&artists[]=id_artist1&artists[]=id_artist2", filter_artist.into_param());
+    }
+
+    #[test]
+    fn filter_by_author_works() {
+        let sample_authors: Vec<AuthorFilterState> =
+            vec![AuthorFilterState::new("id_author1".to_string()), AuthorFilterState::new("id_author2".to_string())];
+        let filter_artist = User::<AuthorFilterState>::new(sample_authors);
+        assert_eq!("&authors[]=id_author1&authors[]=id_author2", filter_artist.into_param());
+    }
+
+    #[test]
+    fn filter_by_language_works() {
+        let default_language: Vec<Languages> = vec![];
+        assert_eq!("&availableTranslatedLanguage[]=en", default_language.into_param());
+
+        let languages: Vec<Languages> =
+            vec![Languages::English, Languages::Spanish, Languages::SpanishLa, Languages::BrazilianPortuguese];
+
+        assert_eq!(
+            "&availableTranslatedLanguage[]=en&availableTranslatedLanguage[]=es&availableTranslatedLanguage[]=es-la&availableTranslatedLanguage[]=pt-br",
+            languages.into_param()
+        );
+    }
+
+    #[test]
+    fn filter_by_publication_status_works() {
+        let publication_status: Vec<PublicationStatus> =
+            vec![PublicationStatus::Ongoing, PublicationStatus::Hiatus, PublicationStatus::Completed, PublicationStatus::Cancelled];
+
+        assert_eq!("&status[]=ongoing&status[]=hiatus&status[]=completed&status[]=cancelled", publication_status.into_param());
+    }
+
+    #[test]
+    fn filter_by_tags_works() {
+        let tags = Tags::new(vec![
+            TagData {
+                id: "id_tag_included".to_string(),
+                state: TagSelection::Included,
+            },
+            TagData {
+                id: "id_tag_excluded".to_string(),
+                state: TagSelection::Excluded,
+            },
+        ]);
+
+        assert_eq!("&includedTags[]=id_tag_included&excludedTags[]=id_tag_excluded", tags.into_param());
+    }
+
+    #[test]
+    fn filters_combined_work() {
+        let filters = Filters::default();
+
+        assert_eq!(
+            "&availableTranslatedLanguage[]=en&contentRating[]=safe&order[latestUploadedChapter]=desc",
+            filters.into_param()
+        );
+
+        let mut filters = Filters::default();
+
+        filters.set_tags(vec![TagData::new("id_1".to_string(), TagSelection::Included)]);
+
+        filters.set_authors(vec![AuthorFilterState::new("id_1".to_string()), AuthorFilterState::new("id_2".to_string())]);
+
+        filters.set_languages(vec![Languages::French, Languages::Spanish]);
+
+        assert_eq!(
+            "&authors[]=id_1&authors[]=id_2&availableTranslatedLanguage[]=fr&availableTranslatedLanguage[]=es&includedTags[]=id_1&contentRating[]=safe&order[latestUploadedChapter]=desc",
+            filters.into_param()
+        );
+    }
+
+    #[test]
+    fn filter_list_works() {
+        let mut filter_list: FilterList<MagazineDemographicState> = FilterList::default();
+
+        filter_list.scroll_down();
+
+        filter_list.toggle();
+
+        assert_eq!(Some(0), filter_list.state.selected());
+
+        assert!(filter_list.items.iter().any(|item| item.is_selected));
+
+        assert_eq!(1, filter_list.num_filters_active());
+
+        filter_list.scroll_down();
+
+        filter_list.toggle();
+
+        assert_eq!(Some(1), filter_list.state.selected());
+
+        assert_eq!(2, filter_list.num_filters_active());
+
+        filter_list.scroll_up();
+
+        assert_eq!(Some(0), filter_list.state.selected());
+    }
+
+    #[test]
+    fn language_filter_list_works() {
+        let filter_list: FilterList<LanguageState> = FilterList::default();
+
+        assert_eq!(
+            Languages::default(),
+            filter_list
+                .items
+                .iter()
+                .find(|filter_list_item| filter_list_item.is_selected)
+                .cloned()
+                .unwrap()
+                .into()
+        );
+
+        let language_items: Vec<Languages> =
+            filter_list.items.into_iter().map(|filter_list_item| filter_list_item.into()).collect();
+
+        assert!(!language_items.iter().any(|lang| *lang == Languages::Unkown));
+    }
+
+    #[test]
+    fn sort_by_state_works() {
+        let mut filter_list: FilterList<SortByState> = FilterList::default();
+
+        filter_list.scroll_down();
+        filter_list.toggle_sort_by();
+        filter_list.scroll_down();
+        filter_list.toggle_sort_by();
+
+        // for the sort_by filter only one can be selected at a time
+        assert_eq!(1, filter_list.num_filters_active());
+    }
+
+    #[test]
+    fn filter_list_dynamic_works() {
+        let mut filter_list: FilterListDynamic<AuthorState> = FilterListDynamic::default();
+
+        let mock_response = AuthorsResponse {
+            data: vec![Data::default()],
+            ..Default::default()
+        };
+
+        assert_eq!(0, filter_list.num_filters_active());
+
+        filter_list.toggle();
+
+        filter_list.load_users(Some(mock_response));
+
+        assert!(filter_list.items.is_some());
+
+        filter_list.state.select_next();
+
+        filter_list.toggle();
+
+        assert!(filter_list.items.as_ref().is_some_and(|items| items.iter().any(|item| item.is_selected)));
+
+        filter_list.load_users(Some(AuthorsResponse::default()));
+
+        assert!(filter_list.items.is_none());
+    }
+
+    #[test]
+    fn tag_state_works() {
+        let mut tag_state = TagsState {
+            tags: Some(vec![TagListItem::default(), TagListItem::default()]),
+            ..Default::default()
+        };
+
+        tag_state.state.select_next();
+
+        tag_state.include_tag();
+
+        assert!(
+            tag_state
+                .tags
+                .as_ref()
+                .is_some_and(|tags| tags.iter().any(|tag| tag.state == TagListItemState::Included))
+        );
+
+        tag_state.exclude_tag();
+
+        assert!(
+            tag_state
+                .tags
+                .as_ref()
+                .is_some_and(|tags| tags.iter().any(|tag| tag.state == TagListItemState::Excluded))
+        );
+    }
+
+    // simulate what the user can do
+    fn next_tab(filter_state: &mut MangadexFilterProvider) {
+        filter_state.handle_events(Events::Key(KeyCode::Tab.into()));
+    }
+
+    fn previous_tab(filter_state: &mut MangadexFilterProvider) {
+        filter_state.handle_events(Events::Key(KeyCode::BackTab.into()));
+    }
+
+    fn scroll_down(filter_state: &mut MangadexFilterProvider) {
+        filter_state.handle_events(Events::Key(KeyCode::Char('j').into()));
+    }
+
+    fn press_s(filter_state: &mut MangadexFilterProvider) {
+        filter_state.handle_events(Events::Key(KeyCode::Char('s').into()));
+    }
+
+    fn start_typing(filter_state: &mut MangadexFilterProvider) {
+        filter_state.handle_events(Events::Key(KeyCode::Char('l').into()));
+    }
+
+    fn type_a_letter(filter_state: &mut MangadexFilterProvider, character: char) {
+        filter_state.handle_events(Events::Key(KeyCode::Char(character).into()));
+    }
+
+    // this action both sets fillter_state.is_open = false and unfocus search_bar input
+    fn close_filter(filter_state: &mut MangadexFilterProvider) {
+        filter_state.handle_events(Events::Key(KeyCode::Esc.into()));
+    }
+
+    #[test]
+    fn filter_state() {
+        let mut filter_state = MangadexFilterProvider::new();
+
+        filter_state.is_open = true;
+
+        let mock_response = TagsResponse {
+            data: vec![TagsData::default(), TagsData::default()],
+            ..Default::default()
+        };
+
+        filter_state.set_tags_from_response(mock_response);
+
+        assert!(filter_state.tags_state.tags.is_some());
+
+        // Go to magazine demographic
+        previous_tab(&mut filter_state);
+        previous_tab(&mut filter_state);
+        previous_tab(&mut filter_state);
+
+        scroll_down(&mut filter_state);
+        press_s(&mut filter_state);
+
+        assert!(filter_state.magazine_demographic.state.selected().is_some());
+
+        assert!(filter_state.magazine_demographic.items.iter().any(|item| item.is_selected));
+
+        // Go to tags
+        previous_tab(&mut filter_state);
+
+        scroll_down(&mut filter_state);
+        press_s(&mut filter_state);
+
+        assert!(
+            filter_state
+                .tags_state
+                .tags
+                .as_ref()
+                .is_some_and(|tags| tags.iter().any(|tag| tag.state == TagListItemState::Included))
+        );
+
+        assert!(!filter_state.filters.tags.is_empty());
+
+        // Go to Publication status
+        previous_tab(&mut filter_state);
+        scroll_down(&mut filter_state);
+        press_s(&mut filter_state);
+
+        assert!(filter_state.publication_status.state.selected().is_some());
+        assert!(filter_state.publication_status.items.iter().any(|item| item.is_selected));
+
+        // Go to tags
+        next_tab(&mut filter_state);
+        start_typing(&mut filter_state);
+
+        assert!(filter_state.is_typing);
+
+        type_a_letter(&mut filter_state, 't');
+        type_a_letter(&mut filter_state, 'e');
+        type_a_letter(&mut filter_state, 's');
+        type_a_letter(&mut filter_state, 't');
+        assert_eq!("test", filter_state.tags_state.filter_input.value());
+
+        // First unfocus the filter bar
+        close_filter(&mut filter_state);
+
+        // then "close" the filter
+        close_filter(&mut filter_state);
+
+        assert!(!filter_state.is_open);
+    }
+
     //#[tokio::test]
     //async fn search_authors_sends_expected_event() {
     //    let (tx, mut rx) = unbounded_channel::<FilterEvents>();
