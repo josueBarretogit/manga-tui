@@ -1,3 +1,4 @@
+use chrono::NaiveDate;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Margin, Rect};
 use ratatui::style::{Color, Style, Stylize};
@@ -31,7 +32,7 @@ pub struct RecentChapters {
     pub title: String,
     pub number: String,
     pub translated_language: Languages,
-    pub readeable_at: String,
+    pub readeable_at: NaiveDate,
 }
 
 impl From<RecentChapters> for ListItem<'_> {
@@ -44,7 +45,7 @@ impl From<RecentChapters> for ListItem<'_> {
             " ".into(),
             value.translated_language.as_human_readable().into(),
             " | ".into(),
-            value.readeable_at.into(),
+            display_dates_since_publication(value.readeable_at).into(),
         ]);
 
         ListItem::new(line)
@@ -62,12 +63,6 @@ pub struct MangasRead {
 impl From<LatestChapter> for RecentChapters {
     fn from(value: LatestChapter) -> Self {
         let id = value.id;
-        let today = chrono::offset::Local::now().date_naive();
-        let parse_date = chrono::DateTime::parse_from_rfc3339(&value.publication_date).unwrap_or_default();
-
-        let difference = today - parse_date.date_naive();
-
-        let num_days = difference.num_days();
 
         let translated_language = value.language;
 
@@ -75,7 +70,7 @@ impl From<LatestChapter> for RecentChapters {
             id,
             title: value.title,
             number: value.chapter_number,
-            readeable_at: display_dates_since_publication(num_days),
+            readeable_at: value.publication_date,
             translated_language,
         }
     }

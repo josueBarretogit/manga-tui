@@ -1,3 +1,4 @@
+use chrono::NaiveDate;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Style, Stylize};
 use ratatui::text::{Line, Span};
@@ -15,7 +16,11 @@ pub fn set_filter_tags_style(tag: &TagListItem) -> Span<'_> {
     }
 }
 
-pub fn display_dates_since_publication(day: i64) -> String {
+pub fn display_dates_since_publication(date: NaiveDate) -> String {
+    let today = chrono::offset::Local::now().date_naive();
+
+    let difference = today - date;
+    let day = difference.num_days();
     let month = (day as f64 / 30.44) as i64;
     let year = (day as f64 / 364.0) as i64;
     if day <= 31 {

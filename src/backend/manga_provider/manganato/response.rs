@@ -3,6 +3,7 @@ use std::error::Error;
 use std::fmt::Display;
 use std::num::ParseIntError;
 
+use chrono::NaiveDate;
 use regex::Regex;
 use scraper::selectable::Selectable;
 use scraper::{html, Selector};
@@ -12,8 +13,8 @@ use super::ManganatoProvider;
 use crate::backend::html_parser::scraper::AsSelector;
 use crate::backend::html_parser::{HtmlElement, ParseHtml};
 use crate::backend::manga_provider::{
-    Chapter, ChapterReader, Genres, GetMangasResponse, Languages, ListOfChapters, MangaStatus, PopularManga, Rating, SearchManga,
-    SortedChapters, SortedVolumes, Volumes,
+    ChapterReader, Genres, GetMangasResponse, ListOfChapters, MangaStatus, PopularManga, Rating, SearchManga, SortedChapters,
+    SortedVolumes, Volumes,
 };
 
 pub(super) fn extract_id_from_url<T: AsRef<str>>(url: T) -> String {
@@ -27,6 +28,10 @@ struct ChapterTitle<'a> {
     title: Option<&'a str>,
     volume_number: Option<&'a str>,
     number: &'a str,
+}
+
+pub(super) fn from_timestamp(timestamp: i64) -> Option<NaiveDate> {
+    chrono::DateTime::from_timestamp(timestamp, 0).map(|time| time.date_naive())
 }
 
 fn extract_chapter_title(raw_title: &str) -> ChapterTitle<'_> {
@@ -476,13 +481,9 @@ impl ParseHtml for MangaPageData {
 
         for rows in right_div_containing_most_info.select(&row_selector) {
             if rows.select(&authors_selector).next().is_some() {
-                authors = rows
-                    .select(&value_selector_a_tag)
-                    .next()
-                    .ok_or("no author")?
-                    .inner_html()
-                    .trim()
-                    .to_string();
+                if let Some(tag) = rows.select(&value_selector_a_tag).next() {
+                    authors = tag.inner_html().trim().to_string();
+                }
             } else if rows.select(&status_selector).next().is_some() {
                 status.name = rows
                     .select(&status_selector_value)
@@ -625,7 +626,9 @@ impl ParseHtml for ManganatoChapter {
             .select(&uploaded_at_selector)
             .next()
             .ok_or("no span with uploaded at selector")?
-            .inner_html();
+            .attr("data-fn-time")
+            .ok_or("could not get timestamp")?
+            .to_string();
 
         Ok(Self {
             page_url: id.to_string(),
@@ -650,7 +653,7 @@ impl ParseHtml for ManganatoChaptersResponse {
             chapters.push(ManganatoChapter::parse_html(HtmlElement::new(li_chapter.html())));
         }
 
-        let chapters: Vec<ManganatoChapter> = chapters.into_iter().map(|may| may.unwrap()).collect();
+        let chapters: Vec<ManganatoChapter> = chapters.into_iter().flatten().collect();
 
         let total_chapters = chapters.len() as u32;
 
@@ -842,6 +845,7 @@ impl From<ChaptersList> for ListOfChapters {
 mod tests {
     use std::error::Error;
 
+    use chrono::Datelike;
     use pretty_assertions::assert_eq;
 
     use super::*;
@@ -902,6 +906,15 @@ mod tests {
         };
 
         assert_eq!(expected, extract_chapter_title(title));
+    }
+
+    #[test]
+    fn convert_number_to_datetime() {
+        // Sep 29,2024 16:09
+        let number = 1727625860;
+
+        // September
+        assert_eq!(9, from_timestamp(number).unwrap_or_default().month());
     }
 
     #[test]
@@ -1482,7 +1495,7 @@ mod tests {
             title: Some("Once I Realized It, I Was In A Game".to_string()),
             number: "1".to_string(),
             volume: None,
-            uploaded_at: "Sep 08,2020".to_string(),
+            uploaded_at: "1599532412".to_string(),
         };
 
         let expected_chapter2: ManganatoChapter = ManganatoChapter {
@@ -1490,7 +1503,7 @@ mod tests {
             title: Some("Save The Heroine's Mother!".to_string()),
             number: "2".to_string(),
             volume: Some("2".to_string()),
-            uploaded_at: "Sep 08,2020".to_string(),
+            uploaded_at: "1599562482".to_string(),
         };
 
         let result = ManganatoChaptersResponse::parse_html(HtmlElement::new(html))?;

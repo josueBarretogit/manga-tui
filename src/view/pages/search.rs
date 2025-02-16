@@ -50,7 +50,7 @@ pub enum SearchPageEvents {
     SearchCovers,
     LoadCover(Option<DynamicImage>, String),
     LoadMangasFound(Option<GetMangasResponse>),
-    FailedGoToMangaPage,
+    FailedGoToMangaPage(String),
     GoToMangaPage(Manga),
 }
 
@@ -453,8 +453,8 @@ where
                         tx.send(SearchPageEvents::GoToMangaPage(res)).ok();
                     },
                     Err(e) => {
+                        tx.send(SearchPageEvents::FailedGoToMangaPage(e.to_string())).ok();
                         write_to_error_log(e.into());
-                        tx.send(SearchPageEvents::FailedGoToMangaPage).ok();
                     },
                 }
             });
@@ -631,6 +631,10 @@ where
         });
     }
 
+    fn display_error_message(&self, error_message: String) {
+        self.global_event_tx.as_ref().unwrap().send(Events::Error(error_message)).ok();
+    }
+
     fn load_cover(&mut self, maybe_cover: Option<DynamicImage>, manga_id: String) {
         if let Some(cover) = maybe_cover {
             if let Some(picker) = self.picker.as_mut() {
@@ -654,7 +658,7 @@ where
                     }
                 },
                 SearchPageEvents::LoadCover(maybe_image, manga_id) => self.load_cover(maybe_image, manga_id),
-                SearchPageEvents::FailedGoToMangaPage => todo!(),
+                SearchPageEvents::FailedGoToMangaPage(error_message) => self.display_error_message(error_message),
                 SearchPageEvents::GoToMangaPage(manga) => self.go_to_manga_page(manga),
             }
         }

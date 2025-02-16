@@ -85,13 +85,7 @@ impl Widget for ChapterItem {
                         .wrap(Wrap { trim: true })
                         .render(scanlator_area, buf);
 
-                    let today = chrono::offset::Local::now().date_naive();
-
-                    let parse_date = chrono::DateTime::parse_from_rfc3339(&self.chapter.publication_date).unwrap_or_default();
-
-                    let difference = today - parse_date.date_naive();
-
-                    Paragraph::new(display_dates_since_publication(difference.num_days()))
+                    Paragraph::new(display_dates_since_publication(self.chapter.publication_date))
                         .style(self.style)
                         .wrap(Wrap { trim: true })
                         .render(readable_at_area, buf);

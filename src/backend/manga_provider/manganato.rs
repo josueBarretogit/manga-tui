@@ -12,8 +12,8 @@ use manga_tui::SearchTerm;
 use reqwest::cookie::Jar;
 use reqwest::{Client, Url};
 use response::{
-    extract_id_from_url, ChapterPageResponse, ChapterUrls, GetPopularMangasResponse, MangaPageData, ManganatoChaptersResponse,
-    NewAddedMangas, SearchMangaResponse, ToolTipItem,
+    extract_id_from_url, from_timestamp, ChapterPageResponse, ChapterUrls, GetPopularMangasResponse, MangaPageData,
+    ManganatoChaptersResponse, NewAddedMangas, SearchMangaResponse, ToolTipItem,
 };
 
 use super::{
@@ -215,7 +215,7 @@ impl HomePageMangaProvider for ManganatoProvider {
         let response = self.client.get(self.base_url.clone()).send().await?;
 
         if response.status() != StatusCode::OK {
-            return Err("could not".into());
+            return Err(format!("could not get popular mangas on manganato, details about the response : {:#?}", response).into());
         }
 
         let doc = response.text().await?;
@@ -390,7 +390,7 @@ impl MangaPageProvider for ManganatoProvider {
                 language: Languages::English,
                 chapter_number: chap.number,
                 manga_id: manga_id.to_string(),
-                publication_date: chap.uploaded_at,
+                publication_date: from_timestamp(chap.uploaded_at.parse().unwrap_or_default()).unwrap_or_default(),
             })
             .collect();
 
@@ -432,7 +432,7 @@ impl MangaPageProvider for ManganatoProvider {
                 language: Languages::English,
                 chapter_number: chap.number,
                 manga_id: manga_id.to_string(),
-                publication_date: chap.uploaded_at,
+                publication_date: from_timestamp(chap.uploaded_at.parse().unwrap_or_default()).unwrap_or_default(),
             })
             .collect();
 
@@ -457,7 +457,7 @@ impl FeedPageProvider for ManganatoProvider {
                 manga_id: manga_id.to_string(),
                 language: Languages::English,
                 volume_number: chap.volume,
-                publication_date: chap.uploaded_at,
+                publication_date: from_timestamp(chap.uploaded_at.parse().unwrap_or_default()).unwrap_or_default(),
             })
             .collect())
     }
@@ -644,6 +644,7 @@ mod tests {
         let expected: Chapter = Chapter {
             id: format!("https://chapmanganato.to/manga-jq986499/chapter-27"),
             id_safe_for_download: "manga-jq986499-chapter-27".to_string(),
+            publication_date: chrono::DateTime::from_timestamp(1722694402, 0).unwrap().date_naive(),
             ..Default::default()
         };
 
@@ -651,6 +652,7 @@ mod tests {
 
         assert_eq!(expected.id, result.id);
         assert_eq!(expected.id_safe_for_download, result.id_safe_for_download);
+        assert_eq!(expected.publication_date, result.publication_date);
 
         Ok(())
     }

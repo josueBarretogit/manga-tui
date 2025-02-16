@@ -121,15 +121,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     color_eyre::install()?;
     stdout().execute(EnableMouseCapture)?;
-    //run_app(
-    //    ratatui::init(),
-    //    ManganatoProvider::new(MANGANATO_BASE_URL.parse().unwrap()),
-    //    anilist_client,
-    //    ManganatoFiltersProvider::new(ManganatoFilterState {}),
-    //    ManganatoFilterWidget {},
-    //)
-    //.await?;
-    run_app(ratatui::init(), mangadex_client, anilist_client, MangadexFilterProvider::new(), MangadexFilterWidget::new()).await?;
+    run_app(
+        ratatui::init(),
+        ManganatoProvider::new(MANGANATO_BASE_URL.parse().unwrap()),
+        anilist_client,
+        ManganatoFiltersProvider::new(ManganatoFilterState {}),
+        ManganatoFilterWidget {},
+    )
+    .await?;
+    //run_app(ratatui::init(), mangadex_client, anilist_client, MangadexFilterProvider::new(), MangadexFilterWidget::new()).await?;
     ratatui::restore();
     stdout().execute(DisableMouseCapture)?;
 

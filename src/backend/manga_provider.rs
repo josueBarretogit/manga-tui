@@ -5,6 +5,7 @@ use std::future::Future;
 use std::io::Cursor;
 
 use bytes::Bytes;
+use chrono::NaiveDate;
 use image::{DynamicImage, GenericImageView, ImageReader};
 use manga_tui::{SearchTerm, SortedVec};
 use mangadex::filter::FilterListItem;
@@ -305,7 +306,7 @@ pub struct Chapter {
     pub chapter_number: String,
     pub volume_number: Option<String>,
     pub scanlator: Option<String>,
-    pub publication_date: String,
+    pub publication_date: NaiveDate,
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
@@ -316,7 +317,7 @@ pub struct LatestChapter {
     pub language: Languages,
     pub chapter_number: String,
     pub volume_number: Option<String>,
-    pub publication_date: String,
+    pub publication_date: NaiveDate,
 }
 
 #[derive(Debug, Default, PartialEq, Clone, Copy)]

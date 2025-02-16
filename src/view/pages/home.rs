@@ -196,6 +196,7 @@ where
                     tx.send(Events::GoToMangaPage(res)).ok();
                 },
                 Err(e) => {
+                    tx.send(Events::Error(e.to_string())).ok();
                     write_to_error_log(e.into());
                 },
             }

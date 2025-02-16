@@ -506,7 +506,7 @@ impl MangaPageProvider for MangadexClient {
                     chapter_number,
                     volume_number,
                     scanlator,
-                    publication_date,
+                    publication_date: chrono::DateTime::parse_from_rfc3339(&publication_date).unwrap_or_default().date_naive(),
                 }
             })
             .collect();
@@ -582,7 +582,7 @@ impl MangaPageProvider for MangadexClient {
                     chapter_number,
                     volume_number,
                     scanlator,
-                    publication_date,
+                    publication_date: chrono::DateTime::parse_from_rfc3339(&publication_date).unwrap_or_default().date_naive(),
                 }
             })
             .collect();
@@ -808,7 +808,7 @@ impl FeedPageProvider for MangadexClient {
                     manga_id: manga_id.to_string(),
                     language,
                     chapter_number,
-                    publication_date,
+                    publication_date: chrono::DateTime::parse_from_rfc3339(&publication_date).unwrap_or_default().date_naive(),
                     volume_number,
                 }
             })

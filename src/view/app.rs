@@ -3,8 +3,11 @@ use std::sync::Arc;
 use ::crossterm::event::KeyCode;
 use crossterm::event::{KeyEvent, KeyModifiers};
 use ratatui::buffer::Buffer;
-use ratatui::layout::{Constraint, Layout, Rect};
-use ratatui::widgets::{Block, Borders, Tabs, Widget};
+use ratatui::layout::{Constraint, Layout, Margin, Rect};
+use ratatui::style::Styled;
+use ratatui::text::Line;
+use ratatui::widgets::block::{title, Title};
+use ratatui::widgets::{Block, Borders, Clear, Tabs, Widget};
 use ratatui::Frame;
 use ratatui_image::picker::Picker;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
@@ -20,11 +23,13 @@ use crate::backend::tracker::MangaTracker;
 use crate::backend::tui::{Action, Events};
 use crate::config::MangaTuiConfig;
 use crate::global::INSTRUCTIONS_STYLE;
+use crate::utils::centered_rect;
 use crate::view::pages::*;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
 pub enum AppState {
     Runnning,
+    DisplayingErrorMessage,
     Done,
 }
 
@@ -53,6 +58,7 @@ where
     pub feed_page: Feed<T>,
     api_client: Arc<T>,
     manga_tracker: Option<S>,
+    error_message: Option<String>,
     // The picker is what decides how big a image needs to be rendered depending on the user's
     // terminal font size and the graphics it supports
     // if the terminal doesn't support any graphics protocol the picker is `None`
@@ -78,6 +84,10 @@ where
 
             self.render_pages(page_area, frame);
         }
+
+        if let Some(message) = self.error_message.as_ref().cloned() {
+            self.render_popup_error_message(area, frame.buffer_mut(), message);
+        }
     }
 
     fn handle_events(&mut self, events: Events) {
@@ -92,6 +102,8 @@ where
             },
             Events::GoToHome => self.go_to_home(),
             Events::GoFeedPage => self.go_feed_page(),
+
+            Events::Error(message) => self.display_error_message(message),
 
             Events::GoBackMangaPage => {
                 if self.current_tab == SelectedPage::ReaderTab && self.manga_reader_page.is_some() {
@@ -162,6 +174,7 @@ where
             global_event_rx,
             manga_tracker,
             state: AppState::Runnning,
+            error_message: None,
             api_client: Arc::clone(&provider),
         }
     }
@@ -189,6 +202,38 @@ where
             .padding("", "")
             .divider(" | ")
             .render(area, buf);
+    }
+
+    fn render_popup_error_message(&self, area: Rect, buf: &mut Buffer, message: String) {
+        let area = centered_rect(area, 50, 50);
+        Clear.render(area, buf);
+
+        Block::bordered()
+            .title(Title::from(Line::from(vec![
+                "Some error ocurred, press ".into(),
+                "<q>".set_style(*INSTRUCTIONS_STYLE),
+                " to close this popup".into(),
+            ])))
+            .render(area, buf);
+
+        let inner = area.inner(Margin {
+            horizontal: 2,
+            vertical: 2,
+        });
+
+        message.render(inner, buf);
+    }
+
+    fn display_error_message(&mut self, error_message: String) {
+        self.error_message = Some(error_message);
+    }
+
+    fn close_error_mesagge(&mut self) {
+        self.error_message = None;
+    }
+
+    fn is_displaying_error_message(&self) -> bool {
+        self.error_message.is_some()
     }
 
     pub fn render_pages(&mut self, area: Rect, frame: &mut Frame<'_>) {
@@ -233,6 +278,14 @@ where
     fn quit(&mut self) {
         self.auto_bookmark_on_quit();
         self.global_action_tx.send(Action::Quit).ok();
+    }
+
+    fn key_events_error_message(&mut self, key_event: KeyEvent) {
+        match key_event.code {
+            KeyCode::Char('q') => self.close_error_mesagge(),
+            KeyCode::Char('c') if key_event.modifiers == KeyModifiers::CONTROL => self.quit(),
+            _ => {},
+        }
     }
 
     fn handle_key_events(&mut self, key_event: KeyEvent) {
@@ -347,6 +400,16 @@ where
     pub async fn listen_to_event(&mut self) {
         if let Some(event) = self.global_event_rx.recv().await {
             self.handle_events(event.clone());
+
+            // If the app is displaying an error message then the user can only close the app or
+            // the error message popup
+            if self.is_displaying_error_message() {
+                if let Events::Key(key_event) = event {
+                    self.key_events_error_message(key_event);
+                    return;
+                }
+            }
+
             match self.current_tab {
                 SelectedPage::Search => {
                     self.search_page.handle_events(event);
