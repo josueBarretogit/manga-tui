@@ -17,8 +17,8 @@ use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
 use crate::backend::database::{
-    get_chapters_history_status, save_history, set_chapter_downloaded, Bookmark, ChapterBookmarked, ChapterToBookmark,
-    ChapterToSaveHistory, Database, MangaReadingHistorySave, RetrieveBookmark, SetChapterDownloaded, DBCONN,
+    Bookmark, ChapterBookmarked, ChapterToBookmark, ChapterToSaveHistory, Database, MangaReadingHistorySave, RetrieveBookmark,
+    SetChapterDownloaded,
 };
 use crate::backend::error_log::{self, write_to_error_log, ErrorType};
 use crate::backend::manga_provider::{
@@ -650,9 +650,9 @@ where
     }
 
     fn check_chapters_read(&mut self) {
-        let binding = DBCONN.lock().unwrap();
-        let conn = binding.as_ref().unwrap();
-        let history = get_chapters_history_status(&self.manga.id, conn);
+        let conn = Database::get_connection().unwrap();
+        let database = Database::new(&conn);
+        let history = database.get_chapters_history_status(&self.manga.id);
         match history {
             Ok(his) => {
                 if let Some(chapters) = self.chapters.as_mut() {
@@ -682,6 +682,7 @@ where
         let manga_id = self.manga.id.clone();
         let manga_title = self.manga.title.clone();
         let cover_img_url = self.manga.cover_img_url.clone();
+        let provider = self.manga_provider.name();
         let chapter_language = self.get_current_selected_language();
         if let Some(chapter_selected) = self.get_current_selected_chapter_mut() {
             let chapter_to_bookmark: ChapterToBookmark = ChapterToBookmark {
@@ -692,6 +693,7 @@ where
                 manga_cover_url: Some(&cover_img_url),
                 translated_language: chapter_language,
                 page_number: None,
+                provider,
             };
 
             match database.bookmark(chapter_to_bookmark) {
@@ -778,19 +780,17 @@ where
     }
 
     fn save_download_status(&mut self, id_chapter: String, title: String) {
-        let binding = DBCONN.lock().unwrap();
-        let conn = binding.as_ref().unwrap();
+        let conn = Database::get_connection().unwrap();
+        let database = Database::new(&conn);
 
-        let save_download_operation = set_chapter_downloaded(
-            SetChapterDownloaded {
-                id: &id_chapter,
-                title: &title,
-                manga_id: &self.manga.id,
-                manga_title: &self.manga.title,
-                img_url: Some(&self.manga.cover_img_url),
-            },
-            conn,
-        );
+        let save_download_operation = database.set_chapter_downloaded(SetChapterDownloaded {
+            id: &id_chapter,
+            title: &title,
+            manga_id: &self.manga.id,
+            manga_title: &self.manga.title,
+            img_url: Some(&self.manga.cover_img_url),
+            provider: self.manga_provider.name(),
+        });
 
         if let Err(e) = save_download_operation {
             write_to_error_log(error_log::ErrorType::Error(Box::new(e)));
@@ -981,19 +981,18 @@ where
         let connection = Database::get_connection();
 
         if let Ok(conn) = connection {
-            let save_read_history_result = save_history(
-                MangaReadingHistorySave {
-                    id: &self.manga.id,
-                    title: &self.manga.title,
-                    img_url: Some(&self.manga.cover_img_url),
-                    chapter: ChapterToSaveHistory {
-                        id: &chapter.id,
-                        title: &chapter.title,
-                        translated_language: chapter.language.as_iso_code(),
-                    },
+            let database = Database::new(&conn);
+            let save_read_history_result = database.save_history(MangaReadingHistorySave {
+                id: &self.manga.id,
+                title: &self.manga.title,
+                img_url: Some(&self.manga.cover_img_url),
+                chapter: ChapterToSaveHistory {
+                    id: &chapter.id,
+                    title: &chapter.title,
+                    translated_language: chapter.language.as_iso_code(),
                 },
-                &conn,
-            );
+                provider: self.manga_provider.name(),
+            });
 
             if let Err(e) = save_read_history_result {
                 write_to_error_log(format!("error saving reading history in local db: {e}").into());

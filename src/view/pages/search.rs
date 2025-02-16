@@ -19,7 +19,7 @@ use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
 use tui_widget_list::ListState;
 
-use crate::backend::database::{save_plan_to_read, MangaPlanToReadSave, DBCONN};
+use crate::backend::database::{Database, MangaPlanToReadSave};
 use crate::backend::error_log::{write_to_error_log, ErrorType};
 use crate::backend::manga_provider::{
     EventHandler as FilterEventHandler, FiltersHandler, GetMangasResponse, Manga, Pagination, SearchPageProvider,
@@ -420,16 +420,15 @@ where
                     .into(),
                 );
             });
-            let binding = DBCONN.lock().unwrap();
-            let conn = binding.as_ref().unwrap();
-            let plan_to_read_operation = save_plan_to_read(
-                MangaPlanToReadSave {
-                    id: &item.manga.id,
-                    title: &item.manga.title,
-                    img_url: Some(&item.manga.cover_img_url),
-                },
-                conn,
-            );
+
+            let conn = Database::get_connection().unwrap();
+            let database = Database::new(&conn);
+            let plan_to_read_operation = database.save_plan_to_read(MangaPlanToReadSave {
+                id: &item.manga.id,
+                title: &item.manga.title,
+                img_url: Some(&item.manga.cover_img_url),
+                provider: self.manga_provider.name(),
+            });
 
             match plan_to_read_operation {
                 Ok(()) => {

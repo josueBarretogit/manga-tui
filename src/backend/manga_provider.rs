@@ -267,8 +267,6 @@ pub struct Manga {
     pub status: MangaStatus,
     pub cover_img_url: String,
     pub languages: Vec<Languages>,
-    /// Most mangas providers show the rating of the manga, if they dont then 0.0 should be used
-    /// instead
     pub rating: String,
     /// Some manga providers provide the artist of the manga
     pub artist: Option<Artist>,
@@ -634,8 +632,13 @@ pub struct ChapterPageUrl {
     pub extension: String,
 }
 
-#[derive(Debug, Clone, Copy, Display)]
+/// This enum has two purposes:
+/// 1. determine which manga provider to use when running manga-tui
+/// 2. apply specific configuration for each provider, for example `manganato` provides larger paginations sizes than `mangadex`
+/// since `mangadex` has been the first manga provider it is the default
+#[derive(Debug, Clone, Copy, Display, Default, clap::ValueEnum, PartialEq)]
 pub enum MangaProviders {
+    #[default]
     #[strum(to_string = "mangadex")]
     Mangadex,
     #[strum(to_string = "manganato")]
@@ -746,7 +749,7 @@ pub trait HomePageMangaProvider: DecodeBytesToImage + SearchMangaById + Clone + 
 }
 
 pub trait MangaPageProvider:
-    DecodeBytesToImage + GoToReadChapter + GetChapterPages + FetchChapterBookmarked + Clone + Send + Sync
+    DecodeBytesToImage + GoToReadChapter + ProviderIdentity + GetChapterPages + FetchChapterBookmarked + Clone + Send + Sync
 {
     fn get_chapters(
         &self,
@@ -761,7 +764,7 @@ pub trait MangaPageProvider:
     ) -> impl Future<Output = Result<Vec<Chapter>, Box<dyn Error>>> + Send;
 }
 
-pub trait ReaderPageProvider: SearchMangaPanel + SearchChapterById + Send + Sync + 'static {}
+pub trait ReaderPageProvider: SearchMangaPanel + SearchChapterById + ProviderIdentity + Send + Sync + 'static {}
 
 pub trait EventHandler {
     fn handle_events(&mut self, events: Events);
@@ -802,7 +805,7 @@ pub trait SearchPageProvider: DecodeBytesToImage + SearchMangaById + ProviderIde
     ) -> impl Future<Output = Result<GetMangasResponse, Box<dyn Error>>> + Send;
 }
 
-pub trait FeedPageProvider: SearchMangaById + ProviderIdentity + Clone + Send + Sync + 'static {
+pub trait FeedPageProvider: ProviderIdentity + SearchMangaById + ProviderIdentity + Clone + Send + Sync + 'static {
     fn get_latest_chapters(&self, manga_id: &str) -> impl Future<Output = Result<Vec<LatestChapter>, Box<dyn Error>>> + Send;
 }
 
@@ -884,7 +887,7 @@ pub mod mock {
     pub struct MockWidgetFilter {}
 
     impl EventHandler for MockFiltersHandler {
-        fn handle_events(&mut self, events: Events) {}
+        fn handle_events(&mut self, _events: Events) {}
     }
 
     impl FiltersHandler for MockFiltersHandler {
@@ -1095,6 +1098,12 @@ pub mod mock {
     impl SearchMangaPanel for ReaderPageProvierMock {
         async fn search_manga_panel(&self, _endpoint: Url) -> Result<MangaPanel, Box<dyn Error>> {
             if self.should_fail { Err("must_failt".into()) } else { Ok(self.panel_response.clone()) }
+        }
+    }
+
+    impl ProviderIdentity for ReaderPageProvierMock {
+        fn name(&self) -> MangaProviders {
+            MangaProviders::default()
         }
     }
 

@@ -8,7 +8,7 @@ use clap::{crate_version, Parser, Subcommand};
 use strum::IntoEnumIterator;
 
 use crate::backend::error_log::write_to_error_log;
-use crate::backend::manga_provider::Languages;
+use crate::backend::manga_provider::{Languages, MangaProviders};
 use crate::backend::secrets::anilist::{AnilistCredentials, AnilistStorage};
 use crate::backend::secrets::SecretStorage;
 use crate::backend::tracker::anilist::{self, BASE_ANILIST_API_URL};
@@ -53,6 +53,8 @@ pub struct CliArgs {
     pub command: Option<Commands>,
     #[arg(short, long)]
     pub data_dir: bool,
+    #[arg(short = 'p', long = "provider", default_value = "mangadex")]
+    pub manga_provider: MangaProviders,
 }
 
 pub struct AnilistCredentialsProvided<'a> {
@@ -65,6 +67,7 @@ impl CliArgs {
         Self {
             command: None,
             data_dir: false,
+            manga_provider: MangaProviders::default(),
         }
     }
 

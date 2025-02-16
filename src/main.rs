@@ -11,6 +11,7 @@ use backend::manga_provider::mangadex::{MangadexClient, API_URL_BASE, COVER_IMG_
 use backend::manga_provider::manganato::filter_state::{ManganatoFilterState, ManganatoFiltersProvider};
 use backend::manga_provider::manganato::filter_widget::ManganatoFilterWidget;
 use backend::manga_provider::manganato::{ManganatoProvider, MANGANATO_BASE_URL};
+use backend::manga_provider::MangaProviders;
 use backend::release_notifier::{ReleaseNotifier, GITHUB_URL};
 use backend::secrets::anilist::AnilistStorage;
 use backend::tracker::anilist::{Anilist, BASE_ANILIST_API_URL};
@@ -23,7 +24,7 @@ use logger::{ILogger, Logger};
 
 use self::backend::build_data_dir;
 use self::backend::database::Database;
-use self::backend::migration::migrate_version;
+use self::backend::migration::update_database_with_migrations;
 use self::backend::tui::run_app;
 use self::cli::CliArgs;
 use self::config::MangaTuiConfig;
@@ -46,6 +47,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     let cli_args = CliArgs::parse();
+
+    let provider = cli_args.manga_provider;
 
     cli_args.proccess_args().await?;
 
@@ -91,45 +94,54 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let config = MangaTuiConfig::get();
 
-    let mangadex_client = MangadexClient::new(API_URL_BASE.parse().unwrap(), COVER_IMG_URL_BASE.parse().unwrap())
-        .with_image_quality(config.image_quality);
-
-    logger.inform("Checking mangadex status...");
-
-    let mangadex_status = mangadex_client.check_status().await;
-
-    match mangadex_status {
-        Ok(response) => {
-            if response.status() != StatusCode::OK {
-                logger.warn("Mangadex appears to be in maintenance, please come back later");
-                exit(0)
-            }
-        },
-        Err(e) => {
-            logger.error(format!("Some error ocurred, more details : {e}").into());
-            exit(1)
-        },
-    }
-
     let mut connection = Database::get_connection()?;
     let database = Database::new(&connection);
 
     database.setup()?;
-    migrate_version(&mut connection, &logger)?;
+    update_database_with_migrations(&mut connection, &logger)?;
 
     drop(connection);
 
     color_eyre::install()?;
     stdout().execute(EnableMouseCapture)?;
-    run_app(
-        ratatui::init(),
-        ManganatoProvider::new(MANGANATO_BASE_URL.parse().unwrap()),
-        anilist_client,
-        ManganatoFiltersProvider::new(ManganatoFilterState {}),
-        ManganatoFilterWidget {},
-    )
-    .await?;
-    //run_app(ratatui::init(), mangadex_client, anilist_client, MangadexFilterProvider::new(), MangadexFilterWidget::new()).await?;
+    match provider {
+        MangaProviders::Mangadex => {
+            let mangadex_client = MangadexClient::new(API_URL_BASE.parse().unwrap(), COVER_IMG_URL_BASE.parse().unwrap())
+                .with_image_quality(config.image_quality);
+
+            logger.inform("Checking mangadex status...");
+
+            let mangadex_status = mangadex_client.check_status().await;
+
+            match mangadex_status {
+                Ok(response) => {
+                    if response.status() != StatusCode::OK {
+                        logger.warn("Mangadex appears to be in maintenance, please come back later");
+                        exit(0)
+                    }
+                },
+                Err(e) => {
+                    logger.error(format!("Some error ocurred, more details : {e}").into());
+                    exit(1)
+                },
+            }
+
+            run_app(ratatui::init(), mangadex_client, anilist_client, MangadexFilterProvider::new(), MangadexFilterWidget::new())
+                .await?;
+        },
+        MangaProviders::Manganato => {
+            logger.inform("Using manganato");
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            run_app(
+                ratatui::init(),
+                ManganatoProvider::new(MANGANATO_BASE_URL.parse().unwrap()),
+                anilist_client,
+                ManganatoFiltersProvider::new(ManganatoFilterState {}),
+                ManganatoFilterWidget {},
+            )
+            .await?;
+        },
+    }
     ratatui::restore();
     stdout().execute(DisableMouseCapture)?;
 

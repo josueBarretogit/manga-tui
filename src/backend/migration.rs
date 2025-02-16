@@ -225,8 +225,20 @@ impl<'a> Migration<'a, Down> {
     }
 }
 
-/// migrate to version 0.4.0
-pub fn migrate_version(connection: &mut Connection, logger: &impl ILogger) -> rusqlite::Result<Option<MigrationTable>> {
+pub fn update_database_with_migrations(
+    connection: &mut Connection,
+    logger: &impl ILogger,
+) -> rusqlite::Result<Vec<Option<MigrationTable>>> {
+    let mut migrations: Vec<Option<MigrationTable>> = vec![];
+
+    migrations.push(migrate_version_0_4_0(connection, logger)?);
+
+    migrations.push(migrate_version_0_6_0(connection, logger)?);
+
+    Ok(migrations)
+}
+
+fn migrate_version_0_4_0(connection: &mut Connection, logger: &impl ILogger) -> rusqlite::Result<Option<MigrationTable>> {
     let queries = [
         Query::AlterTable {
             table_name: "chapters",
@@ -260,7 +272,35 @@ pub fn migrate_version(connection: &mut Connection, logger: &impl ILogger) -> ru
         Some(available_migration) => {
             logger.inform("Updating database");
             let migration_result = available_migration.update(connection)?;
-            logger.inform("Database schema is up to date");
+            logger.inform("Database updated");
+            Some(migration_result)
+        },
+        None => None,
+    };
+
+    Ok(migration_result)
+}
+
+/// Add column `manga_provider` to table `mangas`
+fn migrate_version_0_6_0(connection: &mut Connection, logger: &impl ILogger) -> rusqlite::Result<Option<MigrationTable>> {
+    let queries = [Query::AlterTable {
+        table_name: "mangas",
+        command: AlterTableCommand::Add {
+            column: "manga_provider",
+            data_type: "TEXT NOT NULL DEFAULT mangadex",
+        },
+    }];
+
+    let migration = Migration::new(&queries)
+        .with_name("Add column manga_provider to table mangas")
+        .with_version("0.6.0")
+        .up(connection)?;
+
+    let migration_result = match migration {
+        Some(available_migration) => {
+            logger.inform("Updating database");
+            let migration_result = available_migration.update(connection)?;
+            logger.inform("Database updated");
             Some(migration_result)
         },
         None => None,
@@ -276,10 +316,12 @@ mod tests {
     use fake::faker::name::en::Name;
     use fake::Fake;
     use pretty_assertions::assert_eq;
+    use rusqlite::params;
     use uuid::Uuid;
 
     use super::*;
-    use crate::backend::manga_provider::Languages;
+    use crate::backend::manga_provider::{Languages, MangaProviders};
+    use crate::backend::migration::migrate_version_0_4_0;
     use crate::logger::DefaultLogger;
 
     #[test]
@@ -664,7 +706,7 @@ mod tests {
     }
 
     #[test]
-    fn migrate_version_0_4_0() -> Result<(), Box<dyn Error>> {
+    fn test_migrate_version_0_4_0() -> Result<(), Box<dyn Error>> {
         let mut conn = Connection::open_in_memory()?;
 
         conn.execute(
@@ -702,7 +744,7 @@ mod tests {
             manga_id.clone(),
         ])?;
 
-        let migration_result = migrate_version(&mut conn, &DefaultLogger)
+        let migration_result = migrate_version_0_4_0(&mut conn, &DefaultLogger)
             .expect("the update did not ran successfully")
             .unwrap();
 
@@ -718,9 +760,108 @@ mod tests {
         ])
         .expect("migration did not update table chapters");
 
-        let second_time = migrate_version(&mut conn, &DefaultLogger).expect("should not run migration twice");
+        let second_time = migrate_version_0_4_0(&mut conn, &DefaultLogger).expect("should not run migration twice");
 
         assert!(second_time.is_none());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_migrate_version_0_7_0() -> Result<(), Box<dyn Error>> {
+        let mut conn = Connection::open_in_memory()?;
+
+        conn.execute(
+            "CREATE TABLE if not exists mangas (
+                id    TEXT  PRIMARY KEY,
+                title TEXT  NOT NULL,
+                created_at  DATETIME DEFAULT (datetime('now')),
+                updated_at  DATETIME DEFAULT (datetime('now')),
+                last_read  DATETIME DEFAULT (datetime('now')),
+                deleted_at  DATETIME NULL,
+                img_url TEXT NULL
+             )",
+            (),
+        )?;
+
+        conn.execute(
+            "CREATE TABLE if not exists chapters (
+                id    TEXT  PRIMARY KEY,
+                title TEXT  NOT NULL,
+                manga_id TEXT  NOT NULL,
+                is_read BOOLEAN NOT NULL DEFAULT 0,
+                is_downloaded BOOLEAN NOT NULL DEFAULT 0,
+                FOREIGN KEY (manga_id) REFERENCES mangas (id)
+            )",
+            (),
+        )?;
+
+        let manga_id = Uuid::new_v4().to_string();
+        let chapter_id = Uuid::new_v4().to_string();
+
+        // Inserting mangas and chapters before the update to check if updating breaks
+        conn.execute("INSERT INTO mangas(id, title) VALUES(?1, ?2)", [manga_id.clone(), Name().fake()])?;
+        conn.execute("INSERT INTO chapters(id, title, manga_id) VALUES(?1, ?2, ?3)", [
+            chapter_id,
+            Name().fake(),
+            manga_id.clone(),
+        ])?;
+
+        let migration_result = migrate_version_0_6_0(&mut conn, &DefaultLogger)?.unwrap();
+
+        assert_eq!(migration_result.version, "0.6.0");
+
+        // checking the column was added
+        conn.execute("INSERT INTO mangas(id, title, manga_provider) VALUES(?1, ?2, ?3)", params![
+            Uuid::new_v4().to_string(),
+            "Some title",
+            MangaProviders::Mangadex.to_string()
+        ])
+        .expect("Migration did not add expected column `manga_provider`");
+
+        // running the migration again to make sure y doesnt try to add the already existing column
+        let second_time = migrate_version_0_6_0(&mut conn, &DefaultLogger).expect("should not run migration twice");
+
+        assert!(second_time.is_none());
+
+        Ok(())
+    }
+
+    #[test]
+    fn database_is_updated() -> Result<(), Box<dyn Error>> {
+        let mut conn = Connection::open_in_memory()?;
+
+        conn.execute(
+            "CREATE TABLE if not exists mangas (
+                id    TEXT  PRIMARY KEY,
+                title TEXT  NOT NULL,
+                created_at  DATETIME DEFAULT (datetime('now')),
+                updated_at  DATETIME DEFAULT (datetime('now')),
+                last_read  DATETIME DEFAULT (datetime('now')),
+                deleted_at  DATETIME NULL,
+                img_url TEXT NULL
+             )",
+            (),
+        )?;
+
+        conn.execute(
+            "CREATE TABLE if not exists chapters (
+                id    TEXT  PRIMARY KEY,
+                title TEXT  NOT NULL,
+                manga_id TEXT  NOT NULL,
+                is_read BOOLEAN NOT NULL DEFAULT 0,
+                is_downloaded BOOLEAN NOT NULL DEFAULT 0,
+                FOREIGN KEY (manga_id) REFERENCES mangas (id)
+            )",
+            (),
+        )?;
+
+        let migrations = update_database_with_migrations(&mut conn, &DefaultLogger)?;
+
+        assert_eq!(2, migrations.len());
+
+        assert!(migrations.iter().flatten().find(|migration| migration.version == "0.4.0").is_some());
+        assert!(migrations.iter().flatten().find(|migration| migration.version == "0.6.0").is_some());
 
         Ok(())
     }

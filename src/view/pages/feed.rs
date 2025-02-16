@@ -14,9 +14,9 @@ use tokio::task::JoinSet;
 use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
 
-use crate::backend::database::{get_history, GetHistoryArgs, MangaHistoryResponse, MangaHistoryType, DBCONN};
+use crate::backend::database::{Database, GetHistoryArgs, MangaHistoryResponse, MangaHistoryType};
 use crate::backend::error_log::{write_to_error_log, ErrorType};
-use crate::backend::manga_provider::{FeedPageProvider, LatestChapter};
+use crate::backend::manga_provider::{FeedPageProvider, LatestChapter, MangaProviders};
 use crate::backend::tui::Events;
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
 use crate::utils::render_search_bar;
@@ -309,17 +309,21 @@ where
         let items_per_page = self.items_per_page;
 
         let history_type: MangaHistoryType = self.tabs.into();
+        let provider = match &self.manga_provider {
+            Some(provider) => provider.name(),
+            None => MangaProviders::default(),
+        };
 
         self.tasks.spawn(async move {
-            let binding = DBCONN.lock().unwrap();
-            let conn = binding.as_ref().unwrap();
+            let connection = Database::get_connection().unwrap();
+            let database = Database::new(&connection);
 
-            let maybe_reading_history = get_history(GetHistoryArgs {
-                conn,
+            let maybe_reading_history = database.get_history(GetHistoryArgs {
                 hist_type: history_type,
                 page,
                 search: SearchTerm::trimmed_lowercased(&search_term),
                 items_per_page,
+                provider,
             });
 
             match maybe_reading_history {
