@@ -549,11 +549,11 @@ impl<'a> Database<'a> {
             manga_history.push(manga?);
         }
 
-        return Ok(MangaHistoryResponse {
+        Ok(MangaHistoryResponse {
             mangas: manga_history,
             total_items: total_mangas_with_search,
             page: current_page,
-        });
+        })
     }
 
     pub fn get_history(&self, args: GetHistoryArgs) -> rusqlite::Result<MangaHistoryResponse> {

@@ -30,11 +30,9 @@ pub struct ChapterToDownloadSanitized {
 pub trait MangaDownloader {
     /// The `base_directory` where the pages will be saved, for `raw_images`
     fn make_manga_base_directory_name(&self, base_directory: &Path, chapter: &ChapterToDownloadSanitized) -> PathBuf {
-        let base_directory = base_directory
+        base_directory
             .join(format!("{} {}", chapter.manga_title, chapter.manga_id))
-            .join(chapter.language.as_human_readable());
-
-        PathBuf::from(base_directory)
+            .join(chapter.language.as_human_readable())
     }
     fn create_manga_base_directory(&self, base_directory: &Path) -> Result<(), Box<dyn Error>> {
         if !exists!(base_directory) {

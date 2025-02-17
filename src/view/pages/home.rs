@@ -10,8 +10,7 @@ use ratatui::text::{Line, Span, ToSpan};
 use ratatui::widgets::{Block, List, StatefulWidget, Widget};
 use ratatui::Frame;
 use ratatui_image::picker::Picker;
-use ratatui_image::protocol::Protocol;
-use ratatui_image::{Image, Resize};
+use ratatui_image::Resize;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
@@ -53,7 +52,7 @@ pub enum HomeActions {
 
 pub struct Home<T>
 where
-    T: HomePageMangaProvider + Send + Sync + Send,
+    T: HomePageMangaProvider + Sync + Send,
 {
     carrousel_popular_mangas: PopularMangaCarrousel,
     carrousel_recently_added: RecentlyAddedCarrousel,
@@ -63,8 +62,6 @@ where
     pub local_action_rx: UnboundedReceiver<HomeActions>,
     pub local_event_tx: UnboundedSender<HomeEvents>,
     pub local_event_rx: UnboundedReceiver<HomeEvents>,
-    pub support_image: Option<Box<dyn Protocol>>,
-    image_support_area: Rect,
     popular_manga_carrousel_state: ImageState,
     recently_added_manga_state: ImageState,
     picker: Option<Picker>,
@@ -74,7 +71,7 @@ where
 
 impl<T> Component for Home<T>
 where
-    T: HomePageMangaProvider + Send + Sync + Send,
+    T: HomePageMangaProvider + Sync + Send,
 {
     type Actions = HomeActions;
 
@@ -110,7 +107,6 @@ where
         self.tasks.abort_all();
         self.carrousel_popular_mangas.items = vec![];
         self.carrousel_recently_added.items = vec![];
-        self.support_image = None;
         self.state = HomeState::Unused;
         self.recently_added_manga_state = ImageState::default();
         self.popular_manga_carrousel_state = ImageState::default();
@@ -127,7 +123,7 @@ where
 
 impl<T> Home<T>
 where
-    T: HomePageMangaProvider + Send + Sync + Send,
+    T: HomePageMangaProvider + Sync + Send,
 {
     pub fn new(picker: Option<Picker>, manga_provider: Arc<T>) -> Self {
         let (local_action_tx, local_action_rx) = mpsc::unbounded_channel::<HomeActions>();
@@ -142,8 +138,6 @@ where
             local_event_rx,
             local_action_tx,
             local_action_rx,
-            support_image: None,
-            image_support_area: Rect::default(),
             picker,
             popular_manga_carrousel_state: ImageState::default(),
             recently_added_manga_state: ImageState::default(),
@@ -322,17 +316,10 @@ where
         let client = Arc::clone(&self.manga_provider);
         self.tasks.spawn(async move {
             for item in mangas {
-                match item.manga.cover_img_url.as_ref() {
-                    Some(url) => {
-                        let response = client.get_image(url).await;
-                        if let Ok(res) = response {
-                            tx.send(HomeEvents::LoadCover(Some(res), item.manga.id)).ok();
-                        }
-                    },
-                    None => {
-                        tx.send(HomeEvents::LoadCover(None, item.manga.id)).ok();
-                    },
-                };
+                let response = client.get_image(&item.manga.cover_img_url).await;
+                if let Ok(res) = response {
+                    tx.send(HomeEvents::LoadCover(Some(res), item.manga.id)).ok();
+                }
             }
         });
     }
@@ -377,7 +364,7 @@ where
             for item in mangas {
                 match item.manga.cover_img_url.as_ref() {
                     Some(file_name) => {
-                        let response = client.get_image(&file_name).await;
+                        let response = client.get_image(file_name).await;
                         if let Ok(res) = response {
                             tx.send(HomeEvents::LoadRecentlyAddedMangasCover(Some(res), item.manga.id)).ok();
                         } else {
@@ -437,26 +424,15 @@ where
     fn render_app_information(&mut self, area: Rect, buf: &mut Buffer) {
         let layout = Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)]).margin(1).split(area);
 
-        Block::bordered()
-            .title(format!("Manga-tui V{}", env!("CARGO_PKG_VERSION")))
-            .render(area, buf);
-
-        match self.support_image.as_ref() {
-            Some(image) => {
-                let image = Image::new(image.as_ref());
-                Widget::render(image, layout[0], buf);
-            },
-            None => {
-                self.image_support_area = layout[0];
-            },
-        }
+        Block::bordered().render(area, buf);
 
         Widget::render(
             List::new([
-                Line::from(vec!["Support mangadex: ".into(), "<m>".to_span().style(*INSTRUCTIONS_STYLE)]),
+                Line::from(vec![format!("Manga-tui V{}", env!("CARGO_PKG_VERSION")).into()]),
+                Line::from(vec![format!("Using: {}", self.manga_provider.name()).into()]),
                 Line::from(vec!["Support this project ".into(), "<g>".to_span().style(*INSTRUCTIONS_STYLE)]),
             ]),
-            layout[1],
+            layout[0],
             buf,
         )
     }

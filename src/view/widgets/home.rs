@@ -63,8 +63,8 @@ impl CarrouselItemPopularManga {
             .wrap(Wrap { trim: true })
             .render(tags_area, buf);
 
-        if let Some(status) = self.manga.status.as_ref() {
-            Paragraph::new(Line::from(Span::from(status.clone())))
+        if let Some(status) = self.manga.status {
+            Paragraph::new(Line::from(Span::from(status)))
                 .wrap(Wrap { trim: true })
                 .render(status_area, buf);
         }

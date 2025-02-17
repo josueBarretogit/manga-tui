@@ -20,12 +20,10 @@ impl MangaDownloader for RawImagesDownloader {
         base_directory: &std::path::Path,
         chapter: &super::ChapterToDownloadSanitized,
     ) -> PathBuf {
-        let base_directory = base_directory
+        base_directory
             .join(format!("{} {}", chapter.manga_title, chapter.manga_id))
             .join(chapter.language.as_human_readable())
-            .join(self.make_chapter_name(chapter));
-
-        PathBuf::from(base_directory)
+            .join(self.make_chapter_name(chapter))
     }
 
     fn save_chapter_in_file_system(
@@ -94,7 +92,9 @@ mod tests {
 
         let downloader = RawImagesDownloader::new();
 
-        downloader.save_chapter_in_file_system(&AppDirectories::MangaDownloads.get_full_path(), chapter)?;
+        let base_path = AppDirectories::MangaDownloads.get_full_path();
+
+        downloader.save_chapter_in_file_system(&base_path, chapter)?;
 
         Ok(())
     }

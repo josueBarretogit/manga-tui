@@ -136,7 +136,7 @@ impl From<PopularMangaItem> for PopularManga {
             genres: vec![],
             description: value.additional_data,
             status: None,
-            cover_img_url: Some(value.cover_img_url.to_string()),
+            cover_img_url: value.cover_img_url.to_string(),
         }
     }
 }
@@ -371,7 +371,7 @@ impl ParseHtml for SearchMangaItem {
         let manga_page_url = a_manga_page_url.attr("href").ok_or("no href")?;
 
         let latest_chapters_selector = Selector::parse(".genres-item-chap").unwrap();
-        let latest_chapters: String = div.select(&latest_chapters_selector).into_iter().map(|a| a.inner_html()).collect();
+        let latest_chapters: String = div.select(&latest_chapters_selector).map(|a| a.inner_html()).collect();
 
         let description_selector = Selector::parse(".genres-item-description").unwrap();
         let description = div.select(&description_selector).next().map(|desc| desc.inner_html().trim().to_string());
@@ -807,7 +807,7 @@ impl From<ChaptersList> for ListOfChapters {
         for chap in value.chapters {
             match chap.volume_number {
                 Some(vol_number) => {
-                    let already_existing_volume = volumes.entry(vol_number.clone()).or_insert(vec![]);
+                    let already_existing_volume = volumes.entry(vol_number.clone()).or_default();
 
                     already_existing_volume.push(ChapterReader {
                         volume: vol_number,
@@ -816,7 +816,7 @@ impl From<ChaptersList> for ListOfChapters {
                     });
                 },
                 None => {
-                    let already_existing_volume = volumes.entry("none".to_string()).or_insert(vec![]);
+                    let already_existing_volume = volumes.entry("none".to_string()).or_default();
 
                     already_existing_volume.push(ChapterReader {
                         volume: "none".to_string(),

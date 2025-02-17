@@ -51,7 +51,8 @@ pub enum SearchPageEvents {
     LoadCover(Option<DynamicImage>, String),
     LoadMangasFound(Option<GetMangasResponse>),
     FailedGoToMangaPage(String),
-    GoToMangaPage(Manga),
+    /// This is a `Box` because of `[clippy::large_enum_variant](clippy::large_enum_variant)`
+    GoToMangaPage(Box<Manga>),
 }
 
 /// These are actions that the user actively via key events or mouse events
@@ -340,7 +341,7 @@ where
                             MangaPreview::new(
                                 &manga_selected.manga.id,
                                 &manga_selected.manga.title,
-                                &manga_selected.manga.description.as_ref().unwrap_or(&"No description".to_string()),
+                                manga_selected.manga.description.as_ref().unwrap_or(&"No description".to_string()),
                                 &manga_selected.manga.genres,
                                 manga_selected.manga.status,
                                 self.picker.is_some(),
@@ -449,7 +450,7 @@ where
                 let response = client.get_manga_by_id(&id).await;
                 match response {
                     Ok(res) => {
-                        tx.send(SearchPageEvents::GoToMangaPage(res)).ok();
+                        tx.send(SearchPageEvents::GoToMangaPage(Box::new(res))).ok();
                     },
                     Err(e) => {
                         tx.send(SearchPageEvents::FailedGoToMangaPage(e.to_string())).ok();
@@ -658,7 +659,7 @@ where
                 },
                 SearchPageEvents::LoadCover(maybe_image, manga_id) => self.load_cover(maybe_image, manga_id),
                 SearchPageEvents::FailedGoToMangaPage(error_message) => self.display_error_message(error_message),
-                SearchPageEvents::GoToMangaPage(manga) => self.go_to_manga_page(manga),
+                SearchPageEvents::GoToMangaPage(manga) => self.go_to_manga_page(*manga),
             }
         }
     }

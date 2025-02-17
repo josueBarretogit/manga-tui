@@ -229,11 +229,8 @@ pub fn update_database_with_migrations(
     connection: &mut Connection,
     logger: &impl ILogger,
 ) -> rusqlite::Result<Vec<Option<MigrationTable>>> {
-    let mut migrations: Vec<Option<MigrationTable>> = vec![];
-
-    migrations.push(migrate_version_0_4_0(connection, logger)?);
-
-    migrations.push(migrate_version_0_6_0(connection, logger)?);
+    let migrations: Vec<Option<MigrationTable>> =
+        vec![migrate_version_0_4_0(connection, logger)?, migrate_version_0_6_0(connection, logger)?];
 
     Ok(migrations)
 }

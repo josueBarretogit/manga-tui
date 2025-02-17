@@ -101,8 +101,8 @@ impl<'a> MangaPreview<'a> {
         let layout = Layout::vertical([Constraint::Percentage(20), Constraint::Percentage(80)]);
         let [details_area, tags_area] = layout.areas(area);
 
-        if let Some(status) = &self.status {
-            Paragraph::new(Line::from_iter(vec![status.clone()])).render(details_area, buf);
+        if let Some(status) = self.status {
+            Paragraph::new(Line::from_iter(vec![status])).render(details_area, buf);
         }
 
         Paragraph::new(Line::from_iter(self.genres.clone()))

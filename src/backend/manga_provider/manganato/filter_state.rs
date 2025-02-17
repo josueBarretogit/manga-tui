@@ -23,6 +23,7 @@ impl ManganatoFiltersProvider {
 
 impl EventHandler for ManganatoFiltersProvider {
     fn handle_events(&mut self, events: crate::backend::tui::Events) {
+        #![allow(clippy::single_match)]
         match events {
             Events::Key(key) => match key.code {
                 KeyCode::Char('f') => self.toggle(),

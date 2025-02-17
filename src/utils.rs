@@ -16,6 +16,7 @@ pub fn set_filter_tags_style(tag: &TagListItem) -> Span<'_> {
     }
 }
 
+/// Convert a `NaiveDate` to a user friendly date, like: "2 days ago"
 pub fn display_dates_since_publication(date: NaiveDate) -> String {
     let today = chrono::offset::Local::now().date_naive();
 

@@ -1,15 +1,10 @@
-use scraper::{html, selector, Selector};
+use scraper::Selector;
 
-use super::{HtmlElement, HtmlParser};
-
-pub struct Parser;
+//pub struct Parser;
 
 pub trait AsSelector {
+    #![allow(clippy::wrong_self_convention)]
     fn as_selector(self) -> Selector;
-}
-
-pub trait InnerText {
-    fn inner_text(&self) -> String;
 }
 
 impl AsSelector for &str {

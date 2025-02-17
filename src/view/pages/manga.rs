@@ -32,7 +32,7 @@ use crate::common::format_error_message_tracking_reading_history;
 use crate::config::MangaTuiConfig;
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
 use crate::view::app::MangaToRead;
-use crate::view::tasks::manga::{download_all_chapters, download_single_chapter};
+use crate::view::tasks::manga::{download_all_chapters, download_single_chapter, DownloadAllChapters, DownloadSingleChapter};
 use crate::view::widgets::manga::{
     ChapterItem, ChaptersListWidget, DownloadAllChaptersState, DownloadAllChaptersWidget, DownloadPhase,
 };
@@ -255,11 +255,11 @@ where
 
         let authors = match &self.manga.author {
             Some(author) => format!("Author : {} ", author.name),
-            None => format!(""),
+            None => String::new(),
         };
         let artist = match &self.manga.artist {
             Some(artist) => format!("Artist : {} ", artist.name),
-            None => format!(""),
+            None => String::new(),
         };
 
         Block::bordered()
@@ -749,24 +749,24 @@ where
         let manga_tracker = self.manga_tracker.clone();
 
         self.state = PageState::DownloadingChapters;
-        if let Some(chapter) = self.get_current_selected_chapter_mut() {
-            if chapter.download_loading_state.is_some() {
+        if let Some(item) = self.get_current_selected_chapter_mut() {
+            if item.download_loading_state.is_some() {
                 return;
             }
-            chapter.set_normal_state();
-            chapter.download_loading_state = Some(0.001);
+            item.set_normal_state();
+            item.download_loading_state = Some(0.001);
             let config = MangaTuiConfig::get();
 
-            tokio::spawn(download_single_chapter(
+            tokio::spawn(download_single_chapter(DownloadSingleChapter {
                 client,
                 manga_tracker,
                 manga_id,
-                id_safe_for_download,
+                manga_id_safe_for_download: id_safe_for_download,
                 manga_title,
-                chapter.chapter.clone(),
-                config.clone(),
+                chapter: item.chapter.clone(),
+                config: config.clone(),
                 tx,
-            ));
+            }));
         }
     }
 
@@ -872,15 +872,15 @@ where
         let tx = self.local_event_tx.clone();
         let client = Arc::clone(&self.manga_provider);
         let config = MangaTuiConfig::get();
-        self.tasks.spawn(download_all_chapters(
+        self.tasks.spawn(download_all_chapters(DownloadAllChapters {
             client,
             manga_id,
             manga_id_safe_for_download,
             manga_title,
             lang,
-            config.clone(),
+            config: config.clone(),
             tx,
-        ));
+        }));
     }
 
     fn cancel_download_all_chapters(&mut self) {

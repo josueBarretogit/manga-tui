@@ -79,7 +79,7 @@ impl<T: AsRef<Path>> From<T> for SanitizedFilename {
 }
 
 /// A `Vec` that is guaranteed to be sorted
-/// and whith no duplicates
+/// and with no duplicates
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SortedVec<T: Debug>(Vec<T>);
 

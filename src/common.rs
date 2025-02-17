@@ -3,32 +3,6 @@ use std::fmt::Display;
 
 use ratatui::layout::Rect;
 use ratatui_image::protocol::Protocol;
-use strum::{Display, EnumIter};
-
-#[derive(Display, Clone, Copy, EnumIter, Default, Debug, Eq, PartialEq)]
-pub enum PageType {
-    #[strum(to_string = "data")]
-    HighQuality,
-    #[strum(to_string = "data-saver")]
-    #[default]
-    LowQuality,
-}
-
-impl PageType {
-    pub fn toggle(self) -> Self {
-        match self {
-            Self::LowQuality => Self::HighQuality,
-            Self::HighQuality => Self::LowQuality,
-        }
-    }
-
-    pub fn as_human_readable(&self) -> &str {
-        match self {
-            Self::LowQuality => "Low quality",
-            Self::HighQuality => "High quality",
-        }
-    }
-}
 
 #[derive(Default)]
 pub struct ImageState {

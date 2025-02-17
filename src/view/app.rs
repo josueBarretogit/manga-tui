@@ -6,7 +6,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Margin, Rect};
 use ratatui::style::Styled;
 use ratatui::text::Line;
-use ratatui::widgets::block::{title, Title};
+use ratatui::widgets::block::Title;
 use ratatui::widgets::{Block, Borders, Clear, Tabs, Widget};
 use ratatui::Frame;
 use ratatui_image::picker::Picker;
@@ -29,7 +29,6 @@ use crate::view::pages::*;
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
 pub enum AppState {
     Runnning,
-    DisplayingErrorMessage,
     Done,
 }
 
@@ -40,6 +39,9 @@ pub struct MangaToRead {
     pub list: ListOfChapters,
 }
 
+/// The application which owns every `page` or section in manga-tui
+/// its job mainly consists of displaying the selected page, passing the `manga_provider` to each
+/// page handling when to quit and switching between pages based on user inputs
 pub struct App<T, S>
 where
     T: MangaProvider,
@@ -56,7 +58,7 @@ where
     pub search_page: SearchPage<T, S>,
     pub home_page: Home<T>,
     pub feed_page: Feed<T>,
-    api_client: Arc<T>,
+    manga_provider: Arc<T>,
     manga_tracker: Option<S>,
     error_message: Option<String>,
     // The picker is what decides how big a image needs to be rendered depending on the user's
@@ -175,7 +177,7 @@ where
             manga_tracker,
             state: AppState::Runnning,
             error_message: None,
-            api_client: Arc::clone(&provider),
+            manga_provider: Arc::clone(&provider),
         }
     }
 
@@ -338,7 +340,7 @@ where
 
         let config = MangaTuiConfig::get();
 
-        let manga_page = MangaPage::new(manga, self.picker, Arc::clone(&self.api_client))
+        let manga_page = MangaPage::new(manga, self.picker, Arc::clone(&self.manga_provider))
             .with_global_sender(self.global_event_tx.clone())
             .auto_bookmark(config.auto_bookmark)
             .with_manga_tracker(self.manga_tracker.clone());
@@ -355,7 +357,7 @@ where
             chapter_to_read,
             manga_to_read.manga_id,
             self.picker.as_ref().cloned().unwrap(),
-            Arc::clone(&self.api_client),
+            Arc::clone(&self.manga_provider),
         )
         .with_global_sender(self.global_event_tx.clone())
         .with_list_of_chapters(manga_to_read.list)
@@ -471,7 +473,7 @@ where
     #[cfg(test)]
     fn with_manga_page(mut self) -> Self {
         self.manga_page =
-            Some(MangaPage::new(crate::backend::manga_provider::Manga::default(), None, Arc::clone(&self.api_client)));
+            Some(MangaPage::new(crate::backend::manga_provider::Manga::default(), None, Arc::clone(&self.manga_provider)));
 
         self
     }

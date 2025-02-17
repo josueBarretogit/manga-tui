@@ -1,5 +1,7 @@
+#![allow(unused)]
 #![allow(dead_code)]
 #![allow(deprecated)]
+#![allow(clippy::single_match)]
 
 use std::io::stdout;
 use std::process::exit;
@@ -130,7 +132,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .await?;
         },
         MangaProviders::Manganato => {
-            logger.inform("Using manganato");
+            logger.inform("Using manganato as manga provider");
             tokio::time::sleep(Duration::from_secs(1)).await;
             run_app(
                 ratatui::init(),

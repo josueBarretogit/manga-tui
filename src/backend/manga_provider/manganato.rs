@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use filter_state::{ManganatoFilterState, ManganatoFiltersProvider};
 use filter_widget::ManganatoFilterWidget;
-use http::header::{ACCEPT, ACCEPT_ENCODING, REFERER};
+use http::header::{ACCEPT, ACCEPT_ENCODING, CACHE_CONTROL, REFERER};
 use http::{HeaderMap, HeaderValue, StatusCode};
 use manga_tui::SearchTerm;
 use reqwest::cookie::Jar;
@@ -56,6 +56,7 @@ impl ManganatoProvider {
 
         default_headers.insert(REFERER, HeaderValue::from_static("https://google.com"));
         default_headers.insert(ACCEPT_ENCODING, HeaderValue::from_static("gzip, deflate"));
+        default_headers.insert(CACHE_CONTROL, HeaderValue::from_static("max-age=604800"));
         default_headers.insert(
             ACCEPT,
             HeaderValue::from_static("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8,application/json"),
@@ -69,6 +70,7 @@ impl ManganatoProvider {
 
         let mut chapter_pages_header = HeaderMap::new();
 
+        chapter_pages_header.insert(CACHE_CONTROL, HeaderValue::from_static("max-age=604800"));
         chapter_pages_header.insert(REFERER, HeaderValue::from_static(MANGANATO_REFERER));
         chapter_pages_header.insert(ACCEPT_ENCODING, HeaderValue::from_static("gzip, deflate"));
         chapter_pages_header
@@ -88,6 +90,8 @@ impl ManganatoProvider {
         }
     }
 
+    /// The search query / term in manganato needs to be something like this: "Oshi no ko" =>
+    /// "oshi_no_ko"
     fn format_search_term(search_term: SearchTerm) -> String {
         let mut search: String = search_term.get().split(" ").fold(String::new(), |mut acc, word| {
             let _ = write!(acc, "{}_", word);
@@ -95,7 +99,6 @@ impl ManganatoProvider {
         });
 
         search.pop();
-
         search
     }
 
@@ -126,7 +129,7 @@ impl ManganatoProvider {
             volume_number: response.volume_number,
             num_page_bookmarked: None,
             language: Languages::English,
-            pages_url: response.pages_url.urls.into_iter().map(|url| Url::parse(&url)).flatten().collect(),
+            pages_url: response.pages_url.urls.into_iter().flat_map(|raw_url| Url::parse(&raw_url)).collect(),
         };
 
         let list_of_chapters = ListOfChapters::from(response.chapters_list);
@@ -311,7 +314,7 @@ impl GoToReadChapter for ManganatoProvider {
         chapter_id: &str,
         manga_id: &str,
     ) -> Result<(super::ChapterToRead, super::ListOfChapters), Box<dyn Error>> {
-        Ok(self.get_chapter_page(manga_id, chapter_id).await?)
+        self.get_chapter_page(manga_id, chapter_id).await
     }
 }
 
@@ -351,7 +354,9 @@ impl FetchChapterBookmarked for ManganatoProvider {
         &self,
         chapter: crate::backend::database::ChapterBookmarked,
     ) -> Result<(super::ChapterToRead, super::ListOfChapters), Box<dyn Error>> {
-        Ok(self.get_chapter_page(&chapter.manga_id, &chapter.id).await?)
+        let (mut chapter_to_read, list_of_chapters) = self.get_chapter_page(&chapter.manga_id, &chapter.id).await?;
+        chapter_to_read.num_page_bookmarked = chapter.number_page_bookmarked;
+        Ok((chapter_to_read, list_of_chapters))
     }
 }
 
@@ -398,7 +403,7 @@ impl MangaPageProvider for ManganatoProvider {
             chapters.reverse();
         }
 
-        let from = pagination.from_index();
+        let from = pagination.index_to_slice_from();
         let to = pagination.to_index(total_chapters as usize);
 
         let chapters = chapters.as_slice().get(from..to).unwrap_or(&[]);

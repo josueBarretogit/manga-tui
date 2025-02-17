@@ -5,6 +5,7 @@ use super::filter_state::ManganatoFiltersProvider;
 use crate::backend::manga_provider::FiltersWidget;
 use crate::view::widgets::StatefulWidgetFrame;
 
+/// TODO: implement manganato filters in future release
 #[derive(Debug, Clone)]
 pub struct ManganatoFilterWidget {}
 

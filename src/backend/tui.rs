@@ -104,7 +104,7 @@ pub async fn run_app<T: MangaProvider>(
 
     while app.state == AppState::Runnning {
         terminal.draw(|f| {
-            app.render(f.size(), f);
+            app.render(f.area(), f);
         })?;
 
         app.listen_to_event().await;

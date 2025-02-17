@@ -7,7 +7,8 @@ use bytes::Bytes;
 use chrono::Months;
 use filter::{Filters, IntoParam, MangadexFilterProvider};
 use filter_widget::MangadexFilterWidget;
-use http::StatusCode;
+use http::header::{ACCEPT, ACCEPT_ENCODING, CACHE_CONTROL};
+use http::{HeaderMap, HeaderValue, StatusCode};
 use manga_tui::SearchTerm;
 use reqwest::{Client, Response, Url};
 
@@ -50,7 +51,13 @@ impl MangadexClient {
     }
 
     pub fn new(api_url_base: Url, cover_img_url_base: Url) -> Self {
+        let mut default_headers = HeaderMap::new();
+        default_headers.insert(ACCEPT_ENCODING, HeaderValue::from_static("gzip, deflate"));
+        default_headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
+        default_headers.insert(CACHE_CONTROL, HeaderValue::from_static("max-age=604800"));
+
         let client = Client::builder()
+            .default_headers(default_headers)
             .timeout(StdDuration::from_secs(10))
             .user_agent(&*APP_USER_AGENT)
             .build()
@@ -223,14 +230,14 @@ impl HomePageMangaProvider for MangadexClient {
             .data
             .into_iter()
             .map(|manga| {
-                let mut cover_img_url: Option<String> = Option::default();
+                let mut cover_img_url = String::new();
 
                 for rel in &manga.relationships {
                     if let Some(attributes) = &rel.attributes {
                         match rel.type_field.as_str() {
                             "cover_art" => {
                                 let file_name = attributes.file_name.as_ref().unwrap().to_string();
-                                cover_img_url = Some(self.make_cover_img_url(&manga.id, &file_name));
+                                cover_img_url = self.make_cover_img_url(&manga.id, &file_name);
                             },
                             _ => {},
                         }
@@ -254,6 +261,10 @@ impl HomePageMangaProvider for MangadexClient {
                 };
 
                 genres.push(Genres::new(manga.attributes.content_rating, content_rating));
+
+                if let Some(pb) = manga.attributes.publication_demographic {
+                    genres.push(Genres::new(pb, Rating::Normal));
+                }
 
                 PopularManga {
                     id: manga.id,
@@ -300,6 +311,10 @@ impl SearchMangaById for MangadexClient {
         };
 
         genres.push(Genres::new(manga.data.attributes.content_rating, content_rating));
+
+        if let Some(pb) = manga.data.attributes.publication_demograpchic {
+            genres.push(Genres::new(pb, Rating::Normal));
+        }
 
         let description = manga
             .data
@@ -457,7 +472,7 @@ impl MangaPageProvider for MangadexClient {
                 ("includes[]", "scanlation_group"),
                 ("limit", &pagination.items_per_page.to_string()),
                 ("offset", &offset.to_string()),
-                ("order", &order),
+                ("order", order),
                 ("contentRating[]", "safe"),
                 ("contentRating[]", "suggestive"),
                 ("contentRating[]", "erotica"),
@@ -837,10 +852,7 @@ mod test {
     use self::api_responses::authors::AuthorsResponse;
     use self::api_responses::feed::OneMangaResponse;
     use self::api_responses::tags::TagsResponse;
-    use self::api_responses::{
-        AggregateChapterResponse, ChapterPagesResponse, ChapterResponse, MangaStatisticsResponse, OneChapterResponse,
-        SearchMangaResponse,
-    };
+    use self::api_responses::{AggregateChapterResponse, ChapterResponse, SearchMangaResponse};
     use super::*;
     use crate::backend::*;
 

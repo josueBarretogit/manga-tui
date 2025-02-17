@@ -180,6 +180,9 @@ impl CliArgs {
 
                     match set {
                         Some(lang) => {
+                            println!(
+                                "WARNING: deprecated function this will be part of the config file in future releases, and only applies to mangadex"
+                            );
                             let try_lang = Languages::try_from_iso_code(lang.as_str());
 
                             if try_lang.is_none() {

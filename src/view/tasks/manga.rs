@@ -16,22 +16,25 @@ use crate::common::format_error_message_tracking_reading_history;
 use crate::config::{DownloadType, MangaTuiConfig};
 use crate::view::pages::manga::MangaPageEvents;
 
-pub async fn download_all_chapters(
-    client: Arc<impl MangaPageProvider>,
-    manga_id: String,
-    manga_id_safe_for_download: String,
-    manga_title: String,
-    lang: Languages,
-    config: MangaTuiConfig,
-    tx: UnboundedSender<MangaPageEvents>,
-) {
-    let get_all_chapters_response = client.get_all_chapters(&manga_id, lang).await;
+#[derive(Debug)]
+pub struct DownloadAllChapters<T: MangaPageProvider> {
+    pub client: Arc<T>,
+    pub manga_id: String,
+    pub manga_id_safe_for_download: String,
+    pub manga_title: String,
+    pub lang: Languages,
+    pub config: MangaTuiConfig,
+    pub tx: UnboundedSender<MangaPageEvents>,
+}
+
+pub async fn download_all_chapters<T: MangaPageProvider>(args: DownloadAllChapters<T>) {
+    let get_all_chapters_response = args.client.get_all_chapters(&args.manga_id, args.lang).await;
 
     match get_all_chapters_response {
         Ok(chapters) => {
             let total_chapters = chapters.len();
 
-            tx.send(MangaPageEvents::StartDownloadProgress(total_chapters as f64)).ok();
+            args.tx.send(MangaPageEvents::StartDownloadProgress(total_chapters as f64)).ok();
 
             // This is needed in order to avoid any api request limits
             let download_chapter_delay = if total_chapters < 40 {
@@ -43,16 +46,17 @@ pub async fn download_all_chapters(
             };
 
             for chapter in chapters {
-                let manga_id = manga_id.clone();
-                let manga_id_safe_for_download = manga_id_safe_for_download.clone();
-                let manga_title = manga_title.clone();
-                let client = Arc::clone(&client);
-                let inner_tx = tx.clone();
+                let manga_id = args.manga_id.clone();
+                let manga_id_safe_for_download = args.manga_id_safe_for_download.clone();
+                let manga_title = args.manga_title.clone();
+                let client = Arc::clone(&args.client);
+                let inner_tx = args.tx.clone();
 
                 sleep(Duration::from_secs(download_chapter_delay));
                 tokio::spawn(async move {
-                    let chapter_pages_response =
-                        client.get_chapter_pages(&chapter.id, &manga_id, config.image_quality, |_, _| {}).await;
+                    let chapter_pages_response = client
+                        .get_chapter_pages(&chapter.id, &manga_id, args.config.image_quality, |_, _| {})
+                        .await;
                     match chapter_pages_response {
                         Ok(pages) => {
                             let original_chapter_title = chapter.title.clone();
@@ -64,13 +68,13 @@ pub async fn download_all_chapters(
                                 chapter_title: chapter.title.into(),
                                 chapter_number: chapter.chapter_number,
                                 volume_number: chapter.volume_number,
-                                language: lang,
+                                language: args.lang,
                                 scanlator: chapter.scanlator.unwrap_or_default().into(),
-                                download_type: config.download_type,
+                                download_type: args.config.download_type,
                                 pages,
                             };
 
-                            let downloader: &dyn MangaDownloader = match config.download_type {
+                            let downloader: &dyn MangaDownloader = match args.config.download_type {
                                 DownloadType::Raw => &RawImagesDownloader::new(),
                                 DownloadType::Cbz => &CbzDownloader::new(),
                                 DownloadType::Epub => &EpubDownloader::new(),
@@ -105,58 +109,67 @@ pub async fn download_all_chapters(
             }
         },
         Err(e) => {
-            tx.send(MangaPageEvents::DownloadAllChaptersError).ok();
+            args.tx.send(MangaPageEvents::DownloadAllChaptersError).ok();
             write_to_error_log(
-                format!("could not get all chapter for manga {manga_title} with id {manga_id} more details about the error: \n{e}")
-                    .into(),
+                format!(
+                    "could not get all chapter for manga {} with id {} more details about the error: \n{e}",
+                    args.manga_title, args.manga_id
+                )
+                .into(),
             );
         },
     }
 }
 
-pub async fn download_single_chapter(
-    client: Arc<impl MangaPageProvider>,
-    manga_tracker: Option<impl MangaTracker>,
-    manga_id: String,
-    manga_id_safe_for_download: String,
-    manga_title: String,
-    chapter: Chapter,
-    config: MangaTuiConfig,
-    tx: UnboundedSender<MangaPageEvents>,
-) {
-    let sender_report_progress = tx.clone();
-    let pages_bytes = client
-        .get_chapter_pages(&chapter.id, &manga_id, config.image_quality, move |percentage, chapter_id| {
+#[derive(Debug)]
+pub struct DownloadSingleChapter<T: MangaPageProvider, S: MangaTracker> {
+    pub client: Arc<T>,
+    pub manga_tracker: Option<S>,
+    pub manga_id: String,
+    pub manga_id_safe_for_download: String,
+    pub manga_title: String,
+    pub chapter: Chapter,
+    pub config: MangaTuiConfig,
+    pub tx: UnboundedSender<MangaPageEvents>,
+}
+
+pub async fn download_single_chapter<T: MangaPageProvider, S: MangaTracker>(args: DownloadSingleChapter<T, S>) {
+    let sender_report_progress = args.tx.clone();
+    let pages_bytes = args
+        .client
+        .get_chapter_pages(&args.chapter.id, &args.manga_id, args.config.image_quality, move |percentage, chapter_id| {
             sender_report_progress
                 .send(MangaPageEvents::SetDownloadProgress(percentage, chapter_id.to_string()))
                 .ok();
         })
         .await;
+
+    let tx = args.tx;
     match pages_bytes {
         Ok(pages) => {
-            let original_chapter_title = chapter.title.clone();
-            let chapter_id = chapter.id.clone();
-            let chapter_number = chapter.chapter_number.clone();
-            let volume_number = chapter.volume_number.clone();
-            let manga_title_copy = manga_title.clone();
+            let original_chapter_title = args.chapter.title.clone();
+            let chapter_id = args.chapter.id.clone();
+            let chapter_number = args.chapter.chapter_number.clone();
+            let volume_number = args.chapter.volume_number.clone();
+            let manga_title_copy = args.manga_title.clone();
             let chapter_to_download: ChapterToDownloadSanitized = ChapterToDownloadSanitized {
-                chapter_id: chapter.id_safe_for_download,
-                manga_id: manga_id_safe_for_download,
-                manga_title: manga_title.into(),
-                chapter_title: chapter.title.into(),
-                chapter_number: chapter.chapter_number,
-                volume_number: chapter.volume_number,
-                language: chapter.language,
-                scanlator: chapter.scanlator.unwrap_or_default().into(),
-                download_type: config.download_type,
+                chapter_id: args.chapter.id_safe_for_download,
+                manga_id: args.manga_id_safe_for_download,
+                manga_title: args.manga_title.into(),
+                chapter_title: args.chapter.title.into(),
+                chapter_number: args.chapter.chapter_number,
+                volume_number: args.chapter.volume_number,
+                language: args.chapter.language,
+                scanlator: args.chapter.scanlator.unwrap_or_default().into(),
+                download_type: args.config.download_type,
                 pages,
             };
-            if config.track_reading_when_download {
+            if args.config.track_reading_when_download {
                 // clone chapter title so that it can be used inside `track_manga` error
                 // closure
                 let chapter_title_error = original_chapter_title.clone();
                 track_manga(
-                    manga_tracker,
+                    args.manga_tracker,
                     manga_title_copy.clone(),
                     // This conversion is needed so that we take into account chapters
                     // like 1.2, 10.1 etc
@@ -175,7 +188,7 @@ pub async fn download_single_chapter(
                 );
             }
 
-            let downloader: &dyn MangaDownloader = match config.download_type {
+            let downloader: &dyn MangaDownloader = match args.config.download_type {
                 DownloadType::Cbz => &CbzDownloader::new(),
                 DownloadType::Raw => &RawImagesDownloader::new(),
                 DownloadType::Epub => &EpubDownloader::new(),
@@ -195,7 +208,7 @@ pub async fn download_single_chapter(
         },
         Err(e) => {
             write_to_error_log(e.into());
-            tx.send(MangaPageEvents::DownloadError(chapter.id)).ok();
+            tx.send(MangaPageEvents::DownloadError(args.chapter.id)).ok();
         },
     }
 }

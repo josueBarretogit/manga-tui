@@ -44,6 +44,11 @@ impl Rating {
     }
 }
 
+/// Genres of manga, providers like `mangadex` call them "tags" and other data about the manga may
+/// be considered a genre, like the content rating ("safe, suggestive") and publication demographic
+/// ("shounen, seinen")
+/// the genre needs to be categorized by the `Rating`, a genre named `comedy` is considered normal,
+/// `ecchi` is moderate, and stuff like `smut` or `gore` are to be considered nsfw
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
 pub struct Genres {
     pub title: String,
@@ -70,7 +75,7 @@ pub struct PopularManga {
     pub description: String,
     /// Some manga provider may or may not provide this information from their popular titles
     pub status: Option<MangaStatus>,
-    pub cover_img_url: Option<String>,
+    pub cover_img_url: String,
 }
 
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
@@ -100,6 +105,8 @@ impl From<MangaStatus> for Span<'_> {
         }
     }
 }
+
+/// NOTE this is very mangadex-specifc since its the only provider that provides a lot of languages
 #[derive(Debug, Display, EnumIter, Default, Clone, Copy, PartialEq, Eq, Deserialize)]
 pub enum Languages {
     French,
@@ -399,7 +406,7 @@ impl Pagination {
     }
 
     /// Used for client side pagination through a slice
-    pub fn from_index(&self) -> usize {
+    pub fn index_to_slice_from(&self) -> usize {
         ((self.current_page - 1) * self.items_per_page) as usize
     }
 
@@ -635,7 +642,7 @@ pub struct ChapterPageUrl {
 /// This enum has two purposes:
 /// 1. determine which manga provider to use when running manga-tui
 /// 2. apply specific configuration for each provider, for example `manganato` provides larger paginations sizes than `mangadex`
-/// since `mangadex` has been the first manga provider it is the default
+///    since `mangadex` has been the first manga provider it is the default
 #[derive(Debug, Clone, Copy, Display, Default, clap::ValueEnum, PartialEq)]
 pub enum MangaProviders {
     #[default]
@@ -743,7 +750,7 @@ pub trait GetChapterPages: GetRawImage + Send + Sync {
 
 /// Most manga websites have a section where the top 10 mangas of the month are on display in their
 /// homepage, as well as the recently added mangas
-pub trait HomePageMangaProvider: DecodeBytesToImage + SearchMangaById + Clone + Send + Sync + 'static {
+pub trait HomePageMangaProvider: ProviderIdentity + DecodeBytesToImage + SearchMangaById + Clone + Send + Sync + 'static {
     fn get_popular_mangas(&self) -> impl Future<Output = Result<Vec<PopularManga>, Box<dyn Error>>> + Send;
     fn get_recently_added_mangas(&self) -> impl Future<Output = Result<Vec<RecentlyAddedManga>, Box<dyn Error>>> + Send;
 }
@@ -779,6 +786,9 @@ pub trait FiltersHandler: EventHandler {
     fn get_state(&self) -> &Self::InnerState;
 }
 
+/// This trait represent the widget used to show the user the filters available for the
+/// `manga_provider`, why not just use the `StatefulWidgetFrame`?, maybe in the future the widget
+/// may require more methods/functionality
 pub trait FiltersWidget: StatefulWidgetFrame<State = Self::FilterState> {
     type FilterState;
 }
@@ -913,7 +923,7 @@ pub mod mock {
     impl StatefulWidgetFrame for MockWidgetFilter {
         type State = MockFiltersHandler;
 
-        fn render(&mut self, area: ratatui::prelude::Rect, frame: &mut ratatui::Frame<'_>, state: &mut Self::State) {}
+        fn render(&mut self, _area: ratatui::prelude::Rect, _frame: &mut ratatui::Frame<'_>, _state: &mut Self::State) {}
     }
     impl FiltersWidget for MockWidgetFilter {
         type FilterState = MockFiltersHandler;
@@ -930,18 +940,18 @@ pub mod mock {
     }
 
     impl GetRawImage for MockMangaPageProvider {
-        async fn get_raw_image(&self, url: &str) -> Result<Bytes, Box<dyn Error>> {
+        async fn get_raw_image(&self, _url: &str) -> Result<Bytes, Box<dyn Error>> {
             Ok(include_bytes!("../../data_test/images/1.jpg").to_vec().into())
         }
     }
 
     impl SearchMangaById for MockMangaPageProvider {
-        async fn get_manga_by_id(&self, manga_id: &str) -> Result<Manga, Box<dyn Error>> {
+        async fn get_manga_by_id(&self, _manga_id: &str) -> Result<Manga, Box<dyn Error>> {
             Ok(Manga::default())
         }
     }
     impl SearchChapterById for MockMangaPageProvider {
-        async fn search_chapter(&self, chapter_id: &str, manga_id: &str) -> Result<ChapterToRead, Box<dyn Error>> {
+        async fn search_chapter(&self, _chapter_id: &str, _manga_id: &str) -> Result<ChapterToRead, Box<dyn Error>> {
             Ok(ChapterToRead::default())
         }
     }
@@ -949,26 +959,30 @@ pub mod mock {
     impl DecodeBytesToImage for MockMangaPageProvider {}
 
     impl GoToReadChapter for MockMangaPageProvider {
-        async fn read_chapter(&self, chapter_id: &str, manga_id: &str) -> Result<(ChapterToRead, ListOfChapters), Box<dyn Error>> {
+        async fn read_chapter(
+            &self,
+            _chapter_id: &str,
+            _manga_id: &str,
+        ) -> Result<(ChapterToRead, ListOfChapters), Box<dyn Error>> {
             todo!()
         }
     }
     impl GetChapterPages for MockMangaPageProvider {
         async fn get_chapter_pages_url_with_extension(
             &self,
-            chapter_id: &str,
-            manga_id: &str,
-            image_quality: ImageQuality,
+            _chapter_id: &str,
+            _manga_id: &str,
+            _image_quality: ImageQuality,
         ) -> Result<Vec<ChapterPageUrl>, Box<dyn Error>> {
             Ok(vec![])
         }
 
         async fn get_chapter_pages<F: Fn(f64, &str) + 'static + Send>(
             &self,
-            chapter_id: &str,
-            manga_id: &str,
-            image_quality: ImageQuality,
-            on_progress: F,
+            _chapter_id: &str,
+            _manga_id: &str,
+            _image_quality: ImageQuality,
+            _on_progress: F,
         ) -> Result<Vec<ChapterPage>, Box<dyn Error>> {
             Ok(vec![])
         }
@@ -977,7 +991,7 @@ pub mod mock {
     impl FetchChapterBookmarked for MockMangaPageProvider {
         async fn fetch_chapter_bookmarked(
             &self,
-            chapter: ChapterBookmarked,
+            _chapter: ChapterBookmarked,
         ) -> Result<(ChapterToRead, ListOfChapters), Box<dyn Error>> {
             if self.should_fail {
                 return Err("should fail".into());
@@ -989,9 +1003,9 @@ pub mod mock {
     impl MangaPageProvider for MockMangaPageProvider {
         async fn get_chapters(
             &self,
-            manga_id: &str,
-            filters: ChapterFilters,
-            pagination: Pagination,
+            _manga_id: &str,
+            _filters: ChapterFilters,
+            _pagination: Pagination,
         ) -> Result<GetChaptersResponse, Box<dyn Error>> {
             Ok(GetChaptersResponse {
                 chapters: vec![],
@@ -999,7 +1013,7 @@ pub mod mock {
             })
         }
 
-        async fn get_all_chapters(&self, manga_id: &str, language: Languages) -> Result<Vec<Chapter>, Box<dyn Error>> {
+        async fn get_all_chapters(&self, _manga_id: &str, _language: Languages) -> Result<Vec<Chapter>, Box<dyn Error>> {
             Ok(vec![])
         }
     }

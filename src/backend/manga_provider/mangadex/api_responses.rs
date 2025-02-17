@@ -103,6 +103,7 @@ impl From<Tag> for Genres {
     fn from(value: Tag) -> Self {
         let rating = match value.attributes.name.en.to_lowercase().as_str() {
             "sexual violence" | "gore" => crate::backend::manga_provider::Rating::Nsfw,
+            "doujinshi" => crate::backend::manga_provider::Rating::Doujinshi,
             _ => crate::backend::manga_provider::Rating::default(),
         };
         Genres::new(value.attributes.name.en, rating)

@@ -29,6 +29,7 @@ pub mod test_utils {
 
     use crate::backend::tracker::{MangaTracker, PlanToReadArgs};
 
+    /// NOTE: this should be under `manga_tracker`
     #[derive(Debug, Clone)]
     pub struct TrackerTest {
         pub should_fail: bool,
