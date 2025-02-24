@@ -9,6 +9,7 @@ use self::error_log::create_error_logs_files;
 use crate::config::{MangaTuiConfig, CONFIG};
 use crate::logger::ILogger;
 
+pub mod cache;
 pub mod database;
 pub mod error_log;
 pub mod html_parser;
