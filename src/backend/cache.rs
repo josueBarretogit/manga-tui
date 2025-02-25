@@ -25,3 +25,28 @@ pub trait Cacher: Send + Sync + Debug {
     /// likely to be accesed again
     fn get(&self, id: &str) -> Result<Option<Entry>, Box<dyn Error>>;
 }
+
+#[cfg(test)]
+pub mod mock {
+    use std::sync::Arc;
+
+    use super::Cacher;
+
+    #[derive(Debug)]
+    pub struct EmptyCache;
+    impl EmptyCache {
+        pub fn new_arc() -> Arc<Self> {
+            Arc::new(EmptyCache)
+        }
+    }
+
+    impl Cacher for EmptyCache {
+        fn get(&self, id: &str) -> Result<Option<super::Entry>, Box<dyn std::error::Error>> {
+            Ok(None)
+        }
+
+        fn cache(&self, entry: super::InsertEntry) -> Result<(), Box<dyn std::error::Error>> {
+            Ok(())
+        }
+    }
+}

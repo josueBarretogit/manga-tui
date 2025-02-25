@@ -7,6 +7,7 @@ use std::io::stdout;
 use std::process::exit;
 use std::time::Duration;
 
+use backend::cache::in_memory::InMemoryCache;
 use backend::manga_provider::mangadex::filter::MangadexFilterProvider;
 use backend::manga_provider::mangadex::filter_widget::MangadexFilterWidget;
 use backend::manga_provider::mangadex::{MangadexClient, API_URL_BASE, COVER_IMG_URL_BASE};
@@ -136,7 +137,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             tokio::time::sleep(Duration::from_secs(1)).await;
             run_app(
                 ratatui::init(),
-                ManganatoProvider::new(MANGANATO_BASE_URL.parse().unwrap()),
+                ManganatoProvider::new(MANGANATO_BASE_URL.parse().unwrap(), InMemoryCache::init(8)),
                 anilist_client,
                 ManganatoFiltersProvider::new(ManganatoFilterState {}),
                 ManganatoFilterWidget {},

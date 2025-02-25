@@ -44,8 +44,8 @@ impl MemoryEntry {
 
 impl InMemoryCache {
     /// Only way of constructing this struct to make sure when initializing the cleanup task is spawned
-    pub fn init() -> Arc<Self> {
-        let cache = Arc::new(Self::new());
+    pub fn init(capacity: usize) -> Arc<Self> {
+        let cache = Arc::new(Self::new().with_capacity(capacity));
 
         start_cleanup_task(Arc::clone(&cache));
 
@@ -60,7 +60,7 @@ impl InMemoryCache {
     }
 
     /// Set how many entries to hold before starting the cleanup proccess
-    fn with_capacity(mut self, capacity: usize) -> Self {
+    pub fn with_capacity(mut self, capacity: usize) -> Self {
         self.capacity = capacity;
         self
     }

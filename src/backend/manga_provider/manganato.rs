@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use filter_state::{ManganatoFilterState, ManganatoFiltersProvider};
 use filter_widget::ManganatoFilterWidget;
-use http::header::{ACCEPT, ACCEPT_ENCODING, CACHE_CONTROL, REFERER};
+use http::header::{ACCEPT, ACCEPT_ENCODING, ACCEPT_LANGUAGE, CACHE_CONTROL, CONNECTION, REFERER};
 use http::{HeaderMap, HeaderValue, StatusCode};
 use manga_tui::SearchTerm;
 use reqwest::cookie::Jar;
@@ -22,6 +22,8 @@ use super::{
     ListOfChapters, MangaPageProvider, MangaProvider, PopularManga, ProviderIdentity, ReaderPageProvider, RecentlyAddedManga,
     SearchChapterById, SearchMangaById, SearchMangaPanel, SearchPageProvider,
 };
+use crate::backend::cache::in_memory::InMemoryCache;
+use crate::backend::cache::{Cacher, InsertEntry};
 use crate::backend::html_parser::{HtmlElement, ParseHtml};
 use crate::backend::manga_provider::ChapterToRead;
 
@@ -46,12 +48,17 @@ pub struct ManganatoProvider {
     client: reqwest::Client,
     base_url: Url,
     chapter_pages_header: HeaderMap,
+    cache_provider: Arc<dyn Cacher>,
 }
 
 impl ManganatoProvider {
+    const CHAPTER_PAGE_CACHE_DURATION: Duration = Duration::from_secs(25);
+    const HOME_PAGE_CACHE_DURATION: Duration = Duration::from_secs(10);
     pub const MANGANATO_MANGA_LANGUAGE: &[Languages] = &[Languages::English];
+    const MANGA_PAGE_CACHE_DURATION: Duration = Duration::from_secs(25);
+    const SEARCH_PAGE_CACHE_DURATION: Duration = Duration::from_secs(5);
 
-    pub fn new(base_url: Url) -> Self {
+    pub fn new(base_url: Url, cache_provider: Arc<dyn Cacher>) -> Self {
         let mut default_headers = HeaderMap::new();
 
         default_headers.insert(REFERER, HeaderValue::from_static("https://google.com"));
@@ -62,8 +69,11 @@ impl ManganatoProvider {
             HeaderValue::from_static("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8,application/json"),
         );
 
-        default_headers.insert("priority", HeaderValue::from_static("u=0, i"));
-        default_headers.insert("sec-fetch-site", HeaderValue::from_static("cross-site"));
+        default_headers.insert(ACCEPT_LANGUAGE, HeaderValue::from_static("en-US,en;q=0.5"));
+        default_headers.insert(CONNECTION, HeaderValue::from_static("keep-alive"));
+
+        default_headers.insert("DNT", HeaderValue::from_static("1"));
+        default_headers.insert("sec-fetch-site", HeaderValue::from_static("none"));
         default_headers.insert("sec-fetch-mode", HeaderValue::from_static("navigate"));
         default_headers.insert("sec-fetch-user", HeaderValue::from_static("?1"));
         default_headers.insert("sec-fetch-dest", HeaderValue::from_static("document"));
@@ -72,6 +82,7 @@ impl ManganatoProvider {
 
         chapter_pages_header.insert(CACHE_CONTROL, HeaderValue::from_static("max-age=604800"));
         chapter_pages_header.insert(REFERER, HeaderValue::from_static(MANGANATO_REFERER));
+        chapter_pages_header.insert(CONNECTION, HeaderValue::from_static("keep-alive"));
         chapter_pages_header.insert(ACCEPT_ENCODING, HeaderValue::from_static("gzip, deflate"));
         chapter_pages_header
             .insert(ACCEPT, HeaderValue::from_static("image/avif,image/webp,image/png,image/svg+xml,image/*;q=0.8,*/*;q=0.5"));
@@ -86,6 +97,7 @@ impl ManganatoProvider {
         Self {
             client,
             base_url,
+            cache_provider,
             chapter_pages_header,
         }
     }
@@ -108,33 +120,64 @@ impl ManganatoProvider {
     /// this is because on manganato a chapter doesnt have a id per se
     /// and the `manga_id` is actually not required
     async fn get_chapter_page(&self, manga_id: &str, chapter_id: &str) -> Result<(ChapterToRead, ListOfChapters), Box<dyn Error>> {
-        let response = self.client.get(chapter_id).send().await?;
+        let cache = self.cache_provider.get(chapter_id)?;
 
-        if response.status() != StatusCode::OK {
-            return Err(format!(
-                "Could not search chapter of manga on manganato with id : {manga_id}, status code : {}, {chapter_id}",
-                response.status()
-            )
-            .into());
+        match cache {
+            Some(cached) => {
+                let response = ChapterPageResponse::parse_html(HtmlElement::new(cached.data))?;
+
+                let chapter_to_read: ChapterToRead = ChapterToRead {
+                    id: chapter_id.to_string(),
+                    title: response.title.unwrap_or("no title".to_string()),
+                    number: response.number.parse().unwrap(),
+                    volume_number: response.volume_number,
+                    num_page_bookmarked: None,
+                    language: Languages::English,
+                    pages_url: response.pages_url.urls.into_iter().flat_map(|raw_url| Url::parse(&raw_url)).collect(),
+                };
+
+                let list_of_chapters = ListOfChapters::from(response.chapters_list);
+
+                Ok((chapter_to_read, list_of_chapters))
+            },
+            None => {
+                let response = self.client.get(chapter_id).send().await?;
+
+                if response.status() != StatusCode::OK {
+                    return Err(format!(
+                        "Could not search chapter of manga on manganato with id : {manga_id}, status code : {}, {chapter_id}",
+                        response.status()
+                    )
+                    .into());
+                }
+
+                let doc = response.text().await?;
+
+                self.cache_provider
+                    .cache(InsertEntry {
+                        id: chapter_id,
+                        data: &doc,
+                        duration: Self::CHAPTER_PAGE_CACHE_DURATION,
+                    })
+                    .ok();
+
+                let response = ChapterPageResponse::parse_html(HtmlElement::new(doc))?;
+
+                let chapter_to_read: ChapterToRead = ChapterToRead {
+                    id: chapter_id.to_string(),
+                    title: response.title.unwrap_or("no title".to_string()),
+                    number: response.number.parse().unwrap(),
+                    volume_number: response.volume_number,
+                    num_page_bookmarked: None,
+                    language: Languages::English,
+                    pages_url: response.pages_url.urls.into_iter().flat_map(|raw_url| Url::parse(&raw_url)).collect(),
+                };
+
+                let list_of_chapters = ListOfChapters::from(response.chapters_list);
+
+                Ok((chapter_to_read, list_of_chapters))
+            },
         }
-
-        let doc = response.text().await?;
-
-        let response = ChapterPageResponse::parse_html(HtmlElement::new(doc))?;
-
-        let chapter_to_read: ChapterToRead = ChapterToRead {
-            id: chapter_id.to_string(),
-            title: response.title.unwrap_or("no title".to_string()),
-            number: response.number.parse().unwrap(),
-            volume_number: response.volume_number,
-            num_page_bookmarked: None,
-            language: Languages::English,
-            pages_url: response.pages_url.urls.into_iter().flat_map(|raw_url| Url::parse(&raw_url)).collect(),
-        };
-
-        let list_of_chapters = ListOfChapters::from(response.chapters_list);
-
-        Ok((chapter_to_read, list_of_chapters))
     }
 }
 
@@ -170,39 +213,80 @@ impl SearchMangaById for ManganatoProvider {
     /// `manga_id` is expected to be the url which points to the manga page
     /// example `https://manganato.com/manga-js987275`
     async fn get_manga_by_id(&self, manga_id: &str) -> Result<super::Manga, Box<dyn Error>> {
-        let response = self.client.get(manga_id).send().await?;
+        let cache = self.cache_provider.get(manga_id)?;
 
-        if response.status() != StatusCode::OK {
-            return Err(format!("manga page with id : {manga_id} could not be found on manganato").into());
+        match cache {
+            Some(cached_page) => {
+                let manga = MangaPageData::parse_html(HtmlElement::new(cached_page.data))?;
+
+                let authors = if manga.authors.is_empty() {
+                    None
+                } else {
+                    Some(Author {
+                        name: manga.authors,
+                        ..Default::default()
+                    })
+                };
+
+                Ok(super::Manga {
+                    id: manga_id.to_string(),
+                    id_safe_for_download: extract_id_from_url(manga_id),
+                    title: manga.title,
+                    genres: manga.genres.into_iter().map(Genres::from).collect(),
+                    description: manga.description,
+                    status: manga.status.into(),
+                    cover_img_url: manga.cover_url.clone(),
+                    languages: Self::MANGANATO_MANGA_LANGUAGE.into(),
+                    rating: manga.rating,
+                    // There is no way of knowing the artist/artists of the manga on manganato
+                    artist: None,
+                    author: authors,
+                })
+            },
+            None => {
+                let response = self.client.get(manga_id).send().await?;
+
+                if response.status() != StatusCode::OK {
+                    return Err(format!("manga page with id : {manga_id} could not be found on manganato").into());
+                }
+
+                let doc = response.text().await?;
+
+                self.cache_provider
+                    .cache(InsertEntry {
+                        id: manga_id,
+                        data: &doc,
+                        duration: Self::MANGA_PAGE_CACHE_DURATION,
+                    })
+                    .ok();
+
+                let manga = MangaPageData::parse_html(HtmlElement::new(doc))?;
+
+                let authors = if manga.authors.is_empty() {
+                    None
+                } else {
+                    Some(Author {
+                        name: manga.authors,
+                        ..Default::default()
+                    })
+                };
+
+                Ok(super::Manga {
+                    id: manga_id.to_string(),
+                    id_safe_for_download: extract_id_from_url(manga_id),
+                    title: manga.title,
+                    genres: manga.genres.into_iter().map(Genres::from).collect(),
+                    description: manga.description,
+                    status: manga.status.into(),
+                    cover_img_url: manga.cover_url.clone(),
+                    languages: Self::MANGANATO_MANGA_LANGUAGE.into(),
+                    rating: manga.rating,
+                    // There is no way of knowing the artist/artists of the manga on manganato
+                    artist: None,
+                    author: authors,
+                })
+            },
         }
-
-        let doc = response.text().await?;
-
-        let manga = MangaPageData::parse_html(HtmlElement::new(doc))?;
-
-        let authors = if manga.authors.is_empty() {
-            None
-        } else {
-            Some(Author {
-                name: manga.authors,
-                ..Default::default()
-            })
-        };
-
-        Ok(super::Manga {
-            id: manga_id.to_string(),
-            id_safe_for_download: extract_id_from_url(manga_id),
-            title: manga.title,
-            genres: manga.genres.into_iter().map(Genres::from).collect(),
-            description: manga.description,
-            status: manga.status.into(),
-            cover_img_url: manga.cover_url.clone(),
-            languages: Self::MANGANATO_MANGA_LANGUAGE.into(),
-            rating: manga.rating,
-            // There is no way of knowing the artist/artists of the manga on manganato
-            artist: None,
-            author: authors,
-        })
     }
 }
 
@@ -215,59 +299,132 @@ impl SearchChapterById for ManganatoProvider {
 
 impl HomePageMangaProvider for ManganatoProvider {
     async fn get_popular_mangas(&self) -> Result<Vec<super::PopularManga>, Box<dyn Error>> {
-        let response = self.client.get(self.base_url.clone()).send().await?;
+        let cache = self.cache_provider.get(self.base_url.as_str())?;
+        match cache {
+            Some(cached) => {
+                let response = GetPopularMangasResponse::parse_html(HtmlElement::new(cached.data))?;
 
-        if response.status() != StatusCode::OK {
-            return Err(format!("could not get popular mangas on manganato, details about the response : {:#?}", response).into());
+                Ok(response.mangas.into_iter().map(PopularManga::from).collect())
+            },
+            None => {
+                let response = self.client.get(self.base_url.clone()).send().await?;
+
+                if response.status() != StatusCode::OK {
+                    return Err(
+                        format!("could not get popular mangas on manganato, details about the response : {:#?}", response).into()
+                    );
+                }
+
+                let doc = response.text().await?;
+
+                self.cache_provider
+                    .cache(InsertEntry {
+                        id: self.base_url.as_str(),
+                        data: &doc,
+                        duration: Self::HOME_PAGE_CACHE_DURATION,
+                    })
+                    .ok();
+
+                let response = GetPopularMangasResponse::parse_html(HtmlElement::new(doc))?;
+
+                Ok(response.mangas.into_iter().map(PopularManga::from).collect())
+            },
         }
-
-        let doc = response.text().await?;
-
-        let response = GetPopularMangasResponse::parse_html(HtmlElement::new(doc))?;
-
-        Ok(response.mangas.into_iter().map(PopularManga::from).collect())
     }
 
     async fn get_recently_added_mangas(&self) -> Result<Vec<super::RecentlyAddedManga>, Box<dyn Error>> {
-        let response = self.client.get(self.base_url.clone()).send().await?;
+        let cache = self.cache_provider.get(self.base_url.as_str())?;
 
-        if response.status() != StatusCode::OK {
-            return Err(format!("could not find recently added mangas on manganato, status code : {}", response.status()).into());
+        match cache {
+            Some(cached) => {
+                let new_mangas = NewAddedMangas::parse_html(HtmlElement::new(cached.data))?;
+
+                let tool_tip_response = self.client.get(format!("{}/homepage_tooltips_json", self.base_url)).send().await?;
+
+                if tool_tip_response.status() != StatusCode::OK {
+                    return Err(format!(
+                        "could not find recently added mangas on manganato, status code : {}",
+                        tool_tip_response.status()
+                    )
+                    .into());
+                }
+
+                let tool_tip_response: Vec<ToolTipItem> = tool_tip_response.json().await?;
+                let mut response: Vec<RecentlyAddedManga> = vec![];
+
+                for new_manga in new_mangas.mangas.into_iter() {
+                    let from_tool_tip = tool_tip_response
+                        .iter()
+                        .find(|data| data.id == new_manga.id_tooltip)
+                        .cloned()
+                        .unwrap_or_default();
+
+                    let manga = RecentlyAddedManga {
+                        id: new_manga.id,
+                        title: from_tool_tip.name,
+                        description: from_tool_tip.description,
+                        cover_img_url: from_tool_tip.image,
+                    };
+
+                    response.push(manga);
+                }
+
+                Ok(response)
+            },
+            None => {
+                let response = self.client.get(self.base_url.clone()).send().await?;
+
+                if response.status() != StatusCode::OK {
+                    return Err(
+                        format!("could not find recently added mangas on manganato, status code : {}", response.status()).into()
+                    );
+                }
+
+                let doc = response.text().await?;
+
+                self.cache_provider
+                    .cache(InsertEntry {
+                        id: self.base_url.as_str(),
+                        data: &doc,
+                        duration: Self::HOME_PAGE_CACHE_DURATION,
+                    })
+                    .ok();
+
+                let new_mangas = NewAddedMangas::parse_html(HtmlElement::new(doc))?;
+
+                let tool_tip_response = self.client.get(format!("{}/homepage_tooltips_json", self.base_url)).send().await?;
+
+                if tool_tip_response.status() != StatusCode::OK {
+                    return Err(format!(
+                        "could not find recently added mangas on manganato, status code : {}",
+                        tool_tip_response.status()
+                    )
+                    .into());
+                }
+
+                let tool_tip_response: Vec<ToolTipItem> = tool_tip_response.json().await?;
+                let mut response: Vec<RecentlyAddedManga> = vec![];
+
+                for new_manga in new_mangas.mangas.into_iter() {
+                    let from_tool_tip = tool_tip_response
+                        .iter()
+                        .find(|data| data.id == new_manga.id_tooltip)
+                        .cloned()
+                        .unwrap_or_default();
+
+                    let manga = RecentlyAddedManga {
+                        id: new_manga.id,
+                        title: from_tool_tip.name,
+                        description: from_tool_tip.description,
+                        cover_img_url: from_tool_tip.image,
+                    };
+
+                    response.push(manga);
+                }
+
+                Ok(response)
+            },
         }
-
-        let doc = response.text().await?;
-
-        let new_mangas = NewAddedMangas::parse_html(HtmlElement::new(doc))?;
-
-        let tool_tip_response = self.client.get(format!("{}/homepage_tooltips_json", self.base_url)).send().await?;
-
-        if tool_tip_response.status() != StatusCode::OK {
-            return Err(
-                format!("could not find recently added mangas on manganato, status code : {}", tool_tip_response.status()).into()
-            );
-        }
-
-        let tool_tip_response: Vec<ToolTipItem> = tool_tip_response.json().await?;
-        let mut response: Vec<RecentlyAddedManga> = vec![];
-
-        for new_manga in new_mangas.mangas.into_iter() {
-            let from_tool_tip = tool_tip_response
-                .iter()
-                .find(|data| data.id == new_manga.id_tooltip)
-                .cloned()
-                .unwrap_or_default();
-
-            let manga = RecentlyAddedManga {
-                id: new_manga.id,
-                title: from_tool_tip.name,
-                description: from_tool_tip.description,
-                cover_img_url: from_tool_tip.image,
-            };
-
-            response.push(manga);
-        }
-
-        Ok(response)
     }
 }
 
@@ -288,23 +445,39 @@ impl SearchPageProvider for ManganatoProvider {
         };
 
         let endpoint = format!("{}/advanced_search", self.base_url);
+        let query = &[("page", pagination.current_page.to_string()), ("s", "all".to_string()), search.clone()];
+        let cache_id = format!("{endpoint}{}{}", pagination.current_page, search.1);
 
-        let response = self
-            .client
-            .get(endpoint)
-            .query(&[("page", pagination.current_page.to_string()), ("s", "all".to_string()), search])
-            .send()
-            .await?;
+        let cache = self.cache_provider.get(&cache_id)?;
 
-        if response.status() != StatusCode::OK {
-            return Err("could not search mangas on manganato".into());
+        match cache {
+            Some(cached) => {
+                let result = SearchMangaResponse::parse_html(HtmlElement::new(cached.data))?;
+
+                Ok(GetMangasResponse::from(result))
+            },
+            None => {
+                let response = self.client.get(endpoint).query(query).send().await?;
+
+                if response.status() != StatusCode::OK {
+                    return Err("could not search mangas on manganato".into());
+                }
+
+                let doc = response.text().await?;
+
+                self.cache_provider
+                    .cache(InsertEntry {
+                        id: &cache_id,
+                        data: &doc,
+                        duration: Self::SEARCH_PAGE_CACHE_DURATION,
+                    })
+                    .ok();
+
+                let result = SearchMangaResponse::parse_html(HtmlElement::new(doc))?;
+
+                Ok(GetMangasResponse::from(result))
+            },
         }
-
-        let doc = response.text().await?;
-
-        let result = SearchMangaResponse::parse_html(HtmlElement::new(doc))?;
-
-        Ok(GetMangasResponse::from(result))
     }
 }
 
@@ -327,25 +500,51 @@ impl GetChapterPages for ManganatoProvider {
         _manga_id: &str,
         _image_quality: crate::config::ImageQuality,
     ) -> Result<Vec<super::ChapterPageUrl>, Box<dyn Error>> {
-        let response = self.client.get(chapter_id).send().await?;
+        let cache = self.cache_provider.get(chapter_id)?;
+        match cache {
+            Some(cached) => {
+                let pages = ChapterUrls::parse_html(HtmlElement::new(cached.data))?;
 
-        if response.status() != StatusCode::OK {
-            return Err(format!("could not get pages url for chapter with id : {chapter_id}").into());
+                let mut pages_url: Vec<ChapterPageUrl> = vec![];
+
+                for page in pages.urls {
+                    let url = Url::parse(&page).unwrap_or("https://localhost".parse().unwrap());
+                    let extension = Path::new(&page).extension().unwrap().to_str().unwrap().to_string();
+
+                    pages_url.push(ChapterPageUrl { url, extension });
+                }
+                Ok(pages_url)
+            },
+            None => {
+                let response = self.client.get(chapter_id).send().await?;
+
+                if response.status() != StatusCode::OK {
+                    return Err(format!("could not get pages url for chapter with id : {chapter_id}").into());
+                }
+
+                let doc = response.text().await?;
+
+                self.cache_provider
+                    .cache(InsertEntry {
+                        id: chapter_id,
+                        data: &doc,
+                        duration: Self::CHAPTER_PAGE_CACHE_DURATION,
+                    })
+                    .ok();
+
+                let pages = ChapterUrls::parse_html(HtmlElement::new(doc))?;
+
+                let mut pages_url: Vec<ChapterPageUrl> = vec![];
+
+                for page in pages.urls {
+                    let url = Url::parse(&page).unwrap_or("https://localhost".parse().unwrap());
+                    let extension = Path::new(&page).extension().unwrap().to_str().unwrap().to_string();
+
+                    pages_url.push(ChapterPageUrl { url, extension });
+                }
+                Ok(pages_url)
+            },
         }
-
-        let doc = response.text().await?;
-
-        let pages = ChapterUrls::parse_html(HtmlElement::new(doc))?;
-
-        let mut pages_url: Vec<ChapterPageUrl> = vec![];
-
-        for page in pages.urls {
-            let url = Url::parse(&page).unwrap_or("https://localhost".parse().unwrap());
-            let extension = Path::new(&page).extension().unwrap().to_str().unwrap().to_string();
-
-            pages_url.push(ChapterPageUrl { url, extension });
-        }
-        Ok(pages_url)
     }
 }
 
@@ -371,100 +570,215 @@ impl MangaPageProvider for ManganatoProvider {
         filters: super::ChapterFilters,
         pagination: super::Pagination,
     ) -> Result<super::GetChaptersResponse, Box<dyn Error>> {
-        let response = self.client.get(manga_id).send().await?;
+        let cache = self.cache_provider.get(manga_id)?;
 
-        if response.status() != StatusCode::OK {
-            return Err(format!("could not find manga page for : {manga_id}").into());
+        match cache {
+            Some(cached) => {
+                let response = ManganatoChaptersResponse::parse_html(HtmlElement::new(cached.data))?;
+
+                let total_chapters = response.total_chapters;
+
+                let mut chapters: Vec<Chapter> = response
+                    .chapters
+                    .into_iter()
+                    .map(|chap| Chapter {
+                        id: chap.page_url.clone(),
+                        id_safe_for_download: format!("{}-{}", extract_id_from_url(manga_id), extract_id_from_url(chap.page_url)),
+                        title: chap.title.unwrap_or("no title".to_string()),
+                        volume_number: chap.volume,
+                        scanlator: Some("Manganato".to_string()),
+                        language: Languages::English,
+                        chapter_number: chap.number,
+                        manga_id: manga_id.to_string(),
+                        publication_date: from_timestamp(chap.uploaded_at.parse().unwrap_or_default()).unwrap_or_default(),
+                    })
+                    .collect();
+
+                if filters.order == ChapterOrderBy::Ascending {
+                    chapters.reverse();
+                }
+
+                let from = pagination.index_to_slice_from();
+                let to = pagination.to_index(total_chapters as usize);
+
+                let chapters = chapters.as_slice().get(from..to).unwrap_or(&[]);
+
+                Ok(super::GetChaptersResponse {
+                    chapters: chapters.to_vec(),
+                    total_chapters,
+                })
+            },
+            None => {
+                let response = self.client.get(manga_id).send().await?;
+
+                if response.status() != StatusCode::OK {
+                    return Err(format!("could not find manga page for : {manga_id}").into());
+                }
+
+                let doc = response.text().await?;
+
+                self.cache_provider
+                    .cache(InsertEntry {
+                        id: manga_id,
+                        data: &doc,
+                        duration: Self::MANGA_PAGE_CACHE_DURATION,
+                    })
+                    .ok();
+
+                let response = ManganatoChaptersResponse::parse_html(HtmlElement::new(doc))?;
+
+                let total_chapters = response.total_chapters;
+
+                let mut chapters: Vec<Chapter> = response
+                    .chapters
+                    .into_iter()
+                    .map(|chap| Chapter {
+                        id: chap.page_url.clone(),
+                        id_safe_for_download: format!("{}-{}", extract_id_from_url(manga_id), extract_id_from_url(chap.page_url)),
+                        title: chap.title.unwrap_or("no title".to_string()),
+                        volume_number: chap.volume,
+                        scanlator: Some("Manganato".to_string()),
+                        language: Languages::English,
+                        chapter_number: chap.number,
+                        manga_id: manga_id.to_string(),
+                        publication_date: from_timestamp(chap.uploaded_at.parse().unwrap_or_default()).unwrap_or_default(),
+                    })
+                    .collect();
+
+                if filters.order == ChapterOrderBy::Ascending {
+                    chapters.reverse();
+                }
+
+                let from = pagination.index_to_slice_from();
+                let to = pagination.to_index(total_chapters as usize);
+
+                let chapters = chapters.as_slice().get(from..to).unwrap_or(&[]);
+
+                Ok(super::GetChaptersResponse {
+                    chapters: chapters.to_vec(),
+                    total_chapters,
+                })
+            },
         }
-
-        let doc = response.text().await?;
-
-        let response = ManganatoChaptersResponse::parse_html(HtmlElement::new(doc))?;
-
-        let total_chapters = response.total_chapters;
-
-        let mut chapters: Vec<Chapter> = response
-            .chapters
-            .into_iter()
-            .map(|chap| Chapter {
-                id: chap.page_url.clone(),
-                id_safe_for_download: format!("{}-{}", extract_id_from_url(manga_id), extract_id_from_url(chap.page_url)),
-                title: chap.title.unwrap_or("no title".to_string()),
-                volume_number: chap.volume,
-                scanlator: Some("Manganato".to_string()),
-                language: Languages::English,
-                chapter_number: chap.number,
-                manga_id: manga_id.to_string(),
-                publication_date: from_timestamp(chap.uploaded_at.parse().unwrap_or_default()).unwrap_or_default(),
-            })
-            .collect();
-
-        if filters.order == ChapterOrderBy::Ascending {
-            chapters.reverse();
-        }
-
-        let from = pagination.index_to_slice_from();
-        let to = pagination.to_index(total_chapters as usize);
-
-        let chapters = chapters.as_slice().get(from..to).unwrap_or(&[]);
-
-        Ok(super::GetChaptersResponse {
-            chapters: chapters.to_vec(),
-            total_chapters,
-        })
     }
 
     async fn get_all_chapters(&self, manga_id: &str, _language: Languages) -> Result<Vec<super::Chapter>, Box<dyn Error>> {
-        let response = self.client.get(manga_id).send().await?;
+        let cache = self.cache_provider.get(manga_id)?;
 
-        if response.status() != StatusCode::OK {
-            return Err(format!("could not find manga page for : {manga_id}").into());
+        match cache {
+            Some(cached) => {
+                let response = ManganatoChaptersResponse::parse_html(HtmlElement::new(cached.data))?;
+
+                let chapters: Vec<Chapter> = response
+                    .chapters
+                    .into_iter()
+                    .map(|chap| Chapter {
+                        id: chap.page_url.clone(),
+                        id_safe_for_download: format!("{}-{}", extract_id_from_url(manga_id), extract_id_from_url(chap.page_url)),
+                        title: chap.title.unwrap_or("no title".to_string()),
+                        volume_number: chap.volume,
+                        scanlator: Some("Manganato".to_string()),
+                        language: Languages::English,
+                        chapter_number: chap.number,
+                        manga_id: manga_id.to_string(),
+                        publication_date: from_timestamp(chap.uploaded_at.parse().unwrap_or_default()).unwrap_or_default(),
+                    })
+                    .collect();
+
+                Ok(chapters)
+            },
+            None => {
+                let response = self.client.get(manga_id).send().await?;
+
+                if response.status() != StatusCode::OK {
+                    return Err(format!("could not find manga page for : {manga_id}").into());
+                }
+
+                let doc = response.text().await?;
+
+                self.cache_provider
+                    .cache(InsertEntry {
+                        id: manga_id,
+                        data: &doc,
+                        duration: Self::MANGA_PAGE_CACHE_DURATION,
+                    })
+                    .ok();
+
+                let response = ManganatoChaptersResponse::parse_html(HtmlElement::new(doc))?;
+
+                let chapters: Vec<Chapter> = response
+                    .chapters
+                    .into_iter()
+                    .map(|chap| Chapter {
+                        id: chap.page_url.clone(),
+                        id_safe_for_download: format!("{}-{}", extract_id_from_url(manga_id), extract_id_from_url(chap.page_url)),
+                        title: chap.title.unwrap_or("no title".to_string()),
+                        volume_number: chap.volume,
+                        scanlator: Some("Manganato".to_string()),
+                        language: Languages::English,
+                        chapter_number: chap.number,
+                        manga_id: manga_id.to_string(),
+                        publication_date: from_timestamp(chap.uploaded_at.parse().unwrap_or_default()).unwrap_or_default(),
+                    })
+                    .collect();
+
+                Ok(chapters)
+            },
         }
-
-        let doc = response.text().await?;
-
-        let response = ManganatoChaptersResponse::parse_html(HtmlElement::new(doc))?;
-
-        let chapters: Vec<Chapter> = response
-            .chapters
-            .into_iter()
-            .map(|chap| Chapter {
-                id: chap.page_url.clone(),
-                id_safe_for_download: format!("{}-{}", extract_id_from_url(manga_id), extract_id_from_url(chap.page_url)),
-                title: chap.title.unwrap_or("no title".to_string()),
-                volume_number: chap.volume,
-                scanlator: Some("Manganato".to_string()),
-                language: Languages::English,
-                chapter_number: chap.number,
-                manga_id: manga_id.to_string(),
-                publication_date: from_timestamp(chap.uploaded_at.parse().unwrap_or_default()).unwrap_or_default(),
-            })
-            .collect();
-
-        Ok(chapters)
     }
 }
 
 impl FeedPageProvider for ManganatoProvider {
     async fn get_latest_chapters(&self, manga_id: &str) -> Result<Vec<super::LatestChapter>, Box<dyn Error>> {
-        let doc = self.client.get(manga_id).send().await?.text().await?;
+        let cache = self.cache_provider.get(manga_id)?;
+        match cache {
+            Some(cached) => {
+                let data = ManganatoChaptersResponse::parse_html(HtmlElement::new(cached.data))?;
 
-        let data = ManganatoChaptersResponse::parse_html(HtmlElement::new(doc))?;
+                Ok(data
+                    .chapters
+                    .into_iter()
+                    .take(4)
+                    .map(|chap| LatestChapter {
+                        id: chap.page_url,
+                        title: chap.title.unwrap_or("no title".to_string()),
+                        chapter_number: chap.number,
+                        manga_id: manga_id.to_string(),
+                        language: Languages::English,
+                        volume_number: chap.volume,
+                        publication_date: from_timestamp(chap.uploaded_at.parse().unwrap_or_default()).unwrap_or_default(),
+                    })
+                    .collect())
+            },
+            None => {
+                let doc = self.client.get(manga_id).send().await?.text().await?;
 
-        Ok(data
-            .chapters
-            .into_iter()
-            .take(4)
-            .map(|chap| LatestChapter {
-                id: chap.page_url,
-                title: chap.title.unwrap_or("no title".to_string()),
-                chapter_number: chap.number,
-                manga_id: manga_id.to_string(),
-                language: Languages::English,
-                volume_number: chap.volume,
-                publication_date: from_timestamp(chap.uploaded_at.parse().unwrap_or_default()).unwrap_or_default(),
-            })
-            .collect())
+                self.cache_provider
+                    .cache(InsertEntry {
+                        id: manga_id,
+                        data: &doc,
+                        duration: Self::MANGA_PAGE_CACHE_DURATION,
+                    })
+                    .ok();
+
+                let data = ManganatoChaptersResponse::parse_html(HtmlElement::new(doc))?;
+
+                Ok(data
+                    .chapters
+                    .into_iter()
+                    .take(4)
+                    .map(|chap| LatestChapter {
+                        id: chap.page_url,
+                        title: chap.title.unwrap_or("no title".to_string()),
+                        chapter_number: chap.number,
+                        manga_id: manga_id.to_string(),
+                        language: Languages::English,
+                        volume_number: chap.volume,
+                        publication_date: from_timestamp(chap.uploaded_at.parse().unwrap_or_default()).unwrap_or_default(),
+                    })
+                    .collect())
+            },
+        }
     }
 }
 
@@ -478,6 +792,7 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use super::*;
+    use crate::backend::cache::mock::EmptyCache;
     use crate::backend::manga_provider::{ChapterFilters, Manga, Pagination};
     use crate::config::ImageQuality;
 
@@ -518,7 +833,7 @@ mod tests {
             })
             .await;
 
-        let manganato = ManganatoProvider::new(server.url("/manganatotest").parse().unwrap());
+        let manganato = ManganatoProvider::new(server.url("/manganatotest").parse().unwrap(), EmptyCache::new_arc());
 
         let response = manganato.get_raw_image(server.base_url().as_str()).await?;
 
@@ -541,7 +856,7 @@ mod tests {
             })
             .await;
 
-        let manganato = ManganatoProvider::new(server.url("/home_page").parse().unwrap());
+        let manganato = ManganatoProvider::new(server.url("/home_page").parse().unwrap(), EmptyCache::new_arc());
 
         let response = manganato.get_popular_mangas().await?;
 
@@ -570,7 +885,7 @@ mod tests {
             })
             .await;
 
-        let manganato = ManganatoProvider::new(server.url("/").parse().unwrap());
+        let manganato = ManganatoProvider::new(server.url("/").parse().unwrap(), EmptyCache::new_arc());
 
         let response = manganato
             .search_mangas(SearchTerm::trimmed_lowercased("oshi no ko"), ManganatoFilterState {}, Pagination::default())
@@ -600,7 +915,7 @@ mod tests {
 
         let base_url = server.url("");
 
-        let manganato = ManganatoProvider::new(base_url.clone().parse().unwrap());
+        let manganato = ManganatoProvider::new(base_url.clone().parse().unwrap(), EmptyCache::new_arc());
 
         // shikanoko nokonoko koshitantan
         let response = manganato.get_manga_by_id(server.url("/manga-jq986499").as_str()).await?;
@@ -633,7 +948,7 @@ mod tests {
 
         let base_url = server.url("");
 
-        let manganato = ManganatoProvider::new(base_url.clone().parse().unwrap());
+        let manganato = ManganatoProvider::new(base_url.clone().parse().unwrap(), EmptyCache::new_arc());
 
         // shikanoko nokonoko koshitantan
         let response = manganato
@@ -675,7 +990,7 @@ mod tests {
 
         let base_url = server.url("");
 
-        let manganato = ManganatoProvider::new(base_url.clone().parse().unwrap());
+        let manganato = ManganatoProvider::new(base_url.clone().parse().unwrap(), EmptyCache::new_arc());
 
         let response = manganato
             .get_all_chapters(server.url("/manga-jq986499").as_str(), Languages::default())
@@ -703,7 +1018,7 @@ mod tests {
 
         let base_url = server.url("");
 
-        let manganato = ManganatoProvider::new(base_url.clone().parse().unwrap());
+        let manganato = ManganatoProvider::new(base_url.clone().parse().unwrap(), EmptyCache::new_arc());
 
         // shikanoko nokonoko koshitantan
         let (chapter_to_read, chapter_list) = manganato.read_chapter(&server.url("/manga-jq986499/chapter-27"), "").await?;
@@ -736,7 +1051,7 @@ mod tests {
 
         let base_url = server.url("");
 
-        let manganato = ManganatoProvider::new(base_url.clone().parse().unwrap());
+        let manganato = ManganatoProvider::new(base_url.clone().parse().unwrap(), EmptyCache::new_arc());
 
         let (chapter_to_read, _) = manganato
             .fetch_chapter_bookmarked(crate::backend::database::ChapterBookmarked {
@@ -765,7 +1080,7 @@ mod tests {
 
         let base_url = server.url("");
 
-        let manganato = ManganatoProvider::new(base_url.clone().parse().unwrap());
+        let manganato = ManganatoProvider::new(base_url.clone().parse().unwrap(), EmptyCache::new_arc());
 
         let result = manganato
             .get_chapter_pages_url_with_extension(&server.url("/manga-jq986499/chapter-27"), "", ImageQuality::Low)
@@ -802,7 +1117,7 @@ mod tests {
 
         let base_url = server.url("");
 
-        let manganato = ManganatoProvider::new(base_url.clone().parse().unwrap());
+        let manganato = ManganatoProvider::new(base_url.clone().parse().unwrap(), EmptyCache::new_arc());
 
         let manga_id = server.url("/manga-jq986499");
 
