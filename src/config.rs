@@ -22,6 +22,7 @@ pub enum DownloadType {
     Epub,
 }
 
+/// NOTE: very mangadex-specific, may not apply to other manga providers
 #[derive(Default, Debug, Serialize, Deserialize, Display, EnumIter, Clone, Copy)]
 #[serde(rename_all = "snake_case")]
 pub enum ImageQuality {

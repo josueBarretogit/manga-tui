@@ -28,12 +28,14 @@ pub struct ChapterToDownloadSanitized {
 }
 
 pub trait MangaDownloader {
-    /// The `base_directory` where the pages will be saved, for `raw_images`
+    /// Construct the manga directory name which should look like this: New World Builders ~ Survive With Class 24 “Body”
+    /// manga-yd1002286
     fn make_manga_base_directory_name(&self, base_directory: &Path, chapter: &ChapterToDownloadSanitized) -> PathBuf {
         base_directory
             .join(format!("{} {}", chapter.manga_title, chapter.manga_id))
             .join(chapter.language.as_human_readable())
     }
+
     fn create_manga_base_directory(&self, base_directory: &Path) -> Result<(), Box<dyn Error>> {
         if !exists!(base_directory) {
             create_dir_all(base_directory)?

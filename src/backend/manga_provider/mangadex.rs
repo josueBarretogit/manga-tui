@@ -31,6 +31,16 @@ pub static API_URL_BASE: &str = "https://api.mangadex.org";
 
 pub static COVER_IMG_URL_BASE: &str = "https://uploads.mangadex.org/covers";
 
+/// Mangadex: `https://mangadex.org`
+/// This is the first manga provider since the first versions of manga-tui, thats why it is the
+/// default
+/// the implementation of `MangaProvider` is mostly based on the api requests made on the website
+/// which can be seen in the network tab in the dev-tools
+/// documentation on how to use the mangadex api can be found [here](https://api.mangadex.org/docs)
+/// Mangadex can:
+/// - Provide manga translated in multiple languages
+/// - Provide an option to fetch chapter pages with lower quality `https://api.mangadex.org/docs/04-chapter/retrieving-chapter/#2-construct-page-urls`
+/// - Has, in my opinion the most advanced search with multiple genres and options
 #[derive(Clone, Debug)]
 pub struct MangadexClient {
     client: reqwest::Client,
@@ -40,11 +50,13 @@ pub struct MangadexClient {
 }
 
 impl MangadexClient {
+    /// see: `https://api.mangadex.org/docs/04-chapter/retrieving-chapter/#2-construct-page-urls`
     fn make_cover_img_url_lower_quality(&self, manga_id: &str, file_name: &str) -> String {
         let file_name = format!("{}/{manga_id}/{file_name}.256.jpg", self.cover_img_url_base);
         file_name
     }
 
+    /// see: `https://api.mangadex.org/docs/04-chapter/retrieving-chapter/#2-construct-page-urls`
     fn make_cover_img_url(&self, manga_id: &str, file_name: &str) -> String {
         let file_name = format!("{}/{manga_id}/{file_name}.512.jpg", self.cover_img_url_base);
         file_name
@@ -121,10 +133,10 @@ impl MangadexClient {
 
 impl GetRawImage for MangadexClient {
     async fn get_raw_image(&self, url: &str) -> Result<Bytes, Box<dyn Error>> {
-        let response = self.client.get(url).timeout(StdDuration::from_secs(3)).send().await?;
+        let response = self.client.get(url).timeout(StdDuration::from_secs(10)).send().await?;
 
         if response.status() != StatusCode::OK {
-            return Err(format!("Could not get image on mangadex with url : {url}").into());
+            return Err(format!("Could not get image on mangadex with url: {url}").into());
         }
 
         Ok(response.bytes().await?)
@@ -169,14 +181,14 @@ impl HomePageMangaProvider for MangadexClient {
             .data
             .into_iter()
             .map(|manga| {
-                let mut cover_img_url: Option<String> = Option::default();
+                let mut cover_img_url = String::new();
 
                 for rel in &manga.relationships {
                     if let Some(attributes) = &rel.attributes {
                         match rel.type_field.as_str() {
                             "cover_art" => {
                                 let file_name = attributes.file_name.as_ref().unwrap().to_string();
-                                cover_img_url = Some(self.make_cover_img_url_lower_quality(&manga.id, &file_name));
+                                cover_img_url = self.make_cover_img_url_lower_quality(&manga.id, &file_name);
                             },
                             _ => {},
                         }

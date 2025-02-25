@@ -7,7 +7,7 @@ use ratatui::layout::{Constraint, Layout, Margin, Rect};
 use ratatui::style::Styled;
 use ratatui::text::Line;
 use ratatui::widgets::block::Title;
-use ratatui::widgets::{Block, Borders, Clear, Tabs, Widget};
+use ratatui::widgets::{Block, Borders, Clear, Paragraph, Tabs, Widget, Wrap};
 use ratatui::Frame;
 use ratatui_image::picker::Picker;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
@@ -160,7 +160,7 @@ where
                 filter_widget,
                 Pagination::from_first_page(match which_provider {
                     MangaProviders::Mangadex => 10,
-                    MangaProviders::Manganato => 24,
+                    MangaProviders::Mangakakalot => 24,
                 }),
             )
             .with_global_sender(global_event_tx.clone()),
@@ -223,7 +223,7 @@ where
             vertical: 2,
         });
 
-        message.render(inner, buf);
+        Paragraph::new(message).wrap(Wrap { trim: true }).render(inner, buf);
     }
 
     fn display_error_message(&mut self, error_message: String) {

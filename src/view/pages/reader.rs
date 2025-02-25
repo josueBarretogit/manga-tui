@@ -15,7 +15,9 @@ use tokio::task::JoinSet;
 
 use crate::backend::database::{Bookmark, ChapterToBookmark, ChapterToSaveHistory, Database, MangaReadingHistorySave};
 use crate::backend::error_log::{write_to_error_log, ErrorType};
-use crate::backend::manga_provider::{ChapterReader, ChapterToRead, ListOfChapters, MangaPanel, ReaderPageProvider};
+use crate::backend::manga_provider::{
+    ChapterReader, ChapterToRead, ListOfChapters, MangaPanel, MangaProviders, ReaderPageProvider,
+};
 use crate::backend::tracker::{track_manga, MangaTracker};
 use crate::backend::tui::Events;
 use crate::common::format_error_message_tracking_reading_history;
@@ -137,7 +139,11 @@ where
             let image = StatefulImage::new(None).resize(Resize::Fit(None));
             StatefulWidget::render(image, center, buf, page.image_state.as_mut().unwrap());
             let (width, height) = page.dimensions.unwrap();
-            self.resize_based_on_image_size(width, height);
+
+            let provider = self.api_client.name();
+            if provider != MangaProviders::Mangakakalot {
+                self.resize_based_on_image_size(width, height);
+            }
 
             false
         } else {

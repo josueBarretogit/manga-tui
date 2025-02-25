@@ -22,6 +22,7 @@ use crate::global::PREFERRED_LANGUAGE;
 use crate::view::widgets::StatefulWidgetFrame;
 
 pub mod mangadex;
+pub mod mangakakalot;
 pub mod manganato;
 
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
@@ -67,6 +68,10 @@ impl From<Genres> for Span<'_> {
     }
 }
 
+/// Represents manga which are popular in the week/month like the ones from the homepage of
+/// mangadex https://mangadex.org/
+/// most manga providers wont provide info such as description, status or genres, like `manganato` its fine to leave
+/// them empty to avoid making many requests
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
 pub struct PopularManga {
     pub id: String,
@@ -78,12 +83,13 @@ pub struct PopularManga {
     pub cover_img_url: String,
 }
 
+/// Used to represent manga which are new
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
 pub struct RecentlyAddedManga {
     pub id: String,
     pub title: String,
     pub description: String,
-    pub cover_img_url: Option<String>,
+    pub cover_img_url: String,
 }
 
 #[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
@@ -106,7 +112,7 @@ impl From<MangaStatus> for Span<'_> {
     }
 }
 
-/// NOTE this is very mangadex-specifc since its the only provider that provides a lot of languages
+/// NOTE: this is very mangadex-specifc since its the only provider that provides a lot of languages
 #[derive(Debug, Display, EnumIter, Default, Clone, Copy, PartialEq, Eq, Deserialize)]
 pub enum Languages {
     French,
@@ -261,11 +267,13 @@ pub struct Artist {
     pub name: String,
 }
 
+/// Represents the data which is shown in the `manga page`
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct Manga {
     pub id: String,
-    /// This is necessary because on mangadex ids are Uuids which are safe to be used in file
-    /// names, but when the manga providers is a website the id cannot be a url, like `https://chapmanganato.to/manga-zt1003076/chapter-11`
+    /// This is necessary because sometimes the id is a Uuid which can be used in file names
+    /// but when the manga providers is a website the id is most likely a url like: `https://chapmanganato.to/manga-zt1003076/chapter-11`
+    /// which cannot be used as a file name
     /// so this is only intended to be used when downloading a manga
     pub id_safe_for_download: String,
     pub title: String,
@@ -314,6 +322,7 @@ pub struct Chapter {
     pub publication_date: NaiveDate,
 }
 
+/// Represents the data needed to display the most recents chapter uploaded of a manga
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct LatestChapter {
     pub id: String,
@@ -648,8 +657,8 @@ pub enum MangaProviders {
     #[default]
     #[strum(to_string = "mangadex")]
     Mangadex,
-    #[strum(to_string = "manganato")]
-    Manganato,
+    #[strum(to_string = "mangakakalot")]
+    Mangakakalot,
 }
 
 pub trait GetRawImage {
@@ -719,7 +728,8 @@ pub trait GetChapterPages: GetRawImage + Send + Sync {
     ) -> impl Future<Output = Result<Vec<ChapterPageUrl>, Box<dyn Error>>> + Send;
 
     /// Used this method to get the pages with `bytes` and `extension`
-    /// `on_progress` is used to indicate how many pages have been fetched
+    /// `on_progress` is used to indicate how many pages have been fetched by providing the
+    /// percentage of the page in relation with the total
     fn get_chapter_pages<F: Fn(f64, &str) + 'static + Send>(
         &self,
         chapter_id: &str,
@@ -824,6 +834,10 @@ pub trait ProviderIdentity {
     fn name(&self) -> MangaProviders;
 }
 
+/// Preferer manga providers which provide an api like `mangadex`, when scraping from a website
+/// prefer ones that are server-side rendered, I should be able to `curl https://example./// >>
+/// example.html` and get juicy scrapable html document since client-side rendered website are much
+/// harder to scrape
 pub trait MangaProvider:
     HomePageMangaProvider + MangaPageProvider + SearchPageProvider + ReaderPageProvider + FeedPageProvider + Send + Sync
 {

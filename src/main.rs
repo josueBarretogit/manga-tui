@@ -10,9 +10,9 @@ use std::time::Duration;
 use backend::manga_provider::mangadex::filter::MangadexFilterProvider;
 use backend::manga_provider::mangadex::filter_widget::MangadexFilterWidget;
 use backend::manga_provider::mangadex::{MangadexClient, API_URL_BASE, COVER_IMG_URL_BASE};
-use backend::manga_provider::manganato::filter_state::{ManganatoFilterState, ManganatoFiltersProvider};
-use backend::manga_provider::manganato::filter_widget::ManganatoFilterWidget;
-use backend::manga_provider::manganato::{ManganatoProvider, MANGANATO_BASE_URL};
+use backend::manga_provider::mangakakalot::filter_state::{MangakakalotFilterState, MangakakalotFiltersProvider};
+use backend::manga_provider::mangakakalot::filter_widget::MangakakalotFilterWidget;
+use backend::manga_provider::mangakakalot::{MangakakalotProvider, MANGAKAKALOT_BASE_URL};
 use backend::manga_provider::MangaProviders;
 use backend::release_notifier::{ReleaseNotifier, GITHUB_URL};
 use backend::secrets::anilist::AnilistStorage;
@@ -131,15 +131,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             run_app(ratatui::init(), mangadex_client, anilist_client, MangadexFilterProvider::new(), MangadexFilterWidget::new())
                 .await?;
         },
-        MangaProviders::Manganato => {
-            logger.inform("Using manganato as manga provider");
+        MangaProviders::Mangakakalot => {
+            logger.inform("Using mangakakalot as manga provider");
             tokio::time::sleep(Duration::from_secs(1)).await;
             run_app(
                 ratatui::init(),
-                ManganatoProvider::new(MANGANATO_BASE_URL.parse().unwrap()),
+                MangakakalotProvider::new(MANGAKAKALOT_BASE_URL.parse().unwrap()),
                 anilist_client,
-                ManganatoFiltersProvider::new(ManganatoFilterState {}),
-                ManganatoFilterWidget {},
+                MangakakalotFiltersProvider::new(MangakakalotFilterState {}),
+                MangakakalotFilterWidget {},
             )
             .await?;
         },

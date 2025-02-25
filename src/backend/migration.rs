@@ -279,6 +279,10 @@ fn migrate_version_0_4_0(connection: &mut Connection, logger: &impl ILogger) -> 
 }
 
 /// Add column `manga_provider` to table `mangas`
+/// this was done because mangas come from different providers now (mangadex, and manganato as of
+/// v0.6.0), so in `pages/feed.rs` the fetched mangas from the database must come from the manga provider
+/// in use, if the app is running with mangadex then no manga from manganato should appear in the
+/// reading history
 fn migrate_version_0_6_0(connection: &mut Connection, logger: &impl ILogger) -> rusqlite::Result<Option<MigrationTable>> {
     let queries = [Query::AlterTable {
         table_name: "mangas",
