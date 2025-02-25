@@ -362,19 +362,12 @@ where
         let client = Arc::clone(&self.manga_provider);
         self.tasks.spawn(async move {
             for item in mangas {
-                match item.manga.cover_img_url.as_ref() {
-                    Some(file_name) => {
-                        let response = client.get_image(file_name).await;
-                        if let Ok(res) = response {
-                            tx.send(HomeEvents::LoadRecentlyAddedMangasCover(Some(res), item.manga.id)).ok();
-                        } else {
-                            tx.send(HomeEvents::LoadRecentlyAddedMangasCover(None, item.manga.id)).ok();
-                        }
-                    },
-                    None => {
-                        tx.send(HomeEvents::LoadRecentlyAddedMangasCover(None, item.manga.id)).ok();
-                    },
-                };
+                let response = client.get_image(&item.manga.cover_img_url).await;
+                if let Ok(res) = response {
+                    tx.send(HomeEvents::LoadRecentlyAddedMangasCover(Some(res), item.manga.id)).ok();
+                } else {
+                    tx.send(HomeEvents::LoadRecentlyAddedMangasCover(None, item.manga.id)).ok();
+                }
             }
         });
     }

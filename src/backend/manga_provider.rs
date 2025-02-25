@@ -67,6 +67,10 @@ impl From<Genres> for Span<'_> {
     }
 }
 
+/// Represents manga which are popular in the week/month like the ones from the homepage of
+/// mangadex https://mangadex.org/
+/// most manga providers wont provide info such as description, status or genres, like `manganato` its fine to leave
+/// them empty to avoid making many requests
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
 pub struct PopularManga {
     pub id: String,
@@ -83,7 +87,7 @@ pub struct RecentlyAddedManga {
     pub id: String,
     pub title: String,
     pub description: String,
-    pub cover_img_url: Option<String>,
+    pub cover_img_url: String,
 }
 
 #[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
@@ -824,6 +828,10 @@ pub trait ProviderIdentity {
     fn name(&self) -> MangaProviders;
 }
 
+/// Preferer manga providers which provide an api like `mangadex`, when scraping from a website
+/// prefer ones that are server-side rendered, I should be able to `curl https://example./// >>
+/// example.html` and get juicy scrapable html document since client-side rendered website are much
+/// harder to scrape
 pub trait MangaProvider:
     HomePageMangaProvider + MangaPageProvider + SearchPageProvider + ReaderPageProvider + FeedPageProvider + Send + Sync
 {

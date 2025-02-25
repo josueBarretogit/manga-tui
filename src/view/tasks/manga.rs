@@ -27,6 +27,17 @@ pub struct DownloadAllChapters<T: MangaPageProvider> {
     pub tx: UnboundedSender<MangaPageEvents>,
 }
 
+// This is needed in order to avoid any api request limits
+fn get_download_delay(total_chapters: usize) -> u64 {
+    if total_chapters < 40 {
+        2
+    } else if (40..100).contains(&total_chapters) {
+        4
+    } else {
+        8
+    }
+}
+
 pub async fn download_all_chapters<T: MangaPageProvider>(args: DownloadAllChapters<T>) {
     let get_all_chapters_response = args.client.get_all_chapters(&args.manga_id, args.lang).await;
 
@@ -36,14 +47,7 @@ pub async fn download_all_chapters<T: MangaPageProvider>(args: DownloadAllChapte
 
             args.tx.send(MangaPageEvents::StartDownloadProgress(total_chapters as f64)).ok();
 
-            // This is needed in order to avoid any api request limits
-            let download_chapter_delay = if total_chapters < 40 {
-                1
-            } else if (40..100).contains(&total_chapters) {
-                2
-            } else {
-                3
-            };
+            let download_chapter_delay = get_download_delay(total_chapters);
 
             for chapter in chapters {
                 let manga_id = args.manga_id.clone();

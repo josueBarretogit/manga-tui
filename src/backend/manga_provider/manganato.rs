@@ -261,7 +261,7 @@ impl HomePageMangaProvider for ManganatoProvider {
                 id: new_manga.id,
                 title: from_tool_tip.name,
                 description: from_tool_tip.description,
-                cover_img_url: Some(from_tool_tip.image),
+                cover_img_url: from_tool_tip.image,
             };
 
             response.push(manga);
