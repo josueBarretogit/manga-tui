@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use reqwest::Url;
 use serde::{Deserialize, Deserializer, Serialize};
 
+use crate::backend::manga_provider::{ChapterReader, Genres, ListOfChapters, SortedChapters, SortedVolumes, Volumes};
 use crate::config::ImageQuality;
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -53,6 +54,21 @@ pub struct Title {
     pub ko_ro: Option<String>,
 }
 
+impl From<Title> for String {
+    fn from(value: Title) -> Self {
+        value
+            .en
+            .or(value.ja)
+            .or(value.ja_ro)
+            .or(value.jp)
+            .or(value.zh)
+            .or(value.zh_ro)
+            .or(value.ko)
+            .or(value.ko_ro)
+            .unwrap_or("No title".to_string())
+    }
+}
+
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Description {
@@ -83,6 +99,17 @@ pub struct Tag {
     pub attributes: TagAtributtes,
 }
 
+impl From<Tag> for Genres {
+    fn from(value: Tag) -> Self {
+        let rating = match value.attributes.name.en.to_lowercase().as_str() {
+            "sexual violence" | "gore" => crate::backend::manga_provider::Rating::Nsfw,
+            "doujinshi" => crate::backend::manga_provider::Rating::Doujinshi,
+            _ => crate::backend::manga_provider::Rating::default(),
+        };
+        Genres::new(value.attributes.name.en, rating)
+    }
+}
+
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TagAtributtes {
@@ -99,8 +126,6 @@ pub struct Name {
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChapterResponse {
-    pub result: String,
-    pub response: String,
     pub data: Vec<ChapterData>,
     pub limit: i64,
     pub offset: i64,
@@ -111,8 +136,6 @@ pub struct ChapterResponse {
 #[serde(rename_all = "camelCase")]
 pub struct ChapterData {
     pub id: String,
-    #[serde(rename = "type")]
-    pub type_field: String,
     pub attributes: ChapterAttribute,
     pub relationships: Vec<Relationship>,
 }
@@ -124,13 +147,7 @@ pub struct ChapterAttribute {
     pub chapter: Option<String>,
     pub title: Option<String>,
     pub translated_language: String,
-    pub external_url: Option<String>,
-    pub publish_at: String,
     pub readable_at: String,
-    pub created_at: String,
-    pub updated_at: String,
-    pub pages: i64,
-    pub version: i64,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -159,7 +176,11 @@ pub struct ChapterPagesResponse {
 impl ChapterPagesResponse {
     /// According to mangadex api the endpoint to get a chapter's panel is built as follows: `base_url`/`data`, data-saver`/`hash`
     pub fn get_image_url_endpoint(&self, quality: ImageQuality) -> String {
-        format!("{}/{}/{}", self.base_url, quality.as_param(), self.chapter.hash)
+        let quality = match quality {
+            ImageQuality::Low => "data-saver",
+            ImageQuality::High => "data",
+        };
+        format!("{}/{}/{}", self.base_url, quality, self.chapter.hash)
     }
 
     /// Based on the mangadex api the `data_saver` array is used when image quality is low and
@@ -223,12 +244,12 @@ pub struct Rating {
 #[serde(rename_all = "camelCase")]
 pub struct AggregateChapterResponse {
     pub result: String,
-    pub volumes: HashMap<String, Volumes>,
+    pub volumes: HashMap<String, VolumesMangadex>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Volumes {
+pub struct VolumesMangadex {
     pub volume: String,
     pub count: i32,
     #[serde(deserialize_with = "deserialize_aggregate_chapters")]
@@ -240,6 +261,35 @@ pub struct Volumes {
 enum VecOrHashMap {
     Hash(HashMap<String, Chapters>),
     Vec(Vec<Chapters>),
+}
+
+impl From<AggregateChapterResponse> for ListOfChapters {
+    fn from(value: AggregateChapterResponse) -> Self {
+        let mut volumes: Vec<Volumes> = vec![];
+
+        for (vol_key, vol) in value.volumes {
+            let chapters: Vec<ChapterReader> = vol
+                .chapters
+                .into_iter()
+                .map(|(number, chap)| ChapterReader {
+                    id: if let Some(first) = chap.others.first() { first.clone() } else { chap.id },
+                    number,
+                    volume: vol_key.clone(),
+                })
+                .collect();
+
+            let sorted = SortedChapters::new(chapters);
+
+            volumes.push(Volumes {
+                chapters: sorted,
+                volume: vol_key,
+            });
+        }
+
+        ListOfChapters {
+            volumes: SortedVolumes::new(volumes),
+        }
+    }
 }
 
 /// Sometimes when the manga has volume 0 the field `chapters` is not a `HashMap` but a `Vec<Chapters>`
@@ -359,6 +409,49 @@ pub struct OneChapterData {
     pub attributes: ChapterAttribute,
 }
 
+/* as of v0.5.0 */
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetMangaByIdResponse {
+    pub data: GetMangaByIdData,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetMangaByIdData {
+    pub id: String,
+    pub attributes: GetMangaByIdAttributes,
+    pub relationships: Vec<MangaRelationship>,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetMangaByIdAttributes {
+    pub title: Title,
+    pub description: Option<Description>,
+    pub publication_demograpchic: Option<String>,
+    pub tags: Vec<Tag>,
+    pub content_rating: String,
+    pub status: String,
+    pub available_translated_languages: Vec<Option<String>>,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MangaRelationship {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub type_field: String,
+    pub attributes: Option<MangaRelationshipAttributes>,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MangaRelationshipAttributes {
+    #[serde(rename = "fileName")]
+    pub file_name: Option<String>,
+    pub name: Option<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -378,19 +471,17 @@ mod tests {
 
         let image_quality = ImageQuality::Low;
 
-        let expected: Url =
-            format!("{}/{}/{}/low_quality1.jpg", response.base_url, image_quality.as_param(), response.chapter.hash,)
-                .parse()
-                .unwrap();
+        let expected: Url = format!("{}/{}/{}/low_quality1.jpg", response.base_url, "data-saver", response.chapter.hash,)
+            .parse()
+            .unwrap();
 
         assert_eq!(&expected, response.clone().get_files_based_on_quality_as_url(image_quality).first().unwrap());
 
         let image_quality = ImageQuality::High;
 
-        let expected: Url =
-            format!("{}/{}/{}/high_quality1.jpg", response.base_url, image_quality.as_param(), response.chapter.hash)
-                .parse()
-                .unwrap();
+        let expected: Url = format!("{}/{}/{}/high_quality1.jpg", response.base_url, "data", response.chapter.hash)
+            .parse()
+            .unwrap();
 
         assert_eq!(&expected, response.clone().get_files_based_on_quality_as_url(image_quality).first().unwrap());
     }

@@ -9,12 +9,12 @@ use self::error_log::create_error_logs_files;
 use crate::config::{MangaTuiConfig, CONFIG};
 use crate::logger::ILogger;
 
-pub mod api_responses;
+pub mod cache;
 pub mod database;
-pub mod download;
 pub mod error_log;
-pub mod fetch;
-pub mod filter;
+pub mod html_parser;
+pub mod manga_downloader;
+pub mod manga_provider;
 pub mod migration;
 pub mod release_notifier;
 pub mod secrets;

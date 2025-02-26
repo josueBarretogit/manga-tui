@@ -39,10 +39,14 @@
           strictDeps = true;
           nativeBuildInputs = with pkgs; [
             pkg-config
+            perl #added due to failing workflow: https://github.com/josueBarretogit/manga-tui/actions/runs/13379018167/job/37364084916?pr=114
+            openssl.dev  #added due to failing workflow: https://github.com/josueBarretogit/manga-tui/actions/runs/13379018167/job/37364084916?pr=114
           ];
           buildInputs = with pkgs; [
             dbus
-            openssl
+            openssl  #added due to failing workflow: https://github.com/josueBarretogit/manga-tui/actions/runs/13379018167/job/37364084916?pr=114
+            perl
+            cacert  #added due to failing workflow: https://github.com/josueBarretogit/manga-tui/actions/runs/13379018167/job/37364084916?pr=114
           ];
         };
 
@@ -64,8 +68,11 @@
           packages = with pkgs; [
             git
             openssl
+            openssl.dev  #added due to failing workflow: https://github.com/josueBarretogit/manga-tui/actions/runs/13379018167/job/37364084916?pr=114
             dbus
             pkg-config
+            perl
+            cacert  #added due to failing workflow: https://github.com/josueBarretogit/manga-tui/actions/runs/13379018167/job/37364084916?pr=114
           ];
         };
 

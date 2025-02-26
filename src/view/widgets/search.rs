@@ -1,24 +1,22 @@
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Margin, Rect};
 use ratatui::style::Style;
-use ratatui::text::{Line, Span};
+use ratatui::text::Line;
 use ratatui::widgets::{Block, Paragraph, StatefulWidget, StatefulWidgetRef, Widget, Wrap};
 use ratatui_image::Image;
 use throbber_widgets_tui::{Throbber, ThrobberState};
 use tui_widget_list::PreRender;
 
-use crate::backend::api_responses::Data;
-use crate::common::{ImageState, Manga};
+use crate::backend::manga_provider::{Genres, MangaStatus, SearchManga};
+use crate::common::ImageState;
 use crate::global::CURRENT_LIST_ITEM_STYLE;
-use crate::utils::{from_manga_response, set_status_style, set_tags_style};
 
 pub struct MangaPreview<'a> {
     id: &'a str,
     title: &'a str,
     description: &'a str,
-    tags: &'a Vec<String>,
-    content_rating: &'a str,
-    status: &'a str,
+    genres: &'a Vec<Genres>,
+    status: Option<MangaStatus>,
     can_display_images: bool,
     loader_state: ThrobberState,
 }
@@ -29,9 +27,8 @@ impl<'a> MangaPreview<'a> {
         id: &'a str,
         title: &'a str,
         description: &'a str,
-        tags: &'a Vec<String>,
-        content_rating: &'a str,
-        status: &'a str,
+        genres: &'a Vec<Genres>,
+        status: Option<MangaStatus>,
         can_display_images: bool,
         loader_state: ThrobberState,
     ) -> Self {
@@ -39,8 +36,7 @@ impl<'a> MangaPreview<'a> {
             id,
             title,
             description,
-            tags,
-            content_rating,
+            genres,
             status,
             can_display_images,
             loader_state,
@@ -105,15 +101,13 @@ impl<'a> MangaPreview<'a> {
         let layout = Layout::vertical([Constraint::Percentage(20), Constraint::Percentage(80)]);
         let [details_area, tags_area] = layout.areas(area);
 
-        let tags_list: Vec<Span<'_>> = self.tags.iter().map(|tag| set_tags_style(tag)).collect();
+        if let Some(status) = self.status {
+            Paragraph::new(Line::from_iter(vec![status])).render(details_area, buf);
+        }
 
-        let content_rating = set_tags_style(self.content_rating);
-
-        let status = set_status_style(self.status);
-
-        Paragraph::new(Line::from(vec![content_rating, status])).render(details_area, buf);
-
-        Paragraph::new(Line::from(tags_list)).wrap(Wrap { trim: true }).render(tags_area, buf);
+        Paragraph::new(Line::from_iter(self.genres.clone()))
+            .wrap(Wrap { trim: true })
+            .render(tags_area, buf);
     }
 }
 
@@ -131,7 +125,7 @@ impl<'a> StatefulWidget for MangaPreview<'a> {
 
 #[derive(Default, Clone, Debug, PartialEq)]
 pub struct MangaItem {
-    pub manga: Manga,
+    pub manga: SearchManga,
     pub style: Style,
 }
 
@@ -157,15 +151,14 @@ impl PreRender for MangaItem {
     }
 }
 
-impl From<Data> for MangaItem {
-    fn from(value: Data) -> Self {
-        let manga = from_manga_response(value);
-        Self::new(manga)
+impl From<SearchManga> for MangaItem {
+    fn from(value: SearchManga) -> Self {
+        Self::new(value)
     }
 }
 
 impl MangaItem {
-    pub fn new(manga: Manga) -> Self {
+    pub fn new(manga: SearchManga) -> Self {
         Self {
             manga,
             style: Style::default(),
@@ -173,13 +166,13 @@ impl MangaItem {
     }
 }
 
-#[derive(Default, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct ListMangasFoundWidget {
     pub mangas: Vec<MangaItem>,
 }
 
 impl ListMangasFoundWidget {
-    pub fn from_response(search_response: Vec<Data>) -> Self {
+    pub fn from_response(search_response: Vec<SearchManga>) -> Self {
         let mut mangas: Vec<MangaItem> = vec![];
 
         for manga in search_response {

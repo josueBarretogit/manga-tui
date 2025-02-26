@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 use once_cell::sync::{Lazy, OnceCell};
 use ratatui::style::{Style, Stylize};
 
-use crate::backend::filter::Languages;
+use crate::backend::manga_provider::Languages;
 
 pub static PREFERRED_LANGUAGE: OnceCell<Languages> = OnceCell::new();
 
@@ -13,7 +13,7 @@ pub static ERROR_STYLE: Lazy<Style> = Lazy::new(|| Style::default().bold().under
 
 pub static CURRENT_LIST_ITEM_STYLE: Lazy<Style> = Lazy::new(|| Style::default().on_blue());
 
-pub static USER_AGENT: LazyLock<String> = LazyLock::new(|| {
+pub static APP_USER_AGENT: LazyLock<String> = LazyLock::new(|| {
     format!(
         "manga-tui/{} ({}/{}/{})",
         env!("CARGO_PKG_VERSION"),
@@ -29,6 +29,7 @@ pub mod test_utils {
 
     use crate::backend::tracker::{MangaTracker, PlanToReadArgs};
 
+    /// NOTE: this should be under `manga_tracker`
     #[derive(Debug, Clone)]
     pub struct TrackerTest {
         pub should_fail: bool,

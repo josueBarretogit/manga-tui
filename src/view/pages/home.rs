@@ -1,9 +1,7 @@
-use std::env;
-use std::io::Cursor;
+use std::sync::Arc;
 use std::time::Duration;
 
 use crossterm::event::{KeyCode, KeyEvent};
-use image::io::Reader;
 use image::DynamicImage;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Margin, Rect};
@@ -12,21 +10,17 @@ use ratatui::text::{Line, Span, ToSpan};
 use ratatui::widgets::{Block, List, StatefulWidget, Widget};
 use ratatui::Frame;
 use ratatui_image::picker::Picker;
-use ratatui_image::protocol::Protocol;
-use ratatui_image::{Image, Resize};
+use ratatui_image::Resize;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
-use crate::backend::api_responses::SearchMangaResponse;
 use crate::backend::error_log::{write_to_error_log, ErrorType};
-use crate::backend::fetch::{ApiClient, MangadexClient};
+use crate::backend::manga_provider::{HomePageMangaProvider, PopularManga, RecentlyAddedManga};
 use crate::backend::tui::Events;
 use crate::common::ImageState;
 use crate::global::INSTRUCTIONS_STYLE;
-use crate::utils::search_manga_cover;
-use crate::view::widgets::home::{CarrouselItem, CarrouselState, PopularMangaCarrousel, RecentlyAddedCarrousel};
-use crate::view::widgets::search::MangaItem;
-use crate::view::widgets::{Component, ImageHandler};
+use crate::view::widgets::home::{CarrouselItemPopularManga, CarrouselState, PopularMangaCarrousel, RecentlyAddedCarrousel};
+use crate::view::widgets::Component;
 
 #[derive(PartialEq, Eq)]
 pub enum HomeState {
@@ -39,22 +33,10 @@ pub enum HomeEvents {
     SearchPopularMangasCover,
     SearchRecentlyAddedMangas,
     SearchRecentlyCover,
-    SearchSupportImage,
-    LoadSupportImage(DynamicImage),
-    LoadPopularMangas(Option<SearchMangaResponse>),
-    LoadRecentlyAddedMangas(Option<SearchMangaResponse>),
+    LoadPopularMangas(Option<Vec<PopularManga>>),
+    LoadRecentlyAddedMangas(Option<Vec<RecentlyAddedManga>>),
     LoadCover(Option<DynamicImage>, String),
     LoadRecentlyAddedMangasCover(Option<DynamicImage>, String),
-}
-
-impl ImageHandler for HomeEvents {
-    fn load(image: DynamicImage, id: String) -> Self {
-        Self::LoadRecentlyAddedMangasCover(Some(image), id)
-    }
-
-    fn not_found(id: String) -> Self {
-        Self::LoadRecentlyAddedMangasCover(None, id)
-    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -65,11 +47,13 @@ pub enum HomeActions {
     GoToRecentlyAddedMangaPage,
     SelectNextRecentlyAddedManga,
     SelectPreviousRecentlyAddedManga,
-    SupportMangadex,
     SupportProject,
 }
 
-pub struct Home {
+pub struct Home<T>
+where
+    T: HomePageMangaProvider + Sync + Send,
+{
     carrousel_popular_mangas: PopularMangaCarrousel,
     carrousel_recently_added: RecentlyAddedCarrousel,
     state: HomeState,
@@ -78,15 +62,17 @@ pub struct Home {
     pub local_action_rx: UnboundedReceiver<HomeActions>,
     pub local_event_tx: UnboundedSender<HomeEvents>,
     pub local_event_rx: UnboundedReceiver<HomeEvents>,
-    pub support_image: Option<Box<dyn Protocol>>,
-    image_support_area: Rect,
     popular_manga_carrousel_state: ImageState,
     recently_added_manga_state: ImageState,
     picker: Option<Picker>,
     tasks: JoinSet<()>,
+    manga_provider: Arc<T>,
 }
 
-impl Component for Home {
+impl<T> Component for Home<T>
+where
+    T: HomePageMangaProvider + Sync + Send,
+{
     type Actions = HomeActions;
 
     fn render(&mut self, area: Rect, frame: &mut Frame<'_>) {
@@ -109,17 +95,11 @@ impl Component for Home {
             HomeActions::GoToPopularMangaPage => self.go_to_manga_page_popular(),
             HomeActions::SelectNextRecentlyAddedManga => self.carrousel_recently_added.select_next(),
             HomeActions::SelectPreviousRecentlyAddedManga => self.carrousel_recently_added.select_previous(),
+
             HomeActions::GoToRecentlyAddedMangaPage => {
-                if let Some(item) = self.carrousel_recently_added.get_current_selected_manga() {
-                    self.global_event_tx
-                        .as_mut()
-                        .unwrap()
-                        .send(Events::GoToMangaPage(MangaItem::new(item.manga.clone())))
-                        .ok();
-                }
+                self.go_to_manga_page_recently_added();
             },
             HomeActions::SupportProject => self.support_project(),
-            HomeActions::SupportMangadex => self.support_mangadex(),
         }
     }
 
@@ -127,7 +107,6 @@ impl Component for Home {
         self.tasks.abort_all();
         self.carrousel_popular_mangas.items = vec![];
         self.carrousel_recently_added.items = vec![];
-        self.support_image = None;
         self.state = HomeState::Unused;
         self.recently_added_manga_state = ImageState::default();
         self.popular_manga_carrousel_state = ImageState::default();
@@ -142,8 +121,11 @@ impl Component for Home {
     }
 }
 
-impl Home {
-    pub fn new(picker: Option<Picker>) -> Self {
+impl<T> Home<T>
+where
+    T: HomePageMangaProvider + Sync + Send,
+{
+    pub fn new(picker: Option<Picker>, manga_provider: Arc<T>) -> Self {
         let (local_action_tx, local_action_rx) = mpsc::unbounded_channel::<HomeActions>();
         let (local_event_tx, local_event_rx) = mpsc::unbounded_channel::<HomeEvents>();
 
@@ -156,12 +138,11 @@ impl Home {
             local_event_rx,
             local_action_tx,
             local_action_rx,
-            support_image: None,
-            image_support_area: Rect::default(),
             picker,
             popular_manga_carrousel_state: ImageState::default(),
             recently_added_manga_state: ImageState::default(),
             tasks: JoinSet::new(),
+            manga_provider,
         }
     }
 
@@ -199,17 +180,36 @@ impl Home {
         StatefulWidget::render(self.carrousel_popular_mangas.clone(), inner, buf, &mut self.popular_manga_carrousel_state);
     }
 
-    pub fn go_to_manga_page_popular(&self) {
+    fn go_to_manga_page(&self, manga_id: String) {
+        let client = Arc::clone(&self.manga_provider);
+        let tx = self.global_event_tx.as_ref().unwrap().clone();
+        tokio::spawn(async move {
+            let response = client.get_manga_by_id(&manga_id).await;
+            match response {
+                Ok(res) => {
+                    tx.send(Events::GoToMangaPage(res)).ok();
+                },
+                Err(e) => {
+                    tx.send(Events::Error(e.to_string())).ok();
+                    write_to_error_log(e.into());
+                },
+            }
+        });
+    }
+
+    fn go_to_manga_page_popular(&self) {
         if let Some(item) = self.get_current_popular_manga() {
-            self.global_event_tx
-                .as_ref()
-                .unwrap()
-                .send(Events::GoToMangaPage(MangaItem::new(item.manga.clone())))
-                .ok();
+            self.go_to_manga_page(item.manga.id.clone());
         }
     }
 
-    fn get_current_popular_manga(&self) -> Option<&CarrouselItem> {
+    fn go_to_manga_page_recently_added(&self) {
+        if let Some(item) = self.carrousel_recently_added.get_current_selected_manga() {
+            self.go_to_manga_page(item.manga.id.clone());
+        }
+    }
+
+    fn get_current_popular_manga(&self) -> Option<&CarrouselItemPopularManga> {
         self.carrousel_popular_mangas.get_current_item()
     }
 
@@ -221,9 +221,6 @@ impl Home {
         self.local_event_tx.send(HomeEvents::SearchPopularNewMangas).ok();
 
         self.local_event_tx.send(HomeEvents::SearchRecentlyAddedMangas).ok();
-        if self.picker.is_some() {
-            self.local_event_tx.send(HomeEvents::SearchSupportImage).ok();
-        }
     }
 
     pub fn init_search_popular_mangas_cover(&self) {
@@ -235,29 +232,6 @@ impl Home {
     pub fn init_search_recently_added_mangas_cover(&self) {
         if self.picker.is_some() {
             self.local_event_tx.send(HomeEvents::SearchRecentlyCover).ok();
-        }
-    }
-
-    fn search_support_image(&mut self) {
-        let tx = self.local_event_tx.clone();
-        self.tasks.spawn(async move {
-            let response = MangadexClient::global().get_mangadex_image_support().await;
-            if let Ok(bytes) = response {
-                let dyn_img = Reader::new(Cursor::new(bytes)).with_guessed_format().unwrap();
-
-                let maybe_decoded = dyn_img.decode();
-                if let Ok(image) = maybe_decoded {
-                    tx.send(HomeEvents::LoadSupportImage(image)).ok();
-                }
-            }
-        });
-    }
-
-    fn load_support_image(&mut self, img: DynamicImage) {
-        if let Some(picker) = self.picker.as_mut() {
-            if let Ok(protocol) = picker.new_protocol(img, self.image_support_area, Resize::Fit(None)) {
-                self.support_image = Some(protocol);
-            }
         }
     }
 
@@ -284,13 +258,11 @@ impl Home {
                 HomeEvents::LoadRecentlyAddedMangasCover(maybe_image, id) => {
                     self.load_recently_added_mangas_cover(maybe_image, id);
                 },
-                HomeEvents::SearchSupportImage => self.search_support_image(),
-                HomeEvents::LoadSupportImage(image) => self.load_support_image(image),
             }
         }
     }
 
-    fn load_popular_mangas(&mut self, maybe_response: Option<SearchMangaResponse>) {
+    fn load_popular_mangas(&mut self, maybe_response: Option<Vec<PopularManga>>) {
         match maybe_response {
             Some(response) => {
                 self.carrousel_popular_mangas = PopularMangaCarrousel::from_response(response, self.picker.is_some());
@@ -317,20 +289,19 @@ impl Home {
     fn search_popular_mangas(&mut self) {
         let tx = self.local_event_tx.clone();
         self.carrousel_popular_mangas.state = CarrouselState::Searching;
+        let manga_provider = self.manga_provider.clone();
         self.tasks.spawn(async move {
-            let response = MangadexClient::global().get_popular_mangas().await;
+            let response = manga_provider.get_popular_mangas().await;
             match response {
                 Ok(res) => {
-                    if let Ok(data) = res.json::<SearchMangaResponse>().await {
-                        if data.data.is_empty() {
-                            tx.send(HomeEvents::LoadPopularMangas(None)).ok();
-                        } else {
-                            tx.send(HomeEvents::LoadPopularMangas(Some(data))).ok();
-                        }
+                    if res.is_empty() {
+                        tx.send(HomeEvents::LoadPopularMangas(None)).ok();
+                    } else {
+                        tx.send(HomeEvents::LoadPopularMangas(Some(res))).ok();
                     }
                 },
                 Err(e) => {
-                    write_to_error_log(ErrorType::Error(Box::new(e)));
+                    write_to_error_log(ErrorType::Error(e));
                     tx.send(HomeEvents::LoadPopularMangas(None)).ok();
                 },
             }
@@ -339,54 +310,39 @@ impl Home {
 
     fn search_popular_mangas_cover(&mut self) {
         std::thread::sleep(Duration::from_millis(250));
-        for item in self.carrousel_popular_mangas.items.iter() {
-            let manga_id = item.manga.id.clone();
-            let tx = self.local_event_tx.clone();
-            match item.manga.img_url.as_ref() {
-                Some(file_name) => {
-                    let file_name = file_name.clone();
-                    self.tasks.spawn(async move {
-                        let response = MangadexClient::global().get_cover_for_manga(&manga_id, &file_name).await;
-                        if let Ok(res) = response {
-                            if let Ok(bytes) = res.bytes().await {
-                                let dyn_img = Reader::new(Cursor::new(bytes)).with_guessed_format().unwrap();
+        let mangas = self.carrousel_popular_mangas.items.clone();
 
-                                let maybe_decoded = dyn_img.decode();
-
-                                if let Ok(decoded) = maybe_decoded {
-                                    tx.send(HomeEvents::LoadCover(Some(decoded), manga_id)).ok();
-                                }
-                            }
-                        }
-                    });
-                },
-                None => {
-                    tx.send(HomeEvents::LoadCover(None, manga_id)).ok();
-                },
-            };
-        }
+        let tx = self.local_event_tx.clone();
+        let client = Arc::clone(&self.manga_provider);
+        self.tasks.spawn(async move {
+            for item in mangas {
+                let response = client.get_image(&item.manga.cover_img_url).await;
+                if let Ok(res) = response {
+                    tx.send(HomeEvents::LoadCover(Some(res), item.manga.id)).ok();
+                }
+            }
+        });
     }
 
     fn search_recently_added_mangas(&mut self) {
         let tx = self.local_event_tx.clone();
         self.carrousel_recently_added.state = CarrouselState::Searching;
+        let client = Arc::clone(&self.manga_provider);
         self.tasks.spawn(async move {
-            let response = MangadexClient::global().get_recently_added().await;
+            let response = client.get_recently_added_mangas().await;
             match response {
                 Ok(mangas) => {
-                    if let Ok(data) = mangas.json().await {
-                        tx.send(HomeEvents::LoadRecentlyAddedMangas(Some(data))).ok();
-                    }
+                    tx.send(HomeEvents::LoadRecentlyAddedMangas(Some(mangas))).ok();
                 },
                 Err(e) => {
-                    write_to_error_log(ErrorType::Error(Box::new(e)));
+                    write_to_error_log(e.into());
                     tx.send(HomeEvents::LoadRecentlyAddedMangas(None)).ok();
                 },
             }
         });
     }
 
-    fn load_recently_added_mangas(&mut self, maybe_response: Option<SearchMangaResponse>) {
+    fn load_recently_added_mangas(&mut self, maybe_response: Option<Vec<RecentlyAddedManga>>) {
         match maybe_response {
             Some(response) => {
                 self.carrousel_recently_added = RecentlyAddedCarrousel::from_response(response, self.picker.is_some());
@@ -400,19 +356,20 @@ impl Home {
 
     fn search_recently_added_mangas_cover(&mut self) {
         std::thread::sleep(Duration::from_millis(250));
-        for item in self.carrousel_recently_added.items.iter() {
-            let manga_id = item.manga.id.clone();
-            let tx = self.local_event_tx.clone();
-            match item.manga.img_url.as_ref() {
-                Some(file_name) => {
-                    let file_name = file_name.clone();
-                    search_manga_cover(file_name, manga_id, &mut self.tasks, tx);
-                },
-                None => {
-                    tx.send(HomeEvents::LoadRecentlyAddedMangasCover(None, manga_id)).ok();
-                },
-            };
-        }
+
+        let mangas = self.carrousel_recently_added.items.clone();
+        let tx = self.local_event_tx.clone();
+        let client = Arc::clone(&self.manga_provider);
+        self.tasks.spawn(async move {
+            for item in mangas {
+                let response = client.get_image(&item.manga.cover_img_url).await;
+                if let Ok(res) = response {
+                    tx.send(HomeEvents::LoadRecentlyAddedMangasCover(Some(res), item.manga.id)).ok();
+                } else {
+                    tx.send(HomeEvents::LoadRecentlyAddedMangasCover(None, item.manga.id)).ok();
+                }
+            }
+        });
     }
 
     fn load_recently_added_mangas_cover(&mut self, maybe_cover: Option<DynamicImage>, id: String) {
@@ -425,10 +382,6 @@ impl Home {
                 }
             }
         }
-    }
-
-    fn support_mangadex(&mut self) {
-        open::that("https://namicomi.com/en/org/3Hb7HnWG/mangadex/subscriptions").ok();
     }
 
     fn support_project(&mut self) {
@@ -464,26 +417,15 @@ impl Home {
     fn render_app_information(&mut self, area: Rect, buf: &mut Buffer) {
         let layout = Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)]).margin(1).split(area);
 
-        Block::bordered()
-            .title(format!("Manga-tui V{}", env!("CARGO_PKG_VERSION")))
-            .render(area, buf);
-
-        match self.support_image.as_ref() {
-            Some(image) => {
-                let image = Image::new(image.as_ref());
-                Widget::render(image, layout[0], buf);
-            },
-            None => {
-                self.image_support_area = layout[0];
-            },
-        }
+        Block::bordered().render(area, buf);
 
         Widget::render(
             List::new([
-                Line::from(vec!["Support mangadex: ".into(), "<m>".to_span().style(*INSTRUCTIONS_STYLE)]),
+                Line::from(vec![format!("Manga-tui V{}", env!("CARGO_PKG_VERSION")).into()]),
+                Line::from(vec![format!("Using: {}", self.manga_provider.name()).into()]),
                 Line::from(vec!["Support this project ".into(), "<g>".to_span().style(*INSTRUCTIONS_STYLE)]),
             ]),
-            layout[1],
+            layout[0],
             buf,
         )
     }
@@ -509,9 +451,6 @@ impl Home {
             KeyCode::Enter => {
                 self.local_action_tx.send(HomeActions::GoToRecentlyAddedMangaPage).ok();
             },
-            KeyCode::Char('m') => {
-                self.local_action_tx.send(HomeActions::SupportMangadex).ok();
-            },
             KeyCode::Char('g') => {
                 self.local_action_tx.send(HomeActions::SupportProject).ok();
             },
@@ -525,16 +464,13 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use super::*;
-    use crate::backend::api_responses::Data;
+    use crate::backend::manga_provider::mock::MockMangaPageProvider;
 
     #[test]
     fn searches_popular_manga_cover_after_mangas_are_loaded_if_picker_is_some() {
-        let mut home = Home::new(Some(Picker::new((8, 8))));
+        let mut home: Home<MockMangaPageProvider> = Home::new(Some(Picker::new((8, 8))), MockMangaPageProvider::new().into());
 
-        home.load_popular_mangas(Some(SearchMangaResponse {
-            data: vec![Data::default()],
-            ..Default::default()
-        }));
+        home.load_popular_mangas(Some(vec![PopularManga::default()]));
 
         let event = home.local_event_rx.blocking_recv().expect("no event was");
 
@@ -542,12 +478,9 @@ mod tests {
     }
     #[test]
     fn searches_recently_added_manga_cover_after_mangas_are_loaded_if_picker_is_some() {
-        let mut home = Home::new(Some(Picker::new((8, 8))));
+        let mut home: Home<MockMangaPageProvider> = Home::new(Some(Picker::new((8, 8))), MockMangaPageProvider::new().into());
 
-        home.load_recently_added_mangas(Some(SearchMangaResponse {
-            data: vec![Data::default()],
-            ..Default::default()
-        }));
+        home.load_recently_added_mangas(Some(vec![RecentlyAddedManga::default()]));
 
         let event = home.local_event_rx.blocking_recv().expect("no event was");
 
@@ -556,19 +489,13 @@ mod tests {
 
     #[test]
     fn doesnt_search_manga_cover_if_picker_is_none() {
-        let mut home = Home::new(None);
+        let mut home: Home<MockMangaPageProvider> = Home::new(None, MockMangaPageProvider::new().into());
 
-        home.load_popular_mangas(Some(SearchMangaResponse {
-            data: vec![Data::default()],
-            ..Default::default()
-        }));
+        home.load_popular_mangas(Some(vec![PopularManga::default()]));
 
         assert!(home.local_event_rx.is_empty());
 
-        home.load_recently_added_mangas(Some(SearchMangaResponse {
-            data: vec![Data::default()],
-            ..Default::default()
-        }));
+        home.load_recently_added_mangas(Some(vec![RecentlyAddedManga::default()]));
 
         assert!(home.local_event_rx.is_empty());
     }

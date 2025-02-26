@@ -34,12 +34,16 @@ https://github.com/user-attachments/assets/2b693bd3-ec30-4d6e-bcc4-6cf457a860b1
 - [Installation](#installation)
 - [Image rendering](#image-rendering)
 - [Usage](#usage)
+- [Manga providers](#manga-providers)
 - [Configuration](#configuration)
 - [Motivation](#motivation)
 - [Credits](#credits)
 
 ## Features
 
+- [Mangadex](https://mangadex.org/) and [Manganato](https://manganato.com/) are available as manga providers
+
+- Track your reading history with [anilist integration](./docs/anilist.md) 
 
 - Advanced search (with filters)
 
@@ -60,8 +64,6 @@ https://github.com/user-attachments/assets/ba785668-7cf1-4367-93f9-6e6e1f72c12c
 - Download all chapters of a manga (available formats: cbz, epub and raw images) 
 
 https://github.com/user-attachments/assets/26ad493f-633c-41fc-9d09-49b316118923
-
-- Track your reading history with [anilist integration](./docs/anilist.md) 
 
 
 ### Join the [discord](https://discord.gg/jNzuDCH3) server for further help, feature requests or to chat with contributors   
@@ -139,6 +141,21 @@ After installation just run the binary
 manga-tui
 ```
 
+## Manga providers
+
+> [!WARNING]
+> Expect any manga provider to fail at some point, either due to them closing operations due to a [lawsuit](https://www.japantimes.co.jp/news/2024/04/18/japan/crime-legal/manga-mura-copyright-ruling/) or the provider itself having issues on their end like [manganato](https://www.reddit.com/r/mangapiracy/comments/1iumo9v/mangakakalot_and_manganato_site_shutdown_mangabat/)
+
+By default when you run `manga-tui` Mangadex will be used 
+
+```shell
+manga-tui
+```
+If you want to use manganato then run:
+
+```shell
+manga-tui -p manganato
+```
 
 ## Configuration
 

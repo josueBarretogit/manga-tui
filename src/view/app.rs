@@ -1,8 +1,13 @@
+use std::sync::Arc;
+
 use ::crossterm::event::KeyCode;
 use crossterm::event::{KeyEvent, KeyModifiers};
 use ratatui::buffer::Buffer;
-use ratatui::layout::{Constraint, Layout, Rect};
-use ratatui::widgets::{Block, Borders, Tabs, Widget};
+use ratatui::layout::{Constraint, Layout, Margin, Rect};
+use ratatui::style::Styled;
+use ratatui::text::Line;
+use ratatui::widgets::block::Title;
+use ratatui::widgets::{Block, Borders, Clear, Paragraph, Tabs, Widget, Wrap};
 use ratatui::Frame;
 use ratatui_image::picker::Picker;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
@@ -10,15 +15,15 @@ use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use self::feed::Feed;
 use self::home::Home;
 use self::manga::MangaPage;
-use self::reader::{ChapterToRead, ListOfChapters, MangaReader, SearchChapter, SearchMangaPanel};
+use self::reader::MangaReader;
 use self::search::{InputMode, SearchPage};
-use super::widgets::search::MangaItem;
 use super::widgets::Component;
-use crate::backend::fetch::ApiClient;
+use crate::backend::manga_provider::{ChapterToRead, ListOfChapters, Manga, MangaProvider, MangaProviders, Pagination};
 use crate::backend::tracker::MangaTracker;
 use crate::backend::tui::{Action, Events};
 use crate::config::MangaTuiConfig;
 use crate::global::INSTRUCTIONS_STYLE;
+use crate::utils::centered_rect;
 use crate::view::pages::*;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
@@ -34,9 +39,12 @@ pub struct MangaToRead {
     pub list: ListOfChapters,
 }
 
+/// The application which owns every `page` or section in manga-tui
+/// its job mainly consists of displaying the selected page, passing the `manga_provider` to each
+/// page handling when to quit and switching between pages based on user inputs
 pub struct App<T, S>
 where
-    T: ApiClient + SearchChapter + SearchMangaPanel,
+    T: MangaProvider,
     S: MangaTracker,
 {
     pub global_action_tx: UnboundedSender<Action>,
@@ -45,13 +53,14 @@ where
     pub global_event_rx: UnboundedReceiver<Events>,
     pub state: AppState,
     pub current_tab: SelectedPage,
-    pub manga_page: Option<MangaPage<S>>,
+    pub manga_page: Option<MangaPage<T, S>>,
     pub manga_reader_page: Option<MangaReader<T, S>>,
     pub search_page: SearchPage<T, S>,
-    pub home_page: Home,
+    pub home_page: Home<T>,
     pub feed_page: Feed<T>,
-    api_client: T,
+    manga_provider: Arc<T>,
     manga_tracker: Option<S>,
+    error_message: Option<String>,
     // The picker is what decides how big a image needs to be rendered depending on the user's
     // terminal font size and the graphics it supports
     // if the terminal doesn't support any graphics protocol the picker is `None`
@@ -60,7 +69,7 @@ where
 
 impl<T, S> Component for App<T, S>
 where
-    T: ApiClient + SearchChapter + SearchMangaPanel,
+    T: MangaProvider,
     S: MangaTracker,
 {
     type Actions = Action;
@@ -77,6 +86,10 @@ where
 
             self.render_pages(page_area, frame);
         }
+
+        if let Some(message) = self.error_message.as_ref().cloned() {
+            self.render_popup_error_message(area, frame.buffer_mut(), message);
+        }
     }
 
     fn handle_events(&mut self, events: Events) {
@@ -92,14 +105,8 @@ where
             Events::GoToHome => self.go_to_home(),
             Events::GoFeedPage => self.go_feed_page(),
 
-            Events::GoSearchMangasAuthor(author) => {
-                self.go_search_page();
-                self.search_page.search_mangas_of_author(author);
-            },
-            Events::GoSearchMangasArtist(artist) => {
-                self.go_search_page();
-                self.search_page.search_mangas_of_artist(artist);
-            },
+            Events::Error(message) => self.display_error_message(message),
+
             Events::GoBackMangaPage => {
                 if self.current_tab == SelectedPage::ReaderTab && self.manga_reader_page.is_some() {
                     self.manga_reader_page.as_mut().unwrap().clean_up();
@@ -121,22 +128,46 @@ where
     fn clean_up(&mut self) {}
 }
 
-impl<T: ApiClient + SearchChapter + SearchMangaPanel, S: MangaTracker> App<T, S> {
-    pub fn new(api_client: T, manga_tracker: Option<S>, picker: Option<Picker>) -> Self {
+impl<T, S> App<T, S>
+where
+    T: MangaProvider,
+    S: MangaTracker,
+{
+    pub fn new(
+        api_client: T,
+        manga_tracker: Option<S>,
+        picker: Option<Picker>,
+        filters_state: T::FiltersHandler,
+        filter_widget: T::Widget,
+    ) -> Self {
         let (global_action_tx, global_action_rx) = unbounded_channel::<Action>();
         let (global_event_tx, global_event_rx) = unbounded_channel::<Events>();
 
         global_event_tx.send(Events::GoToHome).ok();
 
+        let which_provider = api_client.name();
+
+        let provider = Arc::new(api_client);
+
         App {
             picker,
             current_tab: SelectedPage::default(),
-            search_page: SearchPage::new(picker, api_client.clone(), manga_tracker.clone())
-                .with_global_sender(global_event_tx.clone()),
+            search_page: SearchPage::new(
+                picker,
+                Arc::clone(&provider),
+                manga_tracker.clone(),
+                filters_state,
+                filter_widget,
+                Pagination::from_first_page(match which_provider {
+                    MangaProviders::Mangadex => 10,
+                    MangaProviders::Manganato => 24,
+                }),
+            )
+            .with_global_sender(global_event_tx.clone()),
             feed_page: Feed::new()
                 .with_global_sender(global_event_tx.clone())
-                .with_api_client(api_client.clone()),
-            home_page: Home::new(picker).with_global_sender(global_event_tx.clone()),
+                .with_api_client(Arc::clone(&provider)),
+            home_page: Home::new(picker, Arc::clone(&provider)).with_global_sender(global_event_tx.clone()),
             manga_page: None,
             manga_reader_page: None,
             global_action_tx,
@@ -145,7 +176,8 @@ impl<T: ApiClient + SearchChapter + SearchMangaPanel, S: MangaTracker> App<T, S>
             global_event_rx,
             manga_tracker,
             state: AppState::Runnning,
-            api_client,
+            error_message: None,
+            manga_provider: Arc::clone(&provider),
         }
     }
 
@@ -172,6 +204,38 @@ impl<T: ApiClient + SearchChapter + SearchMangaPanel, S: MangaTracker> App<T, S>
             .padding("", "")
             .divider(" | ")
             .render(area, buf);
+    }
+
+    fn render_popup_error_message(&self, area: Rect, buf: &mut Buffer, message: String) {
+        let area = centered_rect(area, 50, 50);
+        Clear.render(area, buf);
+
+        Block::bordered()
+            .title(Title::from(Line::from(vec![
+                "Some error ocurred, press ".into(),
+                "<q>".set_style(*INSTRUCTIONS_STYLE),
+                " to close this popup".into(),
+            ])))
+            .render(area, buf);
+
+        let inner = area.inner(Margin {
+            horizontal: 2,
+            vertical: 2,
+        });
+
+        Paragraph::new(message).wrap(Wrap { trim: true }).render(inner, buf);
+    }
+
+    fn display_error_message(&mut self, error_message: String) {
+        self.error_message = Some(error_message);
+    }
+
+    fn close_error_mesagge(&mut self) {
+        self.error_message = None;
+    }
+
+    fn is_displaying_error_message(&self) -> bool {
+        self.error_message.is_some()
     }
 
     pub fn render_pages(&mut self, area: Rect, frame: &mut Frame<'_>) {
@@ -218,6 +282,14 @@ impl<T: ApiClient + SearchChapter + SearchMangaPanel, S: MangaTracker> App<T, S>
         self.global_action_tx.send(Action::Quit).ok();
     }
 
+    fn key_events_error_message(&mut self, key_event: KeyEvent) {
+        match key_event.code {
+            KeyCode::Char('q') => self.close_error_mesagge(),
+            KeyCode::Char('c') if key_event.modifiers == KeyModifiers::CONTROL => self.quit(),
+            _ => {},
+        }
+    }
+
     fn handle_key_events(&mut self, key_event: KeyEvent) {
         if self.manga_page.as_ref().is_some_and(|page| page.is_downloading_all_chapters()) {
             return;
@@ -256,7 +328,7 @@ impl<T: ApiClient + SearchChapter + SearchMangaPanel, S: MangaTracker> App<T, S>
         self.current_tab = SelectedPage::Search;
     }
 
-    fn go_to_manga_page(&mut self, manga: MangaItem) {
+    fn go_to_manga_page(&mut self, manga: Manga) {
         if self.manga_reader_page.is_some() {
             self.manga_reader_page.as_mut().unwrap().clean_up();
             self.manga_reader_page = None;
@@ -268,7 +340,7 @@ impl<T: ApiClient + SearchChapter + SearchMangaPanel, S: MangaTracker> App<T, S>
 
         let config = MangaTuiConfig::get();
 
-        let manga_page = MangaPage::new(manga.manga, self.picker)
+        let manga_page = MangaPage::new(manga, self.picker, Arc::clone(&self.manga_provider))
             .with_global_sender(self.global_event_tx.clone())
             .auto_bookmark(config.auto_bookmark)
             .with_manga_tracker(self.manga_tracker.clone());
@@ -285,7 +357,7 @@ impl<T: ApiClient + SearchChapter + SearchMangaPanel, S: MangaTracker> App<T, S>
             chapter_to_read,
             manga_to_read.manga_id,
             self.picker.as_ref().cloned().unwrap(),
-            self.api_client.clone(),
+            Arc::clone(&self.manga_provider),
         )
         .with_global_sender(self.global_event_tx.clone())
         .with_list_of_chapters(manga_to_read.list)
@@ -330,6 +402,16 @@ impl<T: ApiClient + SearchChapter + SearchMangaPanel, S: MangaTracker> App<T, S>
     pub async fn listen_to_event(&mut self) {
         if let Some(event) = self.global_event_rx.recv().await {
             self.handle_events(event.clone());
+
+            // If the app is displaying an error message then the user can only close the app or
+            // the error message popup
+            if self.is_displaying_error_message() {
+                if let Events::Key(key_event) = event {
+                    self.key_events_error_message(key_event);
+                    return;
+                }
+            }
+
             match self.current_tab {
                 SelectedPage::Search => {
                     self.search_page.handle_events(event);
@@ -390,7 +472,8 @@ impl<T: ApiClient + SearchChapter + SearchMangaPanel, S: MangaTracker> App<T, S>
 
     #[cfg(test)]
     fn with_manga_page(mut self) -> Self {
-        self.manga_page = Some(MangaPage::new(crate::common::Manga::default(), self.picker.as_ref().cloned()));
+        self.manga_page =
+            Some(MangaPage::new(crate::backend::manga_provider::Manga::default(), None, Arc::clone(&self.manga_provider)));
 
         self
     }
@@ -401,15 +484,14 @@ mod tests {
 
     use pretty_assertions::assert_eq;
 
-    use self::reader::{SortedVolumes, Volumes};
     use super::*;
-    use crate::backend::fetch::fake_api_client::MockMangadexClient;
-    use crate::backend::filter::Languages;
+    use crate::backend::manga_provider::mock::{MockFilterState, MockFiltersHandler, MockMangaPageProvider, MockWidgetFilter};
+    use crate::backend::manga_provider::{Languages, SortedVolumes, Volumes};
     use crate::backend::tracker::MangaTracker;
     use crate::global::test_utils::TrackerTest;
     use crate::view::widgets::press_key;
 
-    fn tick<T: ApiClient + SearchChapter + SearchMangaPanel, S: MangaTracker>(app: &mut App<T, S>) {
+    fn tick<T: MangaProvider, S: MangaTracker>(app: &mut App<T, S>) {
         let max_amoun_ticks = 10;
         let mut count = 0;
 
@@ -427,7 +509,8 @@ mod tests {
 
     #[test]
     fn goes_to_home_page() {
-        let mut app: App<MockMangadexClient, TrackerTest> = App::new(MockMangadexClient::new(), None, None);
+        let mut app: App<MockMangaPageProvider, TrackerTest> =
+            App::new(MockMangaPageProvider::new(), None, None, MockFiltersHandler::new(MockFilterState {}), MockWidgetFilter {});
 
         let first_event = app.global_event_rx.blocking_recv().expect("no event was sent");
 
@@ -437,7 +520,8 @@ mod tests {
 
     #[test]
     fn can_go_to_search_page_by_pressing_i() {
-        let mut app: App<MockMangadexClient, TrackerTest> = App::new(MockMangadexClient::new(), None, None);
+        let mut app: App<MockMangaPageProvider, TrackerTest> =
+            App::new(MockMangaPageProvider::new(), None, None, MockFiltersHandler::new(MockFilterState {}), MockWidgetFilter {});
 
         press_key(&mut app, KeyCode::Char('i'));
 
@@ -448,7 +532,8 @@ mod tests {
 
     #[test]
     fn can_go_to_home_by_pressing_u() {
-        let mut app: App<MockMangadexClient, TrackerTest> = App::new(MockMangadexClient::new(), None, None);
+        let mut app: App<MockMangaPageProvider, TrackerTest> =
+            App::new(MockMangaPageProvider::new(), None, None, MockFiltersHandler::new(MockFilterState {}), MockWidgetFilter {});
 
         app.go_search_page();
 
@@ -461,7 +546,8 @@ mod tests {
 
     #[test]
     fn can_go_to_feed_by_pressing_o() {
-        let mut app: App<MockMangadexClient, TrackerTest> = App::new(MockMangadexClient::new(), None, None);
+        let mut app: App<MockMangaPageProvider, TrackerTest> =
+            App::new(MockMangaPageProvider::new(), None, None, MockFiltersHandler::new(MockFilterState {}), MockWidgetFilter {});
 
         press_key(&mut app, KeyCode::Char('o'));
 
@@ -472,7 +558,9 @@ mod tests {
 
     #[test]
     fn doesnt_listen_to_key_events_if_it_is_downloading_all_chapters() {
-        let mut app: App<MockMangadexClient, TrackerTest> = App::new(MockMangadexClient::new(), None, None).with_manga_page();
+        let mut app: App<MockMangaPageProvider, TrackerTest> =
+            App::new(MockMangaPageProvider::new(), None, None, MockFiltersHandler::new(MockFilterState {}), MockWidgetFilter {})
+                .with_manga_page();
 
         app.manga_page.as_mut().unwrap().start_downloading_all_chapters();
 
@@ -487,7 +575,14 @@ mod tests {
 
     #[test]
     fn reader_page_is_initialized_corectly() {
-        let mut app: App<MockMangadexClient, TrackerTest> = App::new(MockMangadexClient::new(), None, Some(Picker::new((8, 8))));
+        let mut app: App<MockMangaPageProvider, TrackerTest> = App::new(
+            MockMangaPageProvider::new(),
+            None,
+            Some(Picker::new((8, 8))),
+            MockFiltersHandler::new(MockFilterState {}),
+            MockWidgetFilter {},
+        )
+        .with_manga_page();
 
         let chapter_to_read = ChapterToRead {
             id: "some_id".to_string(),

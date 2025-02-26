@@ -10,8 +10,7 @@ use throbber_widgets_tui::{Throbber, ThrobberState};
 use tokio::sync::mpsc::UnboundedSender;
 use tui_widget_list::PreRender;
 
-use crate::backend::api_responses::ChapterResponse;
-use crate::backend::filter::Languages;
+use crate::backend::manga_provider::Chapter;
 use crate::global::{CURRENT_LIST_ITEM_STYLE, ERROR_STYLE, INSTRUCTIONS_STYLE};
 use crate::utils::display_dates_since_publication;
 use crate::view::pages::manga::MangaPageEvents;
@@ -28,18 +27,12 @@ pub enum ChapterItemState {
 
 #[derive(Clone, Debug, Default)]
 pub struct ChapterItem {
-    pub id: String,
-    pub title: String,
-    pub readable_at: String,
-    pub scanlator: String,
-    pub chapter_number: String,
-    pub volume_number: Option<String>,
+    pub chapter: Chapter,
     pub is_read: bool,
     pub is_downloaded: bool,
     pub is_bookmarked: bool,
     pub state: ChapterItemState,
     pub download_loading_state: Option<f64>,
-    pub translated_language: Languages,
     pub style: Style,
 }
 
@@ -68,10 +61,10 @@ impl Widget for ChapterItem {
         let information = if self.is_bookmarked {
             "Bookmarked | ".to_string()
         } else {
-            format!("Vol. {} Ch. {} | ", self.volume_number.unwrap_or_default(), self.chapter_number)
+            format!("Vol. {} Ch. {} | ", self.chapter.volume_number.unwrap_or_default(), self.chapter.chapter_number)
         };
 
-        Paragraph::new(Line::from(vec![information.into(), self.title.into()]))
+        Paragraph::new(Line::from(vec![information.into(), self.chapter.title.into()]))
             .wrap(Wrap { trim: true })
             .style(self.style)
             .render(title_area, buf);
@@ -87,12 +80,12 @@ impl Widget for ChapterItem {
             },
             None => match self.state {
                 ChapterItemState::Normal => {
-                    Paragraph::new(self.scanlator)
+                    Paragraph::new(self.chapter.scanlator.unwrap_or_default())
                         .style(self.style)
                         .wrap(Wrap { trim: true })
                         .render(scanlator_area, buf);
 
-                    Paragraph::new(self.readable_at)
+                    Paragraph::new(display_dates_since_publication(self.chapter.publication_date))
                         .style(self.style)
                         .wrap(Wrap { trim: true })
                         .render(readable_at_area, buf);
@@ -141,27 +134,13 @@ impl PreRender for ChapterItem {
 }
 
 impl ChapterItem {
-    pub fn new(
-        id: String,
-        title: String,
-        chapter_number: String,
-        volume_number: Option<String>,
-        readable_at: String,
-        scanlator: String,
-        translated_language: Languages,
-    ) -> Self {
+    pub fn new(chapter: Chapter) -> Self {
         Self {
-            id,
-            title,
-            readable_at,
-            scanlator,
-            chapter_number,
-            volume_number,
+            chapter,
             is_read: false,
             is_downloaded: false,
             is_bookmarked: false,
             download_loading_state: None,
-            translated_language,
             style: Style::default(),
             state: ChapterItemState::Normal,
         }
@@ -187,40 +166,11 @@ pub struct ChaptersListWidget {
 }
 
 impl ChaptersListWidget {
-    pub fn from_response(response: &ChapterResponse) -> Self {
+    pub fn from_response(response: Vec<Chapter>) -> Self {
         let mut chapters: Vec<ChapterItem> = vec![];
 
-        let today = chrono::offset::Local::now().date_naive();
-        for chapter in response.data.iter() {
-            let id = chapter.id.clone();
-            let title = chapter.attributes.title.clone().unwrap_or("No title".to_string());
-
-            let chapter_number = chapter.attributes.chapter.clone().unwrap_or("0".to_string());
-
-            let translated_language: Languages =
-                Languages::try_from_iso_code(&chapter.attributes.translated_language).unwrap_or(*Languages::get_preferred_lang());
-
-            let parse_date = chrono::DateTime::parse_from_rfc3339(&chapter.attributes.readable_at).unwrap_or_default();
-
-            let difference = today - parse_date.date_naive();
-
-            let scanlator = chapter
-                .relationships
-                .iter()
-                .find(|rel| rel.type_field == "scanlation_group")
-                .map(|rel| rel.attributes.as_ref().unwrap().name.to_string());
-
-            let volume = chapter.attributes.volume.clone();
-
-            chapters.push(ChapterItem::new(
-                id,
-                title,
-                chapter_number,
-                volume,
-                display_dates_since_publication(difference.num_days()),
-                scanlator.unwrap_or_default(),
-                translated_language,
-            ))
+        for chap in response {
+            chapters.push(ChapterItem::new(chap));
         }
 
         Self { chapters }

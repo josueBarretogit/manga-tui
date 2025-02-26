@@ -8,7 +8,7 @@ use clap::{crate_version, Parser, Subcommand};
 use strum::IntoEnumIterator;
 
 use crate::backend::error_log::write_to_error_log;
-use crate::backend::filter::Languages;
+use crate::backend::manga_provider::{Languages, MangaProviders};
 use crate::backend::secrets::anilist::{AnilistCredentials, AnilistStorage};
 use crate::backend::secrets::SecretStorage;
 use crate::backend::tracker::anilist::{self, BASE_ANILIST_API_URL};
@@ -53,6 +53,8 @@ pub struct CliArgs {
     pub command: Option<Commands>,
     #[arg(short, long)]
     pub data_dir: bool,
+    #[arg(short = 'p', long = "provider", default_value = "mangadex")]
+    pub manga_provider: MangaProviders,
 }
 
 pub struct AnilistCredentialsProvided<'a> {
@@ -65,6 +67,7 @@ impl CliArgs {
         Self {
             command: None,
             data_dir: false,
+            manga_provider: MangaProviders::default(),
         }
     }
 
@@ -177,6 +180,9 @@ impl CliArgs {
 
                     match set {
                         Some(lang) => {
+                            println!(
+                                "WARNING: deprecated function this will be part of the config file in future releases, and only applies to mangadex"
+                            );
                             let try_lang = Languages::try_from_iso_code(lang.as_str());
 
                             if try_lang.is_none() {

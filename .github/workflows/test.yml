@@ -80,17 +80,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check Nix flake inputs
-        uses: DeterminateSystems/flake-checker-action@v4
+        uses: DeterminateSystems/flake-checker-action@v9
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@v3
+        uses: DeterminateSystems/nix-installer-action@v16
       - name: Activate Magic Nix Cache
         uses: DeterminateSystems/magic-nix-cache-action@main
         with:
           use-flakehub: false
 
-      - name: install_dependencies
-        run: sudo apt install libdbus-1-dev pkg-config
-
-
       - name: Build default package
-        run: nix build
+        run: nix build --print-build-logs --verbose

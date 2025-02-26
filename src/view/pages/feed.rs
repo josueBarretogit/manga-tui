@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent, MouseEventKind};
 use manga_tui::SearchTerm;
 use ratatui::buffer::Buffer;
@@ -12,14 +14,12 @@ use tokio::task::JoinSet;
 use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
 
-use crate::backend::api_responses::ChapterResponse;
-use crate::backend::database::{get_history, GetHistoryArgs, MangaHistoryResponse, MangaHistoryType, DBCONN};
+use crate::backend::database::{Database, GetHistoryArgs, MangaHistoryResponse, MangaHistoryType};
 use crate::backend::error_log::{write_to_error_log, ErrorType};
-use crate::backend::fetch::ApiClient;
+use crate::backend::manga_provider::{FeedPageProvider, LatestChapter, MangaProviders};
 use crate::backend::tui::Events;
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
 use crate::utils::render_search_bar;
-use crate::view::tasks::feed::{search_latest_chapters, search_manga};
 use crate::view::widgets::feed::{FeedTabs, HistoryWidget};
 use crate::view::widgets::Component;
 
@@ -46,16 +46,17 @@ pub enum FeedActions {
 
 #[derive(Debug, PartialEq)]
 pub enum FeedEvents {
-    SearchingFinalized,
     SearchHistory,
     SearchRecentChapters,
-    LoadRecentChapters(String, Option<ChapterResponse>),
+    LoadLatestChapters(String, Option<Vec<LatestChapter>>),
     ErrorSearchingMangaData,
-    /// page , (history_data, total_results)
     LoadHistory(Option<MangaHistoryResponse>),
 }
 
-pub struct Feed<T: ApiClient> {
+pub struct Feed<T>
+where
+    T: FeedPageProvider,
+{
     pub tabs: FeedTabs,
     state: FeedState,
     pub history: Option<HistoryWidget>,
@@ -69,10 +70,13 @@ pub struct Feed<T: ApiClient> {
     is_typing: bool,
     items_per_page: u32,
     tasks: JoinSet<()>,
-    api_client: Option<T>,
+    manga_provider: Option<Arc<T>>,
 }
 
-impl<T: ApiClient> Feed<T> {
+impl<T> Feed<T>
+where
+    T: FeedPageProvider,
+{
     pub fn new() -> Self {
         let (local_action_tx, local_action_rx) = mpsc::unbounded_channel::<FeedActions>();
         let (local_event_tx, local_event_rx) = mpsc::unbounded_channel::<FeedEvents>();
@@ -90,7 +94,7 @@ impl<T: ApiClient> Feed<T> {
             search_bar: Input::default(),
             items_per_page: 5,
             is_typing: false,
-            api_client: None,
+            manga_provider: None,
         }
     }
 
@@ -103,8 +107,8 @@ impl<T: ApiClient> Feed<T> {
         self
     }
 
-    pub fn with_api_client(mut self, api_client: T) -> Self {
-        self.api_client = Some(api_client);
+    pub fn with_api_client(mut self, api_client: Arc<T>) -> Self {
+        self.manga_provider = Some(api_client);
         self
     }
 
@@ -245,19 +249,18 @@ impl<T: ApiClient> Feed<T> {
         }
         if let Ok(local_event) = self.local_event_rx.try_recv() {
             match local_event {
-                FeedEvents::SearchingFinalized => self.state = FeedState::DisplayingHistory,
                 FeedEvents::ErrorSearchingMangaData => self.display_error_searching_manga(),
                 FeedEvents::SearchHistory => self.search_history(),
                 FeedEvents::LoadHistory(maybe_history) => self.load_history(maybe_history),
                 FeedEvents::SearchRecentChapters => self.search_latest_chapters(),
-                FeedEvents::LoadRecentChapters(manga_id, maybe_chapters) => {
+                FeedEvents::LoadLatestChapters(manga_id, maybe_chapters) => {
                     self.load_recent_chapters(manga_id, maybe_chapters);
                 },
             }
         }
     }
 
-    fn load_recent_chapters(&mut self, manga_id: String, maybe_history: Option<ChapterResponse>) {
+    fn load_recent_chapters(&mut self, manga_id: String, maybe_history: Option<Vec<LatestChapter>>) {
         if let Some(chapters_response) = maybe_history {
             if let Some(history) = self.history.as_mut() {
                 history.set_chapter(manga_id, chapters_response);
@@ -270,8 +273,19 @@ impl<T: ApiClient> Feed<T> {
             for manga in history.mangas.clone() {
                 let manga_id = manga.id;
                 let sender = self.local_event_tx.clone();
-                let api_client = self.api_client.as_ref().cloned().unwrap();
-                self.tasks.spawn(search_latest_chapters(api_client, manga_id, sender));
+                let client = self.manga_provider.as_ref().cloned().unwrap();
+                self.tasks.spawn(async move {
+                    let response = client.get_latest_chapters(&manga_id).await;
+                    match response {
+                        Ok(res) => {
+                            sender.send(FeedEvents::LoadLatestChapters(manga_id, Some(res))).ok();
+                        },
+                        Err(e) => {
+                            write_to_error_log(e.into());
+                            sender.send(FeedEvents::LoadLatestChapters(manga_id, None)).ok();
+                        },
+                    }
+                });
             }
         }
     }
@@ -295,17 +309,21 @@ impl<T: ApiClient> Feed<T> {
         let items_per_page = self.items_per_page;
 
         let history_type: MangaHistoryType = self.tabs.into();
+        let provider = match &self.manga_provider {
+            Some(provider) => provider.name(),
+            None => MangaProviders::default(),
+        };
 
         self.tasks.spawn(async move {
-            let binding = DBCONN.lock().unwrap();
-            let conn = binding.as_ref().unwrap();
+            let connection = Database::get_connection().unwrap();
+            let database = Database::new(&connection);
 
-            let maybe_reading_history = get_history(GetHistoryArgs {
-                conn,
+            let maybe_reading_history = database.get_history(GetHistoryArgs {
                 hist_type: history_type,
                 page,
                 search: SearchTerm::trimmed_lowercased(&search_term),
                 items_per_page,
+                provider,
             });
 
             match maybe_reading_history {
@@ -364,13 +382,6 @@ impl<T: ApiClient> Feed<T> {
         }
     }
 
-    fn change_tab(&mut self) {
-        match self.tabs {
-            FeedTabs::History => self.tabs = FeedTabs::PlantToRead,
-            FeedTabs::PlantToRead => self.tabs = FeedTabs::History,
-        }
-    }
-
     pub fn go_to_manga_page(&mut self) {
         if let Some(history) = self.history.as_mut() {
             if let Some(currently_selected_manga) = history.get_current_manga_selected() {
@@ -381,19 +392,26 @@ impl<T: ApiClient> Feed<T> {
 
                 self.loading_state = Some(ThrobberState::default());
 
-                let api_client = self.api_client.as_ref().cloned().unwrap();
+                let client = self.manga_provider.as_ref().cloned().unwrap();
 
-                self.tasks.spawn(search_manga(api_client, manga_id, tx, local_tx));
+                self.tasks.spawn(async move {
+                    let response = client.get_manga_by_id(&manga_id).await;
+                    match response {
+                        Ok(res) => {
+                            tx.send(Events::GoToMangaPage(res)).ok();
+                        },
+                        Err(e) => {
+                            write_to_error_log(e.into());
+                            local_tx.send(FeedEvents::ErrorSearchingMangaData).ok();
+                        },
+                    }
+                });
             }
         }
     }
 
     fn toggle_focus_search_bar(&mut self) {
         self.is_typing = !self.is_typing;
-    }
-
-    fn set_items_per_page(&mut self, items_per_page: u32) {
-        self.items_per_page = items_per_page;
     }
 
     fn switch_tabs(&mut self) {
@@ -420,7 +438,10 @@ impl<T: ApiClient> Feed<T> {
     }
 }
 
-impl<T: ApiClient> Component for Feed<T> {
+impl<T> Component for Feed<T>
+where
+    T: FeedPageProvider,
+{
     type Actions = FeedActions;
 
     fn render(&mut self, area: Rect, frame: &mut Frame<'_>) {
@@ -477,12 +498,11 @@ mod tests {
 
     use self::mpsc::unbounded_channel;
     use super::*;
-    use crate::backend::api_responses::ChapterData;
     use crate::backend::database::MangaHistory;
-    use crate::backend::fetch::fake_api_client::MockMangadexClient;
+    use crate::backend::manga_provider::mock::MockMangaPageProvider;
     use crate::view::widgets::press_key;
 
-    fn history_data() -> MangaHistoryResponse {
+    fn manga_history_response() -> MangaHistoryResponse {
         let mangas_in_history = vec![MangaHistory::default(), MangaHistory::default()];
         let total_items = mangas_in_history.len();
 
@@ -493,8 +513,8 @@ mod tests {
         }
     }
 
-    fn render_history_and_select(feed_page: &mut Feed<MockMangadexClient>) {
-        feed_page.load_history(Some(history_data()));
+    fn render_history_and_select(feed_page: &mut Feed<MockMangaPageProvider>) {
+        feed_page.load_history(Some(manga_history_response()));
 
         let area = Rect::new(0, 0, 20, 20);
         let mut buf = Buffer::empty(area);
@@ -506,7 +526,7 @@ mod tests {
 
     #[test]
     fn search_for_history_when_instantiated() {
-        let mut feed_page: Feed<MockMangadexClient> = Feed::new();
+        let mut feed_page: Feed<MockMangaPageProvider> = Feed::new();
 
         let expected_event = FeedEvents::SearchHistory;
 
@@ -519,8 +539,8 @@ mod tests {
 
     #[test]
     fn history_is_loaded() {
-        let mut feed_page: Feed<MockMangadexClient> = Feed::new();
-        let response_from_database = history_data();
+        let mut feed_page: Feed<MockMangaPageProvider> = Feed::new();
+        let response_from_database = manga_history_response();
 
         let expected_widget = HistoryWidget::from_database_response(response_from_database.clone());
 
@@ -539,8 +559,8 @@ mod tests {
 
     #[test]
     fn send_events_after_history_is_loaded() {
-        let mut feed_page: Feed<MockMangadexClient> = Feed::new();
-        let response_from_database = history_data();
+        let mut feed_page: Feed<MockMangaPageProvider> = Feed::new();
+        let response_from_database = manga_history_response();
 
         feed_page.load_history(Some(response_from_database));
 
@@ -553,9 +573,9 @@ mod tests {
 
     #[test]
     fn load_no_mangas_found_from_database() {
-        let mut feed_page: Feed<MockMangadexClient> = Feed::new();
+        let mut feed_page: Feed<MockMangaPageProvider> = Feed::new();
 
-        let mut some_empty_response = history_data();
+        let mut some_empty_response = manga_history_response();
 
         some_empty_response.mangas = vec![];
 
@@ -570,9 +590,9 @@ mod tests {
 
     #[test]
     fn load_chapters_of_manga() {
-        let mut feed_page: Feed<MockMangadexClient> = Feed::new();
+        let mut feed_page: Feed<MockMangaPageProvider> = Feed::new();
 
-        let mut history = history_data();
+        let mut history = manga_history_response();
 
         let manga_id = "some_manga_id";
         let chapter_id = "some_chapter_id";
@@ -584,16 +604,13 @@ mod tests {
 
         feed_page.load_history(Some(history));
 
-        let chapter_response = ChapterResponse {
-            data: vec![
-                ChapterData {
-                    id: chapter_id.to_string(),
-                    ..Default::default()
-                },
-                ChapterData::default(),
-            ],
-            ..Default::default()
-        };
+        let chapter_response = vec![
+            LatestChapter {
+                id: chapter_id.to_string(),
+                ..Default::default()
+            },
+            LatestChapter::default(),
+        ];
 
         feed_page.load_recent_chapters(manga_id.to_string(), Some(chapter_response));
 
@@ -615,17 +632,14 @@ mod tests {
     async fn load_chapters_of_manga_with_event() {
         let manga_id = "some_manga_id".to_string();
 
-        let api_client = MockMangadexClient::new().with_chapter_response(ChapterResponse {
-            data: vec![ChapterData {
-                id: manga_id.clone(),
-                ..Default::default()
-            }],
+        let api_client = MockMangaPageProvider::with_latest_chapter_response(vec![LatestChapter {
+            id: manga_id.clone(),
             ..Default::default()
-        });
+        }]);
 
-        let mut feed_page: Feed<MockMangadexClient> = Feed::new().with_api_client(api_client);
+        let mut feed_page: Feed<MockMangaPageProvider> = Feed::new().with_api_client(api_client.into());
 
-        let mut history = history_data();
+        let mut history = manga_history_response();
 
         history.mangas.push(MangaHistory {
             id: manga_id.clone(),
@@ -658,15 +672,15 @@ mod tests {
 
     #[tokio::test]
     async fn goes_to_next_page() {
-        let mut feed_page: Feed<MockMangadexClient> = Feed::new();
+        let mut feed_page: Feed<MockMangaPageProvider> = Feed::new();
 
-        let mut history = history_data();
+        let mut history = manga_history_response();
 
         history.mangas = vec![MangaHistory::default(), MangaHistory::default(), MangaHistory::default(), MangaHistory::default()];
         history.total_items = history.mangas.len() as u32;
         history.page = 1;
 
-        feed_page.set_items_per_page(3);
+        feed_page.items_per_page = 3;
 
         feed_page.load_history(Some(history));
 
@@ -677,15 +691,15 @@ mod tests {
 
     #[tokio::test]
     async fn goes_to_previous_history_page() {
-        let mut feed_page: Feed<MockMangadexClient> = Feed::new();
+        let mut feed_page: Feed<MockMangaPageProvider> = Feed::new();
 
-        let mut history = history_data();
+        let mut history = manga_history_response();
 
         history.mangas = vec![MangaHistory::default(), MangaHistory::default(), MangaHistory::default(), MangaHistory::default()];
         history.total_items = history.mangas.len() as u32;
         history.page = 2;
 
-        feed_page.set_items_per_page(3);
+        feed_page.items_per_page = 3;
 
         feed_page.load_history(Some(history));
 
@@ -696,7 +710,7 @@ mod tests {
 
     #[tokio::test]
     async fn switch_between_tabs() {
-        let mut feed_page: Feed<MockMangadexClient> = Feed::new();
+        let mut feed_page: Feed<MockMangaPageProvider> = Feed::new();
 
         assert_eq!(feed_page.tabs, FeedTabs::History);
 
@@ -711,7 +725,7 @@ mod tests {
 
     #[tokio::test]
     async fn search_history_in_database() {
-        let mut feed_page: Feed<MockMangadexClient> = Feed::new();
+        let mut feed_page: Feed<MockMangaPageProvider> = Feed::new();
 
         feed_page.search_history();
 
@@ -727,7 +741,7 @@ mod tests {
 
     #[tokio::test]
     async fn listen_key_event_to_switch_tabs() {
-        let mut feed_page: Feed<MockMangadexClient> = Feed::new();
+        let mut feed_page: Feed<MockMangaPageProvider> = Feed::new();
 
         let initial_tab = feed_page.tabs;
 
@@ -755,7 +769,7 @@ mod tests {
 
     #[tokio::test]
     async fn when_switching_tabs_remove_previous_history() {
-        let mut feed_page: Feed<MockMangadexClient> = Feed::new();
+        let mut feed_page: Feed<MockMangaPageProvider> = Feed::new();
 
         let manga_history = MangaHistoryResponse {
             mangas: vec![MangaHistory::default()],
@@ -775,7 +789,7 @@ mod tests {
 
     #[tokio::test]
     async fn scrolls_history_up_and_down() {
-        let mut feed_page: Feed<MockMangadexClient> = Feed::new();
+        let mut feed_page: Feed<MockMangaPageProvider> = Feed::new();
 
         let manga_history = MangaHistoryResponse {
             mangas: vec![MangaHistory::default(), MangaHistory::default(), MangaHistory::default()],
@@ -817,7 +831,7 @@ mod tests {
 
     #[tokio::test]
     async fn focus_search_bar_when_pressing_s_and_unfocus_when_pressing_esc() {
-        let mut feed_page: Feed<MockMangadexClient> = Feed::new();
+        let mut feed_page: Feed<MockMangaPageProvider> = Feed::new();
 
         assert!(!feed_page.is_typing(), "search_bar should not be focused by default");
 
@@ -840,7 +854,7 @@ mod tests {
 
     #[tokio::test]
     async fn type_into_search_bar_when_focused() {
-        let mut feed_page: Feed<MockMangadexClient> = Feed::new();
+        let mut feed_page: Feed<MockMangaPageProvider> = Feed::new();
 
         feed_page.toggle_focus_search_bar();
 
@@ -860,7 +874,8 @@ mod tests {
     #[tokio::test]
     async fn when_searching_manga_page_should_not_listen_to_key_events() {
         let (tx, _) = unbounded_channel::<Events>();
-        let mut feed_page: Feed<MockMangadexClient> = Feed::new().with_global_sender(tx).with_api_client(MockMangadexClient::new());
+        let mut feed_page: Feed<MockMangaPageProvider> =
+            Feed::new().with_global_sender(tx).with_api_client(MockMangaPageProvider::new().into());
 
         render_history_and_select(&mut feed_page);
 
@@ -878,7 +893,8 @@ mod tests {
     #[tokio::test]
     async fn goes_to_manga_page_when_pressing_r_with_selected_manga() {
         let (tx, mut rx) = unbounded_channel::<Events>();
-        let mut feed_page: Feed<MockMangadexClient> = Feed::new().with_global_sender(tx).with_api_client(MockMangadexClient::new());
+        let mut feed_page: Feed<MockMangaPageProvider> =
+            Feed::new().with_global_sender(tx).with_api_client(MockMangaPageProvider::new().into());
 
         render_history_and_select(&mut feed_page);
         press_key(&mut feed_page, KeyCode::Char('r'));
@@ -893,20 +909,5 @@ mod tests {
             Events::GoToMangaPage(_) => {},
             _ => panic!("wrong event was sent"),
         }
-    }
-
-    #[tokio::test]
-    async fn show_error_when_searching_manga_failed() {
-        let (tx, _) = unbounded_channel::<Events>();
-
-        let failing_api_client = MockMangadexClient::new().with_returning_errors();
-
-        let mut feed_page: Feed<MockMangadexClient> = Feed::new();
-
-        search_manga(failing_api_client, "".to_string(), tx, feed_page.local_event_tx.clone()).await;
-
-        feed_page.tick();
-
-        assert_eq!(feed_page.state, FeedState::MangaPageNotFound);
     }
 }
