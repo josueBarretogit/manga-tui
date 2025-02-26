@@ -51,10 +51,10 @@ pub struct ManganatoProvider {
 }
 
 impl ManganatoProvider {
-    const CHAPTER_PAGE_CACHE_DURATION: Duration = Duration::from_secs(25);
+    const CHAPTER_PAGE_CACHE_DURATION: Duration = Duration::from_secs(30);
     const HOME_PAGE_CACHE_DURATION: Duration = Duration::from_secs(10);
     pub const MANGANATO_MANGA_LANGUAGE: &[Languages] = &[Languages::English];
-    const MANGA_PAGE_CACHE_DURATION: Duration = Duration::from_secs(25);
+    const MANGA_PAGE_CACHE_DURATION: Duration = Duration::from_secs(40);
     const SEARCH_PAGE_CACHE_DURATION: Duration = Duration::from_secs(5);
 
     pub fn new(base_url: Url, cache_provider: Arc<dyn Cacher>) -> Self {
