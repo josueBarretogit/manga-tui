@@ -22,7 +22,6 @@ use super::{
     ListOfChapters, MangaPageProvider, MangaProvider, PopularManga, ProviderIdentity, ReaderPageProvider, RecentlyAddedManga,
     SearchChapterById, SearchMangaById, SearchMangaPanel, SearchPageProvider,
 };
-use crate::backend::cache::in_memory::InMemoryCache;
 use crate::backend::cache::{Cacher, InsertEntry};
 use crate::backend::html_parser::{HtmlElement, ParseHtml};
 use crate::backend::manga_provider::ChapterToRead;

@@ -10,6 +10,7 @@ use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
 
 use super::{API_URL_BASE, COVER_IMG_URL_BASE};
+use crate::backend::cache::in_memory::InMemoryCache;
 use crate::backend::manga_provider::mangadex::api_responses::authors::AuthorsResponse;
 use crate::backend::manga_provider::mangadex::api_responses::tags::TagsResponse;
 use crate::backend::manga_provider::mangadex::MangadexClient;
@@ -492,7 +493,11 @@ impl MangadexFilterProvider {
             author_state: FilterListDynamic::<AuthorState>::default(),
             artist_state: FilterListDynamic::<ArtistState>::default(),
             lang_state: FilterList::<LanguageState>::default(),
-            api_client: MangadexClient::new(API_URL_BASE.parse().unwrap(), COVER_IMG_URL_BASE.parse().unwrap()),
+            api_client: MangadexClient::new(
+                API_URL_BASE.parse().unwrap(),
+                COVER_IMG_URL_BASE.parse().unwrap(),
+                InMemoryCache::init(2),
+            ),
             is_typing: false,
             tx,
             rx,

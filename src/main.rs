@@ -5,9 +5,11 @@
 
 use std::io::stdout;
 use std::process::exit;
+use std::sync::Arc;
 use std::time::Duration;
 
 use backend::cache::in_memory::InMemoryCache;
+use backend::cache::Cacher;
 use backend::manga_provider::mangadex::filter::MangadexFilterProvider;
 use backend::manga_provider::mangadex::filter_widget::MangadexFilterWidget;
 use backend::manga_provider::mangadex::{MangadexClient, API_URL_BASE, COVER_IMG_URL_BASE};
@@ -107,10 +109,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     color_eyre::install()?;
     stdout().execute(EnableMouseCapture)?;
+
+    let cache_provider: Arc<dyn Cacher> = InMemoryCache::init(8);
+
     match provider {
         MangaProviders::Mangadex => {
-            let mangadex_client = MangadexClient::new(API_URL_BASE.parse().unwrap(), COVER_IMG_URL_BASE.parse().unwrap())
-                .with_image_quality(config.image_quality);
+            let mangadex_client =
+                MangadexClient::new(API_URL_BASE.parse().unwrap(), COVER_IMG_URL_BASE.parse().unwrap(), cache_provider)
+                    .with_image_quality(config.image_quality);
 
             logger.inform("Checking mangadex status...");
 
@@ -137,7 +143,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             tokio::time::sleep(Duration::from_secs(1)).await;
             run_app(
                 ratatui::init(),
-                ManganatoProvider::new(MANGANATO_BASE_URL.parse().unwrap(), InMemoryCache::init(8)),
+                ManganatoProvider::new(MANGANATO_BASE_URL.parse().unwrap(), cache_provider),
                 anilist_client,
                 ManganatoFiltersProvider::new(ManganatoFilterState {}),
                 ManganatoFilterWidget {},
