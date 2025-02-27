@@ -59,7 +59,7 @@ jobs:
       - name: Checksum
         run: sha256sum releases/* > ./releases/checksum.txt
       - name: Create Draft Release
-        uses: softprops/action-gh-release@v2.0.4
+        uses: softprops/action-gh-release@v2.2.1
         with:
           draft: true
           generate_release_notes: true

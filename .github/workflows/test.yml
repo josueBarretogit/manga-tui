@@ -16,11 +16,11 @@ jobs:
     name: Check code formatting and linting
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
 
       - name: setup toolchain
-        uses: hecrj/setup-rust-action@v1
+        uses: hecrj/setup-rust-action@v2
         with:
           rust-version: ${{ env.RUST_TOOLCHAIN_VERSION }}
 
@@ -43,12 +43,12 @@ jobs:
     name: Build and test manga tui
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - uses: Swatinem/rust-cache@v2
 
       - name: setup toolchain
-        uses: hecrj/setup-rust-action@v1
+        uses: hecrj/setup-rust-action@v2
         with:
           rust-version: ${{ env.RUST_TOOLCHAIN_VERSION }}
 
