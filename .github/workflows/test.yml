@@ -16,7 +16,7 @@ jobs:
     name: Check code formatting and linting
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
 
       - name: setup toolchain
@@ -43,7 +43,7 @@ jobs:
     name: Build and test manga tui
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - uses: Swatinem/rust-cache@v2
 
