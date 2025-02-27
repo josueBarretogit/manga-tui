@@ -22,15 +22,14 @@
 
 <p align="center">
 
-https://github.com/user-attachments/assets/2b693bd3-ec30-4d6e-bcc4-6cf457a860b1
+<https://github.com/user-attachments/assets/2b693bd3-ec30-4d6e-bcc4-6cf457a860b1>
 
 </p>
-
 
 ## Table of contents
 
 - [Features](#features)
-- [Dependencies](#Dependencies)
+- [Dependencies](#dependencies)
 - [Installation](#installation)
 - [Image rendering](#image-rendering)
 - [Usage](#usage)
@@ -43,46 +42,48 @@ https://github.com/user-attachments/assets/2b693bd3-ec30-4d6e-bcc4-6cf457a860b1
 
 - [Mangadex](https://mangadex.org/) and [Manganato](https://manganato.com/) are available as manga providers
 
-- Track your reading history with [anilist integration](./docs/anilist.md) 
+- Track your reading history with [anilist integration](./docs/anilist.md)
 
 - Advanced search (with filters)
 
-https://github.com/user-attachments/assets/c1e21aa1-8a51-4c47-baea-9f56dcd0d6a4
+<https://github.com/user-attachments/assets/c1e21aa1-8a51-4c47-baea-9f56dcd0d6a4>
 
-- Read manga in your terminal with terminals such as: Wezterm, iTerm2, Kitty, Ghostty 
+- Read manga in your terminal with terminals such as: Wezterm, iTerm2, Kitty, Ghostty
   
-https://github.com/user-attachments/assets/70f321ff-13d1-4c4b-9c37-604271456ab2
+<https://github.com/user-attachments/assets/70f321ff-13d1-4c4b-9c37-604271456ab2>
 
 - Reading history is stored locally (with no login required)
 
- https://github.com/user-attachments/assets/47e88e89-f73c-4575-9645-2abb80ca7d63
+ <https://github.com/user-attachments/assets/47e88e89-f73c-4575-9645-2abb80ca7d63>
 
-- Download manga (available formats: cbz, epub and raw images) 
+- Download manga (available formats: cbz, epub and raw images)
 
-https://github.com/user-attachments/assets/ba785668-7cf1-4367-93f9-6e6e1f72c12c
+<https://github.com/user-attachments/assets/ba785668-7cf1-4367-93f9-6e6e1f72c12c>
 
-- Download all chapters of a manga (available formats: cbz, epub and raw images) 
+- Download all chapters of a manga (available formats: cbz, epub and raw images)
 
-https://github.com/user-attachments/assets/26ad493f-633c-41fc-9d09-49b316118923
+<https://github.com/user-attachments/assets/26ad493f-633c-41fc-9d09-49b316118923>
 
+### Join the [discord](https://discord.gg/jNzuDCH3) server for further help, feature requests or to chat with contributors
 
-### Join the [discord](https://discord.gg/jNzuDCH3) server for further help, feature requests or to chat with contributors   
-
-## Dependencies 
+## Dependencies
 
 On linux you may need to install the D-bus secret service library
 
-### Debian 
+### Debian
+
 ```shell
 sudo apt install libdbus-1-dev pkg-config
 ```
 
 ### Fedora
+
 ```shell
 sudo dnf install dbus-devel pkgconf-pkg-config
 ```
 
-### Arch 
+### Arch
+
 ```shell
 sudo pacman -S dbus pkgconf
 ```
@@ -146,11 +147,12 @@ manga-tui
 > [!WARNING]
 > Expect any manga provider to fail at some point, either due to them closing operations due to a [lawsuit](https://www.japantimes.co.jp/news/2024/04/18/japan/crime-legal/manga-mura-copyright-ruling/) or the provider itself having issues on their end like [manganato](https://www.reddit.com/r/mangapiracy/comments/1iumo9v/mangakakalot_and_manganato_site_shutdown_mangabat/)
 
-By default when you run `manga-tui` Mangadex will be used 
+By default when you run `manga-tui` Mangadex will be used
 
 ```shell
 manga-tui
 ```
+
 If you want to use manganato then run:
 
 ```shell
@@ -159,9 +161,7 @@ manga-tui -p manganato
 
 ## Configuration
 
-
-Manga downloads and reading history is stored in the `manga-tui` directory, to know where it is run: 
-
+Manga downloads and reading history is stored in the `manga-tui` directory, to know where it is run:
 
 ```shell
 manga-tui --data-dir 
@@ -174,6 +174,7 @@ manga-tui -d
 On linux it will output something like: `~/.local/share/manga-tui` <br />
 
 On the `manga-tui` directory there will be 4 directories
+
 - `history`, which contains a sqlite database to store reading history
 - `config`, which contains the `manga-tui-config.toml` config file with the following fields:
 
@@ -204,8 +205,8 @@ auto_bookmark = true
 track_reading_when_download = false
 ```
 
-- `mangaDownloads`, where manga will be downloaded 
-- `errorLogs`, for storing posible errors / bugs 
+- `mangaDownloads`, where manga will be downloaded
+- `errorLogs`, for storing posible errors / bugs
 
 If you want to change the location of this directory you can set the environment variable `MANGA_TUI_DATA_DIR` to some path pointing to a directory, like: <br />
 
@@ -215,7 +216,6 @@ export MANGA_TUI_DATA_DIR="/home/user/Desktop/mangas"
 
 By default `manga-tui` will search mangas in english, you can change the language by running:
 
-
 ```shell
 # `es` corresponds to the Iso code for spanish
 manga-tui lang --set 'es'
@@ -223,13 +223,13 @@ manga-tui lang --set 'es'
 
 Check the available languages and their Iso codes by running:
 
-
 ```shell
 manga-tui lang --print
 ```
 
 ## Motivation
-I wanted to make a "How linux user does ..." but for manga, [here is the video](https://www.youtube.com/watch?v=K0FsGRqEc1c) also this is a great excuse to start reading manga again 
+
+I wanted to make a "How linux user does ..." but for manga, [here is the video](https://www.youtube.com/watch?v=K0FsGRqEc1c) also this is a great excuse to start reading manga again
 
 ## Credits
 
