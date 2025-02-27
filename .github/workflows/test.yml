@@ -62,8 +62,11 @@ jobs:
       - name: build
         run: cargo build --release --verbose
 
-      - name: install cargo nextest
-        run: cargo install cargo-nextest@0.9.82
+      - name: Install cargo-nextest
+        uses: baptiste0928/cargo-install@v1
+        with:
+          crate: cargo-nextest
+          locked: true
 
       - name: test
         run: cargo nextest run --no-fail-fast
