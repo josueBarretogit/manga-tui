@@ -1,8 +1,10 @@
-use std::fs::{self, File};
-use std::io::{BufWriter, Cursor};
+use std::fs::File;
+use std::io::{BufWriter, Cursor, Write};
 use std::path::Path;
 
-use image::GenericImageView;
+use flate2::write::ZlibEncoder;
+use flate2::Compression;
+use image::{DynamicImage, GenericImageView, ImageFormat};
 use lopdf::{dictionary, Document, Object, Stream};
 
 use super::MangaDownloader;
@@ -14,6 +16,7 @@ impl PdfDownloader {
         Self {}
     }
 }
+
 impl MangaDownloader for PdfDownloader {
     fn save_chapter_in_file_system(
         &self,
@@ -29,42 +32,43 @@ impl MangaDownloader for PdfDownloader {
         let mut pages = Vec::new();
         let page_width = 595.0;
 
-        let pages_id = doc.add_object(dictionary! {
-            "Type" => "Pages",
-            "Kids" => Vec::<Object>::new(),
-            "Count" => 0,
-        });
-
         for (index, page) in chapter.pages.iter().enumerate() {
-            let img = image::load_from_memory(&page.bytes)?.to_rgb8();
+            let img = image::load_from_memory(&page.bytes)?;
             let (img_width, img_height) = img.dimensions();
-
             let mut img_data = Vec::new();
-            let img_format = match page.extension.as_str() {
+            let mut filter = None;
+            let mut color_space = "DeviceRGB";
+
+            match page.extension.as_str() {
                 "jpg" | "jpeg" => {
-                    img.write_to(&mut Cursor::new(&mut img_data), image::ImageFormat::Jpeg)?;
-                    "DCTDecode"
+                    let mut cursor = Cursor::new(Vec::new());
+                    img.write_to(&mut cursor, ImageFormat::Jpeg)?;
+                    img_data = cursor.into_inner();
+                    filter = Some("DCTDecode");
                 },
                 "png" => {
-                    img.write_to(&mut Cursor::new(&mut img_data), image::ImageFormat::Png)?;
-                    "FlateDecode"
+                    let raw_img = img.to_rgb8();
+                    let uncompressed_data = raw_img.into_raw();
+                    let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+                    encoder.write_all(&uncompressed_data)?;
+                    img_data = encoder.finish()?;
+                    filter = Some("FlateDecode");
                 },
                 _ => return Err(format!("Unsupported image format: {}", page.extension).into()),
             };
 
-            let img_stream = Stream::new(
-                dictionary! {
-                    "Type" => "XObject",
-                    "Subtype" => "Image",
-                    "Width" => img_width as i32,
-                    "Height" => img_height as i32,
-                    "ColorSpace" => "DeviceRGB",
-                    "BitsPerComponent" => 8,
-                    "Filter" => img_format,
-                },
-                img_data,
-            );
+            let img_dict = dictionary! {
+                "Type" => "XObject",
+                "Subtype" => "Image",
+                "Width" => img_width as i64,
+                "Height" => img_height as i64,
+                "ColorSpace" => color_space,
+                "BitsPerComponent" => 8,
+                "Filter" => filter.unwrap(),
+                "Length" => img_data.len() as i64
+            };
 
+            let img_stream = Stream::new(img_dict, img_data);
             let img_id = doc.add_object(img_stream);
 
             let scale_factor = page_width / img_width as f32;
@@ -73,11 +77,11 @@ impl MangaDownloader for PdfDownloader {
 
             let contents =
                 Stream::new(dictionary! {}, format!("q {} 0 0 {} 0 0 cm /Im{} Do Q", scaled_w, scaled_h, index).into_bytes());
+
             let contents_id = doc.add_object(contents);
 
             let page_id = doc.add_object(dictionary! {
                 "Type" => "Page",
-                "Parent" => pages_id,  // Ensure parent is set
                 "MediaBox" => vec![0.0.into(), 0.0.into(), 595.0.into(), 842.0.into()],
                 "Resources" => dictionary! {
                     "XObject" => dictionary! {

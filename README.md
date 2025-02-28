@@ -56,11 +56,11 @@
 
  <https://github.com/user-attachments/assets/47e88e89-f73c-4575-9645-2abb80ca7d63>
 
-- Download manga (available formats: cbz, epub and raw images)
+- Download manga (available formats: cbz, epub, pdf and raw images)
 
 <https://github.com/user-attachments/assets/ba785668-7cf1-4367-93f9-6e6e1f72c12c>
 
-- Download all chapters of a manga (available formats: cbz, epub and raw images)
+- Download all chapters of a manga (available formats: cbz, epub, pdf and raw images)
 
 <https://github.com/user-attachments/assets/26ad493f-633c-41fc-9d09-49b316118923>
 
@@ -180,7 +180,7 @@ On the `manga-tui` directory there will be 4 directories
 
 ```toml
 # The format of the manga downloaded 
-# values : cbz , raw, epub 
+# values : cbz , raw, epub, pdf
 # default : cbz 
 download_type = "cbz"
 
