@@ -2,9 +2,9 @@ name: main
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop, dev, "release/**", "hotfix/**"]
   pull_request:
-    branches: [main]
+    branches: [main, develop, dev, "release/**", "hotfix/**"]
 
 env:
   CARGO_TERM_COLOR: always
