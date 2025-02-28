@@ -9,6 +9,7 @@ use crate::config::DownloadType;
 
 pub mod cbz_downloader;
 pub mod epub_downloader;
+pub mod pdf_downloader;
 pub mod raw_images;
 
 /// This struct represents a chapter with its data not having characteres that may throw errors
