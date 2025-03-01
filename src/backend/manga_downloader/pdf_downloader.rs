@@ -36,61 +36,60 @@ impl MangaDownloader for PdfDownloader {
             let img = image::load_from_memory(&page.bytes)?;
             let (img_width, img_height) = img.dimensions();
             let mut img_data = Vec::new();
-            let mut filter = None;
-            let mut color_space = "DeviceRGB";
+            let filter;
+            let color_space = "DeviceRGB";
 
             match page.extension.as_str() {
                 "jpg" | "jpeg" => {
                     let mut cursor = Cursor::new(Vec::new());
                     img.write_to(&mut cursor, ImageFormat::Jpeg)?;
                     img_data = cursor.into_inner();
-                    filter = Some("DCTDecode");
+                    filter = "DCTDecode";
                 },
-                "png" => {
+                "png" | "webp" => {
                     let raw_img = img.to_rgb8();
                     let uncompressed_data = raw_img.into_raw();
-                    let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+                    let mut encoder = ZlibEncoder::new(Vec::new(), Compression::fast());
                     encoder.write_all(&uncompressed_data)?;
                     img_data = encoder.finish()?;
-                    filter = Some("FlateDecode");
+                    filter = "FlateDecode";
                 },
                 _ => return Err(format!("Unsupported image format: {}", page.extension).into()),
-            };
+            }
 
-            let img_dict = dictionary! {
-                "Type" => "XObject",
-                "Subtype" => "Image",
-                "Width" => img_width as i64,
-                "Height" => img_height as i64,
-                "ColorSpace" => color_space,
-                "BitsPerComponent" => 8,
-                "Filter" => filter.unwrap(),
-                "Length" => img_data.len() as i64
-            };
-
-            let img_stream = Stream::new(img_dict, img_data);
-            let img_id = doc.add_object(img_stream);
+            let img_obj = Stream::new(
+                dictionary! {
+                    "Type" => "XObject",
+                    "Subtype" => "Image",
+                    "Width" => img_width as i64,
+                    "Height" => img_height as i64,
+                    "ColorSpace" => color_space,
+                    "BitsPerComponent" => 8,
+                    "Filter" => filter,
+                    "Length" => img_data.len() as i64
+                },
+                img_data,
+            );
+            let img_id = doc.add_object(img_obj);
 
             let scale_factor = page_width / img_width as f32;
-            let scaled_w = img_width as f32 * scale_factor;
+            let scaled_w = page_width;
             let scaled_h = img_height as f32 * scale_factor;
 
-            let contents =
-                Stream::new(dictionary! {}, format!("q {} 0 0 {} 0 0 cm /Im{} Do Q", scaled_w, scaled_h, index).into_bytes());
+            let contents = Stream::new(dictionary! {}, format!("q {} 0 0 {} 0 0 cm /Im Do Q\n", scaled_w, scaled_h).into_bytes());
 
             let contents_id = doc.add_object(contents);
 
-            let page_id = doc.add_object(dictionary! {
+            let page_dict = dictionary! {
                 "Type" => "Page",
-                "MediaBox" => vec![0.0.into(), 0.0.into(), 595.0.into(), 842.0.into()],
+                "MediaBox" => vec![0.into(), 0.into(), scaled_w.into(), scaled_h.into()],
                 "Resources" => dictionary! {
-                    "XObject" => dictionary! {
-                        format!("Im{}", index) => img_id,
-                    }
+                    "XObject" => dictionary! { "Im" => img_id }
                 },
                 "Contents" => contents_id,
-            });
+            };
 
+            let page_id = doc.add_object(page_dict);
             pages.push(page_id);
         }
 
