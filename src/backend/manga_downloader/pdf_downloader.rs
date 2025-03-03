@@ -37,7 +37,7 @@ impl MangaDownloader for PdfDownloader {
             let (img_width, img_height) = img.dimensions();
             let mut img_data = Vec::new();
             let filter;
-            let color_space = "DeviceRGB";
+            let color_space = if img.color().has_color() { "DeviceRGB" } else { "DeviceGray" };
 
             match page.extension.as_str() {
                 "jpg" | "jpeg" => {
@@ -47,10 +47,9 @@ impl MangaDownloader for PdfDownloader {
                     filter = "DCTDecode";
                 },
                 "png" | "webp" => {
-                    let raw_img = img.to_rgb8();
-                    let uncompressed_data = raw_img.into_raw();
+                    let raw_img = if img.color().has_color() { img.to_rgb8().into_raw() } else { img.to_luma8().into_raw() };
                     let mut encoder = ZlibEncoder::new(Vec::new(), Compression::fast());
-                    encoder.write_all(&uncompressed_data)?;
+                    encoder.write_all(&raw_img)?;
                     img_data = encoder.finish()?;
                     filter = "FlateDecode";
                 },
