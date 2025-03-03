@@ -1,5 +1,5 @@
 # The format of the manga downloaded 
-# values : cbz , raw, epub 
+# values : cbz , raw, epub, pdf
 # default : cbz 
 download_type = "cbz"
 

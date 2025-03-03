@@ -20,6 +20,7 @@ pub enum DownloadType {
     Cbz,
     Raw,
     Epub,
+    Pdf,
 }
 
 #[derive(Default, Debug, Serialize, Deserialize, Display, EnumIter, Clone, Copy)]
