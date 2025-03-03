@@ -1,0 +1,48 @@
+[tasks.format]
+command = "cargo"
+args = ["fmt", "--all",  "--check"]
+
+[tasks.clippy]
+command = "cargo"
+args = ["clippy", "--", "-D", "warnings"]
+
+[tasks.build]
+command = "cargo"
+args = ["build"]
+
+[tasks.test]
+command = "cargo"
+args = ["test"]
+
+[tasks.check]
+command = "cargo"
+args = ["check"]
+
+[tasks.ignored-test]
+command = "cargo"
+args = ["test", "--", "--ignored"]
+
+
+[tasks.download-all]
+description = "Test all download formats"
+command = "cargo"
+args = ["test" , "backend::manga_downloader", "--", "--ignored"]
+
+
+[tasks.download]
+description = "Test only the specified download format, Example: cargo make download epub"
+command = "cargo"
+args = ["test" , "backend::manga_downloader::${@}", "--", "--ignored"]
+
+[tasks.full-ci]
+dependencies = [
+    "check",
+    "clippy",
+    "format",
+    "build",
+    "test",
+    "ignored-test"
+]
+
+[tasks.default]
+alias = "full-ci"
