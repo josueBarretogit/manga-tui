@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
 use crossterm::event::{KeyCode, KeyEvent};
+use ratatui::Frame;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Margin, Rect};
 use ratatui::text::{Line, ToSpan};
 use ratatui::widgets::{Block, List, Paragraph, StatefulWidget, Widget, Wrap};
-use ratatui::Frame;
 use ratatui_image::picker::Picker;
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::{Resize, StatefulImage};
@@ -14,15 +14,15 @@ use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
 use crate::backend::database::{Bookmark, ChapterToBookmark, ChapterToSaveHistory, Database, MangaReadingHistorySave};
-use crate::backend::error_log::{write_to_error_log, ErrorType};
+use crate::backend::error_log::{ErrorType, write_to_error_log};
 use crate::backend::manga_provider::{ChapterReader, ChapterToRead, ListOfChapters, MangaPanel, ReaderPageProvider};
-use crate::backend::tracker::{track_manga, MangaTracker};
+use crate::backend::tracker::{MangaTracker, track_manga};
 use crate::backend::tui::Events;
 use crate::common::format_error_message_tracking_reading_history;
 use crate::config::MangaTuiConfig;
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
-use crate::view::widgets::reader::{PageItemState, PagesItem, PagesList, PagesListState};
 use crate::view::widgets::Component;
+use crate::view::widgets::reader::{PageItemState, PagesItem, PagesList, PagesListState};
 
 #[derive(Debug, PartialEq, Clone, Default)]
 pub enum PageSize {

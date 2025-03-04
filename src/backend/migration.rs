@@ -310,8 +310,8 @@ fn migrate_version_0_6_0(connection: &mut Connection, logger: &impl ILogger) -> 
 mod tests {
     use std::error::Error;
 
-    use fake::faker::name::en::Name;
     use fake::Fake;
+    use fake::faker::name::en::Name;
     use pretty_assertions::assert_eq;
     use rusqlite::params;
     use uuid::Uuid;

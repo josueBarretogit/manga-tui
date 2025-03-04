@@ -1,10 +1,10 @@
 use chrono::Utc;
 use manga_tui::SearchTerm;
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, params};
 use strum::{Display, EnumIter};
 
-use super::manga_provider::{Languages, MangaProviders};
 use super::AppDirectories;
+use super::manga_provider::{Languages, MangaProviders};
 use crate::view::widgets::feed::FeedTabs;
 
 #[derive(Display, Debug, Clone, Copy)]
@@ -84,8 +84,8 @@ pub struct GetHistoryArgs {
     pub items_per_page: u32,
     pub provider: MangaProviders,
 }
-/// This is used in the `feed` page to retrieve the mangas the user is currently reading
 
+/// This is used in the `feed` page to retrieve the mangas the user is currently reading
 pub struct MangaPlanToReadSave<'a> {
     pub id: &'a str,
     pub title: &'a str,

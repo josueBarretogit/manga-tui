@@ -6,7 +6,7 @@ use std::num::ParseIntError;
 use chrono::NaiveDate;
 use regex::Regex;
 use scraper::selectable::Selectable;
-use scraper::{html, Selector};
+use scraper::{Selector, html};
 use serde::{Deserialize, Serialize};
 
 use super::ManganatoProvider;
@@ -105,7 +105,7 @@ impl ParseHtml for PopularMangaItem {
         let a_tag = div.select(&a_selector).next().ok_or("Could not find div element containing manga info")?;
         let a_tag_additional_info = div
             .select(&a_selector_additional_info)
-            .last()
+            .next_back()
             .ok_or("could not find a tag containing additional information")?;
         let title = a_tag.attr("title").ok_or("Could not find manga title")?;
         let manga_page_url = a_tag.attr("href").ok_or("Could not find manga page url")?;

@@ -36,7 +36,7 @@ impl MangaDownloader for RawImagesDownloader {
         self.create_manga_base_directory(&base_directory)?;
 
         for (index, chap) in chapter.pages.into_iter().enumerate() {
-            let file_name = base_directory.join(&format!("{}.{}", index + 1, chap.extension));
+            let file_name = base_directory.join(format!("{}.{}", index + 1, chap.extension));
             let mut maybe_file = File::create(file_name);
 
             if let Ok(file) = maybe_file.as_mut() {
@@ -51,14 +51,14 @@ impl MangaDownloader for RawImagesDownloader {
 mod tests {
     use std::error::Error;
 
-    use fake::faker::name::en::Name;
     use fake::Fake;
+    use fake::faker::name::en::Name;
     use uuid::Uuid;
 
     use super::*;
+    use crate::backend::AppDirectories;
     use crate::backend::manga_downloader::ChapterToDownloadSanitized;
     use crate::backend::manga_provider::{ChapterPage, Languages};
-    use crate::backend::AppDirectories;
     use crate::config::DownloadType;
 
     #[test]

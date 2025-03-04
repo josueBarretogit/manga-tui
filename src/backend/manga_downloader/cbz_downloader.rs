@@ -1,8 +1,8 @@
 use std::fs::File;
 use std::io::Write;
 
-use zip::write::SimpleFileOptions;
 use zip::ZipWriter;
+use zip::write::SimpleFileOptions;
 
 use super::MangaDownloader;
 
@@ -54,14 +54,14 @@ impl MangaDownloader for CbzDownloader {
 mod tests {
     use std::error::Error;
 
-    use fake::faker::name::en::Name;
     use fake::Fake;
+    use fake::faker::name::en::Name;
     use uuid::Uuid;
 
     use super::*;
+    use crate::backend::AppDirectories;
     use crate::backend::manga_downloader::ChapterToDownloadSanitized;
     use crate::backend::manga_provider::{ChapterPage, Languages};
-    use crate::backend::AppDirectories;
     use crate::config::DownloadType;
 
     #[test]

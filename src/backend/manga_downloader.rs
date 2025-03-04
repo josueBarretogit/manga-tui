@@ -2,7 +2,7 @@ use std::error::Error;
 use std::fs::create_dir_all;
 use std::path::{Path, PathBuf};
 
-use manga_tui::{exists, SanitizedFilename};
+use manga_tui::{SanitizedFilename, exists};
 
 use super::manga_provider::{ChapterPage, Languages};
 use crate::config::DownloadType;

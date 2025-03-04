@@ -2,12 +2,12 @@ use std::sync::Arc;
 
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent, MouseEventKind};
 use image::DynamicImage;
+use ratatui::Frame;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Style, Stylize};
 use ratatui::text::{Line, Span, ToSpan};
 use ratatui::widgets::{Block, Clear, List, ListState, Paragraph, StatefulWidget, Widget, Wrap};
-use ratatui::Frame;
 use ratatui_image::picker::Picker;
 use ratatui_image::protocol::Protocol;
 use ratatui_image::{Image, Resize};
@@ -16,27 +16,27 @@ use throbber_widgets_tui::{Throbber, ThrobberState};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
+use crate::backend::AppDirectories;
 use crate::backend::database::{
     Bookmark, ChapterBookmarked, ChapterToBookmark, ChapterToSaveHistory, Database, MangaReadingHistorySave, RetrieveBookmark,
     SetChapterDownloaded,
 };
-use crate::backend::error_log::{self, write_to_error_log, ErrorType};
+use crate::backend::error_log::{self, ErrorType, write_to_error_log};
 use crate::backend::manga_provider::{
     ChapterFilters, ChapterOrderBy, ChapterToRead, GetChaptersResponse, Languages, ListOfChapters, Manga, MangaPageProvider,
     Pagination,
 };
-use crate::backend::tracker::{track_manga, MangaTracker};
+use crate::backend::tracker::{MangaTracker, track_manga};
 use crate::backend::tui::Events;
-use crate::backend::AppDirectories;
 use crate::common::format_error_message_tracking_reading_history;
 use crate::config::MangaTuiConfig;
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
 use crate::view::app::MangaToRead;
-use crate::view::tasks::manga::{download_all_chapters, download_single_chapter, DownloadAllChapters, DownloadSingleChapter};
+use crate::view::tasks::manga::{DownloadAllChapters, DownloadSingleChapter, download_all_chapters, download_single_chapter};
+use crate::view::widgets::Component;
 use crate::view::widgets::manga::{
     ChapterItem, ChaptersListWidget, DownloadAllChaptersState, DownloadAllChaptersWidget, DownloadPhase,
 };
-use crate::view::widgets::Component;
 
 #[derive(Debug, PartialEq, Eq, Default)]
 pub enum BookmarkPhase {
@@ -546,7 +546,7 @@ where
     fn get_current_selected_chapter_mut(&mut self) -> Option<&mut ChapterItem> {
         match self.chapters.as_mut() {
             Some(chapters_data) => match chapters_data.state.selected {
-                Some(selected_chapter_index) => return chapters_data.widget.chapters.get_mut(selected_chapter_index),
+                Some(selected_chapter_index) => chapters_data.widget.chapters.get_mut(selected_chapter_index),
                 None => None,
             },
             None => None,
@@ -556,7 +556,7 @@ where
     fn _get_current_selected_chapter(&self) -> Option<&ChapterItem> {
         match self.chapters.as_ref() {
             Some(chapters_data) => match chapters_data.state.selected {
-                Some(selected_chapter_index) => return chapters_data.widget.chapters.get(selected_chapter_index),
+                Some(selected_chapter_index) => chapters_data.widget.chapters.get(selected_chapter_index),
                 None => None,
             },
             None => None,
@@ -1191,8 +1191,8 @@ mod test {
     use self::mpsc::unbounded_channel;
     use super::*;
     use crate::backend::database::ChapterBookmarked;
-    use crate::backend::manga_provider::mock::MockMangaPageProvider;
     use crate::backend::manga_provider::Chapter;
+    use crate::backend::manga_provider::mock::MockMangaPageProvider;
     use crate::backend::tracker::MangaTracker;
     use crate::global::test_utils::TrackerTest;
     use crate::view::widgets::press_key;

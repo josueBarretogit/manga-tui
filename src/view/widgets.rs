@@ -1,7 +1,7 @@
 #[cfg(test)]
 use crossterm::event::KeyCode;
-use ratatui::layout::Rect;
 use ratatui::Frame;
+use ratatui::layout::Rect;
 
 use crate::backend::tui::Events;
 
