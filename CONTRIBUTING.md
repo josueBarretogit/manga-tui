@@ -24,6 +24,26 @@ manga-tui --data-dir
 manga-tui -d
 ```
 
+### Setting up dev enviroment
+
+Make sure you have installed [cargo make](https://github.com/sagiegurari/cargo-make)
+
+After cloning the repository run:
+```shell
+cargo make
+```
+It will run all the ci workflow which consists of formatting, checking, building and testing the code (which includes both normal test and ignored tests)
+after it is done a directory called `./test_results` will be created which is where the download tests produce their output
+
+To run only the download test:
+```shell
+cargo make download-all
+```
+
+Or if you only want to run one download format
+```shell
+cargo make download epub
+```
 
 ### Suggesting Features
 
