@@ -2,15 +2,15 @@ use std::sync::Arc;
 
 use ::crossterm::event::KeyCode;
 use crossterm::event::{KeyEvent, KeyModifiers};
+use ratatui::Frame;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Margin, Rect};
 use ratatui::style::Styled;
 use ratatui::text::Line;
 use ratatui::widgets::block::Title;
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Tabs, Widget, Wrap};
-use ratatui::Frame;
 use ratatui_image::picker::Picker;
-use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
 use self::feed::Feed;
 use self::home::Home;

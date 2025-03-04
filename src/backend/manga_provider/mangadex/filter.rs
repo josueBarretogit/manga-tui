@@ -6,14 +6,14 @@ use manga_tui::SearchTerm;
 use ratatui::widgets::*;
 use strum::{Display, EnumIter, IntoEnumIterator};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
-use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
+use tui_input::backend::crossterm::EventHandler;
 
 use super::{API_URL_BASE, COVER_IMG_URL_BASE};
 use crate::backend::cache::in_memory::InMemoryCache;
+use crate::backend::manga_provider::mangadex::MangadexClient;
 use crate::backend::manga_provider::mangadex::api_responses::authors::AuthorsResponse;
 use crate::backend::manga_provider::mangadex::api_responses::tags::TagsResponse;
-use crate::backend::manga_provider::mangadex::MangadexClient;
 use crate::backend::manga_provider::{Artist, Author, EventHandler as FiltersEventHandler, FiltersHandler, Languages};
 use crate::backend::tui::Events;
 

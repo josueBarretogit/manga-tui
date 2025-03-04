@@ -17,44 +17,46 @@ exclude = [
 ]
 
 [dependencies]
+# ratatui related dependencies
 ratatui = { version = "0.29.0", features = ["all-widgets", "palette", "unstable-widget-ref"] }
 ratatui-image = {  version = "1.0.5", features = ["rustix"]}
 throbber-widgets-tui = "0.8.0"
 tui-input = "0.11.0"
 tui-widget-list = "0.13.0"
+
 crossterm = { version = "0.28.1", features = ["event-stream"] }
-directories = "5.0.1"
+directories = "6.0.0"
 image = "0.25.4"
 reqwest = { version = "0.12.4", features = ["json", "native-tls", "cookies", "http2", "gzip", "deflate"] }
 tokio = { version = "1.42.0", features = ["full"] }
-serde = { version = "1.0.210", features = ["derive"] }
+serde = { version = "1.0.218", features = ["derive"] }
 strum = "0.26.3"
 strum_macros = "0.26"
 color-eyre = "0.6.2"
 futures = "0.3.31"
 bytes = { version = "1", features = ["serde"] }
-serde_json = "1.0.117"
-once_cell = "1.20.2"
-chrono = "0.4.38"
+serde_json = "1.0.140"
+once_cell = "1.20.3"
+chrono = "0.4.40"
 open = "5"
-rusqlite = { version = "0.31.0", features = ["bundled"] }
-clap = { version = "4.5.18", features = ["derive", "cargo"] }
-zip = "2.2.2"
-toml = "0.8.19"
-epub-builder = "0.7.4"
+rusqlite = { version = "0.33.0", features = ["bundled"] }
+clap = { version = "4.5.31", features = ["derive", "cargo"] }
+zip = "2.2.3"
+toml = "0.8.20"
+epub-builder = "0.8.0"
 http = "1.0"
 keyring = { version = "3", features = ["apple-native", "windows-native",  "sync-secret-service"] }
 log = { version = "0.4", features = ["std", "serde"] }
-pretty_env_logger = "0.4" 
-scraper = "0.22.0"
+pretty_env_logger = "0.5" 
+scraper = "0.23.1"
 regex = "1.11.1"
 
 [dev-dependencies]
 httpmock = "0.7.0-rc.1"
 pretty_assertions = "1.4.0"
 rusty-hook = "0.11.2"
-fake = "3.1.0"
-uuid = { version = "1.11.0", features = ["v4", "fast-rng"] }
+fake = "4.0.0"
+uuid = { version = "1.15.1", features = ["v4", "fast-rng"] }
 http = "1.0"
 
 

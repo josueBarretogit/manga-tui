@@ -5,26 +5,26 @@ use std::time::Duration;
 use crossterm::event::{self, KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 use image::DynamicImage;
 use manga_tui::SearchTerm;
+use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Margin, Rect};
 use ratatui::style::{Color, Style, Stylize};
 use ratatui::text::{Line, Span, ToSpan};
 use ratatui::widgets::{Block, Clear, Paragraph, StatefulWidget, StatefulWidgetRef, Widget, Wrap};
-use ratatui::Frame;
-use ratatui_image::picker::Picker;
 use ratatui_image::Resize;
+use ratatui_image::picker::Picker;
 use throbber_widgets_tui::{Throbber, ThrobberState};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
-use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
+use tui_input::backend::crossterm::EventHandler;
 use tui_widget_list::ListState;
 
 use crate::backend::database::{Database, MangaPlanToReadSave};
-use crate::backend::error_log::{write_to_error_log, ErrorType};
+use crate::backend::error_log::{ErrorType, write_to_error_log};
 use crate::backend::manga_provider::{
     EventHandler as FilterEventHandler, FiltersHandler, GetMangasResponse, Manga, Pagination, SearchPageProvider,
 };
-use crate::backend::tracker::{track_manga_plan_to_read, MangaTracker};
+use crate::backend::tracker::{MangaTracker, track_manga_plan_to_read};
 use crate::backend::tui::Events;
 use crate::common::ImageState;
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};

@@ -152,7 +152,7 @@ impl MangadexClient {
     }
 
     fn map_popular_mangas(&self) -> impl Fn(Data) -> PopularManga + '_ {
-        return |manga| {
+        |manga| {
             let mut cover_img_url = String::new();
 
             for rel in &manga.relationships {
@@ -197,7 +197,7 @@ impl MangadexClient {
                 status: Some(status),
                 cover_img_url,
             }
-        };
+        }
     }
 
     async fn map_manga_found_by_id(&self, manga: GetMangaByIdResponse) -> Manga {

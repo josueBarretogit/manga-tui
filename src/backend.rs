@@ -6,7 +6,7 @@ use once_cell::sync::Lazy;
 use strum::{Display, EnumIter, IntoEnumIterator};
 
 use self::error_log::create_error_logs_files;
-use crate::config::{MangaTuiConfig, CONFIG};
+use crate::config::{CONFIG, MangaTuiConfig};
 use crate::logger::ILogger;
 
 pub mod cache;

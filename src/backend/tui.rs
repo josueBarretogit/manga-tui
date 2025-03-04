@@ -3,8 +3,8 @@ use std::time::Duration;
 
 use crossterm::event::{KeyEvent, MouseEvent};
 use futures::{FutureExt, StreamExt};
-use ratatui::backend::Backend;
 use ratatui::Terminal;
+use ratatui::backend::Backend;
 use ratatui_image::picker::{Picker, ProtocolType};
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::task::JoinHandle;

@@ -12,8 +12,8 @@ use manga_tui::SearchTerm;
 use reqwest::cookie::Jar;
 use reqwest::{Client, Url};
 use response::{
-    extract_id_from_url, from_timestamp, ChapterPageResponse, ChapterUrls, GetPopularMangasResponse, MangaPageData,
-    ManganatoChaptersResponse, NewAddedMangas, SearchMangaResponse, ToolTipItem,
+    ChapterPageResponse, ChapterUrls, GetPopularMangasResponse, MangaPageData, ManganatoChaptersResponse, NewAddedMangas,
+    SearchMangaResponse, ToolTipItem, extract_id_from_url, from_timestamp,
 };
 
 use super::{

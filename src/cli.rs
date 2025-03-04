@@ -4,15 +4,15 @@ use std::future::Future;
 use std::io::BufRead;
 use std::process::exit;
 
-use clap::{crate_version, Parser, Subcommand};
+use clap::{Parser, Subcommand, crate_version};
 use strum::IntoEnumIterator;
 
+use crate::backend::APP_DATA_DIR;
 use crate::backend::error_log::write_to_error_log;
 use crate::backend::manga_provider::{Languages, MangaProviders};
-use crate::backend::secrets::anilist::{AnilistCredentials, AnilistStorage};
 use crate::backend::secrets::SecretStorage;
+use crate::backend::secrets::anilist::{AnilistCredentials, AnilistStorage};
 use crate::backend::tracker::anilist::{self, BASE_ANILIST_API_URL};
-use crate::backend::APP_DATA_DIR;
 use crate::global::PREFERRED_LANGUAGE;
 use crate::logger::{ILogger, Logger};
 
