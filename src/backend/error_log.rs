@@ -1,5 +1,5 @@
 use std::error::Error;
-use std::fs::{create_dir_all, File, OpenOptions};
+use std::fs::{File, OpenOptions, create_dir_all};
 use std::io::Write;
 use std::panic::PanicInfo;
 use std::path::{Path, PathBuf};

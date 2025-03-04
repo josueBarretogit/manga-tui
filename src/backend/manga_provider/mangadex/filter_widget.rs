@@ -1,12 +1,12 @@
+use ratatui::Frame;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Style, Stylize};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, HighlightSpacing, List, ListItem, ListState, Paragraph, StatefulWidget, Tabs, Widget, Wrap};
-use ratatui::Frame;
 
-use super::filter::*;
 use super::StatefulWidgetFrame;
+use super::filter::*;
 use crate::backend::manga_provider::FiltersWidget;
 use crate::global::CURRENT_LIST_ITEM_STYLE;
 use crate::utils::{render_search_bar, set_filter_tags_style};

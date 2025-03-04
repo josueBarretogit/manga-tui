@@ -2,10 +2,10 @@ use std::fs::File;
 use std::io::{BufWriter, Cursor, Write};
 use std::path::Path;
 
-use flate2::write::ZlibEncoder;
 use flate2::Compression;
+use flate2::write::ZlibEncoder;
 use image::{DynamicImage, GenericImageView, ImageFormat};
-use lopdf::{dictionary, Document, Object, Stream};
+use lopdf::{Document, Object, Stream, dictionary};
 
 use super::MangaDownloader;
 
@@ -118,15 +118,15 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
 
-    use fake::faker::name::en::Name;
     use fake::Fake;
+    use fake::faker::name::en::Name;
     use lopdf::Document;
     use uuid::Uuid;
 
     use super::*;
+    use crate::backend::AppDirectories;
     use crate::backend::manga_downloader::ChapterToDownloadSanitized;
     use crate::backend::manga_provider::{ChapterPage, Languages};
-    use crate::backend::AppDirectories;
     use crate::config::DownloadType;
 
     #[test]

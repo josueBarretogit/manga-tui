@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use tokio::sync::mpsc::UnboundedSender;
 
+use crate::backend::AppDirectories;
 use crate::backend::error_log::write_to_error_log;
 use crate::backend::manga_downloader::cbz_downloader::CbzDownloader;
 use crate::backend::manga_downloader::epub_downloader::EpubDownloader;
@@ -11,8 +12,7 @@ use crate::backend::manga_downloader::pdf_downloader::PdfDownloader;
 use crate::backend::manga_downloader::raw_images::RawImagesDownloader;
 use crate::backend::manga_downloader::{ChapterToDownloadSanitized, MangaDownloader};
 use crate::backend::manga_provider::{Chapter, Languages, MangaPageProvider};
-use crate::backend::tracker::{track_manga, MangaTracker};
-use crate::backend::AppDirectories;
+use crate::backend::tracker::{MangaTracker, track_manga};
 use crate::common::format_error_message_tracking_reading_history;
 use crate::config::{DownloadType, MangaTuiConfig};
 use crate::view::pages::manga::MangaPageEvents;

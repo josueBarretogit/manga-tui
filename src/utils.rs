@@ -1,9 +1,9 @@
 use chrono::NaiveDate;
+use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Style, Stylize};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Paragraph, Widget};
-use ratatui::Frame;
 use tui_input::Input;
 
 use crate::backend::manga_provider::mangadex::filter::{TagListItem, TagListItemState};

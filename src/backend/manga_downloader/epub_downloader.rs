@@ -80,14 +80,14 @@ impl MangaDownloader for EpubDownloader {
 mod tests {
     use std::error::Error;
 
-    use fake::faker::name::en::Name;
     use fake::Fake;
+    use fake::faker::name::en::Name;
     use uuid::Uuid;
 
     use super::*;
+    use crate::backend::AppDirectories;
     use crate::backend::manga_downloader::ChapterToDownloadSanitized;
     use crate::backend::manga_provider::{ChapterPage, Languages};
-    use crate::backend::AppDirectories;
     use crate::config::DownloadType;
 
     #[test]

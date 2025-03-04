@@ -2,26 +2,26 @@ use std::sync::Arc;
 
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent, MouseEventKind};
 use manga_tui::SearchTerm;
+use ratatui::Frame;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Margin, Rect};
 use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span, ToSpan};
 use ratatui::widgets::{Block, Paragraph, StatefulWidget, Tabs, Widget};
-use ratatui::Frame;
 use throbber_widgets_tui::{Throbber, ThrobberState};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
-use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
+use tui_input::backend::crossterm::EventHandler;
 
 use crate::backend::database::{Database, GetHistoryArgs, MangaHistoryResponse, MangaHistoryType};
-use crate::backend::error_log::{write_to_error_log, ErrorType};
+use crate::backend::error_log::{ErrorType, write_to_error_log};
 use crate::backend::manga_provider::{FeedPageProvider, LatestChapter, MangaProviders};
 use crate::backend::tui::Events;
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
 use crate::utils::render_search_bar;
-use crate::view::widgets::feed::{FeedTabs, HistoryWidget};
 use crate::view::widgets::Component;
+use crate::view::widgets::feed::{FeedTabs, HistoryWidget};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum FeedState {

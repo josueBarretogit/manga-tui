@@ -3,24 +3,24 @@ use std::time::Duration;
 
 use crossterm::event::{KeyCode, KeyEvent};
 use image::DynamicImage;
+use ratatui::Frame;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Margin, Rect};
 use ratatui::style::Stylize;
 use ratatui::text::{Line, Span, ToSpan};
 use ratatui::widgets::{Block, List, StatefulWidget, Widget};
-use ratatui::Frame;
-use ratatui_image::picker::Picker;
 use ratatui_image::Resize;
+use ratatui_image::picker::Picker;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
-use crate::backend::error_log::{write_to_error_log, ErrorType};
+use crate::backend::error_log::{ErrorType, write_to_error_log};
 use crate::backend::manga_provider::{HomePageMangaProvider, PopularManga, RecentlyAddedManga};
 use crate::backend::tui::Events;
 use crate::common::ImageState;
 use crate::global::INSTRUCTIONS_STYLE;
-use crate::view::widgets::home::{CarrouselItemPopularManga, CarrouselState, PopularMangaCarrousel, RecentlyAddedCarrousel};
 use crate::view::widgets::Component;
+use crate::view::widgets::home::{CarrouselItemPopularManga, CarrouselState, PopularMangaCarrousel, RecentlyAddedCarrousel};
 
 #[derive(PartialEq, Eq)]
 pub enum HomeState {
