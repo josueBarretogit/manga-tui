@@ -97,13 +97,7 @@ pub fn build_data_dir(logger: &impl ILogger) -> Result<PathBuf, Box<dyn std::err
 
             create_error_logs_files(dir)?;
 
-            MangaTuiConfig::write_if_not_exists(dir, logger)?;
-
-            let config_contents = MangaTuiConfig::read_raw_config(dir)?;
-
-            let config = MangaTuiConfig::update_existing_config(&config_contents, dir)?;
-
-            CONFIG.get_or_init(|| config);
+            MangaTuiConfig::create(logger)?;
 
             Ok(dir.to_path_buf())
         },
@@ -133,7 +127,7 @@ mod test {
 
         toml::from_str::<MangaTuiConfig>(config_template).expect("error when deserializing config template");
 
-        let contents = MangaTuiConfig::read_raw_config(&data_dir).expect("error when reading raw config file");
+        let contents = MangaTuiConfig::read_raw_config().expect("error when reading raw config file");
 
         toml::from_str::<MangaTuiConfig>(&contents).expect("error when deserializing config file");
 

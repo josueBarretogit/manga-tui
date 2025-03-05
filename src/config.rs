@@ -1,5 +1,5 @@
 use std::error::Error;
-use std::fs::{File, OpenOptions};
+use std::fs::{File, OpenOptions, create_dir_all};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -61,8 +61,24 @@ impl MangaTuiConfig {
         CONFIG.get_or_init(MangaTuiConfig::default)
     }
 
-    pub fn read_raw_config(base_directory: &Path) -> Result<String, std::io::Error> {
-        let mut config_file = Self::get_config_file(base_directory)?;
+    pub fn create(logger: &impl ILogger) -> Result<(), Box<dyn Error>> {
+        MangaTuiConfig::write_if_not_exists(logger).expect("failed to write");
+
+        let config_contents = MangaTuiConfig::read_raw_config().expect("failed to read");
+
+        let config = MangaTuiConfig::update_existing_config(&config_contents, &Self::get_config_file_path().join("config.toml"))
+            .expect("failed to update");
+
+        CONFIG.get_or_init(|| config);
+
+        Ok(())
+    }
+
+    pub fn read_raw_config() -> Result<String, std::io::Error> {
+        let mut config_file = OpenOptions::new()
+            .append(true)
+            .read(true)
+            .open(Self::get_config_file_path().join("config.toml"))?;
 
         let mut contents = String::new();
         config_file.read_to_string(&mut contents)?;
@@ -71,15 +87,27 @@ impl MangaTuiConfig {
     }
 
     pub fn get_config_file_path() -> PathBuf {
-        AppDirectories::Config.get_path()
+        PathBuf::from(directories::ProjectDirs::from("", "", "manga-tui").unwrap().config_dir())
     }
 
     pub fn get_config_template() -> &'static str {
         CONFIG_TEMPLATE
     }
 
-    pub fn write_if_not_exists(base_directory: &Path, logger: &impl ILogger) -> Result<(), std::io::Error> {
-        let config_file = base_directory.join(Self::get_config_file_path());
+    pub fn build_directory() -> Result<(), std::io::Error> {
+        let dir = Self::get_config_file_path();
+
+        if !exists!(&dir) {
+            create_dir_all(dir)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn write_if_not_exists(logger: &impl ILogger) -> Result<(), std::io::Error> {
+        let config_file = Self::get_config_file_path().join("config.toml");
+
+        Self::build_directory()?;
 
         if !exists!(&config_file) {
             let contents = Self::get_config_template();
@@ -143,7 +171,7 @@ track_reading_when_download = false
     pub fn update_existing_config(config: &str, base_directory: &Path) -> Result<Self, Box<dyn Error>> {
         let already_existing: Table = toml::Table::from_str(config)?;
 
-        let mut config_file = Self::get_config_file(base_directory)?;
+        let mut config_file = OpenOptions::new().append(true).read(true).open(base_directory)?;
 
         Ok(Self::add_missing_fields(&mut config_file, already_existing)?)
     }
