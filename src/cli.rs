@@ -1,17 +1,18 @@
 use std::collections::HashMap;
 use std::error::Error;
+use std::fmt::Display;
 use std::future::Future;
 use std::io::BufRead;
 use std::process::exit;
 
 use clap::{Parser, Subcommand, crate_version};
-use strum::IntoEnumIterator;
+use strum::{Display, IntoEnumIterator};
 
 use crate::backend::APP_DATA_DIR;
 use crate::backend::error_log::write_to_error_log;
 use crate::backend::manga_provider::{Languages, MangaProviders};
 use crate::backend::secrets::SecretStorage;
-use crate::backend::secrets::anilist::{AnilistCredentials, AnilistStorage};
+use crate::backend::secrets::keyring::KeyringStorage;
 use crate::backend::tracker::anilist::{self, BASE_ANILIST_API_URL};
 use crate::global::PREFERRED_LANGUAGE;
 use crate::logger::{ILogger, Logger};
@@ -60,6 +61,52 @@ pub struct CliArgs {
 pub struct AnilistCredentialsProvided<'a> {
     pub access_token: &'a str,
     pub client_id: &'a str,
+}
+
+#[derive(Debug, Display, Clone, Copy)]
+pub enum AnilistCredentials {
+    #[strum(to_string = "anilist_client_id")]
+    ClientId,
+    #[strum(to_string = "anilist_secret")]
+    Secret,
+    #[strum(to_string = "anilist_code")]
+    Code,
+    #[strum(to_string = "anilist_access_token")]
+    AccessToken,
+}
+
+impl From<AnilistCredentials> for String {
+    fn from(value: AnilistCredentials) -> Self {
+        value.to_string()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Credentials {
+    pub access_token: String,
+    pub client_id: String,
+}
+
+pub fn check_anilist_credentials_are_stored(secret_provider: impl SecretStorage) -> Result<Option<Credentials>, Box<dyn Error>> {
+    let credentials =
+        secret_provider.get_multiple_secrets([AnilistCredentials::ClientId, AnilistCredentials::AccessToken].into_iter())?;
+
+    let client_id = credentials.get(&AnilistCredentials::ClientId.to_string()).cloned();
+    let access_token = credentials.get(&AnilistCredentials::AccessToken.to_string()).cloned();
+
+    match client_id.zip(access_token) {
+        Some((id, token)) => {
+            if id.is_empty() || token.is_empty() {
+                return Ok(None);
+            }
+
+            Ok(Some(Credentials {
+                access_token: token,
+                client_id: id.parse().unwrap(),
+            }))
+        },
+        None => Ok(None),
+    }
 }
 
 impl CliArgs {
@@ -134,10 +181,10 @@ impl CliArgs {
     }
 
     async fn check_anilist_status(&self, logger: &impl ILogger) -> Result<(), Box<dyn Error>> {
-        let storage = AnilistStorage::new();
+        let storage = KeyringStorage::new();
         logger.inform("Checking client id and access token are stored");
 
-        let credentials_are_stored = storage.check_credentials_stored()?;
+        let credentials_are_stored = check_anilist_credentials_are_stored(storage)?;
         if credentials_are_stored.is_none() {
             logger.warn("The client id or the access token are empty, run `manga-tui anilist init`");
             exit(0)
@@ -206,7 +253,7 @@ impl CliArgs {
 
                 Commands::Anilist { command } => match command {
                     AnilistCommand::Init => {
-                        let mut storage = AnilistStorage::new();
+                        let mut storage = KeyringStorage::new();
                         self.init_anilist(std::io::stdin().lock(), &mut storage, Logger)?;
                         exit(0)
                     },
@@ -238,29 +285,38 @@ pub trait AnilistTokenChecker {
 mod tests {
     use std::collections::HashMap;
     use std::error::Error;
+    use std::sync::RwLock;
 
     use pretty_assertions::assert_eq;
     use uuid::Uuid;
 
     use super::*;
 
-    #[derive(Default, Clone)]
+    #[derive(Default)]
     struct MockStorage {
-        secrets_stored: HashMap<String, String>,
+        secrets_stored: RwLock<HashMap<String, String>>,
+    }
+
+    impl MockStorage {
+        fn with_data(secrets_stored: HashMap<String, String>) -> Self {
+            Self {
+                secrets_stored: RwLock::new(secrets_stored),
+            }
+        }
     }
 
     impl SecretStorage for MockStorage {
-        fn save_secret<T: Into<String>>(&mut self, name: T, value: T) -> Result<(), Box<dyn Error>> {
-            self.secrets_stored.insert(name.into(), value.into());
+        fn save_secret<T: Into<String>, S: Into<String>>(&self, name: T, value: S) -> Result<(), Box<dyn Error>> {
+            self.secrets_stored.write().unwrap().insert(name.into(), value.into());
             Ok(())
         }
 
         fn get_secret<T: Into<String>>(&self, secret_name: T) -> Result<Option<String>, Box<dyn Error>> {
-            Ok(self.secrets_stored.get(&secret_name.into()).cloned())
+            Ok(self.secrets_stored.read().unwrap().get(&secret_name.into()).cloned())
         }
 
-        fn remove_secret<T: AsRef<str>>(&mut self, secret_name: T) -> Result<(), Box<dyn Error>> {
-            match self.secrets_stored.remove(secret_name.as_ref()) {
+        fn remove_secret<T: AsRef<str>>(&self, secret_name: T) -> Result<(), Box<dyn Error>> {
+            match self.secrets_stored.write().unwrap().remove(secret_name.as_ref()) {
                 Some(_val) => Ok(()),
                 None => Err("secret did not exist".into()),
             }
@@ -284,12 +340,14 @@ mod tests {
         )
         .expect("should not fail");
 
-        let (secret_name, token) = storage.secrets_stored.get_key_value("anilist_access_token").unwrap();
+        let secrets = storage.secrets_stored.read().unwrap();
+
+        let (secret_name, token) = secrets.get_key_value("anilist_access_token").unwrap();
 
         assert_eq!("anilist_access_token", secret_name);
         assert_eq!(acess_token, *token);
 
-        let (secret_name, value) = storage.secrets_stored.get_key_value("anilist_client_id").unwrap();
+        let (secret_name, value) = secrets.get_key_value("anilist_client_id").unwrap();
 
         assert_eq!("anilist_client_id", secret_name);
         assert_eq!(user_id.parse::<u32>().unwrap(), value.parse::<u32>().unwrap());
@@ -341,6 +399,24 @@ mod tests {
         let token_is_valid = cli.check_anilist_token(&anilist_checker, "some_token".to_string()).await?;
 
         assert!(!token_is_valid);
+        Ok(())
+    }
+
+    #[test]
+    fn it_check_anilist_credentials_are_stored() -> Result<(), Box<dyn Error>> {
+        let expected_credentials = [
+            ("anilist_client_id".to_string(), "some_id".to_string()),
+            ("anilist_access_token".to_string(), "some_token".to_string()),
+        ];
+
+        let storage = MockStorage::with_data(HashMap::from(expected_credentials));
+
+        let credentials =
+            check_anilist_credentials_are_stored(storage)?.expect("anilist credentials which should be stored actually aren't");
+
+        assert_eq!("some_id", credentials.client_id);
+        assert_eq!("some_token", credentials.access_token);
+
         Ok(())
     }
 }
