@@ -18,9 +18,10 @@ use backend::manga_provider::manganato::filter_state::{ManganatoFilterState, Man
 use backend::manga_provider::manganato::filter_widget::ManganatoFilterWidget;
 use backend::manga_provider::manganato::{MANGANATO_BASE_URL, ManganatoProvider};
 use backend::release_notifier::{GITHUB_URL, ReleaseNotifier};
-use backend::secrets::anilist::AnilistStorage;
+use backend::secrets::keyring::KeyringStorage;
 use backend::tracker::anilist::{Anilist, BASE_ANILIST_API_URL};
 use clap::Parser;
+use cli::check_anilist_credentials_are_stored;
 use crossterm::ExecutableCommand;
 use crossterm::event::{DisableMouseCapture, EnableMouseCapture};
 use http::StatusCode;
@@ -78,9 +79,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     }
 
-    let anilist_storage = AnilistStorage::new();
+    let anilist_storage = KeyringStorage::new();
 
-    let anilist_client = match anilist_storage.check_credentials_stored() {
+    let anilist_client = match check_anilist_credentials_are_stored(anilist_storage) {
         Ok(Some(credentials)) => {
             logger.inform("Anilist is setup, tracking reading history");
             tokio::time::sleep(Duration::from_secs(1)).await;
