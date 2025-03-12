@@ -6,7 +6,7 @@ use once_cell::sync::Lazy;
 use strum::{Display, EnumIter, IntoEnumIterator};
 
 use self::error_log::create_error_logs_files;
-use crate::config::{CONFIG, MangaTuiConfig};
+use crate::config::{MangaTuiConfig, build_config_file};
 use crate::logger::ILogger;
 
 pub mod cache;
@@ -29,15 +29,11 @@ pub enum AppDirectories {
     ErrorLogs,
     #[strum(to_string = "history")]
     History,
-    #[strum(to_string = "config")]
-    Config,
 }
 
 static ERROR_LOGS_FILE: &str = "manga-tui-error-logs.txt";
 
 static DATABASE_FILE: &str = "manga-tui-history.db";
-
-static CONFIG_FILE: &str = "manga-tui-config.toml";
 
 impl AppDirectories {
     pub fn get_full_path(self) -> PathBuf {
@@ -65,7 +61,6 @@ impl AppDirectories {
     pub fn get_path(self) -> PathBuf {
         let base_directory = self.to_string();
         match self {
-            Self::Config => PathBuf::from(base_directory).join(CONFIG_FILE),
             Self::History => PathBuf::from(base_directory).join(DATABASE_FILE),
             Self::ErrorLogs => PathBuf::from(base_directory).join(ERROR_LOGS_FILE),
             Self::MangaDownloads => PathBuf::from(base_directory),
@@ -97,13 +92,7 @@ pub fn build_data_dir(logger: &impl ILogger) -> Result<PathBuf, Box<dyn std::err
 
             create_error_logs_files(dir)?;
 
-            MangaTuiConfig::write_if_not_exists(dir, logger)?;
-
-            let config_contents = MangaTuiConfig::read_raw_config(dir)?;
-
-            let config = MangaTuiConfig::update_existing_config(&config_contents, dir)?;
-
-            CONFIG.get_or_init(|| config);
+            build_config_file()?;
 
             Ok(dir.to_path_buf())
         },
@@ -122,25 +111,6 @@ mod test {
 
     use super::*;
     use crate::logger::DefaultLogger;
-
-    #[test]
-    #[ignore]
-    fn test_config_file() -> Result<(), Box<dyn Error>> {
-        sleep(Duration::from_millis(100));
-        let data_dir = build_data_dir(&DefaultLogger).expect("Could not build data directory");
-
-        let config_template = MangaTuiConfig::get_config_template();
-
-        toml::from_str::<MangaTuiConfig>(config_template).expect("error when deserializing config template");
-
-        let contents = MangaTuiConfig::read_raw_config(&data_dir).expect("error when reading raw config file");
-
-        toml::from_str::<MangaTuiConfig>(&contents).expect("error when deserializing config file");
-
-        assert_eq!(contents, MangaTuiConfig::get_config_template());
-
-        Ok(())
-    }
 
     #[test]
     #[ignore]
@@ -165,7 +135,7 @@ mod test {
             amount_directories += 1;
         }
 
-        assert_eq!(4, amount_directories);
+        assert_eq!(3, amount_directories);
 
         let error_logs_path = dbg!(AppDirectories::ErrorLogs.get_full_path());
 
