@@ -3,6 +3,7 @@ use std::fs::{File, OpenOptions, create_dir_all};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use std::sync::LazyLock;
 
 use manga_tui::exists;
 use once_cell::sync::OnceCell;
@@ -14,6 +15,12 @@ use crate::backend::AppDirectories;
 use crate::logger::{DefaultLogger, ILogger};
 
 static CONFIG_FILE_NAME: &str = "config.toml";
+
+static CONFIG: OnceCell<MangaTuiConfig> = OnceCell::new();
+
+static CONFIG_DIR_PATH: LazyLock<Option<PathBuf>> = LazyLock::new(|| {
+    directories::ProjectDirs::from("", "", "manga-tui").map(|project_dirs| project_dirs.config_dir().to_path_buf())
+});
 
 /// Defines what a parameter in the config file should implement
 /// `comments` for explaining to the user what the config param does
@@ -312,8 +319,6 @@ impl Default for MangaTuiConfig {
     }
 }
 
-static CONFIG: OnceCell<MangaTuiConfig> = OnceCell::new();
-
 impl MangaTuiConfig {
     pub fn get() -> &'static Self {
         CONFIG.get_or_init(MangaTuiConfig::default)
@@ -331,12 +336,13 @@ impl MangaTuiConfig {
     }
 }
 
+/// As a part of the config setup it must:
+/// - create the config file if it doesnt exist or update it if it's missing configuration,
+/// - read the config file again this time to read the configuration and set it globally
 pub fn build_config_file() -> Result<(), Box<dyn Error>> {
-    let binding = directories::ProjectDirs::from("", "", "manga-tui").ok_or("no home directory was found")?;
+    let path = CONFIG_DIR_PATH.as_ref().ok_or("No home directory was found")?;
 
-    let path = binding.config_dir();
-
-    let config_builder = ConfigBuilder::new().dir_path(&path);
+    let config_builder = ConfigBuilder::new().dir_path(path);
 
     let mut config = config_builder.create_file_if_not_exists()?;
 
@@ -345,6 +351,10 @@ pub fn build_config_file() -> Result<(), Box<dyn Error>> {
     CONFIG.get_or_init(|| config);
 
     Ok(())
+}
+
+pub fn get_config_directory_path() -> PathBuf {
+    CONFIG_DIR_PATH.as_ref().expect("Failed to find home directory").to_path_buf()
 }
 
 #[cfg(test)]
@@ -357,12 +367,12 @@ mod tests {
 
     use super::*;
 
-    const CONFIG_DIRECTORY_PATH: &str = "./test_results/config_test_dir/";
+    const CONFIG_TEST_DIRECTORY_PATH: &str = "./test_results/config_test_dir/";
 
     #[test]
     #[ignore]
     fn config_builder_creates_config_file() -> Result<(), Box<dyn Error>> {
-        let config = ConfigBuilder::new().dir_path(CONFIG_DIRECTORY_PATH);
+        let config = ConfigBuilder::new().dir_path(CONFIG_TEST_DIRECTORY_PATH);
 
         let mut contents = String::new();
 
@@ -374,7 +384,7 @@ mod tests {
 
         assert!(!contents.is_empty());
 
-        fs::read(PathBuf::from(CONFIG_DIRECTORY_PATH).join("config.toml"))?;
+        fs::read(PathBuf::from(CONFIG_TEST_DIRECTORY_PATH).join("config.toml"))?;
 
         /// Running it a second time should not panic
         let _ = config.create_file_if_not_exists()?;
@@ -384,7 +394,7 @@ mod tests {
 
     #[test]
     fn config_builder_writes_to_the_config_file_with_parameters() -> Result<(), Box<dyn Error>> {
-        let config = ConfigBuilder::new().dir_path(CONFIG_DIRECTORY_PATH);
+        let config = ConfigBuilder::new().dir_path(CONFIG_TEST_DIRECTORY_PATH);
 
         let mut test_file = Cursor::new(Vec::new());
         let expected = r#"
@@ -427,7 +437,7 @@ track_reading_when_download = false"#;
     #[test]
     fn config_builder_adds_missing_params() -> Result<(), Box<dyn Error>> {
         let config = ConfigBuilder::with_params(vec![Box::new(AmountPagesParam), Box::new(AutoBookmarkParam)])
-            .dir_path(CONFIG_DIRECTORY_PATH);
+            .dir_path(CONFIG_TEST_DIRECTORY_PATH);
 
         let mut test_file = Cursor::new(Vec::new());
 
@@ -451,7 +461,7 @@ download_type = "cbz"
 
     #[test]
     fn config_is_parse_from_raw_file() -> Result<(), Box<dyn Error>> {
-        let config = ConfigBuilder::new().dir_path(CONFIG_DIRECTORY_PATH);
+        let config = ConfigBuilder::new().dir_path(CONFIG_TEST_DIRECTORY_PATH);
 
         let mut test_file = Cursor::new(Vec::new());
 

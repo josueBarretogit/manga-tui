@@ -13,6 +13,7 @@ use crate::backend::manga_provider::{Languages, MangaProviders};
 use crate::backend::secrets::SecretStorage;
 use crate::backend::secrets::anilist::{AnilistCredentials, AnilistStorage};
 use crate::backend::tracker::anilist::{self, BASE_ANILIST_API_URL};
+use crate::config::get_config_directory_path;
 use crate::global::PREFERRED_LANGUAGE;
 use crate::logger::{ILogger, Logger};
 
@@ -53,6 +54,8 @@ pub struct CliArgs {
     pub command: Option<Commands>,
     #[arg(short, long)]
     pub data_dir: bool,
+    #[arg(short, long)]
+    pub config_dir: bool,
     #[arg(short = 'p', long = "provider", default_value = "mangadex")]
     pub manga_provider: MangaProviders,
 }
@@ -65,6 +68,7 @@ pub struct AnilistCredentialsProvided<'a> {
 impl CliArgs {
     pub fn new() -> Self {
         Self {
+            config_dir: false,
             command: None,
             data_dir: false,
             manga_provider: MangaProviders::default(),
@@ -167,6 +171,11 @@ impl CliArgs {
         if self.data_dir {
             let app_dir = APP_DATA_DIR.as_ref().unwrap();
             println!("{}", app_dir.to_str().unwrap());
+            exit(0)
+        }
+
+        if self.config_dir {
+            println!("{}", get_config_directory_path().display());
             exit(0)
         }
 
