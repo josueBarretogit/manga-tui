@@ -19,7 +19,7 @@ exclude = [
 [dependencies]
 # ratatui related dependencies
 ratatui = { version = "0.29.0", features = ["all-widgets", "palette", "unstable-widget-ref"] }
-ratatui-image = {  version = "2.0.1", features = ["rustix"]}
+ratatui-image = {  version = "1.0.5", features = ["rustix"]}
 throbber-widgets-tui = "0.8.0"
 tui-input = "0.11.0"
 tui-widget-list = "0.13.0"
@@ -30,8 +30,8 @@ image = "0.25.4"
 reqwest = { version = "0.12.4", features = ["json", "native-tls", "cookies", "http2", "gzip", "deflate"] }
 tokio = { version = "1.44.0", features = ["full"] }
 serde = { version = "1.0.219", features = ["derive"] }
-strum = "0.27.1"
-strum_macros = "0.27"
+strum = "0.26.3"
+strum_macros = "0.26"
 color-eyre = "0.6.2"
 futures = "0.3.31"
 bytes = { version = "1", features = ["serde"] }
@@ -52,7 +52,7 @@ scraper = "0.23.1"
 regex = "1.11.1"
 
 [dev-dependencies]
-httpmock = "0.8.0-alpha.1"
+httpmock = "0.7.0-rc.1"
 pretty_assertions = "1.4.0"
 rusty-hook = "0.11.2"
 fake = "4.0.0"
