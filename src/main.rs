@@ -150,6 +150,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             )
             .await?;
         },
+        MangaProviders::Weebcentral => todo!(),
     }
     ratatui::restore();
     stdout().execute(DisableMouseCapture)?;
