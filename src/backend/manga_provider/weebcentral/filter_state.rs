@@ -4,16 +4,16 @@ use crate::backend::manga_provider::{EventHandler, FiltersHandler};
 use crate::backend::tui::Events;
 
 #[derive(Debug, Clone)]
-pub struct ManganatoFilterState {}
+pub struct WeebcentralFilterState {}
 
 #[derive(Debug, Clone)]
-pub struct ManganatoFiltersProvider {
+pub struct WeebcentralFiltersProvider {
     is_open: bool,
-    filter: ManganatoFilterState,
+    filter: WeebcentralFilterState,
 }
 
-impl ManganatoFiltersProvider {
-    pub fn new(filter: ManganatoFilterState) -> Self {
+impl WeebcentralFiltersProvider {
+    pub fn new(filter: WeebcentralFilterState) -> Self {
         Self {
             is_open: false,
             filter,
@@ -21,7 +21,7 @@ impl ManganatoFiltersProvider {
     }
 }
 
-impl EventHandler for ManganatoFiltersProvider {
+impl EventHandler for WeebcentralFiltersProvider {
     fn handle_events(&mut self, events: crate::backend::tui::Events) {
         #![allow(clippy::single_match)]
         match events {
@@ -34,8 +34,8 @@ impl EventHandler for ManganatoFiltersProvider {
     }
 }
 
-impl FiltersHandler for ManganatoFiltersProvider {
-    type InnerState = ManganatoFilterState;
+impl FiltersHandler for WeebcentralFiltersProvider {
+    type InnerState = WeebcentralFilterState;
 
     fn toggle(&mut self) {
         self.is_open = !self.is_open;

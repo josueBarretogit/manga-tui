@@ -17,6 +17,9 @@ use backend::manga_provider::mangadex::{API_URL_BASE, COVER_IMG_URL_BASE, Mangad
 use backend::manga_provider::manganato::filter_state::{ManganatoFilterState, ManganatoFiltersProvider};
 use backend::manga_provider::manganato::filter_widget::ManganatoFilterWidget;
 use backend::manga_provider::manganato::{MANGANATO_BASE_URL, ManganatoProvider};
+use backend::manga_provider::weebcentral::filter_state::WeebcentralFiltersProvider;
+use backend::manga_provider::weebcentral::filter_widget::WeebcentralFilterWidget;
+use backend::manga_provider::weebcentral::{WEEBCENTRAL_BASE_URL, WeebcentralProvider};
 use backend::release_notifier::{GITHUB_URL, ReleaseNotifier};
 use backend::secrets::anilist::AnilistStorage;
 use backend::tracker::anilist::{Anilist, BASE_ANILIST_API_URL};
@@ -46,6 +49,7 @@ mod view;
 #[tokio::main(flavor = "multi_thread", worker_threads = 7)]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let logger = Logger;
+
     pretty_env_logger::formatted_builder()
         .format_module_path(false)
         .filter_level(LevelFilter::Info)
@@ -138,19 +142,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             run_app(ratatui::init(), mangadex_client, anilist_client, MangadexFilterProvider::new(), MangadexFilterWidget::new())
                 .await?;
         },
-        MangaProviders::Manganato => {
-            logger.inform("Using manganato as manga provider");
+        MangaProviders::Manganato => {},
+        MangaProviders::Weebcentral => {
+            logger.inform("Using weebcentral as manga provider");
             tokio::time::sleep(Duration::from_secs(1)).await;
             run_app(
                 ratatui::init(),
-                ManganatoProvider::new(MANGANATO_BASE_URL.parse().unwrap(), cache_provider),
+                WeebcentralProvider::new(WEEBCENTRAL_BASE_URL.parse().unwrap(), cache_provider),
                 anilist_client,
-                ManganatoFiltersProvider::new(ManganatoFilterState {}),
-                ManganatoFilterWidget {},
+                WeebcentralFiltersProvider::new(backend::manga_provider::weebcentral::filter_state::WeebcentralFilterState {}),
+                WeebcentralFilterWidget {},
             )
             .await?;
         },
-        MangaProviders::Weebcentral => todo!(),
     }
     ratatui::restore();
     stdout().execute(DisableMouseCapture)?;

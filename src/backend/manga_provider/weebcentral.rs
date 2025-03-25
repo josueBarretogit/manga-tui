@@ -4,11 +4,14 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
-use http::header::{ACCEPT, ACCEPT_ENCODING, ACCEPT_LANGUAGE, CACHE_CONTROL, CONNECTION, REFERER};
+use filter_state::{WeebcentralFilterState, WeebcentralFiltersProvider};
+use filter_widget::WeebcentralFilterWidget;
+use http::header::{ACCEPT, ACCEPT_ENCODING, ACCEPT_LANGUAGE, CACHE_CONTROL, CONNECTION, HOST, REFERER};
 use http::{HeaderMap, HeaderValue, StatusCode};
 use manga_tui::SearchTerm;
 use reqwest::cookie::Jar;
 use reqwest::{Client, Url};
+use response::{LatestMangas, PopularMangasWeebCentral};
 
 use super::{
     Author, Chapter, ChapterOrderBy, ChapterPageUrl, DecodeBytesToImage, FeedPageProvider, FetchChapterBookmarked, Genres,
@@ -20,15 +23,32 @@ use crate::backend::cache::{Cacher, InsertEntry};
 use crate::backend::html_parser::{HtmlElement, ParseHtml};
 use crate::backend::manga_provider::ChapterToRead;
 
+pub mod filter_state;
+pub mod filter_widget;
 mod response;
 
 pub static WEEBCENTRAL_BASE_URL: &str = "https://weebcentral.com/";
 
-//pub mod filter_state;
-//pub mod filter_widget;
-//pub mod response;
+/*
+*
+*
+Host: weebcentral.com
+User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0
+Accept-Language: en-US,en;q=0.5
+Accept-Encoding: gzip, deflate, br, zstd
+DNT: 1
+Sec-GPC: 1
+Connection: keep-alive
+Upgrade-Insecure-Requests: 1
+Sec-Fetch-Dest: document
+Sec-Fetch-Mode: navigate
+Sec-Fetch-Site: none
+Sec-Fetch-User: ?1
+Priority: u=0, i
 
-/// Weebcentral: `https://manganato.com`
+ */
+
+/// Weebcentral: `https://weebcentral.com/`
 /// Some things to keep in mind:
 /// - All `ids` of manga and chapter are actually Urls
 /// - The only language they provide is english,
@@ -55,38 +75,44 @@ impl WeebcentralProvider {
     pub fn new(base_url: Url, cache_provider: Arc<dyn Cacher>) -> Self {
         let mut default_headers = HeaderMap::new();
 
-        default_headers.insert(REFERER, HeaderValue::from_static("https://google.com"));
-        default_headers.insert(ACCEPT_ENCODING, HeaderValue::from_static("gzip, deflate"));
-        default_headers.insert(CACHE_CONTROL, HeaderValue::from_static("max-age=604800"));
-        default_headers.insert(
-            ACCEPT,
-            HeaderValue::from_static("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8,application/json"),
-        );
+        //default_headers.insert(REFERER, HeaderValue::from_static("https://google.com"));
+        default_headers.insert(HOST, HeaderValue::from_static("weebcentral.com"));
+        default_headers.insert(ACCEPT, HeaderValue::from_static("*/*"));
 
-        default_headers.insert(ACCEPT_LANGUAGE, HeaderValue::from_static("en-US,en;q=0.5"));
-        default_headers.insert(CONNECTION, HeaderValue::from_static("keep-alive"));
-
-        default_headers.insert("DNT", HeaderValue::from_static("1"));
-        default_headers.insert("sec-fetch-site", HeaderValue::from_static("none"));
-        default_headers.insert("sec-fetch-mode", HeaderValue::from_static("navigate"));
-        default_headers.insert("sec-fetch-user", HeaderValue::from_static("?1"));
-        default_headers.insert("sec-fetch-dest", HeaderValue::from_static("document"));
+        //default_headers.insert(ACCEPT_ENCODING, HeaderValue::from_static("gzip, deflate"));
+        //default_headers.insert(CACHE_CONTROL, HeaderValue::from_static("max-age=604800"));
+        //default_headers.insert(
+        //    ACCEPT,
+        //    HeaderValue::from_static("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8,application/json"),
+        //);
+        //
+        //default_headers.insert(ACCEPT_LANGUAGE, HeaderValue::from_static("en-US,en;q=0.5"));
+        //default_headers.insert(CONNECTION, HeaderValue::from_static("keep-alive"));
+        //
+        //default_headers.insert("DNT", HeaderValue::from_static("1"));
+        //default_headers.insert("sec-fetch-site", HeaderValue::from_static("none"));
+        //default_headers.insert("sec-fetch-mode", HeaderValue::from_static("navigate"));
+        //default_headers.insert("sec-fetch-user", HeaderValue::from_static("?1"));
+        //default_headers.insert("sec-fetch-dest", HeaderValue::from_static("document"));
 
         let mut chapter_pages_header = HeaderMap::new();
 
-        chapter_pages_header.insert(CACHE_CONTROL, HeaderValue::from_static("max-age=604800"));
+        //chapter_pages_header.insert(CACHE_CONTROL, HeaderValue::from_static("max-age=604800"));
         chapter_pages_header.insert(REFERER, HeaderValue::from_static(WEEBCENTRAL_BASE_URL));
-        chapter_pages_header.insert(CONNECTION, HeaderValue::from_static("keep-alive"));
-        chapter_pages_header.insert(ACCEPT_ENCODING, HeaderValue::from_static("gzip, deflate"));
-        chapter_pages_header
-            .insert(ACCEPT, HeaderValue::from_static("image/avif,image/webp,image/png,image/svg+xml,image/*;q=0.8,*/*;q=0.5"));
+        //chapter_pages_header.insert(CONNECTION, HeaderValue::from_static("keep-alive"));
+        //chapter_pages_header.insert(ACCEPT_ENCODING, HeaderValue::from_static("gzip, deflate"));
+        //chapter_pages_header
+        //.insert(ACCEPT, HeaderValue::from_static("image/avif,image/webp,image/png,image/svg+xml,image/*;q=0.8,*/*;q=0.5"));
 
         let client = Client::builder()
-            .cookie_provider(Arc::new(Jar::default()))
+            .cookie_store(true)
             .default_headers(default_headers)
-            .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0")
+            .http2_prior_knowledge()
+            .user_agent("Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0")
             .build()
             .unwrap();
+
+        //client.white
 
         Self {
             client,
@@ -127,11 +153,74 @@ impl SearchMangaPanel for WeebcentralProvider {}
 
 impl HomePageMangaProvider for WeebcentralProvider {
     async fn get_popular_mangas(&self) -> Result<Vec<super::PopularManga>, Box<dyn Error>> {
-        todo!()
+        let cache = self.cache_provider.get(self.base_url.as_str())?;
+        match cache {
+            Some(cached) => {
+                let response = PopularMangasWeebCentral::parse_html(HtmlElement::new(cached.data))?;
+
+                Ok(response.mangas.into_iter().map(PopularManga::from).collect())
+            },
+            None => {
+                let response = self.client.get(self.base_url.clone()).send().await?;
+
+                if response.status() != StatusCode::OK {
+                    return Err(format!(
+                        "could not get popular mangas on weebcentral, details about the response : {:#?}",
+                        response
+                    )
+                    .into());
+                }
+
+                let doc = response.text().await?;
+
+                self.cache_provider
+                    .cache(InsertEntry {
+                        id: self.base_url.as_str(),
+                        data: &doc,
+                        duration: Self::HOME_PAGE_CACHE_DURATION,
+                    })
+                    .ok();
+
+                let response = PopularMangasWeebCentral::parse_html(HtmlElement::new(doc))?;
+
+                Ok(response.mangas.into_iter().map(PopularManga::from).collect())
+            },
+        }
     }
 
     async fn get_recently_added_mangas(&self) -> Result<Vec<super::RecentlyAddedManga>, Box<dyn Error>> {
-        todo!()
+        let cache = self.cache_provider.get(self.base_url.as_str())?;
+
+        match cache {
+            Some(cached) => {
+                let new_mangas = LatestMangas::parse_html(HtmlElement::new(cached.data))?;
+
+                Ok(new_mangas.mangas.into_iter().map(RecentlyAddedManga::from).collect())
+            },
+            None => {
+                let response = self.client.get(self.base_url.clone()).send().await?;
+
+                if response.status() != StatusCode::OK {
+                    return Err(
+                        format!("could not find recently added mangas on manganato, status code : {}", response.status()).into()
+                    );
+                }
+
+                let doc = response.text().await?;
+
+                self.cache_provider
+                    .cache(InsertEntry {
+                        id: self.base_url.as_str(),
+                        data: &doc,
+                        duration: Self::HOME_PAGE_CACHE_DURATION,
+                    })
+                    .ok();
+
+                let new_mangas = LatestMangas::parse_html(HtmlElement::new(doc))?;
+
+                Ok(new_mangas.mangas.into_iter().map(RecentlyAddedManga::from).collect())
+            },
+        }
     }
 }
 
@@ -140,6 +229,78 @@ impl SearchMangaById for WeebcentralProvider {
         todo!()
     }
 }
+
+impl SearchPageProvider for WeebcentralProvider {
+    type FiltersHandler = WeebcentralFiltersProvider;
+    type InnerState = WeebcentralFilterState;
+    type Widget = WeebcentralFilterWidget;
+
+    async fn search_mangas(
+        &self,
+        search_term: Option<SearchTerm>,
+        filters: Self::InnerState,
+        pagination: super::Pagination,
+    ) -> Result<GetMangasResponse, Box<dyn Error>> {
+        todo!()
+    }
+}
+
+impl GoToReadChapter for WeebcentralProvider {
+    async fn read_chapter(&self, chapter_id: &str, manga_id: &str) -> Result<(ChapterToRead, ListOfChapters), Box<dyn Error>> {
+        todo!()
+    }
+}
+
+impl GetChapterPages for WeebcentralProvider {
+    async fn get_chapter_pages_url_with_extension(
+        &self,
+        chapter_id: &str,
+        manga_id: &str,
+        image_quality: crate::config::ImageQuality,
+    ) -> Result<Vec<ChapterPageUrl>, Box<dyn Error>> {
+        todo!()
+    }
+}
+
+impl FetchChapterBookmarked for WeebcentralProvider {
+    async fn fetch_chapter_bookmarked(
+        &self,
+        chapter: crate::backend::database::ChapterBookmarked,
+    ) -> Result<(ChapterToRead, ListOfChapters), Box<dyn Error>> {
+        todo!()
+    }
+}
+
+impl MangaPageProvider for WeebcentralProvider {
+    async fn get_chapters(
+        &self,
+        manga_id: &str,
+        filters: super::ChapterFilters,
+        pagination: super::Pagination,
+    ) -> Result<super::GetChaptersResponse, Box<dyn Error>> {
+        todo!()
+    }
+
+    async fn get_all_chapters(&self, manga_id: &str, language: Languages) -> Result<Vec<Chapter>, Box<dyn Error>> {
+        todo!()
+    }
+}
+
+impl FeedPageProvider for WeebcentralProvider {
+    async fn get_latest_chapters(&self, manga_id: &str) -> Result<Vec<LatestChapter>, Box<dyn Error>> {
+        todo!()
+    }
+}
+
+impl SearchChapterById for WeebcentralProvider {
+    async fn search_chapter(&self, chapter_id: &str, manga_id: &str) -> Result<ChapterToRead, Box<dyn Error>> {
+        todo!()
+    }
+}
+
+impl ReaderPageProvider for WeebcentralProvider {}
+
+impl MangaProvider for WeebcentralProvider {}
 
 #[cfg(test)]
 mod tests {
