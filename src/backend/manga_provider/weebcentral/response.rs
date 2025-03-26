@@ -4,16 +4,17 @@ use std::fmt::Display;
 use std::num::ParseIntError;
 
 use chrono::NaiveDate;
+use image::GenericImageView;
 use regex::Regex;
 use scraper::selectable::Selectable;
-use scraper::{Selector, html};
+use scraper::{ElementRef, Selector, html};
 use serde::{Deserialize, Serialize};
 
 use crate::backend::html_parser::scraper::AsSelector;
 use crate::backend::html_parser::{HtmlElement, ParseHtml};
 use crate::backend::manga_provider::{
-    ChapterReader, Genres, GetMangasResponse, ListOfChapters, MangaStatus, PopularManga, Rating, RecentlyAddedManga, SearchManga,
-    SortedChapters, SortedVolumes, Volumes,
+    Chapter, ChapterReader, Genres, GetChaptersResponse, GetMangasResponse, Languages, ListOfChapters, Manga, MangaStatus,
+    PopularManga, Rating, RecentlyAddedManga, SearchManga, SortedChapters, SortedVolumes, Volumes,
 };
 
 #[derive(Debug)]
@@ -86,7 +87,7 @@ impl ParseHtml for PopularMangaItem {
 
         let title = article.select(&title_selector).next().ok_or("no title was found")?.inner_html();
 
-        let latest_chapter = article.select(&title_selector).last().map(|tag| tag.inner_html());
+        let latest_chapter = article.select(&"span".as_selector()).last().map(|tag| tag.inner_html());
 
         Ok(Self {
             page_url,
@@ -236,6 +237,264 @@ impl ParseHtml for LatestMangas {
     }
 }
 
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(super) struct WeebcentralStatus {
+    pub(super) name: String,
+}
+
+impl From<WeebcentralStatus> for MangaStatus {
+    fn from(value: WeebcentralStatus) -> Self {
+        match value.name.to_lowercase().as_str() {
+            "ongoing" => MangaStatus::Ongoing,
+            _ => MangaStatus::default(),
+        }
+    }
+}
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(super) struct WeebcentralTag {
+    pub(super) name: String,
+}
+
+impl From<WeebcentralTag> for Genres {
+    fn from(value: WeebcentralTag) -> Self {
+        let rating = match value.name.to_lowercase().as_str() {
+            "ongoing" => Rating::Normal,
+            _ => Rating::default(),
+        };
+
+        Genres::new(value.name, rating)
+    }
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(super) struct MangaPageData {
+    pub(super) id: String,
+    pub(super) page_url: String,
+    pub(super) cover_url: String,
+    pub(super) title: String,
+    pub(super) description: Option<String>,
+    pub(super) authors: Vec<String>,
+    pub(super) tags: Vec<WeebcentralTag>,
+    pub(super) status: WeebcentralStatus,
+}
+
+impl From<MangaPageData> for Manga {
+    fn from(manga: MangaPageData) -> Self {
+        Self {
+            id: manga.page_url,
+            id_safe_for_download: manga.id,
+            title: manga.title,
+            genres: manga.tags.into_iter().map(Genres::from).collect(),
+            description: manga.description.unwrap_or("No description".to_string()),
+            status: manga.status.into(),
+            cover_img_url: manga.cover_url,
+            languages: vec![Languages::English],
+            rating: "".to_string(),
+            artist: None,
+            author: None,
+        }
+    }
+}
+
+/// Extracts the id from the manga page
+/// # Examples
+/// https://weebcentral.com/series/01J76XYCT4JVR13RN6NT1480MD/Tengoku-Daimakyou
+/// returns : 01J76XYCT4JVR13RN6NT1480MD
+pub(super) fn extract_id_from_url(url: &str) -> String {
+    let mut parts: Vec<&str> = url.split("/").collect();
+
+    parts.reverse();
+
+    parts.iter().nth(1).map(|id| id.to_string()).unwrap_or_default()
+}
+
+/// From a url replaces the last part after `/` with `full-chapter-list`
+/// # Examples
+/// https://weebcentral.com/series/01J76XYCT4JVR13RN6NT1480MD/Tengoku-Daimakyou
+/// returns : https://weebcentral.com/series/01J76XYCT4JVR13RN6NT1480MD/full-chapter-list
+pub(super) fn replace_last_segment_url(url: &str) -> String {
+    let mut parts: Vec<&str> = url.rsplitn(2, '/').collect();
+    if parts.len() > 1 {
+        format!("{}/full-chapter-list", parts[1])
+    } else {
+        url.to_string() // If there's no "/", return the original URL
+    }
+}
+
+#[derive(Debug)]
+pub(super) struct MangaPageError {
+    reason: String,
+}
+
+impl Display for MangaPageError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Failed to parse manga page from weebcentral, more details about the error: {}", self.reason)
+    }
+}
+
+impl<T: Into<String>> From<T> for MangaPageError {
+    fn from(value: T) -> Self {
+        let reason: String = value.into();
+        Self { reason }
+    }
+}
+
+impl Error for MangaPageError {}
+
+impl ParseHtml for MangaPageData {
+    type ParseError = MangaPageError;
+
+    fn parse_html(html: HtmlElement) -> Result<Self, Self::ParseError> {
+        let doc = html::Html::parse_document(html.as_str());
+        let page_url_selector = r#"link[rel="canonical"]"#.as_selector();
+        let page_url = doc
+            .select(&page_url_selector)
+            .next()
+            .ok_or("Page url tag was not found")?
+            .attr("href")
+            .ok_or("No href found for link")?
+            .to_string();
+
+        let cover_url = doc.select(&"picture > source".as_selector()).next().ok_or("No cover tag was found")?;
+        let cover_url = cover_url
+            .attr("srcset")
+            .ok_or("No attribute which contains cover url was found")?
+            .to_string();
+
+        let title = doc.select(&"h1".as_selector()).next().ok_or("No title was found")?.inner_html();
+
+        let description = doc
+            .select(&"p.whitespace-pre-wrap.break-words".as_selector())
+            .next()
+            .map(|el| el.inner_html());
+
+        let binding = "li".as_selector();
+
+        let more_data_list = doc
+            .select(&"ul.flex.flex-col.gap-4".as_selector())
+            .next()
+            .ok_or("section which contains authors was not found")?
+            .select(&binding);
+
+        let mut authors: Vec<String> = vec![];
+        let mut tags: Vec<WeebcentralTag> = vec![];
+        let mut status = WeebcentralStatus::default();
+
+        let selector = "span > a".as_selector();
+        for list_item in more_data_list {
+            //println!("{}", list_item.inner_html());
+            let which_type = list_item
+                .select(&"strong".as_selector())
+                .next()
+                .map(|el| el.inner_html())
+                .unwrap_or_default();
+
+            let which_type = which_type.trim();
+
+            if which_type == "Author(s):" {
+                list_item.select(&selector).for_each(|a| authors.push(a.inner_html()));
+            } else if which_type == "Status:" {
+                status = WeebcentralStatus {
+                    name: list_item.select(&"a".as_selector()).next().ok_or("status was not found")?.inner_html(),
+                };
+            } else if which_type == "Tags(s):" {
+                list_item.select(&selector).for_each(|a| {
+                    tags.push(WeebcentralTag {
+                        name: a.inner_html(),
+                    })
+                });
+            }
+        }
+
+        Ok(Self {
+            id: extract_id_from_url(&page_url),
+            page_url,
+            cover_url,
+            title,
+            description,
+            authors,
+            status,
+            tags,
+        })
+    }
+}
+
+#[derive(Debug)]
+pub(super) struct ChaptersError {
+    reason: String,
+}
+
+impl Display for ChaptersError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Failed to parse chapter list from weebcentral, more details about the error: {}", self.reason)
+    }
+}
+
+impl<T: Into<String>> From<T> for ChaptersError {
+    fn from(value: T) -> Self {
+        let reason: String = value.into();
+        Self { reason }
+    }
+}
+
+impl Error for ChaptersError {}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(super) struct WeebcentralChapter {
+    pub(super) id: String,
+    pub(super) page_url: String,
+    pub(super) number: String,
+    pub(super) datetime: NaiveDate,
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(super) struct WeebcentralChapters {
+    pub(super) chapters: Vec<WeebcentralChapter>,
+}
+
+fn parse_chapter_from_tag(a: ElementRef<'_>) -> Result<WeebcentralChapter, ChaptersError> {
+    let page_url = a.attr("href").ok_or("No href found")?.to_string();
+    let id = page_url.split("/").last().ok_or("No chapter id found")?.to_string();
+
+    let chapter = a
+        .select(&"span.grow.flex.items-center.gap-2 > span".as_selector())
+        .next()
+        .ok_or("No tag which contains chap number found")?;
+
+    let number = chapter.inner_html();
+    let number = number.split(" ").last().ok_or("No number found")?;
+
+    let datetime = a.select(&"time".as_selector()).next().ok_or("No datetime found")?;
+    let datetime = datetime.attr("datetime").ok_or("No datetime attribute found")?.to_string();
+
+    let chapter: WeebcentralChapter = WeebcentralChapter {
+        id,
+        page_url,
+        number: number.to_string(),
+        datetime: chrono::DateTime::parse_from_rfc3339(&datetime).unwrap_or_default().date_naive(),
+    };
+    Ok(chapter)
+}
+
+impl ParseHtml for WeebcentralChapters {
+    type ParseError = ChaptersError;
+
+    fn parse_html(html: HtmlElement) -> Result<Self, Self::ParseError> {
+        let doc = html::Html::parse_document(html.as_str());
+        let chapter_selector = "div > a".as_selector();
+
+        let mut chapters: Vec<Result<WeebcentralChapter, ChaptersError>> = vec![];
+
+        for a in doc.select(&chapter_selector) {
+            chapters.push(parse_chapter_from_tag(a));
+        }
+
+        Ok(Self {
+            chapters: chapters.into_iter().map(|may| may.unwrap()).collect(),
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::error::Error;
@@ -244,18 +503,22 @@ mod tests {
     use pretty_assertions::assert_eq;
     use scraper::Html;
 
-    use super::{LatestMangItem, PopularMangaItem, PopularMangasWeebCentral};
+    use super::{LatestMangItem, MangaPageData, PopularMangaItem, PopularMangasWeebCentral, WeebcentralChapter};
     use crate::backend::html_parser::{HtmlElement, ParseHtml};
-    use crate::backend::manga_provider::weebcentral::response::LatestMangas;
+    use crate::backend::manga_provider::weebcentral::response::{
+        LatestMangas, WeebcentralChapters, WeebcentralTag, extract_id_from_url, replace_last_segment_url,
+    };
 
     static HOME_PAGE_DOC: &str = include_str!("../../../../data_test/weebcentral/home_page.txt");
+    static MANGA_PAGE_DOC: &str = include_str!("../../../../data_test/weebcentral/manga_page.txt");
+    static CHAPTER_LIST: &str = include_str!("../../../../data_test/weebcentral/full_chapters.txt");
 
     #[test]
     fn popular_manga_is_parsed_from_html() -> Result<(), Box<dyn Error>> {
         let html = HOME_PAGE_DOC;
 
         let expected: PopularMangaItem = PopularMangaItem {
-            page_url: "https://weebcentral.com/chapters/01JQ5CNKEDKWCD84JSN6PA67MT".to_string(),
+            page_url: "https://weebcentral.com/series/01J76XYEGBDP7J5P4S4QGZS05N/Return-of-the-Frozen-Player".to_string(),
             cover_url: "https://temp.compsci88.com/cover/fallback/01J76XYEGBDP7J5P4S4QGZS05N.jpg".to_string(),
             title: "The Frozen Player Returns".to_string(),
             latest_chapter: Some("Chapter 160".to_string()),
@@ -289,6 +552,94 @@ mod tests {
         let manga = result.mangas.iter().find(|man| man.page_url == expected.page_url).unwrap();
 
         assert_eq!(expected, *manga);
+
+        Ok(())
+    }
+
+    #[test]
+    fn it_extract_manga_id_from_url() {
+        let url = "https://weebcentral.com/series/01J76XYCT4JVR13RN6NT1480MD/Tengoku-Daimakyou";
+        assert_eq!("01J76XYCT4JVR13RN6NT1480MD", extract_id_from_url(url));
+
+        let url = "https://weebcentral.com/series/01J76XYHHK0E7Y3JP4ZWKVVN5Q/Anata-tachi-Soredemo-Sensei-Desu-ka";
+        assert_eq!("01J76XYHHK0E7Y3JP4ZWKVVN5Q", extract_id_from_url(url));
+    }
+
+    #[test]
+    fn it_replaces_title_with_full_chapter_list() {
+        let url = "https://weebcentral.com/series/01J76XYCT4JVR13RN6NT1480MD/Tengoku-Daimakyou";
+        assert_eq!("https://weebcentral.com/series/01J76XYCT4JVR13RN6NT1480MD/full-chapter-list", replace_last_segment_url(url));
+
+        let url = "https://weebcentral.com/series/01J76XYHHK0E7Y3JP4ZWKVVN5Q/Anata-tachi-Soredemo-Sensei-Desu-ka";
+        assert_eq!("https://weebcentral.com/series/01J76XYHHK0E7Y3JP4ZWKVVN5Q/full-chapter-list", replace_last_segment_url(url));
+    }
+
+    #[test]
+    fn manga_page_is_parsed_from_html() -> Result<(), Box<dyn Error>> {
+        let html = MANGA_PAGE_DOC;
+
+        let description = r#"The story is set in two distinct worlds. Tokio lives with other children inside a world surrounded by a beautiful wall, but one day he receives a message that reads, "Do you want to go outside?" Meanwhile, a boy named Maru travels with an older woman, eking out a meager existence in a ruined world as they search for "paradise.""#.to_string();
+
+        let tags = vec![
+            WeebcentralTag {
+                name: "Adventure".to_string(),
+            },
+            WeebcentralTag {
+                name: "Mystery".to_string(),
+            },
+            WeebcentralTag {
+                name: "Romance".to_string(),
+            },
+            WeebcentralTag {
+                name: "Sci-fi".to_string(),
+            },
+            WeebcentralTag {
+                name: "Seinen".to_string(),
+            },
+            WeebcentralTag {
+                name: "Tragedy".to_string(),
+            },
+        ];
+
+        let expected: MangaPageData = MangaPageData {
+            id: "01J76XYCT4JVR13RN6NT1480MD".to_string(),
+            page_url: "https://weebcentral.com/series/01J76XYCT4JVR13RN6NT1480MD/Tengoku-Daimakyou".to_string(),
+            cover_url: "https://temp.compsci88.com/cover/normal/01J76XYCT4JVR13RN6NT1480MD.webp".to_string(),
+            title: "Heavenly Delusion".to_string(),
+            description: Some(description),
+            authors: vec!["ISHIGURO Masakazu".to_string()],
+            tags,
+            status: super::WeebcentralStatus {
+                name: "Ongoing".to_string(),
+            },
+        };
+
+        let result = MangaPageData::parse_html(HtmlElement::new(html))?;
+
+        assert_eq!(expected, result);
+
+        Ok(())
+    }
+
+    #[test]
+    fn list_of_chapters_if_parsed_from_html() -> Result<(), Box<dyn Error>> {
+        let html = CHAPTER_LIST;
+
+        let expected: WeebcentralChapter = WeebcentralChapter {
+            id: "01JQ5N6QKKBWVX427RT44K14WV".to_string(),
+            page_url: "https://weebcentral.com/chapters/01JQ5N6QKKBWVX427RT44K14WV".to_string(),
+            number: "71".to_string(),
+            datetime: chrono::DateTime::parse_from_rfc3339("2025-03-25T03:23:13.393Z")
+                .unwrap_or_default()
+                .date_naive(),
+        };
+
+        let result = WeebcentralChapters::parse_html(HtmlElement::new(html))?;
+        assert!(!result.chapters.is_empty());
+
+        let chap = result.chapters.iter().find(|chap| chap.page_url == expected.page_url).unwrap();
+
+        assert_eq!(expected, *chap);
 
         Ok(())
     }

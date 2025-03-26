@@ -11,13 +11,13 @@ use http::{HeaderMap, HeaderValue, StatusCode};
 use manga_tui::SearchTerm;
 use reqwest::cookie::Jar;
 use reqwest::{Client, Url};
-use response::{LatestMangas, PopularMangasWeebCentral};
+use response::{LatestMangas, MangaPageData, PopularMangasWeebCentral, WeebcentralChapters};
 
 use super::{
     Author, Chapter, ChapterOrderBy, ChapterPageUrl, DecodeBytesToImage, FeedPageProvider, FetchChapterBookmarked, Genres,
-    GetChapterPages, GetMangasResponse, GetRawImage, GoToReadChapter, HomePageMangaProvider, Languages, LatestChapter,
-    ListOfChapters, MangaPageProvider, MangaProvider, MangaProviders, PopularManga, ProviderIdentity, ReaderPageProvider,
-    RecentlyAddedManga, SearchChapterById, SearchMangaById, SearchMangaPanel, SearchPageProvider,
+    GetChapterPages, GetChaptersResponse, GetMangasResponse, GetRawImage, GoToReadChapter, HomePageMangaProvider, Languages,
+    LatestChapter, ListOfChapters, Manga, MangaPageProvider, MangaProvider, MangaProviders, PopularManga, ProviderIdentity,
+    ReaderPageProvider, RecentlyAddedManga, SearchChapterById, SearchMangaById, SearchMangaPanel, SearchPageProvider,
 };
 use crate::backend::cache::{Cacher, InsertEntry};
 use crate::backend::html_parser::{HtmlElement, ParseHtml};
@@ -54,8 +54,8 @@ Priority: u=0, i
 /// - The only language they provide is english,
 /// - Since it is a website headers that mimic the behavior of a browser must be used, including a User agent like : `Mozilla/5.0
 ///   (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0`
-/// - There is no way of getting images with lower or higher quality, so `image_quality` doesnt apply to manganto
-/// - The `Referer` header `https://chapmanganato.to` must be used to get chapter pages when reading a chapter or else cloudfare
+/// - There is no way of getting images with lower or higher quality, so `image_quality` doesnt apply to weebcentral
+/// - The `Referer` header `https://weebcentral.com/` must be used to get chapter pages when reading a chapter or else cloudfare
 ///   blocks the request, it is not required on the rest of requests
 #[derive(Clone, Debug)]
 pub struct WeebcentralProvider {
@@ -75,34 +75,34 @@ impl WeebcentralProvider {
     pub fn new(base_url: Url, cache_provider: Arc<dyn Cacher>) -> Self {
         let mut default_headers = HeaderMap::new();
 
-        //default_headers.insert(REFERER, HeaderValue::from_static("https://google.com"));
+        default_headers.insert(REFERER, HeaderValue::from_static("https://google.com"));
         default_headers.insert(HOST, HeaderValue::from_static("weebcentral.com"));
         default_headers.insert(ACCEPT, HeaderValue::from_static("*/*"));
 
-        //default_headers.insert(ACCEPT_ENCODING, HeaderValue::from_static("gzip, deflate"));
-        //default_headers.insert(CACHE_CONTROL, HeaderValue::from_static("max-age=604800"));
-        //default_headers.insert(
-        //    ACCEPT,
-        //    HeaderValue::from_static("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8,application/json"),
-        //);
-        //
-        //default_headers.insert(ACCEPT_LANGUAGE, HeaderValue::from_static("en-US,en;q=0.5"));
-        //default_headers.insert(CONNECTION, HeaderValue::from_static("keep-alive"));
-        //
-        //default_headers.insert("DNT", HeaderValue::from_static("1"));
-        //default_headers.insert("sec-fetch-site", HeaderValue::from_static("none"));
-        //default_headers.insert("sec-fetch-mode", HeaderValue::from_static("navigate"));
-        //default_headers.insert("sec-fetch-user", HeaderValue::from_static("?1"));
-        //default_headers.insert("sec-fetch-dest", HeaderValue::from_static("document"));
+        default_headers.insert(ACCEPT_ENCODING, HeaderValue::from_static("gzip, deflate"));
+        default_headers.insert(CACHE_CONTROL, HeaderValue::from_static("max-age=604800"));
+        default_headers.insert(
+            ACCEPT,
+            HeaderValue::from_static("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8,application/json"),
+        );
+
+        default_headers.insert(ACCEPT_LANGUAGE, HeaderValue::from_static("en-US,en;q=0.5"));
+        default_headers.insert(CONNECTION, HeaderValue::from_static("keep-alive"));
+
+        default_headers.insert("DNT", HeaderValue::from_static("1"));
+        default_headers.insert("sec-fetch-site", HeaderValue::from_static("none"));
+        default_headers.insert("sec-fetch-mode", HeaderValue::from_static("navigate"));
+        default_headers.insert("sec-fetch-user", HeaderValue::from_static("?1"));
+        default_headers.insert("sec-fetch-dest", HeaderValue::from_static("document"));
 
         let mut chapter_pages_header = HeaderMap::new();
 
-        //chapter_pages_header.insert(CACHE_CONTROL, HeaderValue::from_static("max-age=604800"));
+        chapter_pages_header.insert(CACHE_CONTROL, HeaderValue::from_static("max-age=604800"));
         chapter_pages_header.insert(REFERER, HeaderValue::from_static(WEEBCENTRAL_BASE_URL));
-        //chapter_pages_header.insert(CONNECTION, HeaderValue::from_static("keep-alive"));
-        //chapter_pages_header.insert(ACCEPT_ENCODING, HeaderValue::from_static("gzip, deflate"));
-        //chapter_pages_header
-        //.insert(ACCEPT, HeaderValue::from_static("image/avif,image/webp,image/png,image/svg+xml,image/*;q=0.8,*/*;q=0.5"));
+        chapter_pages_header.insert(CONNECTION, HeaderValue::from_static("keep-alive"));
+        chapter_pages_header.insert(ACCEPT_ENCODING, HeaderValue::from_static("gzip, deflate"));
+        chapter_pages_header
+            .insert(ACCEPT, HeaderValue::from_static("image/avif,image/webp,image/png,image/svg+xml,image/*;q=0.8,*/*;q=0.5"));
 
         let client = Client::builder()
             .cookie_store(true)
@@ -111,8 +111,6 @@ impl WeebcentralProvider {
             .user_agent("Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0")
             .build()
             .unwrap();
-
-        //client.white
 
         Self {
             client,
@@ -165,7 +163,7 @@ impl HomePageMangaProvider for WeebcentralProvider {
 
                 if response.status() != StatusCode::OK {
                     return Err(format!(
-                        "could not get popular mangas on weebcentral, details about the response : {:#?}",
+                        "could not get popular mangas on weebcentral, more details about the response : {:#?}",
                         response
                     )
                     .into());
@@ -201,9 +199,11 @@ impl HomePageMangaProvider for WeebcentralProvider {
                 let response = self.client.get(self.base_url.clone()).send().await?;
 
                 if response.status() != StatusCode::OK {
-                    return Err(
-                        format!("could not find recently added mangas on manganato, status code : {}", response.status()).into()
-                    );
+                    return Err(format!(
+                        "could not find recently added mangas on weebcentral, more details about the response: {}",
+                        response.status()
+                    )
+                    .into());
                 }
 
                 let doc = response.text().await?;
@@ -225,23 +225,38 @@ impl HomePageMangaProvider for WeebcentralProvider {
 }
 
 impl SearchMangaById for WeebcentralProvider {
+    /// The `manga_id` is expected to be a url like: https://weebcentral.com/series/01J76XYCT4JVR13RN6NT1480MD/Tengoku-Daimakyou
     async fn get_manga_by_id(&self, manga_id: &str) -> Result<super::Manga, Box<dyn Error>> {
-        todo!()
-    }
-}
+        let cache = self.cache_provider.get(manga_id)?;
 
-impl SearchPageProvider for WeebcentralProvider {
-    type FiltersHandler = WeebcentralFiltersProvider;
-    type InnerState = WeebcentralFilterState;
-    type Widget = WeebcentralFilterWidget;
+        match cache {
+            Some(cached_page) => {
+                let manga = MangaPageData::parse_html(HtmlElement::new(cached_page.data))?;
 
-    async fn search_mangas(
-        &self,
-        search_term: Option<SearchTerm>,
-        filters: Self::InnerState,
-        pagination: super::Pagination,
-    ) -> Result<GetMangasResponse, Box<dyn Error>> {
-        todo!()
+                Ok(Manga::from(manga))
+            },
+            None => {
+                let response = self.client.get(manga_id).send().await?;
+
+                if response.status() != StatusCode::OK {
+                    return Err(format!("manga page with id : {manga_id} could not be found on weebcentral").into());
+                }
+
+                let doc = response.text().await?;
+
+                self.cache_provider
+                    .cache(InsertEntry {
+                        id: manga_id,
+                        data: &doc,
+                        duration: Self::MANGA_PAGE_CACHE_DURATION,
+                    })
+                    .ok();
+
+                let manga = MangaPageData::parse_html(HtmlElement::new(doc))?;
+
+                Ok(Manga::from(manga))
+            },
+        }
     }
 }
 
@@ -278,10 +293,25 @@ impl MangaPageProvider for WeebcentralProvider {
         filters: super::ChapterFilters,
         pagination: super::Pagination,
     ) -> Result<super::GetChaptersResponse, Box<dyn Error>> {
-        todo!()
+        Ok(GetChaptersResponse::default())
     }
 
     async fn get_all_chapters(&self, manga_id: &str, language: Languages) -> Result<Vec<Chapter>, Box<dyn Error>> {
+        Ok(vec![])
+    }
+}
+
+impl SearchPageProvider for WeebcentralProvider {
+    type FiltersHandler = WeebcentralFiltersProvider;
+    type InnerState = WeebcentralFilterState;
+    type Widget = WeebcentralFilterWidget;
+
+    async fn search_mangas(
+        &self,
+        search_term: Option<SearchTerm>,
+        filters: Self::InnerState,
+        pagination: super::Pagination,
+    ) -> Result<GetMangasResponse, Box<dyn Error>> {
         todo!()
     }
 }
