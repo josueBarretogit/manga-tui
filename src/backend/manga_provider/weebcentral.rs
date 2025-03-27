@@ -7,11 +7,11 @@ use std::time::Duration;
 use filter_state::{WeebcentralFilterState, WeebcentralFiltersProvider};
 use filter_widget::WeebcentralFilterWidget;
 use http::header::{ACCEPT, ACCEPT_ENCODING, ACCEPT_LANGUAGE, CACHE_CONTROL, CONNECTION, HOST, REFERER};
-use http::{HeaderMap, HeaderValue, StatusCode};
+use http::{HeaderMap, HeaderValue, StatusCode, status};
 use manga_tui::SearchTerm;
 use reqwest::cookie::Jar;
 use reqwest::{Client, Url};
-use response::{LatestMangas, MangaPageData, PopularMangasWeebCentral, WeebcentralChapters};
+use response::{ChapterPageData, ChapterPagesLinks, LatestMangas, MangaPageData, PopularMangasWeebCentral, WeebcentralChapters};
 
 use super::{
     Author, Chapter, ChapterOrderBy, ChapterPageUrl, DecodeBytesToImage, FeedPageProvider, FetchChapterBookmarked, Genres,
@@ -22,6 +22,7 @@ use super::{
 use crate::backend::cache::{Cacher, InsertEntry};
 use crate::backend::html_parser::{HtmlElement, ParseHtml};
 use crate::backend::manga_provider::ChapterToRead;
+use crate::config::ImageQuality;
 
 pub mod filter_state;
 pub mod filter_widget;
@@ -29,28 +30,10 @@ mod response;
 
 pub static WEEBCENTRAL_BASE_URL: &str = "https://weebcentral.com/";
 
-/*
-*
-*
-Host: weebcentral.com
-User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0
-Accept-Language: en-US,en;q=0.5
-Accept-Encoding: gzip, deflate, br, zstd
-DNT: 1
-Sec-GPC: 1
-Connection: keep-alive
-Upgrade-Insecure-Requests: 1
-Sec-Fetch-Dest: document
-Sec-Fetch-Mode: navigate
-Sec-Fetch-Site: none
-Sec-Fetch-User: ?1
-Priority: u=0, i
-
- */
-
 /// Weebcentral: `https://weebcentral.com/`
 /// Some things to keep in mind:
-/// - All `ids` of manga and chapter are actually Urls
+/// - The url of a Manga page can be built like this: `https://weebcentral.com/series/{manga_id}`
+/// - The url of a Chapter page can be built like this: `https://weebcentral.com/chapter/{chapter_id}`
 /// - The only language they provide is english,
 /// - Since it is a website headers that mimic the behavior of a browser must be used, including a User agent like : `Mozilla/5.0
 ///   (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0`
@@ -68,7 +51,6 @@ pub struct WeebcentralProvider {
 impl WeebcentralProvider {
     const CHAPTER_PAGE_CACHE_DURATION: Duration = Duration::from_secs(30);
     const HOME_PAGE_CACHE_DURATION: Duration = Duration::from_secs(10);
-    pub const MANGANATO_MANGA_LANGUAGE: &[Languages] = &[Languages::English];
     const MANGA_PAGE_CACHE_DURATION: Duration = Duration::from_secs(40);
     const SEARCH_PAGE_CACHE_DURATION: Duration = Duration::from_secs(5);
 
@@ -101,6 +83,7 @@ impl WeebcentralProvider {
         chapter_pages_header.insert(REFERER, HeaderValue::from_static(WEEBCENTRAL_BASE_URL));
         chapter_pages_header.insert(CONNECTION, HeaderValue::from_static("keep-alive"));
         chapter_pages_header.insert(ACCEPT_ENCODING, HeaderValue::from_static("gzip, deflate"));
+
         chapter_pages_header
             .insert(ACCEPT, HeaderValue::from_static("image/avif,image/webp,image/png,image/svg+xml,image/*;q=0.8,*/*;q=0.5"));
 
@@ -117,6 +100,106 @@ impl WeebcentralProvider {
             base_url,
             cache_provider,
             chapter_pages_header,
+        }
+    }
+
+    /// https://weebcentral.com/chapters/01JJB9BP43FHYCHAAZDVXKPSEW/images?is_prev=False&current_page=1&reading_style=long_strip
+    fn make_chapter_pages_url(&self, chapter_id: &str) -> String {
+        format!("{}chapters/{chapter_id}/images?is_prev=False&current_page=1&reading_style=long_strip", self.base_url)
+    }
+
+    /// https://weebcentral.com/series/01JEXZK546WKQ91SNBTXYPT3VN/full-chapter-list
+    fn make_full_chapter_list_url(&self, manga_id: &str) -> String {
+        format!("{}series/{manga_id}/full-chapter-list", self.base_url)
+    }
+
+    async fn get_chapter(&self, chapter_id: &str) -> Result<ChapterToRead, Box<dyn Error>> {
+        let chapter_page_url = self.make_chapter_pages_url(chapter_id);
+
+        let pages_url = self.get_chapter_pages_url_with_extension(chapter_id, "", ImageQuality::default()).await?;
+
+        let chapter_page_url = format!("{}chapters/{chapter_id}", self.base_url);
+
+        let cache = self.cache_provider.get(&chapter_page_url)?;
+
+        match cache {
+            Some(cached) => {
+                let chapter_data = ChapterPageData::parse_html(HtmlElement::new(cached.data))?;
+
+                Ok(ChapterToRead {
+                    id: chapter_id.to_string(),
+                    title: "".to_string(),
+                    number: chapter_data.number.parse().unwrap_or_default(),
+                    volume_number: None,
+                    num_page_bookmarked: None,
+                    language: Languages::English,
+                    pages_url: pages_url.into_iter().map(|page| page.url).collect(),
+                })
+            },
+            None => {
+                let response = self.client.get(&chapter_page_url).send().await?;
+
+                if response.status() != StatusCode::OK {
+                    return Err(format!("{:#?}", response).into());
+                }
+
+                let doc = response.text().await?;
+
+                self.cache_provider
+                    .cache(InsertEntry {
+                        id: &chapter_page_url,
+                        data: &doc,
+                        duration: Self::MANGA_PAGE_CACHE_DURATION,
+                    })
+                    .ok();
+
+                let chapter_data = ChapterPageData::parse_html(HtmlElement::new(doc))?;
+
+                Ok(ChapterToRead {
+                    id: chapter_id.to_string(),
+                    title: "".to_string(),
+                    number: chapter_data.number.parse().unwrap_or_default(),
+                    volume_number: None,
+                    num_page_bookmarked: None,
+                    language: Languages::English,
+                    pages_url: pages_url.into_iter().map(|page| page.url).collect(),
+                })
+            },
+        }
+    }
+
+    async fn get_list_of_chapters(&self, manga_id: &str) -> Result<ListOfChapters, Box<dyn Error>> {
+        let url = self.make_full_chapter_list_url(manga_id);
+
+        let cache = self.cache_provider.get(&url)?;
+
+        match cache {
+            Some(cached) => {
+                let chapters = WeebcentralChapters::parse_html(HtmlElement::new(cached.data))?;
+
+                Ok(ListOfChapters::from(chapters))
+            },
+            None => {
+                let response = self.client.get(&url).send().await?;
+
+                if response.status() != StatusCode::OK {
+                    return Err(format!("Could not get list of chapters on weebcentral").into());
+                }
+
+                let doc = response.text().await?;
+
+                self.cache_provider
+                    .cache(InsertEntry {
+                        id: &url,
+                        data: &doc,
+                        duration: Self::MANGA_PAGE_CACHE_DURATION,
+                    })
+                    .ok();
+
+                let chapters = WeebcentralChapters::parse_html(HtmlElement::new(doc))?;
+
+                Ok(ListOfChapters::from(chapters))
+            },
         }
     }
 }
@@ -138,7 +221,7 @@ impl GetRawImage for WeebcentralProvider {
             .await?;
 
         if response.status() != StatusCode::OK {
-            return Err(format!("Could not get image on manganato with url : {url}").into());
+            return Err(format!("Could not get image on weebcentral with url: {url}").into());
         }
 
         Ok(response.bytes().await?)
@@ -152,6 +235,7 @@ impl SearchMangaPanel for WeebcentralProvider {}
 impl HomePageMangaProvider for WeebcentralProvider {
     async fn get_popular_mangas(&self) -> Result<Vec<super::PopularManga>, Box<dyn Error>> {
         let cache = self.cache_provider.get(self.base_url.as_str())?;
+
         match cache {
             Some(cached) => {
                 let response = PopularMangasWeebCentral::parse_html(HtmlElement::new(cached.data))?;
@@ -225,9 +309,9 @@ impl HomePageMangaProvider for WeebcentralProvider {
 }
 
 impl SearchMangaById for WeebcentralProvider {
-    /// The `manga_id` is expected to be a url like: https://weebcentral.com/series/01J76XYCT4JVR13RN6NT1480MD/Tengoku-Daimakyou
     async fn get_manga_by_id(&self, manga_id: &str) -> Result<super::Manga, Box<dyn Error>> {
-        let cache = self.cache_provider.get(manga_id)?;
+        let url = format!("{}series/{manga_id}/", self.base_url);
+        let cache = self.cache_provider.get(&url)?;
 
         match cache {
             Some(cached_page) => {
@@ -236,17 +320,17 @@ impl SearchMangaById for WeebcentralProvider {
                 Ok(Manga::from(manga))
             },
             None => {
-                let response = self.client.get(manga_id).send().await?;
+                let response = self.client.get(&url).send().await?;
 
                 if response.status() != StatusCode::OK {
-                    return Err(format!("manga page with id : {manga_id} could not be found on weebcentral").into());
+                    return Err(format!("manga page with id: {manga_id} could not be found on weebcentral, {url}").into());
                 }
 
                 let doc = response.text().await?;
 
                 self.cache_provider
                     .cache(InsertEntry {
-                        id: manga_id,
+                        id: &url,
                         data: &doc,
                         duration: Self::MANGA_PAGE_CACHE_DURATION,
                     })
@@ -262,7 +346,9 @@ impl SearchMangaById for WeebcentralProvider {
 
 impl GoToReadChapter for WeebcentralProvider {
     async fn read_chapter(&self, chapter_id: &str, manga_id: &str) -> Result<(ChapterToRead, ListOfChapters), Box<dyn Error>> {
-        todo!()
+        let chapter = self.get_chapter(chapter_id).await?;
+        let list_of_chapters = self.get_list_of_chapters(manga_id).await?;
+        Ok((chapter, list_of_chapters))
     }
 }
 
@@ -273,7 +359,30 @@ impl GetChapterPages for WeebcentralProvider {
         manga_id: &str,
         image_quality: crate::config::ImageQuality,
     ) -> Result<Vec<ChapterPageUrl>, Box<dyn Error>> {
-        todo!()
+        let url = self.make_chapter_pages_url(chapter_id);
+
+        let cache = self.cache_provider.get(&url)?;
+
+        match cache {
+            Some(cached) => {
+                let pages = ChapterPagesLinks::parse_html(HtmlElement::new(cached.data))?;
+
+                Ok(pages.pages.into_iter().map(ChapterPageUrl::from).collect())
+            },
+            None => {
+                let res = self.client.get(url).send().await?;
+
+                if res.status() != StatusCode::OK {
+                    return Err(format!("Could not get chapter pages for chapter with id: {chapter_id}").into());
+                }
+
+                let html = res.text().await?;
+
+                let pages = ChapterPagesLinks::parse_html(HtmlElement::new(html))?;
+
+                Ok(pages.pages.into_iter().map(ChapterPageUrl::from).collect())
+            },
+        }
     }
 }
 
@@ -282,7 +391,7 @@ impl FetchChapterBookmarked for WeebcentralProvider {
         &self,
         chapter: crate::backend::database::ChapterBookmarked,
     ) -> Result<(ChapterToRead, ListOfChapters), Box<dyn Error>> {
-        todo!()
+        self.read_chapter(&chapter.id, &chapter.manga_id).await
     }
 }
 
@@ -293,13 +402,180 @@ impl MangaPageProvider for WeebcentralProvider {
         filters: super::ChapterFilters,
         pagination: super::Pagination,
     ) -> Result<super::GetChaptersResponse, Box<dyn Error>> {
-        Ok(GetChaptersResponse::default())
+        let full_list_url = self.make_full_chapter_list_url(manga_id);
+
+        let cache = self.cache_provider.get(&full_list_url)?;
+        match cache {
+            Some(cached) => {
+                let chapters = WeebcentralChapters::parse_html(HtmlElement::new(cached.data))?;
+
+                let total_chapters = chapters.chapters.len();
+
+                let mut chapters: Vec<Chapter> = chapters
+                    .chapters
+                    .into_iter()
+                    .map(|chap| Chapter {
+                        id: chap.id.clone(),
+                        id_safe_for_download: chap.id,
+                        manga_id: manga_id.to_string(),
+                        title: "".to_string(),
+                        language: Languages::English,
+                        chapter_number: chap.number,
+                        volume_number: None,
+                        scanlator: None,
+                        publication_date: chap.datetime,
+                    })
+                    .collect();
+
+                if filters.order == ChapterOrderBy::Ascending {
+                    chapters.reverse();
+                }
+
+                let from = pagination.index_to_slice_from();
+                let to = pagination.to_index(total_chapters);
+
+                let chapters = chapters.as_slice().get(from..to).unwrap_or(&[]);
+
+                Ok(GetChaptersResponse {
+                    total_chapters: total_chapters as u32,
+                    chapters: chapters.to_vec(),
+                })
+            },
+            None => {
+                let response = self.client.get(&full_list_url).send().await?;
+
+                if response.status() != StatusCode::OK {
+                    return Err(format!(
+                        "Could not get chapters for manga: {manga_id}, more details about the response: {:#?}",
+                        response
+                    )
+                    .into());
+                }
+                let response = response.text().await?;
+
+                self.cache_provider
+                    .cache(InsertEntry {
+                        id: &full_list_url,
+                        data: &response,
+                        duration: Self::MANGA_PAGE_CACHE_DURATION,
+                    })
+                    .ok();
+
+                let chapters = WeebcentralChapters::parse_html(HtmlElement::new(response))?;
+
+                let total_chapters = chapters.chapters.len();
+
+                let mut chapters: Vec<Chapter> = chapters
+                    .chapters
+                    .into_iter()
+                    .map(|chap| Chapter {
+                        id: chap.id.clone(),
+                        id_safe_for_download: chap.id,
+                        manga_id: manga_id.to_string(),
+                        title: "".to_string(),
+                        language: Languages::English,
+                        chapter_number: chap.number,
+                        volume_number: None,
+                        scanlator: None,
+                        publication_date: chap.datetime,
+                    })
+                    .collect();
+
+                if filters.order == ChapterOrderBy::Ascending {
+                    chapters.reverse();
+                }
+
+                let from = pagination.index_to_slice_from();
+                let to = pagination.to_index(total_chapters as usize);
+
+                let chapters = chapters.as_slice().get(from..to).unwrap_or(&[]);
+
+                Ok(GetChaptersResponse {
+                    total_chapters: total_chapters as u32,
+                    chapters: chapters.to_vec(),
+                })
+            },
+        }
     }
 
     async fn get_all_chapters(&self, manga_id: &str, language: Languages) -> Result<Vec<Chapter>, Box<dyn Error>> {
-        Ok(vec![])
+        let full_list_url = self.make_full_chapter_list_url(manga_id);
+
+        let cache = self.cache_provider.get(&full_list_url)?;
+        match cache {
+            Some(cached) => {
+                let chapters = WeebcentralChapters::parse_html(HtmlElement::new(cached.data))?;
+
+                let chapters: Vec<Chapter> = chapters
+                    .chapters
+                    .into_iter()
+                    .map(|chap| Chapter {
+                        id: chap.id.clone(),
+                        id_safe_for_download: chap.id,
+                        manga_id: manga_id.to_string(),
+                        title: "".to_string(),
+                        language: Languages::English,
+                        chapter_number: chap.number,
+                        volume_number: None,
+                        scanlator: None,
+                        publication_date: chap.datetime,
+                    })
+                    .collect();
+
+                Ok(chapters)
+            },
+            None => {
+                let response = self.client.get(&full_list_url).send().await?;
+
+                if response.status() != StatusCode::OK {
+                    return Err(format!(
+                        "Could not get chapters for manga: {manga_id}, more details about the response: {:#?}",
+                        response
+                    )
+                    .into());
+                }
+                let response = response.text().await?;
+
+                self.cache_provider
+                    .cache(InsertEntry {
+                        id: &full_list_url,
+                        data: &response,
+                        duration: Self::MANGA_PAGE_CACHE_DURATION,
+                    })
+                    .ok();
+
+                let chapters = WeebcentralChapters::parse_html(HtmlElement::new(response))?;
+
+                let mut chapters: Vec<Chapter> = chapters
+                    .chapters
+                    .into_iter()
+                    .map(|chap| Chapter {
+                        id: chap.id.clone(),
+                        id_safe_for_download: chap.id,
+                        manga_id: manga_id.to_string(),
+                        title: "".to_string(),
+                        language: Languages::English,
+                        chapter_number: chap.number,
+                        volume_number: None,
+                        scanlator: None,
+                        publication_date: chap.datetime,
+                    })
+                    .collect();
+
+                Ok(chapters)
+            },
+        }
     }
 }
+
+impl SearchChapterById for WeebcentralProvider {
+    async fn search_chapter(&self, chapter_id: &str, manga_id: &str) -> Result<ChapterToRead, Box<dyn Error>> {
+        let chapter = self.get_chapter(chapter_id).await?;
+        Ok(chapter)
+    }
+}
+
+impl ReaderPageProvider for WeebcentralProvider {}
 
 impl SearchPageProvider for WeebcentralProvider {
     type FiltersHandler = WeebcentralFiltersProvider;
@@ -318,363 +594,8 @@ impl SearchPageProvider for WeebcentralProvider {
 
 impl FeedPageProvider for WeebcentralProvider {
     async fn get_latest_chapters(&self, manga_id: &str) -> Result<Vec<LatestChapter>, Box<dyn Error>> {
-        todo!()
+        Ok(vec![])
     }
 }
-
-impl SearchChapterById for WeebcentralProvider {
-    async fn search_chapter(&self, chapter_id: &str, manga_id: &str) -> Result<ChapterToRead, Box<dyn Error>> {
-        todo!()
-    }
-}
-
-impl ReaderPageProvider for WeebcentralProvider {}
 
 impl MangaProvider for WeebcentralProvider {}
-
-#[cfg(test)]
-mod tests {
-
-    use httpmock::Method::GET;
-    use httpmock::MockServer;
-    use pretty_assertions::assert_eq;
-
-    use super::*;
-    use crate::backend::cache::mock::EmptyCache;
-    use crate::backend::manga_provider::{ChapterFilters, Manga, Pagination};
-    use crate::config::ImageQuality;
-
-    static HOME_PAGE_DOCUMENT: &str = include_str!("../../../data_test/manganato/home_page.html");
-    static SEARCH_DOCUMENT: &str = include_str!("../../../data_test/manganato/search.html");
-    static MANGA_PAGE_DOCUMENT: &str = include_str!("../../../data_test/manganato/manga_page.html");
-    static CHAPTER_PAGE_DOCUMENT: &str = include_str!("../../../data_test/manganato/chapter_page.html");
-
-    //#[test]
-    //fn expected_manganato_endpoints() {
-    //    assert_eq!("https://manganato.com", MANGANATO_BASE_URL);
-    //}
-    //
-    //#[test]
-    //fn parses_search_term_correctly() {
-    //    let searchterm = SearchTerm::trimmed_lowercased("death note").unwrap();
-    //
-    //    assert_eq!("death_note", ManganatoProvider::format_search_term(searchterm));
-    //
-    //    let searchterm = SearchTerm::trimmed_lowercased("oshi no ko").unwrap();
-    //
-    //    assert_eq!("oshi_no_ko", ManganatoProvider::format_search_term(searchterm));
-    //}
-    //
-    //#[tokio::test]
-    //async fn it_calls_image_endpoint() -> Result<(), Box<dyn Error>> {
-    //    let server = MockServer::start_async().await;
-    //
-    //    let expected = b"some image bytes";
-    //
-    //    let request = server
-    //        .mock_async(|when, then| {
-    //            // The referer is important to be presented, if not when requesting a chapter page
-    //            // it will be blocked by cloudfare
-    //            when.method(GET).header_exists("user-agent").header("referer", "https://chapmanganato.to");
-    //
-    //            then.status(200).body(expected.clone());
-    //        })
-    //        .await;
-    //
-    //    let manganato = ManganatoProvider::new(server.url("/manganatotest").parse().unwrap(), EmptyCache::new_arc());
-    //
-    //    let response = manganato.get_raw_image(server.base_url().as_str()).await?;
-    //
-    //    request.assert_async().await;
-    //
-    //    assert_eq!(expected.to_vec(), response);
-    //
-    //    Ok(())
-    //}
-    //
-    //#[tokio::test]
-    //async fn it_gets_popular_manga() -> Result<(), Box<dyn Error>> {
-    //    let server = MockServer::start_async().await;
-    //
-    //    let request = server
-    //        .mock_async(|when, then| {
-    //            when.method(GET).header_exists("user-agent").path_contains("home_page");
-    //
-    //            then.status(200).body(HOME_PAGE_DOCUMENT);
-    //        })
-    //        .await;
-    //
-    //    let manganato = ManganatoProvider::new(server.url("/home_page").parse().unwrap(), EmptyCache::new_arc());
-    //
-    //    let response = manganato.get_popular_mangas().await?;
-    //
-    //    request.assert_async().await;
-    //
-    //    assert!(!response.is_empty());
-    //
-    //    assert_eq!(25, response.len());
-    //
-    //    Ok(())
-    //}
-    //
-    //#[tokio::test]
-    //async fn it_searches_manga_with_search_term() -> Result<(), Box<dyn Error>> {
-    //    let server = MockServer::start_async().await;
-    //
-    //    let request = server
-    //        .mock_async(|when, then| {
-    //            when.method(GET)
-    //                .path_contains("advanced_search")
-    //                .query_param("s", "all")
-    //                .query_param("page", "1")
-    //                .query_param("keyw", "oshi_no_ko");
-    //
-    //            then.status(200).body(SEARCH_DOCUMENT);
-    //        })
-    //        .await;
-    //
-    //    let manganato = ManganatoProvider::new(server.url("/").parse().unwrap(), EmptyCache::new_arc());
-    //
-    //    let response = manganato
-    //        .search_mangas(SearchTerm::trimmed_lowercased("oshi no ko"), ManganatoFilterState {}, Pagination::default())
-    //        .await?;
-    //
-    //    request.assert_async().await;
-    //
-    //    assert!(!response.mangas.is_empty());
-    //
-    //    assert_eq!(24, response.mangas.len());
-    //
-    //    assert_eq!(607, response.total_mangas);
-    //
-    //    Ok(())
-    //}
-    //
-    //#[tokio::test]
-    //async fn it_gets_manga_page() -> Result<(), Box<dyn Error>> {
-    //    let server = MockServer::start_async().await;
-    //
-    //    let request = server
-    //        .mock_async(|when, then| {
-    //            when.method(GET);
-    //            then.status(200).body(include_str!("../../../data_test/manganato/manga_page.html"));
-    //        })
-    //        .await;
-    //
-    //    let base_url = server.url("");
-    //
-    //    let manganato = ManganatoProvider::new(base_url.clone().parse().unwrap(), EmptyCache::new_arc());
-    //
-    //    // shikanoko nokonoko koshitantan
-    //    let response = manganato.get_manga_by_id(server.url("/manga-jq986499").as_str()).await?;
-    //
-    //    request.assert_async().await;
-    //
-    //    let expected: Manga = Manga {
-    //        id: format!("{base_url}/manga-jq986499"),
-    //        id_safe_for_download: "manga-jq986499".to_string(),
-    //        ..Default::default()
-    //    };
-    //
-    //    //Only this is important to test, the rest is tested in manganato/response.rs
-    //    assert_eq!(expected.id_safe_for_download, response.id_safe_for_download);
-    //    assert_eq!(expected.id, response.id);
-    //
-    //    Ok(())
-    //}
-    //
-    //#[tokio::test]
-    //async fn it_gets_chapters_of_manga_paginated() -> Result<(), Box<dyn Error>> {
-    //    let server = MockServer::start_async().await;
-    //
-    //    let request = server
-    //        .mock_async(|when, then| {
-    //            when.method(GET);
-    //            then.status(200).body(MANGA_PAGE_DOCUMENT);
-    //        })
-    //        .await;
-    //
-    //    let base_url = server.url("");
-    //
-    //    let manganato = ManganatoProvider::new(base_url.clone().parse().unwrap(), EmptyCache::new_arc());
-    //
-    //    // shikanoko nokonoko koshitantan
-    //    let response = manganato
-    //        .get_chapters(server.url("/manga-jq986499").as_str(), ChapterFilters::default(), Pagination::default())
-    //        .await?;
-    //
-    //    request.assert_async().await;
-    //
-    //    assert!(!response.chapters.is_empty());
-    //
-    //    assert_eq!(48, response.total_chapters);
-    //
-    //    let expected: Chapter = Chapter {
-    //        id: format!("https://chapmanganato.to/manga-jq986499/chapter-27"),
-    //        id_safe_for_download: "manga-jq986499-chapter-27".to_string(),
-    //        publication_date: chrono::DateTime::from_timestamp(1722694402, 0).unwrap().date_naive(),
-    //        ..Default::default()
-    //    };
-    //
-    //    let result = response.chapters.iter().last().ok_or("Expected chapter was not found")?;
-    //
-    //    assert_eq!(expected.id, result.id);
-    //    assert_eq!(expected.id_safe_for_download, result.id_safe_for_download);
-    //    assert_eq!(expected.publication_date, result.publication_date);
-    //
-    //    Ok(())
-    //}
-    //
-    //#[tokio::test]
-    //async fn it_gets_all_chapters() -> Result<(), Box<dyn Error>> {
-    //    let server = MockServer::start_async().await;
-    //
-    //    let request = server
-    //        .mock_async(|when, then| {
-    //            when.method(GET);
-    //            then.status(200).body(MANGA_PAGE_DOCUMENT);
-    //        })
-    //        .await;
-    //
-    //    let base_url = server.url("");
-    //
-    //    let manganato = ManganatoProvider::new(base_url.clone().parse().unwrap(), EmptyCache::new_arc());
-    //
-    //    let response = manganato
-    //        .get_all_chapters(server.url("/manga-jq986499").as_str(), Languages::default())
-    //        .await?;
-    //
-    //    request.assert_async().await;
-    //
-    //    assert!(!response.is_empty());
-    //
-    //    assert_eq!(48, response.len());
-    //
-    //    Ok(())
-    //}
-    //
-    //#[tokio::test]
-    //async fn it_gets_chapter_page() -> Result<(), Box<dyn Error>> {
-    //    let server = MockServer::start_async().await;
-    //
-    //    let request = server
-    //        .mock_async(|when, then| {
-    //            when.method(GET);
-    //            then.status(200).body(CHAPTER_PAGE_DOCUMENT);
-    //        })
-    //        .await;
-    //
-    //    let base_url = server.url("");
-    //
-    //    let manganato = ManganatoProvider::new(base_url.clone().parse().unwrap(), EmptyCache::new_arc());
-    //
-    //    // shikanoko nokonoko koshitantan
-    //    let (chapter_to_read, chapter_list) = manganato.read_chapter(&server.url("/manga-jq986499/chapter-27"), "").await?;
-    //
-    //    request.assert_async().await;
-    //
-    //    assert_eq!(23, chapter_to_read.pages_url.len());
-    //
-    //    let volume = chapter_list.volumes.as_slice().last().ok_or("no volume in chapter list was found")?;
-    //
-    //    let chapters = volume.chapters.as_slice();
-    //
-    //    for chap in chapters {
-    //        Url::parse(&chap.id).expect("id of chapters in chapter list must be valid urls");
-    //    }
-    //
-    //    Ok(())
-    //}
-    //
-    //#[tokio::test]
-    //async fn it_gets_chapter_page_bookmarked() -> Result<(), Box<dyn Error>> {
-    //    let server = MockServer::start_async().await;
-    //
-    //    let request = server
-    //        .mock_async(|when, then| {
-    //            when.method(GET);
-    //            then.status(200).body(CHAPTER_PAGE_DOCUMENT);
-    //        })
-    //        .await;
-    //
-    //    let base_url = server.url("");
-    //
-    //    let manganato = ManganatoProvider::new(base_url.clone().parse().unwrap(), EmptyCache::new_arc());
-    //
-    //    let (chapter_to_read, _) = manganato
-    //        .fetch_chapter_bookmarked(crate::backend::database::ChapterBookmarked {
-    //            id: server.url("/manga-jq986499/chapter-27"),
-    //            ..Default::default()
-    //        })
-    //        .await?;
-    //
-    //    request.assert_async().await;
-    //
-    //    assert_eq!(23, chapter_to_read.pages_url.len());
-    //
-    //    Ok(())
-    //}
-    //
-    //#[tokio::test]
-    //async fn it_gets_chapter_pages_with_url_and_extension() -> Result<(), Box<dyn Error>> {
-    //    let server = MockServer::start_async().await;
-    //
-    //    let request = server
-    //        .mock_async(|when, then| {
-    //            when.method(GET);
-    //            then.status(200).body(CHAPTER_PAGE_DOCUMENT);
-    //        })
-    //        .await;
-    //
-    //    let base_url = server.url("");
-    //
-    //    let manganato = ManganatoProvider::new(base_url.clone().parse().unwrap(), EmptyCache::new_arc());
-    //
-    //    let result = manganato
-    //        .get_chapter_pages_url_with_extension(&server.url("/manga-jq986499/chapter-27"), "", ImageQuality::Low)
-    //        .await?;
-    //
-    //    request.assert_async().await;
-    //
-    //    assert_eq!(23, result.len());
-    //
-    //    let last_page = result.last().ok_or("no last page found")?;
-    //
-    //    let expected: ChapterPageUrl = ChapterPageUrl {
-    //        url: Url::parse(
-    //            "https://v4.mkklcdnv6tempv2.com/img/tab_24/03/51/42/jq986499/vol5_chapter_27_come_back_nokotan/23-1722675417-o.webp",
-    //        )?,
-    //        extension: "webp".to_string(),
-    //    };
-    //
-    //    assert_eq!(expected, *last_page);
-    //
-    //    Ok(())
-    //}
-    //
-    //#[tokio::test]
-    //async fn it_gets_latest_chapters_of_manga() -> Result<(), Box<dyn Error>> {
-    //    let server = MockServer::start_async().await;
-    //
-    //    let request = server
-    //        .mock_async(|when, then| {
-    //            when.method(GET);
-    //            then.status(200).body(MANGA_PAGE_DOCUMENT);
-    //        })
-    //        .await;
-    //
-    //    let base_url = server.url("");
-    //
-    //    let manganato = ManganatoProvider::new(base_url.clone().parse().unwrap(), EmptyCache::new_arc());
-    //
-    //    let manga_id = server.url("/manga-jq986499");
-    //
-    //    let result = manganato.get_latest_chapters(&manga_id).await?;
-    //
-    //    request.assert_async().await;
-    //
-    //    assert_eq!(4, result.len());
-    //
-    //    Ok(())
-    //}
-}

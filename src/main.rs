@@ -142,9 +142,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             run_app(ratatui::init(), mangadex_client, anilist_client, MangadexFilterProvider::new(), MangadexFilterWidget::new())
                 .await?;
         },
-        MangaProviders::Manganato => {},
+        MangaProviders::Manganato => {
+            logger.inform("Using manganato as manga provider");
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            run_app(
+                ratatui::init(),
+                ManganatoProvider::new(MANGANATO_BASE_URL.parse().unwrap(), cache_provider),
+                anilist_client,
+                ManganatoFiltersProvider::new(ManganatoFilterState {}),
+                ManganatoFilterWidget {},
+            )
+            .await?;
+        },
         MangaProviders::Weebcentral => {
-            logger.inform("Using weebcentral as manga provider");
+            logger.inform("Using Weeb central as manga provider");
             tokio::time::sleep(Duration::from_secs(1)).await;
             run_app(
                 ratatui::init(),
