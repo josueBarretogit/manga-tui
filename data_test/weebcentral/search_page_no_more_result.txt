@@ -1,0 +1,143 @@
+<article class="bg-base-300 flex gap-4 p-4">
+    <section class="w-full lg:w-[25%] xl:w-[20%]">
+        <a href="https://weebcentral.com/series/01J76XYDJ8EJGFDMR878PJM89D/Oshi-no-Ko">
+            <article class="hidden lg:block w-full aspect-4/6  overflow-hidden">
+                <picture>
+                    <source srcset="https://temp.compsci88.com/cover/normal/01J76XYDJ8EJGFDMR878PJM89D.webp" width="400"
+                        height="600" media="(min-width: 768px)" type="image/webp">
+                    <source srcset="https://temp.compsci88.com/cover/small/01J76XYDJ8EJGFDMR878PJM89D.webp" width="200"
+                        height="300" type="image/webp">
+                    <img src="https://temp.compsci88.com/cover/fallback/01J76XYDJ8EJGFDMR878PJM89D.jpg"
+                        alt="[Oshi No Ko] cover" width="400" height="600" decoding="async">
+                </picture>
+            </article>
+            <article class="lg:hidden relative overflow-hidden">
+
+                <div class="absolute right-0 top-0 h-16 w-16">
+                    <div
+                        class="absolute transform rotate-45 bg-orange-600 text-center text-white font-semibold py-1 right-[-55px] top-[12px] w-[170px]">
+                        Official</div>
+                </div>
+
+                <div>
+                    <div class="w-full aspect-4/6 overflow-hidden">
+                        <picture>
+                            <source srcset="https://temp.compsci88.com/cover/normal/01J76XYDJ8EJGFDMR878PJM89D.webp"
+                                width="400" height="600" media="(min-width: 768px)" type="image/webp">
+                            <source srcset="https://temp.compsci88.com/cover/small/01J76XYDJ8EJGFDMR878PJM89D.webp"
+                                width="200" height="300" type="image/webp">
+                            <img src="https://temp.compsci88.com/cover/fallback/01J76XYDJ8EJGFDMR878PJM89D.jpg"
+                                alt="[Oshi No Ko] cover" width="400" height="600" decoding="async">
+                        </picture>
+                    </div>
+                    <div
+                        class="w-full h-16 absolute bottom-0 flex flex-col items-center justify-center bg-linear-to-r from-black to-slate-900 hover:from-slate-900 hover:to-black opacity-90">
+                        <div class="text-ellipsis truncate text-white text-center text-lg z-20 w-[90%]">[Oshi No Ko]
+                        </div>
+                    </div>
+
+                    <div class="absolute left-2 bottom-[4.5rem]">
+                        <span class="tooltip tooltip-top" data-tip="Manga">
+                            <svg class="w-8 h-8" version="1.1" id="Layer_1" xmlns="http://www.w3.org/2000/svg"
+                                xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 512 512" xml:space="preserve"
+                                fill="#000000">
+                                <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
+                                <g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g>
+                                <g id="SVGRepo_iconCarrier">
+                                    <circle style="fill:#F0F0F0;" cx="256" cy="256" r="256"></circle>
+                                    <circle style="fill:#D80027;" cx="256" cy="256" r="111.304"></circle>
+                                </g>
+                            </svg>
+                        </span>
+                    </div>
+
+                </div>
+            </article>
+        </a>
+    </section>
+    <section class="hidden lg:block lg:w-[75%] xl:w-[80%]">
+        <div class="text-lg font-semibold flex items-center gap-1">
+
+            <span class="tooltip tooltip-bottom" data-tip="Official Translation">
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <g id="SVGRepo_bgCarrier-5" stroke-width="0"></g>
+                    <g id="SVGRepo_tracerCarrier-5" stroke-linecap="round" stroke-linejoin="round"></g>
+                    <g id="SVGRepo_iconCarrier-5">
+                        <path
+                            d="M8.5 12.5L10.0089 14.0089C10.3526 14.3526 10.5245 14.5245 10.7198 14.5822C10.8914 14.6328 11.0749 14.6245 11.2412 14.5585C11.4305 14.4834 11.5861 14.2967 11.8973 13.9232L16 9M16.3287 4.75855C17.0676 4.77963 17.8001 5.07212 18.364 5.636C18.9278 6.19989 19.2203 6.9324 19.2414 7.67121C19.2623 8.40232 19.2727 8.76787 19.2942 8.85296C19.3401 9.0351 19.2867 8.90625 19.383 9.06752C19.428 9.14286 19.6792 9.40876 20.1814 9.94045C20.6889 10.4778 21 11.2026 21 12C21 12.7974 20.6889 13.5222 20.1814 14.0595C19.6792 14.5912 19.428 14.8571 19.383 14.9325C19.2867 15.0937 19.3401 14.9649 19.2942 15.147C19.2727 15.2321 19.2623 15.5977 19.2414 16.3288C19.2203 17.0676 18.9278 17.8001 18.364 18.364C17.8001 18.9279 17.0676 19.2204 16.3287 19.2414C15.5976 19.2623 15.2321 19.2727 15.147 19.2942C14.9649 19.3401 15.0937 19.2868 14.9325 19.3831C14.8571 19.4281 14.5912 19.6792 14.0595 20.1814C13.5222 20.6889 12.7974 21 12 21C11.2026 21 10.4778 20.6889 9.94047 20.1814C9.40874 19.6792 9.14287 19.4281 9.06753 19.3831C8.90626 19.2868 9.0351 19.3401 8.85296 19.2942C8.76788 19.2727 8.40225 19.2623 7.67121 19.2414C6.93238 19.2204 6.19986 18.9279 5.63597 18.364C5.07207 17.8001 4.77959 17.0676 4.75852 16.3287C4.73766 15.5976 4.72724 15.2321 4.70578 15.147C4.65985 14.9649 4.71322 15.0937 4.61691 14.9324C4.57192 14.8571 4.32082 14.5912 3.81862 14.0595C3.31113 13.5222 3 12.7974 3 12C3 11.2026 3.31113 10.4778 3.81862 9.94048C4.32082 9.40876 4.57192 9.14289 4.61691 9.06755C4.71322 8.90628 4.65985 9.03512 4.70578 8.85299C4.72724 8.7679 4.73766 8.40235 4.75852 7.67126C4.77959 6.93243 5.07207 6.1999 5.63597 5.636C6.19986 5.07211 6.93238 4.77963 7.67121 4.75855C8.40232 4.73769 8.76788 4.72727 8.85296 4.70581C9.0351 4.65988 8.90626 4.71325 9.06753 4.61694C9.14287 4.57195 9.40876 4.32082 9.94047 3.81863C10.4778 3.31113 11.2026 3 12 3C12.7974 3 13.5222 3.31114 14.0595 3.81864C14.5913 4.32084 14.8571 4.57194 14.9325 4.61693C15.0937 4.71324 14.9649 4.65988 15.147 4.70581C15.2321 4.72726 15.5976 4.73769 16.3287 4.75855Z"
+                            stroke="#d8b4fe" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                    </g>
+                </svg>
+            </span>
+
+
+            <span class="tooltip tooltip-bottom" data-tip="Anime Adaptation">
+                <svg class="w-5 h-5" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
+                    <g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g>
+                    <g id="SVGRepo_iconCarrier">
+                        <rect width="48" height="48" fill="white" fill-opacity="0.01"></rect>
+                        <path d="M48 0H0V48H48V0Z" fill="white" fill-opacity="0.01"></path>
+                        <path
+                            d="M42 12H6C4.89543 12 4 12.8954 4 14V40C4 41.1046 4.89543 42 6 42H42C43.1046 42 44 41.1046 44 40V14C44 12.8954 43.1046 12 42 12Z"
+                            fill="#2F88FF" stroke="#5b9bfb" stroke-width="4" stroke-linejoin="round"></path>
+                        <path d="M31 19H11V35H31V19Z" fill="#43CCF8" stroke="white" stroke-width="4"
+                            stroke-linejoin="round"></path>
+                        <path d="M14 4.5L23.0909 12L34 2" stroke="#5b9bfb" stroke-width="4" stroke-linecap="round"
+                            stroke-linejoin="round"></path>
+                        <path d="M38 18V19" stroke="white" stroke-width="4" stroke-linecap="round"
+                            stroke-linejoin="round"></path>
+                        <path d="M38 25V26" stroke="white" stroke-width="4" stroke-linecap="round"
+                            stroke-linejoin="round"></path>
+                    </g>
+                </svg>
+            </span>
+
+
+            <span class="tooltip tooltip-bottom" data-tip="[Oshi No Ko]">
+                <a href="https://weebcentral.com/series/01J76XYDJ8EJGFDMR878PJM89D/Oshi-no-Ko"
+                    class="line-clamp-1 link link-hover">[Oshi No Ko]</a>
+            </span>
+        </div>
+        <div class="opacity-70">
+            <strong>Year:</strong>
+            <span>2020</span>
+        </div>
+        <div class="opacity-70">
+            <strong>Status:</strong>
+            <span>Complete</span>
+        </div>
+        <div class="opacity-70">
+            <strong>Type:</strong>
+            <span>Manga</span>
+        </div>
+        <div>
+            <strong class="opacity-70">Author(s): </strong>
+
+            <span><a href="https://weebcentral.com/search?author=AKASAKA+Aka" class="link link-info link-hover">AKASAKA
+                    Aka</a>,</span>
+
+            <span><a href="https://weebcentral.com/search?author=YOKOYARI+Mengo"
+                    class="link link-info link-hover">YOKOYARI Mengo</a></span>
+
+        </div>
+        <div class="opacity-70">
+            <strong>Tag(s): </strong>
+
+            <span>Comedy,</span>
+
+            <span>Drama,</span>
+
+            <span>Mystery,</span>
+
+            <span>Psychological,</span>
+
+            <span>Seinen,</span>
+
+            <span>Slice of Life,</span>
+
+            <span>Tragedy</span>
+
+        </div>
+    </section>
+</article>

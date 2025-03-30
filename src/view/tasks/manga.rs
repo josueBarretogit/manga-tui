@@ -8,6 +8,7 @@ use crate::backend::AppDirectories;
 use crate::backend::error_log::write_to_error_log;
 use crate::backend::manga_downloader::cbz_downloader::CbzDownloader;
 use crate::backend::manga_downloader::epub_downloader::EpubDownloader;
+use crate::backend::manga_downloader::pdf_downloader::PdfDownloader;
 use crate::backend::manga_downloader::raw_images::RawImagesDownloader;
 use crate::backend::manga_downloader::{ChapterToDownloadSanitized, MangaDownloader};
 use crate::backend::manga_provider::{Chapter, Languages, MangaPageProvider};
@@ -79,9 +80,10 @@ pub async fn download_all_chapters<T: MangaPageProvider>(args: DownloadAllChapte
                             };
 
                             let downloader: &dyn MangaDownloader = match args.config.download_type {
-                                DownloadType::Raw => &RawImagesDownloader::new(),
                                 DownloadType::Cbz => &CbzDownloader::new(),
+                                DownloadType::Raw => &RawImagesDownloader::new(),
                                 DownloadType::Epub => &EpubDownloader::new(),
+                                DownloadType::Pdf => &PdfDownloader::new(),
                             };
 
                             let download_result = downloader
@@ -196,6 +198,7 @@ pub async fn download_single_chapter<T: MangaPageProvider, S: MangaTracker>(args
                 DownloadType::Cbz => &CbzDownloader::new(),
                 DownloadType::Raw => &RawImagesDownloader::new(),
                 DownloadType::Epub => &EpubDownloader::new(),
+                DownloadType::Pdf => &PdfDownloader::new(),
             };
 
             match downloader.save_chapter_in_file_system(&AppDirectories::MangaDownloads.get_full_path(), chapter_to_download) {
