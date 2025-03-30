@@ -22,7 +22,6 @@ use crate::global::PREFERRED_LANGUAGE;
 use crate::view::widgets::StatefulWidgetFrame;
 
 pub mod mangadex;
-pub mod manganato;
 pub mod weebcentral;
 
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
@@ -654,8 +653,6 @@ pub enum MangaProviders {
     #[default]
     #[strum(to_string = "mangadex")]
     Mangadex,
-    #[strum(to_string = "manganato")]
-    Manganato,
     #[strum(to_string = "weebcentral")]
     Weebcentral,
 }

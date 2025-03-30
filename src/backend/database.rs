@@ -747,7 +747,7 @@ mod test {
             id: &manga_id,
             title: "some_title",
             img_url: None,
-            provider: MangaProviders::Manganato,
+            provider: MangaProviders::Weebcentral,
         })?;
 
         database.create_chapter_if_not_exists(ChapterToInsert {
@@ -781,7 +781,7 @@ mod test {
             id: &manga_id,
             title: "some_title",
             img_url: None,
-            provider: MangaProviders::Manganato,
+            provider: MangaProviders::Weebcentral,
         })?;
 
         conn.execute("INSERT INTO chapters(id, title, manga_id) VALUES(?1, ?2, ?3)", params![
@@ -819,7 +819,7 @@ mod test {
             id: &manga_id,
             title: "some_title",
             img_url: None,
-            provider: MangaProviders::Manganato,
+            provider: MangaProviders::Weebcentral,
         })?;
 
         let manga_was_saved = database.check_exists(&manga_id, Table::Mangas)?;
@@ -844,7 +844,7 @@ mod test {
             id: &manga_id,
             title: "some_title",
             img_url: None,
-            provider: MangaProviders::Manganato,
+            provider: MangaProviders::Weebcentral,
         })?;
 
         let manga_should_not_be_plan_to_read = database.manga_is_plan_to_read(&manga_id)?;
@@ -855,7 +855,7 @@ mod test {
             id: &manga_id,
             title: "some_title",
             img_url: None,
-            provider: MangaProviders::Manganato,
+            provider: MangaProviders::Weebcentral,
         })?;
 
         let manga_should_be_plan_to_read = database.manga_is_plan_to_read(&manga_id)?;
@@ -885,7 +885,7 @@ mod test {
                 id: &chapter_id,
                 ..Default::default()
             },
-            provider: MangaProviders::Manganato,
+            provider: MangaProviders::Weebcentral,
         })?;
 
         let manga_was_created = database.check_exists(&manga_id, Table::Mangas)?;
@@ -915,7 +915,7 @@ mod test {
             title: "some_title",
             img_url: None,
 
-            provider: MangaProviders::Manganato,
+            provider: MangaProviders::Weebcentral,
         })?;
 
         database.save_history(MangaReadingHistorySave {
@@ -927,7 +927,7 @@ mod test {
                 ..Default::default()
             },
 
-            provider: MangaProviders::Manganato,
+            provider: MangaProviders::Weebcentral,
         })?;
 
         let chapters = get_all_chapters(&connection)?;
@@ -955,7 +955,7 @@ mod test {
             id: &manga_id,
             title: "some_title",
             img_url: None,
-            provider: MangaProviders::Manganato,
+            provider: MangaProviders::Weebcentral,
         })?;
 
         let chapter_which_is_already_reading = ChapterToInsert {
@@ -980,7 +980,7 @@ mod test {
                     id: &chapter_id,
                     ..Default::default()
                 },
-                provider: MangaProviders::Manganato,
+                provider: MangaProviders::Weebcentral,
             })
             .expect("could not save chapter history");
 
@@ -1012,7 +1012,7 @@ mod test {
             id: &manga_id,
             title: "some_manga",
             img_url: None,
-            provider: MangaProviders::Manganato,
+            provider: MangaProviders::Weebcentral,
         })?;
 
         database.create_chapter_if_not_exists(ChapterToInsert {
@@ -1065,7 +1065,7 @@ mod test {
             id: &manga_is_in_reading_history_id,
             title: "some_title",
             img_url: None,
-            provider: MangaProviders::Manganato,
+            provider: MangaProviders::Weebcentral,
         })?;
 
         database.insert_manga_in_reading_history(&manga_is_in_reading_history_id)?;
@@ -1074,7 +1074,7 @@ mod test {
             id: &manga_not_in_reading_history_id,
             title: "some_title",
             img_url: None,
-            provider: MangaProviders::Manganato,
+            provider: MangaProviders::Weebcentral,
         })?;
 
         let history = database.get_history(GetHistoryArgs {
@@ -1082,7 +1082,7 @@ mod test {
             page: 1,
             search: None,
             items_per_page: 100,
-            provider: MangaProviders::Manganato,
+            provider: MangaProviders::Weebcentral,
         })?;
 
         assert!(history.total_items > 0);
@@ -1101,16 +1101,16 @@ mod test {
         database.setup()?;
 
         let manga_id_mangadex = Uuid::new_v4().to_string();
-        let manga_id_manganato = Uuid::new_v4().to_string();
+        let manga_id_weebcentral = Uuid::new_v4().to_string();
 
         database.create_manga_if_not_exists(MangaInsert {
-            id: &manga_id_manganato,
-            title: "of manganato",
+            id: &manga_id_weebcentral,
+            title: "of Weebcentral",
             img_url: None,
-            provider: MangaProviders::Manganato,
+            provider: MangaProviders::Weebcentral,
         })?;
 
-        database.insert_manga_in_reading_history(&manga_id_manganato)?;
+        database.insert_manga_in_reading_history(&manga_id_weebcentral)?;
 
         database.create_manga_if_not_exists(MangaInsert {
             id: &manga_id_mangadex,
@@ -1127,20 +1127,20 @@ mod test {
             page: 1,
             search: None,
             items_per_page: 100,
-            provider: MangaProviders::Manganato,
+            provider: MangaProviders::Weebcentral,
         })?;
 
-        // There are 2 mangas but of manganato there is only one
+        // There are 2 mangas but of Weebcentral there is only one
         assert_eq!(1, history.total_items);
 
         assert!(!history.mangas.iter().any(|manga| manga.id == manga_id_mangadex));
 
-        assert!(history.mangas.iter().any(|manga| manga.id == manga_id_manganato));
+        assert!(history.mangas.iter().any(|manga| manga.id == manga_id_weebcentral));
 
         let history = database.get_history(GetHistoryArgs {
             hist_type: MangaHistoryType::ReadingHistory,
             page: 1,
-            search: SearchTerm::trimmed_lowercased("manganato"),
+            search: SearchTerm::trimmed_lowercased("Weebcentral"),
             items_per_page: 100,
             provider: MangaProviders::Mangadex,
         })?;
@@ -1149,7 +1149,7 @@ mod test {
         assert_eq!(0, history.total_items);
 
         assert!(!history.mangas.iter().any(|manga| manga.id == manga_id_mangadex));
-        assert!(!history.mangas.iter().any(|manga| manga.id == manga_id_manganato));
+        assert!(!history.mangas.iter().any(|manga| manga.id == manga_id_weebcentral));
 
         Ok(())
     }
@@ -1167,7 +1167,7 @@ mod test {
             id: &manga_id_filtered_out,
             title: "filtered_out",
             img_url: None,
-            provider: MangaProviders::Manganato,
+            provider: MangaProviders::Weebcentral,
         })?;
 
         database.insert_manga_in_reading_history(&manga_id_filtered_out)?;
@@ -1176,7 +1176,7 @@ mod test {
             id: &manga_id_included_in_search,
             title: "included",
             img_url: None,
-            provider: MangaProviders::Manganato,
+            provider: MangaProviders::Weebcentral,
         })?;
 
         database.insert_manga_in_reading_history(&manga_id_included_in_search)?;
@@ -1186,7 +1186,7 @@ mod test {
             page: 1,
             search: SearchTerm::trimmed_lowercased("Included"),
             items_per_page: 100,
-            provider: MangaProviders::Manganato,
+            provider: MangaProviders::Weebcentral,
         })?;
 
         assert!(history.total_items > 0);
@@ -1210,14 +1210,14 @@ mod test {
             id: &manga_id_filtered_out,
             title: "filtered_out",
             img_url: None,
-            provider: MangaProviders::Manganato,
+            provider: MangaProviders::Weebcentral,
         };
 
         let manga_included = MangaPlanToReadSave {
             id: &manga_id_included_in_search,
             title: "included",
             img_url: None,
-            provider: MangaProviders::Manganato,
+            provider: MangaProviders::Weebcentral,
         };
 
         database.save_plan_to_read(manga_filtered_out)?;
@@ -1229,7 +1229,7 @@ mod test {
             page: 1,
             search: SearchTerm::trimmed_lowercased("Included"),
             items_per_page: 100,
-            provider: MangaProviders::Manganato,
+            provider: MangaProviders::Weebcentral,
         })?;
 
         assert!(history.total_items > 0);
@@ -1253,14 +1253,14 @@ mod test {
             id: &manga_id_1,
             title: "manga_1",
             img_url: None,
-            provider: MangaProviders::Manganato,
+            provider: MangaProviders::Weebcentral,
         };
 
         let manga_2 = MangaPlanToReadSave {
             id: &manga_id_2,
             title: "manga_2",
             img_url: None,
-            provider: MangaProviders::Manganato,
+            provider: MangaProviders::Weebcentral,
         };
 
         database.save_plan_to_read(manga_1)?;
@@ -1272,7 +1272,7 @@ mod test {
             page: 1,
             search: None,
             items_per_page: 100,
-            provider: MangaProviders::Manganato,
+            provider: MangaProviders::Weebcentral,
         })?;
 
         assert!(history.total_items > 0);
@@ -1300,7 +1300,7 @@ mod test {
             manga_id: &manga_id,
             manga_title: "some_title",
             img_url: None,
-            provider: MangaProviders::Manganato,
+            provider: MangaProviders::Weebcentral,
         })?;
 
         assert!(database.check_exists(&manga_id, Table::Mangas)?);
@@ -1332,7 +1332,7 @@ mod test {
             id: &manga_id_exist_in_database,
             title: "some_title",
             img_url: None,
-            provider: MangaProviders::Manganato,
+            provider: MangaProviders::Weebcentral,
         })?;
 
         database.create_chapter_if_not_exists(ChapterToInsert {
@@ -1379,7 +1379,7 @@ mod test {
             id: &manga_id,
             title: "some_title",
             img_url: None,
-            provider: MangaProviders::Manganato,
+            provider: MangaProviders::Weebcentral,
         })?;
 
         database.set_chapter_downloaded(SetChapterDownloaded {
@@ -1554,7 +1554,7 @@ mod test {
             id: &id_manga,
             title: "some_title",
             img_url: None,
-            provider: MangaProviders::Manganato,
+            provider: MangaProviders::Weebcentral,
         })?;
 
         let id_was_created: String = connection
@@ -1568,7 +1568,7 @@ mod test {
                 id: &id_manga,
                 title: "some_title",
                 img_url: None,
-                provider: MangaProviders::Manganato,
+                provider: MangaProviders::Weebcentral,
             })
             .expect("should not try to create already existing manga");
 

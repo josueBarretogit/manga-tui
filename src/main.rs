@@ -14,9 +14,6 @@ use backend::manga_provider::MangaProviders;
 use backend::manga_provider::mangadex::filter::MangadexFilterProvider;
 use backend::manga_provider::mangadex::filter_widget::MangadexFilterWidget;
 use backend::manga_provider::mangadex::{API_URL_BASE, COVER_IMG_URL_BASE, MangadexClient};
-use backend::manga_provider::manganato::filter_state::{ManganatoFilterState, ManganatoFiltersProvider};
-use backend::manga_provider::manganato::filter_widget::ManganatoFilterWidget;
-use backend::manga_provider::manganato::{MANGANATO_BASE_URL, ManganatoProvider};
 use backend::manga_provider::weebcentral::filter_state::{WeebcentralFilterState, WeebcentralFiltersProvider};
 use backend::manga_provider::weebcentral::filter_widget::WeebcentralFilterWidget;
 use backend::manga_provider::weebcentral::{WEEBCENTRAL_BASE_URL, WeebcentralProvider};
@@ -141,18 +138,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             run_app(ratatui::init(), mangadex_client, anilist_client, MangadexFilterProvider::new(), MangadexFilterWidget::new())
                 .await?;
-        },
-        MangaProviders::Manganato => {
-            logger.inform("Using manganato as manga provider");
-            tokio::time::sleep(Duration::from_secs(1)).await;
-            run_app(
-                ratatui::init(),
-                ManganatoProvider::new(MANGANATO_BASE_URL.parse().unwrap(), cache_provider),
-                anilist_client,
-                ManganatoFiltersProvider::new(ManganatoFilterState {}),
-                ManganatoFilterWidget {},
-            )
-            .await?;
         },
         MangaProviders::Weebcentral => {
             logger.inform("Using Weeb central as manga provider");
