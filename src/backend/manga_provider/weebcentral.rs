@@ -11,13 +11,17 @@ use http::{HeaderMap, HeaderValue, StatusCode, status};
 use manga_tui::SearchTerm;
 use reqwest::cookie::Jar;
 use reqwest::{Client, Url};
-use response::{ChapterPageData, ChapterPagesLinks, LatestMangas, MangaPageData, PopularMangasWeebCentral, WeebcentralChapters};
+use response::{
+    ChapterPageData, ChapterPagesLinks, LatestMangas, MangaPageData, PopularMangasWeebCentral, SearchPageMangas,
+    WeebcentralChapters,
+};
 
 use super::{
-    Author, Chapter, ChapterOrderBy, ChapterPageUrl, DecodeBytesToImage, FeedPageProvider, FetchChapterBookmarked, Genres,
-    GetChapterPages, GetChaptersResponse, GetMangasResponse, GetRawImage, GoToReadChapter, HomePageMangaProvider, Languages,
-    LatestChapter, ListOfChapters, Manga, MangaPageProvider, MangaProvider, MangaProviders, PopularManga, ProviderIdentity,
-    ReaderPageProvider, RecentlyAddedManga, SearchChapterById, SearchMangaById, SearchMangaPanel, SearchPageProvider,
+    Author, Chapter, ChapterFilters, ChapterOrderBy, ChapterPageUrl, DecodeBytesToImage, FeedPageProvider, FetchChapterBookmarked,
+    Genres, GetChapterPages, GetChaptersResponse, GetMangasResponse, GetRawImage, GoToReadChapter, HomePageMangaProvider,
+    Languages, LatestChapter, ListOfChapters, Manga, MangaPageProvider, MangaProvider, MangaProviders, Pagination, PopularManga,
+    ProviderIdentity, ReaderPageProvider, RecentlyAddedManga, SearchChapterById, SearchMangaById, SearchMangaPanel,
+    SearchPageProvider,
 };
 use crate::backend::cache::{Cacher, InsertEntry};
 use crate::backend::html_parser::{HtmlElement, ParseHtml};
@@ -32,6 +36,7 @@ pub static WEEBCENTRAL_BASE_URL: &str = "https://weebcentral.com/";
 
 /// Weebcentral: `https://weebcentral.com/`
 /// Some things to keep in mind:
+/// - This site does not provide which volume a chapter is in and the chapter's title is also not provided
 /// - The url of a Manga page can be built like this: `https://weebcentral.com/series/{manga_id}`
 /// - The url of a Chapter page can be built like this: `https://weebcentral.com/chapter/{chapter_id}`
 /// - The only language they provide is english,
@@ -39,10 +44,10 @@ pub static WEEBCENTRAL_BASE_URL: &str = "https://weebcentral.com/";
 ///   (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0`
 /// - There is no way of getting images with lower or higher quality, so `image_quality` doesnt apply to weebcentral
 /// - The `Referer` header `https://weebcentral.com/` must be used to get chapter pages when reading a chapter or else cloudfare
-///   blocks the request, it is not required on the rest of requests
+///   blocks the request, it is not required in other requests
 #[derive(Clone, Debug)]
 pub struct WeebcentralProvider {
-    client: reqwest::Client,
+    client: Client,
     base_url: Url,
     chapter_pages_header: HeaderMap,
     cache_provider: Arc<dyn Cacher>,
@@ -52,6 +57,7 @@ impl WeebcentralProvider {
     const CHAPTER_PAGE_CACHE_DURATION: Duration = Duration::from_secs(30);
     const HOME_PAGE_CACHE_DURATION: Duration = Duration::from_secs(10);
     const MANGA_PAGE_CACHE_DURATION: Duration = Duration::from_secs(40);
+    /// The search page cache is the shortest because it may change a lot
     const SEARCH_PAGE_CACHE_DURATION: Duration = Duration::from_secs(5);
 
     pub fn new(base_url: Url, cache_provider: Arc<dyn Cacher>) -> Self {
@@ -89,8 +95,8 @@ impl WeebcentralProvider {
 
         let client = Client::builder()
             .cookie_store(true)
+            .timeout(Duration::from_secs(30))
             .default_headers(default_headers)
-            .http2_prior_knowledge()
             .user_agent("Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0")
             .build()
             .unwrap();
@@ -103,22 +109,117 @@ impl WeebcentralProvider {
         }
     }
 
-    /// https://weebcentral.com/chapters/01JJB9BP43FHYCHAAZDVXKPSEW/images?is_prev=False&current_page=1&reading_style=long_strip
+    /// Constructs the url with which we can get the pages of a chapter
+    /// Returns https://weebcentral.com/chapters/01JJB9BP43FHYCHAAZDVXKPSEW/images?is_prev=False&current_page=1&reading_style=long_strip
     fn make_chapter_pages_url(&self, chapter_id: &str) -> String {
         format!("{}chapters/{chapter_id}/images?is_prev=False&current_page=1&reading_style=long_strip", self.base_url)
     }
 
-    /// https://weebcentral.com/series/01JEXZK546WKQ91SNBTXYPT3VN/full-chapter-list
+    /// Constructs the url with which we can get the list of chapters of a manga
+    /// Returns https://weebcentral.com/series/01JEXZK546WKQ91SNBTXYPT3VN/full-chapter-list
     fn make_full_chapter_list_url(&self, manga_id: &str) -> String {
         format!("{}series/{manga_id}/full-chapter-list", self.base_url)
     }
 
-    async fn get_chapter(&self, chapter_id: &str) -> Result<ChapterToRead, Box<dyn Error>> {
-        let chapter_page_url = self.make_chapter_pages_url(chapter_id);
+    /// Constructs the url with which we can get the chapter page
+    /// Returns https://weebcentral.com/chapters/01JEXZK546WKQ91SNBTXYPT3VN
+    fn make_chapter_page_url(&self, chapter_id: &str) -> String {
+        format!("{}chapters/{chapter_id}", self.base_url)
+    }
 
+    /// Constructs the url with which we can get the manga page
+    /// Returns https://weebcentral.com/series/01JEXZK546WKQ91SNBTXYPT3VN
+    fn make_manga_page_url(&self, manga_id: &str) -> String {
+        format!("{}series/{manga_id}", self.base_url)
+    }
+
+    /// Weebcentral doesn't provide:
+    /// - title
+    /// - volume_number
+    /// - thus volume_number cannot be set
+    fn map_chapter_to_read(&self, chapter_id: &str, chapter_data: ChapterPageData, pages: Vec<ChapterPageUrl>) -> ChapterToRead {
+        ChapterToRead {
+            id: chapter_id.to_string(),
+            title: "".to_string(),
+            number: chapter_data.number.parse().unwrap_or_default(),
+            volume_number: None,
+            num_page_bookmarked: None,
+            language: Languages::English,
+            pages_url: pages.into_iter().map(|page| page.url).collect(),
+        }
+    }
+
+    /// Weebcentral doesn't provide:
+    /// - chapter title
+    /// - volume_number
+    fn map_chapters(&self, chapters: WeebcentralChapters, manga_id: &str) -> Vec<Chapter> {
+        chapters
+            .chapters
+            .into_iter()
+            .map(|chap| Chapter {
+                id: chap.id.clone(),
+                id_safe_for_download: chap.id,
+                manga_id: manga_id.to_string(),
+                title: "".to_string(),
+                language: Languages::English,
+                chapter_number: chap.number,
+                volume_number: None,
+                scanlator: Some("Weeb central".to_string()),
+                publication_date: chap.datetime,
+            })
+            .collect()
+    }
+
+    fn map_chapters_with_filters(
+        &self,
+        chapters: WeebcentralChapters,
+        manga_id: &str,
+        filters: ChapterFilters,
+        pagination: Pagination,
+    ) -> GetChaptersResponse {
+        let total_chapters = chapters.chapters.len();
+
+        let mut chapters: Vec<Chapter> = self.map_chapters(chapters, manga_id);
+
+        if filters.order == ChapterOrderBy::Ascending {
+            chapters.reverse();
+        }
+
+        let from = pagination.index_to_slice_from();
+        let to = pagination.to_index(total_chapters);
+
+        let chapters = chapters.as_slice().get(from..to).unwrap_or(&[]);
+
+        GetChaptersResponse {
+            total_chapters: total_chapters as u32,
+            chapters: chapters.to_vec(),
+        }
+    }
+
+    /// Weebcentral doesn't provide:
+    /// - chapter title
+    /// - volume_number
+    fn map_chapters_latest_chapters(&self, chapters: WeebcentralChapters, manga_id: &str) -> Vec<LatestChapter> {
+        chapters
+            .chapters
+            .into_iter()
+            .take(5)
+            .map(|chap| LatestChapter {
+                id: chap.id.clone(),
+                manga_id: manga_id.to_string(),
+                title: "".to_string(),
+                language: Languages::English,
+                chapter_number: chap.number,
+                volume_number: None,
+                publication_date: chap.datetime,
+            })
+            .collect()
+    }
+
+    async fn get_chapter(&self, chapter_id: &str) -> Result<ChapterToRead, Box<dyn Error>> {
         let pages_url = self.get_chapter_pages_url_with_extension(chapter_id, "", ImageQuality::default()).await?;
 
-        let chapter_page_url = format!("{}chapters/{chapter_id}", self.base_url);
+        let chapter_page_url = self.make_chapter_page_url(chapter_id);
 
         let cache = self.cache_provider.get(&chapter_page_url)?;
 
@@ -126,21 +227,13 @@ impl WeebcentralProvider {
             Some(cached) => {
                 let chapter_data = ChapterPageData::parse_html(HtmlElement::new(cached.data))?;
 
-                Ok(ChapterToRead {
-                    id: chapter_id.to_string(),
-                    title: "".to_string(),
-                    number: chapter_data.number.parse().unwrap_or_default(),
-                    volume_number: None,
-                    num_page_bookmarked: None,
-                    language: Languages::English,
-                    pages_url: pages_url.into_iter().map(|page| page.url).collect(),
-                })
+                Ok(self.map_chapter_to_read(chapter_id, chapter_data, pages_url))
             },
             None => {
                 let response = self.client.get(&chapter_page_url).send().await?;
 
                 if response.status() != StatusCode::OK {
-                    return Err(format!("{:#?}", response).into());
+                    return Err(format!("Could not get additional data for chapter with id: {chapter_id} {:#?}", response).into());
                 }
 
                 let doc = response.text().await?;
@@ -149,21 +242,13 @@ impl WeebcentralProvider {
                     .cache(InsertEntry {
                         id: &chapter_page_url,
                         data: &doc,
-                        duration: Self::MANGA_PAGE_CACHE_DURATION,
+                        duration: Self::CHAPTER_PAGE_CACHE_DURATION,
                     })
                     .ok();
 
                 let chapter_data = ChapterPageData::parse_html(HtmlElement::new(doc))?;
 
-                Ok(ChapterToRead {
-                    id: chapter_id.to_string(),
-                    title: "".to_string(),
-                    number: chapter_data.number.parse().unwrap_or_default(),
-                    volume_number: None,
-                    num_page_bookmarked: None,
-                    language: Languages::English,
-                    pages_url: pages_url.into_iter().map(|page| page.url).collect(),
-                })
+                Ok(self.map_chapter_to_read(chapter_id, chapter_data, pages_url))
             },
         }
     }
@@ -183,7 +268,11 @@ impl WeebcentralProvider {
                 let response = self.client.get(&url).send().await?;
 
                 if response.status() != StatusCode::OK {
-                    return Err(format!("Could not get list of chapters on weebcentral").into());
+                    return Err(format!(
+                        "Could not get list of chapters on weebcentral, more details about the response: {:#?}",
+                        response
+                    )
+                    .into());
                 }
 
                 let doc = response.text().await?;
@@ -192,7 +281,7 @@ impl WeebcentralProvider {
                     .cache(InsertEntry {
                         id: &url,
                         data: &doc,
-                        duration: Self::MANGA_PAGE_CACHE_DURATION,
+                        duration: Self::CHAPTER_PAGE_CACHE_DURATION,
                     })
                     .ok();
 
@@ -204,21 +293,9 @@ impl WeebcentralProvider {
     }
 }
 
-impl ProviderIdentity for WeebcentralProvider {
-    fn name(&self) -> super::MangaProviders {
-        MangaProviders::Weebcentral
-    }
-}
-
 impl GetRawImage for WeebcentralProvider {
     async fn get_raw_image(&self, url: &str) -> Result<bytes::Bytes, Box<dyn Error>> {
-        let response = self
-            .client
-            .get(url)
-            .timeout(Duration::from_secs(3))
-            .headers(self.chapter_pages_header.clone())
-            .send()
-            .await?;
+        let response = self.client.get(url).headers(self.chapter_pages_header.clone()).send().await?;
 
         if response.status() != StatusCode::OK {
             return Err(format!("Could not get image on weebcentral with url: {url}").into());
@@ -310,7 +387,7 @@ impl HomePageMangaProvider for WeebcentralProvider {
 
 impl SearchMangaById for WeebcentralProvider {
     async fn get_manga_by_id(&self, manga_id: &str) -> Result<super::Manga, Box<dyn Error>> {
-        let url = format!("{}series/{manga_id}/", self.base_url);
+        let url = self.make_manga_page_url(manga_id);
         let cache = self.cache_provider.get(&url)?;
 
         match cache {
@@ -323,7 +400,11 @@ impl SearchMangaById for WeebcentralProvider {
                 let response = self.client.get(&url).send().await?;
 
                 if response.status() != StatusCode::OK {
-                    return Err(format!("manga page with id: {manga_id} could not be found on weebcentral, {url}").into());
+                    return Err(format!(
+                        "manga page with id: {manga_id} could not be found on weebcentral, more details about the response: {:#?}",
+                        response
+                    )
+                    .into());
                 }
 
                 let doc = response.text().await?;
@@ -353,6 +434,8 @@ impl GoToReadChapter for WeebcentralProvider {
 }
 
 impl GetChapterPages for WeebcentralProvider {
+    /// On Weebcentral `manga_id` is not required to get a chapter's pages and neither is
+    /// `image_quality`
     async fn get_chapter_pages_url_with_extension(
         &self,
         chapter_id: &str,
@@ -370,13 +453,25 @@ impl GetChapterPages for WeebcentralProvider {
                 Ok(pages.pages.into_iter().map(ChapterPageUrl::from).collect())
             },
             None => {
-                let res = self.client.get(url).send().await?;
+                let res = self.client.get(&url).send().await?;
 
                 if res.status() != StatusCode::OK {
-                    return Err(format!("Could not get chapter pages for chapter with id: {chapter_id}").into());
+                    return Err(format!(
+                        "Could not get chapter pages for chapter with id: {chapter_id}, more detailes about the response: {:#?}",
+                        res
+                    )
+                    .into());
                 }
 
                 let html = res.text().await?;
+
+                self.cache_provider
+                    .cache(InsertEntry {
+                        id: &url,
+                        data: &html,
+                        duration: Self::CHAPTER_PAGE_CACHE_DURATION,
+                    })
+                    .ok();
 
                 let pages = ChapterPagesLinks::parse_html(HtmlElement::new(html))?;
 
@@ -408,38 +503,7 @@ impl MangaPageProvider for WeebcentralProvider {
         match cache {
             Some(cached) => {
                 let chapters = WeebcentralChapters::parse_html(HtmlElement::new(cached.data))?;
-
-                let total_chapters = chapters.chapters.len();
-
-                let mut chapters: Vec<Chapter> = chapters
-                    .chapters
-                    .into_iter()
-                    .map(|chap| Chapter {
-                        id: chap.id.clone(),
-                        id_safe_for_download: chap.id,
-                        manga_id: manga_id.to_string(),
-                        title: "".to_string(),
-                        language: Languages::English,
-                        chapter_number: chap.number,
-                        volume_number: None,
-                        scanlator: None,
-                        publication_date: chap.datetime,
-                    })
-                    .collect();
-
-                if filters.order == ChapterOrderBy::Ascending {
-                    chapters.reverse();
-                }
-
-                let from = pagination.index_to_slice_from();
-                let to = pagination.to_index(total_chapters);
-
-                let chapters = chapters.as_slice().get(from..to).unwrap_or(&[]);
-
-                Ok(GetChaptersResponse {
-                    total_chapters: total_chapters as u32,
-                    chapters: chapters.to_vec(),
-                })
+                Ok(self.map_chapters_with_filters(chapters, manga_id, filters, pagination))
             },
             None => {
                 let response = self.client.get(&full_list_url).send().await?;
@@ -457,43 +521,13 @@ impl MangaPageProvider for WeebcentralProvider {
                     .cache(InsertEntry {
                         id: &full_list_url,
                         data: &response,
-                        duration: Self::MANGA_PAGE_CACHE_DURATION,
+                        duration: Self::CHAPTER_PAGE_CACHE_DURATION,
                     })
                     .ok();
 
                 let chapters = WeebcentralChapters::parse_html(HtmlElement::new(response))?;
 
-                let total_chapters = chapters.chapters.len();
-
-                let mut chapters: Vec<Chapter> = chapters
-                    .chapters
-                    .into_iter()
-                    .map(|chap| Chapter {
-                        id: chap.id.clone(),
-                        id_safe_for_download: chap.id,
-                        manga_id: manga_id.to_string(),
-                        title: "".to_string(),
-                        language: Languages::English,
-                        chapter_number: chap.number,
-                        volume_number: None,
-                        scanlator: None,
-                        publication_date: chap.datetime,
-                    })
-                    .collect();
-
-                if filters.order == ChapterOrderBy::Ascending {
-                    chapters.reverse();
-                }
-
-                let from = pagination.index_to_slice_from();
-                let to = pagination.to_index(total_chapters as usize);
-
-                let chapters = chapters.as_slice().get(from..to).unwrap_or(&[]);
-
-                Ok(GetChaptersResponse {
-                    total_chapters: total_chapters as u32,
-                    chapters: chapters.to_vec(),
-                })
+                Ok(self.map_chapters_with_filters(chapters, manga_id, filters, pagination))
             },
         }
     }
@@ -506,23 +540,7 @@ impl MangaPageProvider for WeebcentralProvider {
             Some(cached) => {
                 let chapters = WeebcentralChapters::parse_html(HtmlElement::new(cached.data))?;
 
-                let chapters: Vec<Chapter> = chapters
-                    .chapters
-                    .into_iter()
-                    .map(|chap| Chapter {
-                        id: chap.id.clone(),
-                        id_safe_for_download: chap.id,
-                        manga_id: manga_id.to_string(),
-                        title: "".to_string(),
-                        language: Languages::English,
-                        chapter_number: chap.number,
-                        volume_number: None,
-                        scanlator: None,
-                        publication_date: chap.datetime,
-                    })
-                    .collect();
-
-                Ok(chapters)
+                Ok(self.map_chapters(chapters, manga_id))
             },
             None => {
                 let response = self.client.get(&full_list_url).send().await?;
@@ -540,29 +558,13 @@ impl MangaPageProvider for WeebcentralProvider {
                     .cache(InsertEntry {
                         id: &full_list_url,
                         data: &response,
-                        duration: Self::MANGA_PAGE_CACHE_DURATION,
+                        duration: Self::CHAPTER_PAGE_CACHE_DURATION,
                     })
                     .ok();
 
                 let chapters = WeebcentralChapters::parse_html(HtmlElement::new(response))?;
 
-                let mut chapters: Vec<Chapter> = chapters
-                    .chapters
-                    .into_iter()
-                    .map(|chap| Chapter {
-                        id: chap.id.clone(),
-                        id_safe_for_download: chap.id,
-                        manga_id: manga_id.to_string(),
-                        title: "".to_string(),
-                        language: Languages::English,
-                        chapter_number: chap.number,
-                        volume_number: None,
-                        scanlator: None,
-                        publication_date: chap.datetime,
-                    })
-                    .collect();
-
-                Ok(chapters)
+                Ok(self.map_chapters(chapters, manga_id))
             },
         }
     }
@@ -588,13 +590,98 @@ impl SearchPageProvider for WeebcentralProvider {
         filters: Self::InnerState,
         pagination: super::Pagination,
     ) -> Result<GetMangasResponse, Box<dyn Error>> {
-        todo!()
+        let limit = 24;
+        let offset = if pagination.current_page == 1 { 0 } else { limit * pagination.current_page };
+
+        let search = match search_term {
+            Some(text) => format!("text={text}"),
+            None => "".to_string(),
+        };
+
+        let url = format!(
+            "{}search/data?{search}&limit={limit}&offset={offset}&sort=Best+Match&order=Descending&official=Any&anime=Any&adult=Any&display_mode=Full+Display",
+            self.base_url
+        );
+
+        let cache = self.cache_provider.get(&url)?;
+
+        match cache {
+            Some(cached) => {
+                let mangas = SearchPageMangas::parse_html(HtmlElement::new(cached.data))?;
+
+                Ok(GetMangasResponse::from(mangas))
+            },
+            None => {
+                let res = self.client.get(&url).send().await?;
+
+                if res.status() != StatusCode::OK {
+                    return Err(format!(
+                        "Could not search on weebcentral with url: {url}, more details about the response: {:#?}",
+                        res
+                    )
+                    .into());
+                }
+
+                let doc = res.text().await?;
+
+                self.cache_provider
+                    .cache(InsertEntry {
+                        id: &url,
+                        data: &doc,
+                        duration: Self::SEARCH_PAGE_CACHE_DURATION,
+                    })
+                    .ok();
+
+                let mangas = SearchPageMangas::parse_html(HtmlElement::new(doc))?;
+
+                Ok(GetMangasResponse::from(mangas))
+            },
+        }
     }
 }
 
 impl FeedPageProvider for WeebcentralProvider {
     async fn get_latest_chapters(&self, manga_id: &str) -> Result<Vec<LatestChapter>, Box<dyn Error>> {
-        Ok(vec![])
+        let full_list_url = self.make_full_chapter_list_url(manga_id);
+
+        let cache = self.cache_provider.get(&full_list_url)?;
+        match cache {
+            Some(cached) => {
+                let chapters = WeebcentralChapters::parse_html(HtmlElement::new(cached.data))?;
+
+                Ok(self.map_chapters_latest_chapters(chapters, manga_id))
+            },
+            None => {
+                let response = self.client.get(&full_list_url).send().await?;
+
+                if response.status() != StatusCode::OK {
+                    return Err(format!(
+                        "Could not get chapters for manga: {manga_id}, more details about the response: {:#?}",
+                        response
+                    )
+                    .into());
+                }
+                let response = response.text().await?;
+
+                self.cache_provider
+                    .cache(InsertEntry {
+                        id: &full_list_url,
+                        data: &response,
+                        duration: Self::CHAPTER_PAGE_CACHE_DURATION,
+                    })
+                    .ok();
+
+                let chapters = WeebcentralChapters::parse_html(HtmlElement::new(response))?;
+
+                Ok(self.map_chapters_latest_chapters(chapters, manga_id))
+            },
+        }
+    }
+}
+
+impl ProviderIdentity for WeebcentralProvider {
+    fn name(&self) -> super::MangaProviders {
+        MangaProviders::Weebcentral
     }
 }
 

@@ -17,7 +17,7 @@ use backend::manga_provider::mangadex::{API_URL_BASE, COVER_IMG_URL_BASE, Mangad
 use backend::manga_provider::manganato::filter_state::{ManganatoFilterState, ManganatoFiltersProvider};
 use backend::manga_provider::manganato::filter_widget::ManganatoFilterWidget;
 use backend::manga_provider::manganato::{MANGANATO_BASE_URL, ManganatoProvider};
-use backend::manga_provider::weebcentral::filter_state::WeebcentralFiltersProvider;
+use backend::manga_provider::weebcentral::filter_state::{WeebcentralFilterState, WeebcentralFiltersProvider};
 use backend::manga_provider::weebcentral::filter_widget::WeebcentralFilterWidget;
 use backend::manga_provider::weebcentral::{WEEBCENTRAL_BASE_URL, WeebcentralProvider};
 use backend::release_notifier::{GITHUB_URL, ReleaseNotifier};
@@ -161,7 +161,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ratatui::init(),
                 WeebcentralProvider::new(WEEBCENTRAL_BASE_URL.parse().unwrap(), cache_provider),
                 anilist_client,
-                WeebcentralFiltersProvider::new(backend::manga_provider::weebcentral::filter_state::WeebcentralFilterState {}),
+                WeebcentralFiltersProvider::new(WeebcentralFilterState::default()),
                 WeebcentralFilterWidget {},
             )
             .await?;

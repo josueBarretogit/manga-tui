@@ -3,7 +3,7 @@ use crossterm::event::KeyCode;
 use crate::backend::manga_provider::{EventHandler, FiltersHandler};
 use crate::backend::tui::Events;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct WeebcentralFilterState {}
 
 #[derive(Debug, Clone)]

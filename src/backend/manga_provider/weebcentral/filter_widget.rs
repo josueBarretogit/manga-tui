@@ -9,6 +9,12 @@ use crate::view::widgets::StatefulWidgetFrame;
 #[derive(Debug, Clone)]
 pub struct WeebcentralFilterWidget {}
 
+impl WeebcentralFilterWidget {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
 impl FiltersWidget for WeebcentralFilterWidget {
     type FilterState = WeebcentralFiltersProvider;
 }
