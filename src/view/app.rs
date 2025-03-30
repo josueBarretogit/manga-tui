@@ -160,7 +160,6 @@ where
                 filter_widget,
                 Pagination::from_first_page(match which_provider {
                     MangaProviders::Mangadex => 10,
-                    MangaProviders::Manganato => 24,
                     MangaProviders::Weebcentral => 24,
                 }),
             )
