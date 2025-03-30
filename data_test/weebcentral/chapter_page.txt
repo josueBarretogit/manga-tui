@@ -1,0 +1,1141 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#1E1F22">
+
+
+    <meta name="description" content="Read Heavenly Delusion Chapter 70 online for free at Weeb Central">
+    <link rel="canonical" href="https://weebcentral.com/chapters/01JJB9BP43FHYCHAAZDVXKPSEW">
+
+
+
+    <title>Chapter 70 | Heavenly Delusion | Weeb Central</title>
+
+
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Weeb Central">
+
+    <meta property="og:title" content="Chapter 70 | Heavenly Delusion | Weeb Central">
+    <meta property="og:description" content="Read Heavenly Delusion Chapter 70 online for free at Weeb Central">
+    <meta property="og:url" content="https://weebcentral.com/chapters/01JJB9BP43FHYCHAAZDVXKPSEW">
+    <meta property="og:image" content="https://temp.compsci88.com/cover/fallback/01J76XYCT4JVR13RN6NT1480MD.jpg">
+    <meta property="og:image:width" content="400">
+    <meta property="og:image:height" content="600">
+    <meta property="og:image:type" content="image/jpg">
+    <meta property="og:image:alt" content="Heavenly Delusion cover">
+    <link rel="preload" href="https://scans.lastation.us/manga/Tengoku-Daimakyou/0070-001.png" as="image">
+
+
+
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Chapter 70 | Heavenly Delusion | Weeb Central">
+    <meta name="twitter:description" content="Read Heavenly Delusion Chapter 70 online for free at Weeb Central">
+    <meta name="twitter:site" content="@nepweebcentral">
+    <meta name="twitter:image" content="https://temp.compsci88.com/cover/fallback/01J76XYCT4JVR13RN6NT1480MD.jpg">
+
+
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/images/apple-touch-icon.png">
+
+    <!-- Tailwinds 4.0.9 -->
+    <link rel="stylesheet" href="/static/css/tailwind.25.03.18.min.css">
+    <!-- <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script> -->
+
+
+
+
+    <!-- Google tag (gtag.js) -->
+    <script src="https://www.googletagmanager.com/gtag/js?id=G-3Q79Y9D8ZY"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag() {dataLayer.push(arguments);}
+        gtag('js', new Date());
+
+        gtag('config', 'G-3Q79Y9D8ZY');
+    </script>
+
+</head>
+
+<body class="flex flex-col min-h-screen" x-data="{ simple_top_nav: $persist(false), sticky_top_nav: $persist(false) }">
+
+    <input type="hidden" id="visitor-id" name="visitor_id" value="" />
+
+
+
+
+
+    <header id="main-nav" class="bg-base-200" :class="sticky_top_nav ? 'sticky top-0 z-50' : ''"
+        x-data="{ authModal: false }">
+
+
+        <section class="bg-base-200 max-w-7xl mx-auto flex flex-col md:flex-row items-center gap-4 py-4 px-4 xl:px-0"
+            :class="simple_top_nav ? 'hidden' : ''">
+
+            <div class="flex-1">
+                <a href="/">
+                    <img src="/static/images/brand.png" class="hidden md:block" alt="Weeb Central Logo" width="250"
+                        height="80">
+                    <img src="/static/images/brand.png" class="block md:hidden" alt="Weeb Central Logo" width="125"
+                        height="40">
+                </a>
+            </div>
+            <div class="w-full md:w-96 relative">
+                <label class="input w-full flex items-center gap-2 relative z-10">
+                    <input type="search" id="quick-search-input" name="text" placeholder="Quick Search..."
+                        autocomplete="off" hx-post="https://weebcentral.com/search/simple?location=main"
+                        hx-trigger="input changed delay:500ms" hx-target="#quick-search-result" hx-swap="outerHTML">
+                    <svg class="h-4 w-4" fill="currentColor" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+                        <path
+                            d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352a144 144 0 1 0 0-288 144 144 0 1 0 0 288z" />
+                    </svg>
+                </label>
+                <section id="quick-search-result"></section>
+            </div>
+        </section>
+
+        <section class="bg-base-300 text-lg">
+            <nav class="max-w-7xl mx-auto flex">
+                <div class="flex-1 flex items-center">
+                    <a class="hover:bg-base-100 p-4 flex items-center gap-2 opacity-50" href="/"
+                        aria-label="Visit Homepage">
+                        <svg class="h-5 w-5" fill="currentColor" xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 576 512">
+                            <path
+                                d="M575.8 255.5c0 18-15 32.1-32 32.1l-32 0 .7 160.2c0 2.7-.2 5.4-.5 8.1l0 16.2c0 22.1-17.9 40-40 40l-16 0c-1.1 0-2.2 0-3.3-.1c-1.4 .1-2.8 .1-4.2 .1L416 512l-24 0c-22.1 0-40-17.9-40-40l0-24 0-64c0-17.7-14.3-32-32-32l-64 0c-17.7 0-32 14.3-32 32l0 64 0 24c0 22.1-17.9 40-40 40l-24 0-31.9 0c-1.5 0-3-.1-4.5-.2c-1.2 .1-2.4 .2-3.6 .2l-16 0c-22.1 0-40-17.9-40-40l0-112c0-.9 0-1.9 .1-2.8l0-69.7-32 0c-18 0-32-14-32-32.1c0-9 3-17 10-24L266.4 8c7-7 15-8 22-8s15 2 21 7L564.8 231.5c8 7 12 15 11 24z" />
+                        </svg>
+                        <span class="hidden md:inline">Home</span>
+                    </a>
+                    <a class="hover:bg-base-100 p-4 flex items-center gap-2 opacity-50"
+                        href="https://weebcentral.com/search" aria-label="Visit Advanced Search">
+                        <svg class="h-5 w-5" fill="currentColor" xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 512 512">
+                            <path
+                                d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352a144 144 0 1 0 0-288 144 144 0 1 0 0 288z" />
+                        </svg>
+                        <span class="hidden md:inline">Search</span>
+                    </a>
+                    <a class="hover:bg-base-100 p-4 flex items-center gap-2 opacity-50"
+                        href="https://weebcentral.com/general-chat" aria-label="Visit General Chat">
+                        <svg class="h-5 w-5" fill="currentColor" xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 576 512">
+                            <path
+                                d="M284 224.8a34.1 34.1 0 1 0 34.3 34.1A34.2 34.2 0 0 0 284 224.8zm-110.5 0a34.1 34.1 0 1 0 34.3 34.1A34.2 34.2 0 0 0 173.6 224.8zm220.9 0a34.1 34.1 0 1 0 34.3 34.1A34.2 34.2 0 0 0 394.5 224.8zm153.8-55.3c-15.5-24.2-37.3-45.6-64.7-63.6-52.9-34.8-122.4-54-195.7-54a406 406 0 0 0 -72 6.4 238.5 238.5 0 0 0 -49.5-36.6C99.7-11.7 40.9 .7 11.1 11.4A14.3 14.3 0 0 0 5.6 34.8C26.5 56.5 61.2 99.3 52.7 138.3c-33.1 33.9-51.1 74.8-51.1 117.3 0 43.4 18 84.2 51.1 118.1 8.5 39-26.2 81.8-47.1 103.5a14.3 14.3 0 0 0 5.6 23.3c29.7 10.7 88.5 23.1 155.3-10.2a238.7 238.7 0 0 0 49.5-36.6A406 406 0 0 0 288 460.1c73.3 0 142.8-19.2 195.7-54 27.4-18 49.1-39.4 64.7-63.6 17.3-26.9 26.1-55.9 26.1-86.1C574.4 225.4 565.6 196.4 548.3 169.5zM285 409.9a345.7 345.7 0 0 1 -89.4-11.5l-20.1 19.4a184.4 184.4 0 0 1 -37.1 27.6 145.8 145.8 0 0 1 -52.5 14.9c1-1.8 1.9-3.6 2.8-5.4q30.3-55.7 16.3-100.1c-33-26-52.8-59.2-52.8-95.4 0-83.1 104.3-150.5 232.8-150.5s232.9 67.4 232.9 150.5C517.9 342.5 413.6 409.9 285 409.9z">
+                        </svg>
+                        <span class="hidden md:inline">General Chat</span>
+                    </a>
+                    <a class="hover:bg-base-100 p-4 flex items-center gap-2 opacity-50"
+                        href="https://weebcentral.com/series/random" aria-label="Visit random series">
+                        <svg class="h-5 w-5" fill="currentColor" xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 512 512">
+                            <path
+                                d="M142.9 142.9c-17.5 17.5-30.1 38-37.8 59.8c-5.9 16.7-24.2 25.4-40.8 19.5s-25.4-24.2-19.5-40.8C55.6 150.7 73.2 122 97.6 97.6c87.2-87.2 228.3-87.5 315.8-1L455 55c6.9-6.9 17.2-8.9 26.2-5.2s14.8 12.5 14.8 22.2l0 128c0 13.3-10.7 24-24 24l-8.4 0c0 0 0 0 0 0L344 224c-9.7 0-18.5-5.8-22.2-14.8s-1.7-19.3 5.2-26.2l41.1-41.1c-62.6-61.5-163.1-61.2-225.3 1zM16 312c0-13.3 10.7-24 24-24l7.6 0 .7 0L168 288c9.7 0 18.5 5.8 22.2 14.8s1.7 19.3-5.2 26.2l-41.1 41.1c62.6 61.5 163.1 61.2 225.3-1c17.5-17.5 30.1-38 37.8-59.8c5.9-16.7 24.2-25.4 40.8-19.5s25.4 24.2 19.5 40.8c-10.8 30.6-28.4 59.3-52.9 83.8c-87.2 87.2-228.3 87.5-315.8 1L57 457c-6.9 6.9-17.2 8.9-26.2 5.2S16 449.7 16 440l0-119.6 0-.7 0-7.6z" />
+                        </svg>
+                        <span class="hidden md:inline">Random</span>
+                    </a>
+                </div>
+
+                <button class="hover:bg-base-100 p-4 flex items-center gap-2 " aria-label="Login"
+                    onclick="auth_modal.showModal()">
+                    <svg class="h-5 w-5" fill="currentColor" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+                        <path
+                            d="M217.9 105.9L340.7 228.7c7.2 7.2 11.3 17.1 11.3 27.3s-4.1 20.1-11.3 27.3L217.9 406.1c-6.4 6.4-15 9.9-24 9.9c-18.7 0-33.9-15.2-33.9-33.9l0-62.1L32 320c-17.7 0-32-14.3-32-32l0-64c0-17.7 14.3-32 32-32l128 0 0-62.1c0-18.7 15.2-33.9 33.9-33.9c9 0 17.6 3.6 24 9.9zM352 416l64 0c17.7 0 32-14.3 32-32l0-256c0-17.7-14.3-32-32-32l-64 0c-17.7 0-32-14.3-32-32s14.3-32 32-32l64 0c53 0 96 43 96 96l0 256c0 53-43 96-96 96l-64 0c-17.7 0-32-14.3-32-32s14.3-32 32-32z" />
+                    </svg>
+                    <span class="hidden md:inline">Login</span>
+                </button>
+
+            </nav>
+        </section>
+
+
+        <dialog class="modal shadow-l" id="auth_modal"
+            x-data="{ register: false, login: true, forget_password: false }">
+            <div class="modal-box">
+                <ul class="w-full menu menu-horizontal bg-base-200  gap-2">
+                    <li>
+                        <button :class="{ 'opacity-50' : !login, 'bg-[#393A3F]! text-white!' : login }"
+                            @click="register = false; login = true; forget_password = false" aria-label="Login">
+                            <svg class="h-4 w-4" fill="currentColor" xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 512 512">
+                                <path
+                                    d="M217.9 105.9L340.7 228.7c7.2 7.2 11.3 17.1 11.3 27.3s-4.1 20.1-11.3 27.3L217.9 406.1c-6.4 6.4-15 9.9-24 9.9c-18.7 0-33.9-15.2-33.9-33.9l0-62.1L32 320c-17.7 0-32-14.3-32-32l0-64c0-17.7 14.3-32 32-32l128 0 0-62.1c0-18.7 15.2-33.9 33.9-33.9c9 0 17.6 3.6 24 9.9zM352 416l64 0c17.7 0 32-14.3 32-32l0-256c0-17.7-14.3-32-32-32l-64 0c-17.7 0-32-14.3-32-32s14.3-32 32-32l64 0c53 0 96 43 96 96l0 256c0 53-43 96-96 96l-64 0c-17.7 0-32-14.3-32-32s14.3-32 32-32z" />
+                            </svg>
+                            <span class="hidden md:inline">Login</span>
+                        </button>
+                    </li>
+                    <li>
+                        <button :class="{ 'opacity-50' : !register, 'bg-[#393A3F]! text-white!' : register }"
+                            @click="register = true; login = false; forget_password = false" aria-label="Register">
+                            <svg class="h-4 w-4" fill="currentColor" xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 576 512">
+                                <path
+                                    d="M64 32C28.7 32 0 60.7 0 96L0 416c0 35.3 28.7 64 64 64l448 0c35.3 0 64-28.7 64-64l0-320c0-35.3-28.7-64-64-64L64 32zm80 256l64 0c44.2 0 80 35.8 80 80c0 8.8-7.2 16-16 16L80 384c-8.8 0-16-7.2-16-16c0-44.2 35.8-80 80-80zm-32-96a64 64 0 1 1 128 0 64 64 0 1 1 -128 0zm256-32l128 0c8.8 0 16 7.2 16 16s-7.2 16-16 16l-128 0c-8.8 0-16-7.2-16-16s7.2-16 16-16zm0 64l128 0c8.8 0 16 7.2 16 16s-7.2 16-16 16l-128 0c-8.8 0-16-7.2-16-16s7.2-16 16-16zm0 64l128 0c8.8 0 16 7.2 16 16s-7.2 16-16 16l-128 0c-8.8 0-16-7.2-16-16s7.2-16 16-16z" />
+                            </svg>
+                            <span class="hidden md:inline">Register</span>
+                        </button>
+                    </li>
+                    <li>
+                        <button
+                            :class="{ 'opacity-50' : !forget_password, 'bg-[#393A3F]! text-white!' : forget_password }"
+                            @click="register = false; login = false; forget_password = true"
+                            aria-label="Forgot Password">
+                            <svg class="h-4 w-4" fill="currentColor" xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 448 512">
+                                <path
+                                    d="M144 144c0-44.2 35.8-80 80-80c31.9 0 59.4 18.6 72.3 45.7c7.6 16 26.7 22.8 42.6 15.2s22.8-26.7 15.2-42.6C331 33.7 281.5 0 224 0C144.5 0 80 64.5 80 144l0 48-16 0c-35.3 0-64 28.7-64 64L0 448c0 35.3 28.7 64 64 64l320 0c35.3 0 64-28.7 64-64l0-192c0-35.3-28.7-64-64-64l-240 0 0-48z" />
+                            </svg>
+                            <span class="hidden md:inline">Forgot Password</span>
+                        </button>
+                    </li>
+                </ul>
+                <div class="mt-4" hx-ext="response-targets">
+                    <div class="flex flex-col gap-6" x-show="login">
+                        <form id="login-form" class="flex flex-col gap-6" hx-post="https://weebcentral.com/auth/login"
+                            hx-target="#login-message" hx-include="#visitor-id" hx-target-400="#login-message"
+                            hx-swap="outerHTML"
+                            hx-on:htmx:after-request="if(event.detail.xhr.status === 200) clearCacheLogInOut()">
+                            <fieldset class="fieldset text-base">
+                                <legend class="fieldset-legend">Email</legend>
+                                <input type="email" class="input validator w-full" id="login-email" name="email"
+                                    autocomplete="email" placeholder="you@example.com" required>
+                                <div class="validator-hint hidden">Enter valid email address</div>
+                            </fieldset>
+                            <fieldset class="fieldset text-base">
+                                <legend class="fieldset-legend">Password</legend>
+                                <input type="password" class="input validator w-full" id="login-password"
+                                    autocomplete="current-password" name="password" minlength="8" maxlength="128"
+                                    placeholder="********" required>
+                                <div class="validator-hint hidden">Must be 8 to 128 characters</div>
+                            </fieldset>
+                        </form>
+                        <div id="login-message" class="hidden"></div>
+                        <button type="submit" form="login-form" class="btn btn-primary">Login</button>
+                    </div>
+                    <div class="flex flex-col gap-6" x-show="register">
+                        <form id="register-form" class="flex flex-col gap-6"
+                            hx-post="https://weebcentral.com/auth/register" hx-target="#register-message"
+                            hx-include="#visitor-id" hx-target-400="#register-message" hx-swap="outerHTML"
+                            hx-on:htmx:after-request="if(event.detail.xhr.status === 200) clearCacheLogInOut()">
+                            <fieldset class="fieldset text-base">
+                                <legend class="fieldset-legend">Email</legend>
+                                <input type="email" class="input validator w-full" id="register-email" name="email"
+                                    autocomplete="email" placeholder="you@example.com" required>
+                                <div class="validator-hint hidden">Enter valid email address</div>
+                            </fieldset>
+                            <fieldset class="fieldset text-base">
+                                <legend class="fieldset-legend">Username</legend>
+                                <input type="input" class="input validator w-full" id="register-username"
+                                    name="username" pattern="[A-Za-z][A-Za-z0-9_\-]*" minlength="3" maxlength="25"
+                                    placeholder="Username" title="Only letters, numbers, dash, and underscore" required>
+                                <div class="validator-hint hidden">
+                                    Must be 3 to 25 characters
+                                    <br />containing only letters, numbers, dash, and underscore
+                                </div>
+                            </fieldset>
+                            <fieldset class="fieldset text-base">
+                                <legend class="fieldset-legend">Password</legend>
+                                <input type="password" class="input validator w-full" id="register-password"
+                                    autocomplete="current-password" name="password" minlength="8" maxlength="128"
+                                    placeholder="********" required>
+                                <div class="validator-hint hidden">Must be 8 to 128 characters</div>
+                            </fieldset>
+                        </form>
+                        <div id="register-message" class="hidden"></div>
+                        <button type="submit" form="register-form" class="btn btn-primary">Register</button>
+                    </div>
+                    <div class="flex flex-col gap-6" x-show="forget_password">
+                        <form id="forget-password-form" class="flex flex-col gap-6"
+                            hx-post="https://weebcentral.com/auth/forgot-password" hx-target="#forget-password-message"
+                            hx-target-400="#forget-password-message" hx-swap="outerHTML">
+                            <fieldset class="fieldset text-base">
+                                <legend class="fieldset-legend">Email</legend>
+                                <input type="email" class="input validator w-full" id="forget-password-email"
+                                    name="email" autocomplete="email" placeholder="you@example.com" required>
+                                <div class="validator-hint hidden">Enter valid email address</div>
+                            </fieldset>
+                        </form>
+                        <div id="forget-password-message" class="hidden"></div>
+                        <button type="submit" form="forget-password-form" class="btn btn-primary">Reset
+                            Password</button>
+                    </div>
+                </div>
+            </div>
+            <form method="dialog" class="modal-backdrop">
+                <button>close</button>
+            </form>
+        </dialog>
+
+    </header>
+
+
+
+    <main class="flex-1 flex flex-col items-center" :class="dark_background ? 'bg-black' : 'bg-base-100'"
+        x-data="singlePageNavigation"
+        @keydown.window.left="reading_direction === 'left_right' ? prevPage() : nextPage()"
+        @keydown.window.right="reading_direction === 'left_right' ? nextPage() : prevPage()"
+        @keydown.window="handleShortcutKey($event)" @page_loaded="$nextTick(() => { load_page(); });"
+        hx-include="[name='current_page']">
+
+        <section class="w-full" id="nav-top">
+
+            <div class="w-full max-w-7xl mx-auto flex gap-2 p-4"
+                @removed_bookmark="reading_style == 'long_strip' ? bookmarks.delete(0) : bookmarks.delete(page)"
+                @added_bookmark="reading_style == 'long_strip' ? bookmarks.add(0) : bookmarks.add(page)">
+                <div class="flex-1 grid grid-cols-6 lg:flex gap-2">
+                    <a class="col-span-6 lg:flex-2 overflow-hidden btn btn-secondary"
+                        href="https://weebcentral.com/series/01J76XYCT4JVR13RN6NT1480MD/Tengoku-Daimakyou">
+                        <div class="w-full flex items-center justify-center gap-2 p-4">
+                            <svg class="w-4 h-4" fill="currentColor" xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 448 512">
+                                <path
+                                    d="M96 0C43 0 0 43 0 96L0 416c0 53 43 96 96 96l288 0 32 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l0-64c17.7 0 32-14.3 32-32l0-320c0-17.7-14.3-32-32-32L384 0 96 0zm0 384l256 0 0 64L96 448c-17.7 0-32-14.3-32-32s14.3-32 32-32zm32-240c0-8.8 7.2-16 16-16l192 0c8.8 0 16 7.2 16 16s-7.2 16-16 16l-192 0c-8.8 0-16-7.2-16-16zm16 48l192 0c8.8 0 16 7.2 16 16s-7.2 16-16 16l-192 0c-8.8 0-16-7.2-16-16s7.2-16 16-16z" />
+                            </svg>
+                            <span class="truncate">Heavenly Delusion</span>
+                        </div>
+                    </a>
+                    <button class="col-span-4 lg:flex-1 btn btn-secondary " onclick="chapter_select_modal.showModal()"
+                        hx-get="https://weebcentral.com/series/01J76XYCT4JVR13RN6NT1480MD/chapter-select?current_chapter=01JJB9BP43FHYCHAAZDVXKPSEW"
+                        hx-target="#chapter-select-body"
+                        hx-on:htmx:after-request="afterFirstRequest(); scrollToSelectedChapter();">
+                        <svg class="w-4 h-4" fill="currentColor" xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 512 512">
+                            <path
+                                d="M0 96C0 78.3 14.3 64 32 64l384 0c17.7 0 32 14.3 32 32s-14.3 32-32 32L32 128C14.3 128 0 113.7 0 96zM64 256c0-17.7 14.3-32 32-32l384 0c17.7 0 32 14.3 32 32s-14.3 32-32 32L96 288c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32L32 448c-17.7 0-32-14.3-32-32s14.3-32 32-32l384 0c17.7 0 32 14.3 32 32z" />
+                        </svg>
+                        <span>Chapter 70</span>
+                    </button>
+                    <div class="col-span-2 lg:hidden flex gap-2">
+                        <button class="flex-1 btn btn-secondary tooltip tooltip-bottom" data-tip="Bookmark"
+                            aria-label="Bookmark"
+                            x-show="reading_style !== 'double_page' && reading_style !== 'double_page_v2' && !is_bookmarked()"
+                            hx-post="https://weebcentral.com/chapters/01JJB9BP43FHYCHAAZDVXKPSEW/bookmarks"
+                            hx-swap="none" x-bind:hx-vals="JSON.stringify({ 
+                'series_id': '01J76XYCT4JVR13RN6NT1480MD',
+                'chapter_type': 'Chapter',
+                'number': '70',
+                'page': reading_style == 'long_strip' ? 0 : page
+            })">
+                            <svg class="w-4 h-4" fill="currentColor" xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 384 512">
+                                <path
+                                    d="M0 48C0 21.5 21.5 0 48 0l0 48 0 393.4 130.1-92.9c8.3-6 19.6-6 27.9 0L336 441.4 336 48 48 48 48 0 336 0c26.5 0 48 21.5 48 48l0 440c0 9-5 17.2-13 21.3s-17.6 3.4-24.9-1.8L192 397.5 37.9 507.5c-7.3 5.2-16.9 5.9-24.9 1.8S0 497 0 488L0 48z" />
+                            </svg>
+                        </button>
+                        <button class="flex-1 btn btn-secondary tooltip tooltip-bottom" data-tip="Remove Bookmark"
+                            aria-label="Remove Bookmark"
+                            x-show="reading_style !== 'double_page' && reading_style !== 'double_page_v2' && is_bookmarked()"
+                            hx-delete="https://weebcentral.com/chapters/01JJB9BP43FHYCHAAZDVXKPSEW/bookmarks"
+                            hx-swap="none">
+                            <svg class="w-4 h-4" fill="currentColor" xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 384 512">
+                                <path
+                                    d="M0 48V487.7C0 501.1 10.9 512 24.3 512c5 0 9.9-1.5 14-4.4L192 400 345.7 507.6c4.1 2.9 9 4.4 14 4.4c13.4 0 24.3-10.9 24.3-24.3V48c0-26.5-21.5-48-48-48H48C21.5 0 0 21.5 0 48z" />
+                            </svg>
+                        </button>
+                        <button class="flex-1 btn btn-secondary tooltip tooltip-bottom" data-tip="Preferences"
+                            aria-label="Preferences" onclick="preference_modal.showModal()">
+                            <svg class="w-4 h-4" fill="currentColor" xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 512 512">
+                                <path
+                                    d="M495.9 166.6c3.2 8.7 .5 18.4-6.4 24.6l-43.3 39.4c1.1 8.3 1.7 16.8 1.7 25.4s-.6 17.1-1.7 25.4l43.3 39.4c6.9 6.2 9.6 15.9 6.4 24.6c-4.4 11.9-9.7 23.3-15.8 34.3l-4.7 8.1c-6.6 11-14 21.4-22.1 31.2c-5.9 7.2-15.7 9.6-24.5 6.8l-55.7-17.7c-13.4 10.3-28.2 18.9-44 25.4l-12.5 57.1c-2 9.1-9 16.3-18.2 17.8c-13.8 2.3-28 3.5-42.5 3.5s-28.7-1.2-42.5-3.5c-9.2-1.5-16.2-8.7-18.2-17.8l-12.5-57.1c-15.8-6.5-30.6-15.1-44-25.4L83.1 425.9c-8.8 2.8-18.6 .3-24.5-6.8c-8.1-9.8-15.5-20.2-22.1-31.2l-4.7-8.1c-6.1-11-11.4-22.4-15.8-34.3c-3.2-8.7-.5-18.4 6.4-24.6l43.3-39.4C64.6 273.1 64 264.6 64 256s.6-17.1 1.7-25.4L22.4 191.2c-6.9-6.2-9.6-15.9-6.4-24.6c4.4-11.9 9.7-23.3 15.8-34.3l4.7-8.1c6.6-11 14-21.4 22.1-31.2c5.9-7.2 15.7-9.6 24.5-6.8l55.7 17.7c13.4-10.3 28.2-18.9 44-25.4l12.5-57.1c2-9.1 9-16.3 18.2-17.8C227.3 1.2 241.5 0 256 0s28.7 1.2 42.5 3.5c9.2 1.5 16.2 8.7 18.2 17.8l12.5 57.1c15.8 6.5 30.6 15.1 44 25.4l55.7-17.7c8.8-2.8 18.6-.3 24.5 6.8c8.1 9.8 15.5 20.2 22.1 31.2l4.7 8.1c6.1 11 11.4 22.4 15.8 34.3zM256 336a80 80 0 1 0 0-160 80 80 0 1 0 0 160z" />
+                            </svg>
+                        </button>
+                    </div>
+                    <button class="lg:flex-1 flex items-center justify-center btn btn-secondary"
+                        :class="reading_style == 'single_page' ? 'col-span-2' : 'col-span-3'" @click="prevPage()"
+                        x-show="reading_direction === 'left_right'">
+                        <svg class="w-4 h-4" fill="currentColor" xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 512 512">
+                            <path
+                                d="M459.5 440.6c9.5 7.9 22.8 9.7 34.1 4.4s18.4-16.6 18.4-29l0-320c0-12.4-7.2-23.7-18.4-29s-24.5-3.6-34.1 4.4L288 214.3l0 41.7 0 41.7L459.5 440.6zM256 352l0-96 0-128 0-32c0-12.4-7.2-23.7-18.4-29s-24.5-3.6-34.1 4.4l-192 160C4.2 237.5 0 246.5 0 256s4.2 18.5 11.5 24.6l192 160c9.5 7.9 22.8 9.7 34.1 4.4s18.4-16.6 18.4-29l0-64z" />
+                        </svg>
+                        <span>PREV</span>
+                    </button>
+                    <button class="lg:flex-1 flex items-center justify-center btn btn-secondary"
+                        :class="reading_style == 'single_page' ? 'col-span-2' : 'col-span-3'" @click="nextPage()"
+                        x-show="reading_direction === 'right_left'">
+                        <svg class="w-4 h-4" fill="currentColor" xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 512 512">
+                            <path
+                                d="M459.5 440.6c9.5 7.9 22.8 9.7 34.1 4.4s18.4-16.6 18.4-29l0-320c0-12.4-7.2-23.7-18.4-29s-24.5-3.6-34.1 4.4L288 214.3l0 41.7 0 41.7L459.5 440.6zM256 352l0-96 0-128 0-32c0-12.4-7.2-23.7-18.4-29s-24.5-3.6-34.1 4.4l-192 160C4.2 237.5 0 246.5 0 256s4.2 18.5 11.5 24.6l192 160c9.5 7.9 22.8 9.7 34.1 4.4s18.4-16.6 18.4-29l0-64z" />
+                        </svg>
+                        <span>NEXT</span>
+                    </button>
+                    <button class="col-span-2 lg:flex-1 btn btn-secondary " onclick="page_select_modal.showModal()"
+                        x-show="reading_style == 'single_page'" x-text="'Page ' + page"></button>
+                    <button class="lg:flex-1 flex items-center justify-center btn btn-secondary"
+                        :class="reading_style == 'single_page' ? 'col-span-2' : 'col-span-3'" @click="prevPage()"
+                        x-show="reading_direction === 'right_left'">
+                        <span>PREV</span>
+                        <svg class="w-4 h-4" fill="currentColor" xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 512 512">
+                            <path
+                                d="M52.5 440.6c-9.5 7.9-22.8 9.7-34.1 4.4S0 428.4 0 416L0 96C0 83.6 7.2 72.3 18.4 67s24.5-3.6 34.1 4.4L224 214.3l0 41.7 0 41.7L52.5 440.6zM256 352l0-96 0-128 0-32c0-12.4 7.2-23.7 18.4-29s24.5-3.6 34.1 4.4l192 160c7.3 6.1 11.5 15.1 11.5 24.6s-4.2 18.5-11.5 24.6l-192 160c-9.5 7.9-22.8 9.7-34.1 4.4s-18.4-16.6-18.4-29l0-64z" />
+                        </svg>
+                    </button>
+                    <button class="lg:flex-1 flex items-center justify-center btn btn-secondary"
+                        :class="reading_style == 'single_page' ? 'col-span-2' : 'col-span-3'" @click="nextPage()"
+                        x-show="reading_direction === 'left_right'">
+                        <span>NEXT</span>
+                        <svg class="w-4 h-4" fill="currentColor" xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 512 512">
+                            <path
+                                d="M52.5 440.6c-9.5 7.9-22.8 9.7-34.1 4.4S0 428.4 0 416L0 96C0 83.6 7.2 72.3 18.4 67s24.5-3.6 34.1 4.4L224 214.3l0 41.7 0 41.7L52.5 440.6zM256 352l0-96 0-128 0-32c0-12.4 7.2-23.7 18.4-29s24.5-3.6 34.1 4.4l192 160c7.3 6.1 11.5 15.1 11.5 24.6s-4.2 18.5-11.5 24.6l-192 160c-9.5 7.9-22.8 9.7-34.1 4.4s-18.4-16.6-18.4-29l0-64z" />
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="hidden lg:flex items-center gap-2">
+                    <button class="flex-1 btn btn-secondary tooltip tooltip-bottom" data-tip="Bookmark"
+                        aria-label="Bookmark"
+                        x-show="reading_style !== 'double_page' && reading_style !== 'double_page_v2' && !is_bookmarked()"
+                        hx-post="https://weebcentral.com/chapters/01JJB9BP43FHYCHAAZDVXKPSEW/bookmarks" hx-swap="none"
+                        x-bind:hx-vals="JSON.stringify({ 
+                'series_id': '01J76XYCT4JVR13RN6NT1480MD',
+                'chapter_type': 'Chapter',
+                'number': '70',
+                'page': reading_style == 'long_strip' ? 0 : page
+            })">
+                        <svg class="w-4 h-4" fill="currentColor" xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 384 512">
+                            <path
+                                d="M0 48C0 21.5 21.5 0 48 0l0 48 0 393.4 130.1-92.9c8.3-6 19.6-6 27.9 0L336 441.4 336 48 48 48 48 0 336 0c26.5 0 48 21.5 48 48l0 440c0 9-5 17.2-13 21.3s-17.6 3.4-24.9-1.8L192 397.5 37.9 507.5c-7.3 5.2-16.9 5.9-24.9 1.8S0 497 0 488L0 48z" />
+                        </svg>
+                    </button>
+                    <button class="flex-1 btn btn-secondary tooltip tooltip-bottom" data-tip="Delete Bookmark"
+                        aria-label="Delete Bookmark"
+                        x-show="reading_style !== 'double_page' && reading_style !== 'double_page_v2' && is_bookmarked()"
+                        hx-delete="https://weebcentral.com/chapters/01JJB9BP43FHYCHAAZDVXKPSEW/bookmarks"
+                        hx-swap="none">
+                        <svg class="w-4 h-4" fill="currentColor" xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 384 512">
+                            <path
+                                d="M0 48V487.7C0 501.1 10.9 512 24.3 512c5 0 9.9-1.5 14-4.4L192 400 345.7 507.6c4.1 2.9 9 4.4 14 4.4c13.4 0 24.3-10.9 24.3-24.3V48c0-26.5-21.5-48-48-48H48C21.5 0 0 21.5 0 48z" />
+                        </svg>
+                    </button>
+                    <button class="flex-1 btn btn-secondary tooltip tooltip-bottom" data-tip="Preferences"
+                        aria-label="preferences" onclick="preference_modal.showModal()">
+                        <svg class="w-4 h-4" fill="currentColor" xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 512 512">
+                            <path
+                                d="M495.9 166.6c3.2 8.7 .5 18.4-6.4 24.6l-43.3 39.4c1.1 8.3 1.7 16.8 1.7 25.4s-.6 17.1-1.7 25.4l43.3 39.4c6.9 6.2 9.6 15.9 6.4 24.6c-4.4 11.9-9.7 23.3-15.8 34.3l-4.7 8.1c-6.6 11-14 21.4-22.1 31.2c-5.9 7.2-15.7 9.6-24.5 6.8l-55.7-17.7c-13.4 10.3-28.2 18.9-44 25.4l-12.5 57.1c-2 9.1-9 16.3-18.2 17.8c-13.8 2.3-28 3.5-42.5 3.5s-28.7-1.2-42.5-3.5c-9.2-1.5-16.2-8.7-18.2-17.8l-12.5-57.1c-15.8-6.5-30.6-15.1-44-25.4L83.1 425.9c-8.8 2.8-18.6 .3-24.5-6.8c-8.1-9.8-15.5-20.2-22.1-31.2l-4.7-8.1c-6.1-11-11.4-22.4-15.8-34.3c-3.2-8.7-.5-18.4 6.4-24.6l43.3-39.4C64.6 273.1 64 264.6 64 256s.6-17.1 1.7-25.4L22.4 191.2c-6.9-6.2-9.6-15.9-6.4-24.6c4.4-11.9 9.7-23.3 15.8-34.3l4.7-8.1c6.6-11 14-21.4 22.1-31.2c5.9-7.2 15.7-9.6 24.5-6.8l55.7 17.7c13.4-10.3 28.2-18.9 44-25.4l12.5-57.1c2-9.1 9-16.3 18.2-17.8C227.3 1.2 241.5 0 256 0s28.7 1.2 42.5 3.5c9.2 1.5 16.2 8.7 18.2 17.8l12.5 57.1c15.8 6.5 30.6 15.1 44 25.4l55.7-17.7c8.8-2.8 18.6-.3 24.5 6.8c8.1 9.8 15.5 20.2 22.1 31.2l4.7 8.1c6.1 11 11.4 22.4 15.8 34.3zM256 336a80 80 0 1 0 0-160 80 80 0 1 0 0 160z" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+        </section>
+
+        <section id="last-chapter-top"></section>
+
+        <section class="min-h-screen" x-data="history"
+            hx-get="https://weebcentral.com/chapters/01JJB9BP43FHYCHAAZDVXKPSEW/images?is_prev=False&amp;current_page=1"
+            hx-trigger="load" hx-include="[name='reading_style']" hx-swap="outerHTML"></section>
+
+        <section class="w-full max-w-7xl px-4">
+            <button type="button" class="w-full btn btn-secondary"
+                hx-get="https://weebcentral.com/comments/contents/01JJB9BP43FHYCHAAZDVXKPSEW?content_type=chapter"
+                hx-swap="outerHTML">
+                <svg class="w-5 h-5 me-2" fill="currentColor" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512">
+                    <path
+                        d="M88.2 309.1c9.8-18.3 6.8-40.8-7.5-55.8C59.4 230.9 48 204 48 176c0-63.5 63.8-128 160-128s160 64.5 160 128s-63.8 128-160 128c-13.1 0-25.8-1.3-37.8-3.6c-10.4-2-21.2-.6-30.7 4.2c-4.1 2.1-8.3 4.1-12.6 6c-16 7.2-32.9 13.5-49.9 18c2.8-4.6 5.4-9.1 7.9-13.6c1.1-1.9 2.2-3.9 3.2-5.9zM208 352c114.9 0 208-78.8 208-176S322.9 0 208 0S0 78.8 0 176c0 41.8 17.2 80.1 45.9 110.3c-.9 1.7-1.9 3.5-2.8 5.1c-10.3 18.4-22.3 36.5-36.6 52.1c-6.6 7-8.3 17.2-4.6 25.9C5.8 378.3 14.4 384 24 384c43 0 86.5-13.3 122.7-29.7c4.8-2.2 9.6-4.5 14.2-6.8c15.1 3 30.9 4.5 47.1 4.5zM432 480c16.2 0 31.9-1.6 47.1-4.5c4.6 2.3 9.4 4.6 14.2 6.8C529.5 498.7 573 512 616 512c9.6 0 18.2-5.7 22-14.5c3.8-8.8 2-19-4.6-25.9c-14.2-15.6-26.2-33.7-36.6-52.1c-.9-1.7-1.9-3.4-2.8-5.1C622.8 384.1 640 345.8 640 304c0-94.4-87.9-171.5-198.2-175.8c4.1 15.2 6.2 31.2 6.2 47.8l0 .6c87.2 6.7 144 67.5 144 127.4c0 28-11.4 54.9-32.7 77.2c-14.3 15-17.3 37.6-7.5 55.8c1.1 2 2.2 4 3.2 5.9c2.5 4.5 5.2 9 7.9 13.6c-17-4.5-33.9-10.7-49.9-18c-4.3-1.9-8.5-3.9-12.6-6c-9.5-4.8-20.3-6.2-30.7-4.2c-12.1 2.4-24.8 3.6-37.8 3.6c-61.7 0-110-26.5-136.8-62.3c-16 5.4-32.8 9.4-50 11.8C279 439.8 350 480 432 480z" />
+                </svg>
+                <span>Click to reveal comments</span>
+            </button>
+        </section>
+
+        <section id="last-chapter-bottom"></section>
+
+        <section class="w-full">
+
+            <div class="w-full max-w-7xl mx-auto flex gap-2 p-4"
+                @removed_bookmark="reading_style == 'long_strip' ? bookmarks.delete(0) : bookmarks.delete(page)"
+                @added_bookmark="reading_style == 'long_strip' ? bookmarks.add(0) : bookmarks.add(page)">
+                <div class="flex-1 grid grid-cols-6 lg:flex gap-2">
+                    <a class="col-span-6 lg:flex-2 overflow-hidden btn btn-secondary"
+                        href="https://weebcentral.com/series/01J76XYCT4JVR13RN6NT1480MD/Tengoku-Daimakyou">
+                        <div class="w-full flex items-center justify-center gap-2 p-4">
+                            <svg class="w-4 h-4" fill="currentColor" xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 448 512">
+                                <path
+                                    d="M96 0C43 0 0 43 0 96L0 416c0 53 43 96 96 96l288 0 32 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l0-64c17.7 0 32-14.3 32-32l0-320c0-17.7-14.3-32-32-32L384 0 96 0zm0 384l256 0 0 64L96 448c-17.7 0-32-14.3-32-32s14.3-32 32-32zm32-240c0-8.8 7.2-16 16-16l192 0c8.8 0 16 7.2 16 16s-7.2 16-16 16l-192 0c-8.8 0-16-7.2-16-16zm16 48l192 0c8.8 0 16 7.2 16 16s-7.2 16-16 16l-192 0c-8.8 0-16-7.2-16-16s7.2-16 16-16z" />
+                            </svg>
+                            <span class="truncate">Heavenly Delusion</span>
+                        </div>
+                    </a>
+                    <button class="col-span-4 lg:flex-1 btn btn-secondary " onclick="chapter_select_modal.showModal()"
+                        hx-get="https://weebcentral.com/series/01J76XYCT4JVR13RN6NT1480MD/chapter-select?current_chapter=01JJB9BP43FHYCHAAZDVXKPSEW"
+                        hx-target="#chapter-select-body"
+                        hx-on:htmx:after-request="afterFirstRequest(); scrollToSelectedChapter();">
+                        <svg class="w-4 h-4" fill="currentColor" xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 512 512">
+                            <path
+                                d="M0 96C0 78.3 14.3 64 32 64l384 0c17.7 0 32 14.3 32 32s-14.3 32-32 32L32 128C14.3 128 0 113.7 0 96zM64 256c0-17.7 14.3-32 32-32l384 0c17.7 0 32 14.3 32 32s-14.3 32-32 32L96 288c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32L32 448c-17.7 0-32-14.3-32-32s14.3-32 32-32l384 0c17.7 0 32 14.3 32 32z" />
+                        </svg>
+                        <span>Chapter 70</span>
+                    </button>
+                    <div class="col-span-2 lg:hidden flex gap-2">
+                        <button class="flex-1 btn btn-secondary tooltip tooltip-bottom" data-tip="Bookmark"
+                            aria-label="Bookmark"
+                            x-show="reading_style !== 'double_page' && reading_style !== 'double_page_v2' && !is_bookmarked()"
+                            hx-post="https://weebcentral.com/chapters/01JJB9BP43FHYCHAAZDVXKPSEW/bookmarks"
+                            hx-swap="none" x-bind:hx-vals="JSON.stringify({ 
+                'series_id': '01J76XYCT4JVR13RN6NT1480MD',
+                'chapter_type': 'Chapter',
+                'number': '70',
+                'page': reading_style == 'long_strip' ? 0 : page
+            })">
+                            <svg class="w-4 h-4" fill="currentColor" xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 384 512">
+                                <path
+                                    d="M0 48C0 21.5 21.5 0 48 0l0 48 0 393.4 130.1-92.9c8.3-6 19.6-6 27.9 0L336 441.4 336 48 48 48 48 0 336 0c26.5 0 48 21.5 48 48l0 440c0 9-5 17.2-13 21.3s-17.6 3.4-24.9-1.8L192 397.5 37.9 507.5c-7.3 5.2-16.9 5.9-24.9 1.8S0 497 0 488L0 48z" />
+                            </svg>
+                        </button>
+                        <button class="flex-1 btn btn-secondary tooltip tooltip-bottom" data-tip="Remove Bookmark"
+                            aria-label="Remove Bookmark"
+                            x-show="reading_style !== 'double_page' && reading_style !== 'double_page_v2' && is_bookmarked()"
+                            hx-delete="https://weebcentral.com/chapters/01JJB9BP43FHYCHAAZDVXKPSEW/bookmarks"
+                            hx-swap="none">
+                            <svg class="w-4 h-4" fill="currentColor" xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 384 512">
+                                <path
+                                    d="M0 48V487.7C0 501.1 10.9 512 24.3 512c5 0 9.9-1.5 14-4.4L192 400 345.7 507.6c4.1 2.9 9 4.4 14 4.4c13.4 0 24.3-10.9 24.3-24.3V48c0-26.5-21.5-48-48-48H48C21.5 0 0 21.5 0 48z" />
+                            </svg>
+                        </button>
+                        <button class="flex-1 btn btn-secondary tooltip tooltip-bottom" data-tip="Preferences"
+                            aria-label="Preferences" onclick="preference_modal.showModal()">
+                            <svg class="w-4 h-4" fill="currentColor" xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 512 512">
+                                <path
+                                    d="M495.9 166.6c3.2 8.7 .5 18.4-6.4 24.6l-43.3 39.4c1.1 8.3 1.7 16.8 1.7 25.4s-.6 17.1-1.7 25.4l43.3 39.4c6.9 6.2 9.6 15.9 6.4 24.6c-4.4 11.9-9.7 23.3-15.8 34.3l-4.7 8.1c-6.6 11-14 21.4-22.1 31.2c-5.9 7.2-15.7 9.6-24.5 6.8l-55.7-17.7c-13.4 10.3-28.2 18.9-44 25.4l-12.5 57.1c-2 9.1-9 16.3-18.2 17.8c-13.8 2.3-28 3.5-42.5 3.5s-28.7-1.2-42.5-3.5c-9.2-1.5-16.2-8.7-18.2-17.8l-12.5-57.1c-15.8-6.5-30.6-15.1-44-25.4L83.1 425.9c-8.8 2.8-18.6 .3-24.5-6.8c-8.1-9.8-15.5-20.2-22.1-31.2l-4.7-8.1c-6.1-11-11.4-22.4-15.8-34.3c-3.2-8.7-.5-18.4 6.4-24.6l43.3-39.4C64.6 273.1 64 264.6 64 256s.6-17.1 1.7-25.4L22.4 191.2c-6.9-6.2-9.6-15.9-6.4-24.6c4.4-11.9 9.7-23.3 15.8-34.3l4.7-8.1c6.6-11 14-21.4 22.1-31.2c5.9-7.2 15.7-9.6 24.5-6.8l55.7 17.7c13.4-10.3 28.2-18.9 44-25.4l12.5-57.1c2-9.1 9-16.3 18.2-17.8C227.3 1.2 241.5 0 256 0s28.7 1.2 42.5 3.5c9.2 1.5 16.2 8.7 18.2 17.8l12.5 57.1c15.8 6.5 30.6 15.1 44 25.4l55.7-17.7c8.8-2.8 18.6-.3 24.5 6.8c8.1 9.8 15.5 20.2 22.1 31.2l4.7 8.1c6.1 11 11.4 22.4 15.8 34.3zM256 336a80 80 0 1 0 0-160 80 80 0 1 0 0 160z" />
+                            </svg>
+                        </button>
+                    </div>
+                    <button class="lg:flex-1 flex items-center justify-center btn btn-secondary"
+                        :class="reading_style == 'single_page' ? 'col-span-2' : 'col-span-3'" @click="prevPage()"
+                        x-show="reading_direction === 'left_right'">
+                        <svg class="w-4 h-4" fill="currentColor" xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 512 512">
+                            <path
+                                d="M459.5 440.6c9.5 7.9 22.8 9.7 34.1 4.4s18.4-16.6 18.4-29l0-320c0-12.4-7.2-23.7-18.4-29s-24.5-3.6-34.1 4.4L288 214.3l0 41.7 0 41.7L459.5 440.6zM256 352l0-96 0-128 0-32c0-12.4-7.2-23.7-18.4-29s-24.5-3.6-34.1 4.4l-192 160C4.2 237.5 0 246.5 0 256s4.2 18.5 11.5 24.6l192 160c9.5 7.9 22.8 9.7 34.1 4.4s18.4-16.6 18.4-29l0-64z" />
+                        </svg>
+                        <span>PREV</span>
+                    </button>
+                    <button class="lg:flex-1 flex items-center justify-center btn btn-secondary"
+                        :class="reading_style == 'single_page' ? 'col-span-2' : 'col-span-3'" @click="nextPage()"
+                        x-show="reading_direction === 'right_left'">
+                        <svg class="w-4 h-4" fill="currentColor" xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 512 512">
+                            <path
+                                d="M459.5 440.6c9.5 7.9 22.8 9.7 34.1 4.4s18.4-16.6 18.4-29l0-320c0-12.4-7.2-23.7-18.4-29s-24.5-3.6-34.1 4.4L288 214.3l0 41.7 0 41.7L459.5 440.6zM256 352l0-96 0-128 0-32c0-12.4-7.2-23.7-18.4-29s-24.5-3.6-34.1 4.4l-192 160C4.2 237.5 0 246.5 0 256s4.2 18.5 11.5 24.6l192 160c9.5 7.9 22.8 9.7 34.1 4.4s18.4-16.6 18.4-29l0-64z" />
+                        </svg>
+                        <span>NEXT</span>
+                    </button>
+                    <button class="col-span-2 lg:flex-1 btn btn-secondary " onclick="page_select_modal.showModal()"
+                        x-show="reading_style == 'single_page'" x-text="'Page ' + page"></button>
+                    <button class="lg:flex-1 flex items-center justify-center btn btn-secondary"
+                        :class="reading_style == 'single_page' ? 'col-span-2' : 'col-span-3'" @click="prevPage()"
+                        x-show="reading_direction === 'right_left'">
+                        <span>PREV</span>
+                        <svg class="w-4 h-4" fill="currentColor" xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 512 512">
+                            <path
+                                d="M52.5 440.6c-9.5 7.9-22.8 9.7-34.1 4.4S0 428.4 0 416L0 96C0 83.6 7.2 72.3 18.4 67s24.5-3.6 34.1 4.4L224 214.3l0 41.7 0 41.7L52.5 440.6zM256 352l0-96 0-128 0-32c0-12.4 7.2-23.7 18.4-29s24.5-3.6 34.1 4.4l192 160c7.3 6.1 11.5 15.1 11.5 24.6s-4.2 18.5-11.5 24.6l-192 160c-9.5 7.9-22.8 9.7-34.1 4.4s-18.4-16.6-18.4-29l0-64z" />
+                        </svg>
+                    </button>
+                    <button class="lg:flex-1 flex items-center justify-center btn btn-secondary"
+                        :class="reading_style == 'single_page' ? 'col-span-2' : 'col-span-3'" @click="nextPage()"
+                        x-show="reading_direction === 'left_right'">
+                        <span>NEXT</span>
+                        <svg class="w-4 h-4" fill="currentColor" xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 512 512">
+                            <path
+                                d="M52.5 440.6c-9.5 7.9-22.8 9.7-34.1 4.4S0 428.4 0 416L0 96C0 83.6 7.2 72.3 18.4 67s24.5-3.6 34.1 4.4L224 214.3l0 41.7 0 41.7L52.5 440.6zM256 352l0-96 0-128 0-32c0-12.4 7.2-23.7 18.4-29s24.5-3.6 34.1 4.4l192 160c7.3 6.1 11.5 15.1 11.5 24.6s-4.2 18.5-11.5 24.6l-192 160c-9.5 7.9-22.8 9.7-34.1 4.4s-18.4-16.6-18.4-29l0-64z" />
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="hidden lg:flex items-center gap-2">
+                    <button class="flex-1 btn btn-secondary tooltip tooltip-bottom" data-tip="Bookmark"
+                        aria-label="Bookmark"
+                        x-show="reading_style !== 'double_page' && reading_style !== 'double_page_v2' && !is_bookmarked()"
+                        hx-post="https://weebcentral.com/chapters/01JJB9BP43FHYCHAAZDVXKPSEW/bookmarks" hx-swap="none"
+                        x-bind:hx-vals="JSON.stringify({ 
+                'series_id': '01J76XYCT4JVR13RN6NT1480MD',
+                'chapter_type': 'Chapter',
+                'number': '70',
+                'page': reading_style == 'long_strip' ? 0 : page
+            })">
+                        <svg class="w-4 h-4" fill="currentColor" xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 384 512">
+                            <path
+                                d="M0 48C0 21.5 21.5 0 48 0l0 48 0 393.4 130.1-92.9c8.3-6 19.6-6 27.9 0L336 441.4 336 48 48 48 48 0 336 0c26.5 0 48 21.5 48 48l0 440c0 9-5 17.2-13 21.3s-17.6 3.4-24.9-1.8L192 397.5 37.9 507.5c-7.3 5.2-16.9 5.9-24.9 1.8S0 497 0 488L0 48z" />
+                        </svg>
+                    </button>
+                    <button class="flex-1 btn btn-secondary tooltip tooltip-bottom" data-tip="Delete Bookmark"
+                        aria-label="Delete Bookmark"
+                        x-show="reading_style !== 'double_page' && reading_style !== 'double_page_v2' && is_bookmarked()"
+                        hx-delete="https://weebcentral.com/chapters/01JJB9BP43FHYCHAAZDVXKPSEW/bookmarks"
+                        hx-swap="none">
+                        <svg class="w-4 h-4" fill="currentColor" xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 384 512">
+                            <path
+                                d="M0 48V487.7C0 501.1 10.9 512 24.3 512c5 0 9.9-1.5 14-4.4L192 400 345.7 507.6c4.1 2.9 9 4.4 14 4.4c13.4 0 24.3-10.9 24.3-24.3V48c0-26.5-21.5-48-48-48H48C21.5 0 0 21.5 0 48z" />
+                        </svg>
+                    </button>
+                    <button class="flex-1 btn btn-secondary tooltip tooltip-bottom" data-tip="Preferences"
+                        aria-label="preferences" onclick="preference_modal.showModal()">
+                        <svg class="w-4 h-4" fill="currentColor" xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 512 512">
+                            <path
+                                d="M495.9 166.6c3.2 8.7 .5 18.4-6.4 24.6l-43.3 39.4c1.1 8.3 1.7 16.8 1.7 25.4s-.6 17.1-1.7 25.4l43.3 39.4c6.9 6.2 9.6 15.9 6.4 24.6c-4.4 11.9-9.7 23.3-15.8 34.3l-4.7 8.1c-6.6 11-14 21.4-22.1 31.2c-5.9 7.2-15.7 9.6-24.5 6.8l-55.7-17.7c-13.4 10.3-28.2 18.9-44 25.4l-12.5 57.1c-2 9.1-9 16.3-18.2 17.8c-13.8 2.3-28 3.5-42.5 3.5s-28.7-1.2-42.5-3.5c-9.2-1.5-16.2-8.7-18.2-17.8l-12.5-57.1c-15.8-6.5-30.6-15.1-44-25.4L83.1 425.9c-8.8 2.8-18.6 .3-24.5-6.8c-8.1-9.8-15.5-20.2-22.1-31.2l-4.7-8.1c-6.1-11-11.4-22.4-15.8-34.3c-3.2-8.7-.5-18.4 6.4-24.6l43.3-39.4C64.6 273.1 64 264.6 64 256s.6-17.1 1.7-25.4L22.4 191.2c-6.9-6.2-9.6-15.9-6.4-24.6c4.4-11.9 9.7-23.3 15.8-34.3l4.7-8.1c6.6-11 14-21.4 22.1-31.2c5.9-7.2 15.7-9.6 24.5-6.8l55.7 17.7c13.4-10.3 28.2-18.9 44-25.4l12.5-57.1c2-9.1 9-16.3 18.2-17.8C227.3 1.2 241.5 0 256 0s28.7 1.2 42.5 3.5c9.2 1.5 16.2 8.7 18.2 17.8l12.5 57.1c15.8 6.5 30.6 15.1 44 25.4l55.7-17.7c8.8-2.8 18.6-.3 24.5 6.8c8.1 9.8 15.5 20.2 22.1 31.2l4.7 8.1c6.1 11 11.4 22.4 15.8 34.3zM256 336a80 80 0 1 0 0-160 80 80 0 1 0 0 160z" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+        </section>
+
+        <section>
+            <input type="text" name="current_page" x-model="currentPage" hidden />
+            <button onclick="window.scrollTo({ top: 0, behavior: 'smooth' })"
+                class="bg-secondary opacity-30 hover:opacity-70 fixed bottom-12 right-0 p-4" x-show="back_to_top"
+                aria-label="back to top">
+                <svg class="w-4 h-4" fill="currentColor" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+                    <path
+                        d="M233.4 105.4c12.5-12.5 32.8-12.5 45.3 0l192 192c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L256 173.3 86.6 342.6c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3l192-192z" />
+                </svg>
+            </button>
+            <dialog id="chapter_select_modal" class="modal">
+                <div class="modal-box">
+                    <h3 class="text-lg font-bold flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="currentColor" xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 512 512">
+                            <path
+                                d="M0 96C0 78.3 14.3 64 32 64l384 0c17.7 0 32 14.3 32 32s-14.3 32-32 32L32 128C14.3 128 0 113.7 0 96zM64 256c0-17.7 14.3-32 32-32l384 0c17.7 0 32 14.3 32 32s-14.3 32-32 32L96 288c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32L32 448c-17.7 0-32-14.3-32-32s14.3-32 32-32l384 0c17.7 0 32 14.3 32 32z" />
+                        </svg>
+                        <span>Select Chapter</span>
+                    </h3>
+                    <div class="mt-4" id="chapter-select-body"></div>
+                    <div class="modal-action">
+                        <form method="dialog" class="w-full">
+                            <button class="btn btn-secondary w-full">Close</button>
+                        </form>
+                    </div>
+                </div>
+                <form method="dialog" class="modal-backdrop">
+                    <button>close</button>
+                </form>
+            </dialog>
+            <dialog id="page_select_modal" class="modal">
+                <div class="modal-box">
+                    <h3 class="text-lg font-bold">Select Page</h3>
+                    <div class="mt-4">
+                        <div class="grid grid-cols-3 lg:grid-cols-5 gap-3 justify-items-center">
+
+                            <button class="w-full btn " :class="page === 1 ? 'bg-base-300' : 'bg-base-200'"
+                                @click="page = 1; page_select_modal.close()">1</button>
+
+                            <button class="w-full btn " :class="page === 2 ? 'bg-base-300' : 'bg-base-200'"
+                                @click="page = 2; page_select_modal.close()">2</button>
+
+                            <button class="w-full btn " :class="page === 3 ? 'bg-base-300' : 'bg-base-200'"
+                                @click="page = 3; page_select_modal.close()">3</button>
+
+                            <button class="w-full btn " :class="page === 4 ? 'bg-base-300' : 'bg-base-200'"
+                                @click="page = 4; page_select_modal.close()">4</button>
+
+                            <button class="w-full btn " :class="page === 5 ? 'bg-base-300' : 'bg-base-200'"
+                                @click="page = 5; page_select_modal.close()">5</button>
+
+                            <button class="w-full btn " :class="page === 6 ? 'bg-base-300' : 'bg-base-200'"
+                                @click="page = 6; page_select_modal.close()">6</button>
+
+                            <button class="w-full btn " :class="page === 7 ? 'bg-base-300' : 'bg-base-200'"
+                                @click="page = 7; page_select_modal.close()">7</button>
+
+                            <button class="w-full btn " :class="page === 8 ? 'bg-base-300' : 'bg-base-200'"
+                                @click="page = 8; page_select_modal.close()">8</button>
+
+                            <button class="w-full btn " :class="page === 9 ? 'bg-base-300' : 'bg-base-200'"
+                                @click="page = 9; page_select_modal.close()">9</button>
+
+                            <button class="w-full btn " :class="page === 10 ? 'bg-base-300' : 'bg-base-200'"
+                                @click="page = 10; page_select_modal.close()">10</button>
+
+                            <button class="w-full btn " :class="page === 11 ? 'bg-base-300' : 'bg-base-200'"
+                                @click="page = 11; page_select_modal.close()">11</button>
+
+                            <button class="w-full btn " :class="page === 12 ? 'bg-base-300' : 'bg-base-200'"
+                                @click="page = 12; page_select_modal.close()">12</button>
+
+                            <button class="w-full btn " :class="page === 13 ? 'bg-base-300' : 'bg-base-200'"
+                                @click="page = 13; page_select_modal.close()">13</button>
+
+                            <button class="w-full btn " :class="page === 14 ? 'bg-base-300' : 'bg-base-200'"
+                                @click="page = 14; page_select_modal.close()">14</button>
+
+                            <button class="w-full btn " :class="page === 15 ? 'bg-base-300' : 'bg-base-200'"
+                                @click="page = 15; page_select_modal.close()">15</button>
+
+                            <button class="w-full btn " :class="page === 16 ? 'bg-base-300' : 'bg-base-200'"
+                                @click="page = 16; page_select_modal.close()">16</button>
+
+                            <button class="w-full btn " :class="page === 17 ? 'bg-base-300' : 'bg-base-200'"
+                                @click="page = 17; page_select_modal.close()">17</button>
+
+                            <button class="w-full btn " :class="page === 18 ? 'bg-base-300' : 'bg-base-200'"
+                                @click="page = 18; page_select_modal.close()">18</button>
+
+                            <button class="w-full btn " :class="page === 19 ? 'bg-base-300' : 'bg-base-200'"
+                                @click="page = 19; page_select_modal.close()">19</button>
+
+                            <button class="w-full btn " :class="page === 20 ? 'bg-base-300' : 'bg-base-200'"
+                                @click="page = 20; page_select_modal.close()">20</button>
+
+                            <button class="w-full btn " :class="page === 21 ? 'bg-base-300' : 'bg-base-200'"
+                                @click="page = 21; page_select_modal.close()">21</button>
+
+                            <button class="w-full btn " :class="page === 22 ? 'bg-base-300' : 'bg-base-200'"
+                                @click="page = 22; page_select_modal.close()">22</button>
+
+                            <button class="w-full btn " :class="page === 23 ? 'bg-base-300' : 'bg-base-200'"
+                                @click="page = 23; page_select_modal.close()">23</button>
+
+                            <button class="w-full btn " :class="page === 24 ? 'bg-base-300' : 'bg-base-200'"
+                                @click="page = 24; page_select_modal.close()">24</button>
+
+                            <button class="w-full btn " :class="page === 25 ? 'bg-base-300' : 'bg-base-200'"
+                                @click="page = 25; page_select_modal.close()">25</button>
+
+                            <button class="w-full btn " :class="page === 26 ? 'bg-base-300' : 'bg-base-200'"
+                                @click="page = 26; page_select_modal.close()">26</button>
+
+                            <button class="w-full btn " :class="page === 27 ? 'bg-base-300' : 'bg-base-200'"
+                                @click="page = 27; page_select_modal.close()">27</button>
+
+                            <button class="w-full btn " :class="page === 28 ? 'bg-base-300' : 'bg-base-200'"
+                                @click="page = 28; page_select_modal.close()">28</button>
+
+                        </div>
+                    </div>
+                    <div class="modal-action">
+                        <form method="dialog" class="w-full">
+                            <button class="btn btn-secondary w-full">Close</button>
+                        </form>
+                    </div>
+                </div>
+                <form method="dialog" class="modal-backdrop">
+                    <button>close</button>
+                </form>
+            </dialog>
+            <dialog id="preference_modal" class="modal">
+                <div class="modal-box">
+                    <h3 class="text-lg font-bold flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="currentColor" xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 512 512">
+                            <path
+                                d="M495.9 166.6c3.2 8.7 .5 18.4-6.4 24.6l-43.3 39.4c1.1 8.3 1.7 16.8 1.7 25.4s-.6 17.1-1.7 25.4l43.3 39.4c6.9 6.2 9.6 15.9 6.4 24.6c-4.4 11.9-9.7 23.3-15.8 34.3l-4.7 8.1c-6.6 11-14 21.4-22.1 31.2c-5.9 7.2-15.7 9.6-24.5 6.8l-55.7-17.7c-13.4 10.3-28.2 18.9-44 25.4l-12.5 57.1c-2 9.1-9 16.3-18.2 17.8c-13.8 2.3-28 3.5-42.5 3.5s-28.7-1.2-42.5-3.5c-9.2-1.5-16.2-8.7-18.2-17.8l-12.5-57.1c-15.8-6.5-30.6-15.1-44-25.4L83.1 425.9c-8.8 2.8-18.6 .3-24.5-6.8c-8.1-9.8-15.5-20.2-22.1-31.2l-4.7-8.1c-6.1-11-11.4-22.4-15.8-34.3c-3.2-8.7-.5-18.4 6.4-24.6l43.3-39.4C64.6 273.1 64 264.6 64 256s.6-17.1 1.7-25.4L22.4 191.2c-6.9-6.2-9.6-15.9-6.4-24.6c4.4-11.9 9.7-23.3 15.8-34.3l4.7-8.1c6.6-11 14-21.4 22.1-31.2c5.9-7.2 15.7-9.6 24.5-6.8l55.7 17.7c13.4-10.3 28.2-18.9 44-25.4l12.5-57.1c2-9.1 9-16.3 18.2-17.8C227.3 1.2 241.5 0 256 0s28.7 1.2 42.5 3.5c9.2 1.5 16.2 8.7 18.2 17.8l12.5 57.1c15.8 6.5 30.6 15.1 44 25.4l55.7-17.7c8.8-2.8 18.6-.3 24.5 6.8c8.1 9.8 15.5 20.2 22.1 31.2l4.7 8.1c6.1 11 11.4 22.4 15.8 34.3zM256 336a80 80 0 1 0 0-160 80 80 0 1 0 0 160z" />
+                        </svg>
+                        <span>Preferences</span>
+                    </h3>
+                    <div class="flex flex-col gap-4 mt-4">
+                        <fieldset class="fieldset text-base">
+                            <label class="fieldset-label">
+                                <input type="checkbox" class="toggle" x-model="simple_top_nav" />
+                                <span class="ml-2 cursor-pointer">Simple Top Nav</span>
+                            </label>
+                        </fieldset>
+                        <fieldset class="fieldset text-base">
+                            <label class="fieldset-label">
+                                <input type="checkbox" class="toggle" x-model="sticky_top_nav" />
+                                <span class="ml-2 cursor-pointer">Sticky Top Nav</span>
+                            </label>
+                        </fieldset>
+                        <fieldset class="fieldset text-base">
+                            <label class="fieldset-label">
+                                <input type="checkbox" class="toggle" x-model="gap" />
+                                <span class="ml-2 cursor-pointer">
+                                    <span class="cursor-pointer">Gap between images</span>
+                                    <kbd class="kbd ml-2">G</kbd>
+                                </span>
+                            </label>
+                        </fieldset>
+                        <fieldset class="fieldset text-base">
+                            <label class="fieldset-label">
+                                <input type="checkbox" class="toggle" x-model="back_to_top" />
+                                <span class="ml-2 cursor-pointer">Back to top button</span>
+                            </label>
+                        </fieldset>
+                        <fieldset class="fieldset text-base">
+                            <label class="fieldset-label">
+                                <input type="checkbox" class="toggle" x-model="dark_background" />
+                                <span class="ml-2 cursor-pointer">Dark Background</span>
+                            </label>
+                        </fieldset>
+                        <fieldset class="fieldset text-base">
+                            <legend class="fieldset-legend">Reading Direction</legend>
+                            <label class="fieldset-label ps-8 mt-2">
+                                <input type="radio" class="radio" value="left_right" x-model="reading_direction" />
+                                <span class="ml-2 cursor-pointer">Left to Right</span>
+                            </label>
+                            <label class="fieldset-label ps-8 mt-2">
+                                <input type="radio" class="radio" value="right_left" x-model="reading_direction" />
+                                <span class="ml-2 cursor-pointer">Right to Left</span>
+                            </label>
+                        </fieldset>
+                        <fieldset class="fieldset text-base">
+                            <legend class="fieldset-legend">Reading Style</legend>
+
+                            <label class="fieldset-label ps-8 mt-2">
+                                <input type="radio" class="radio" value="long_strip" x-model="reading_style" />
+                                <span class="ml-2 cursor-pointer">Long Strip</span>
+                            </label>
+
+                            <label class="fieldset-label ps-8 mt-2">
+                                <input type="radio" class="radio" value="single_page" x-model="reading_style" />
+                                <span class="ml-2 cursor-pointer">Single Page</span>
+                            </label>
+
+                            <label class="fieldset-label ps-8 mt-2">
+                                <input type="radio" class="radio" value="double_page" x-model="reading_style" />
+                                <span class="ml-2 cursor-pointer">Double Page</span>
+                            </label>
+
+                            <label class="fieldset-label ps-8 mt-2">
+                                <input type="radio" class="radio" value="double_page_v2" x-model="reading_style" />
+                                <span class="ml-2 cursor-pointer">Double Page (MangaPlus)</span>
+                            </label>
+
+                        </fieldset>
+                        <fieldset class="fieldset text-base">
+                            <legend class="fieldset-legend">Image Fit</legend>
+
+                            <label class="fieldset-label ps-8 mt-2">
+                                <input type="radio" class="radio" value="width" x-model="image_fit" />
+                                <span class="ml-2 cursor-pointer">Fit Width</span>
+                            </label>
+
+                            <label class="fieldset-label ps-8 mt-2">
+                                <input type="radio" class="radio" value="height" x-model="image_fit" />
+                                <span class="ml-2 cursor-pointer">Fit Height</span>
+                            </label>
+
+                        </fieldset>
+                    </div>
+                    <div class="modal-action">
+                        <form method="dialog" class="w-full">
+                            <button class="btn btn-secondary w-full">Close</button>
+                        </form>
+                    </div>
+                </div>
+                <form method="dialog" class="modal-backdrop">
+                    <button>close</button>
+                </form>
+            </dialog>
+
+        </section>
+    </main>
+
+
+
+    <footer class="bg-base-300 footer footer-horizontal footer-center text-base-content p-10">
+        <button id="report-button" class="btn flex gap-2 " onclick="bug_report.showModal(); focusOnReportReason()">
+            <svg class="w-4 h-4" fill="currentColor" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+                <path
+                    d="M256 0c53 0 96 43 96 96l0 3.6c0 15.7-12.7 28.4-28.4 28.4l-135.1 0c-15.7 0-28.4-12.7-28.4-28.4l0-3.6c0-53 43-96 96-96zM41.4 105.4c12.5-12.5 32.8-12.5 45.3 0l64 64c.7 .7 1.3 1.4 1.9 2.1c14.2-7.3 30.4-11.4 47.5-11.4l112 0c17.1 0 33.2 4.1 47.5 11.4c.6-.7 1.2-1.4 1.9-2.1l64-64c12.5-12.5 32.8-12.5 45.3 0s12.5 32.8 0 45.3l-64 64c-.7 .7-1.4 1.3-2.1 1.9c6.2 12 10.1 25.3 11.1 39.5l64.3 0c17.7 0 32 14.3 32 32s-14.3 32-32 32l-64 0c0 24.6-5.5 47.8-15.4 68.6c2.2 1.3 4.2 2.9 6 4.8l64 64c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0l-63.1-63.1c-24.5 21.8-55.8 36.2-90.3 39.6L272 240c0-8.8-7.2-16-16-16s-16 7.2-16 16l0 239.2c-34.5-3.4-65.8-17.8-90.3-39.6L86.6 502.6c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3l64-64c1.9-1.9 3.9-3.4 6-4.8C101.5 367.8 96 344.6 96 320l-64 0c-17.7 0-32-14.3-32-32s14.3-32 32-32l64.3 0c1.1-14.1 5-27.5 11.1-39.5c-.7-.6-1.4-1.2-2.1-1.9l-64-64c-12.5-12.5-12.5-32.8 0-45.3z" />
+            </svg>
+            <span>Report</span>
+        </button>
+        <dialog id="bug_report" class="modal">
+            <div class="modal-box">
+                <form id="report-form" class="flex flex-col gap-4"
+                    hx-post="https://weebcentral.com/chapters/01JJB9BP43FHYCHAAZDVXKPSEW/report"
+                    hx-target="#report-button" hx-swap="outerHTML">
+                    <h3 class="text-lg font-bold flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="currentColor" xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 512 512">
+                            <path
+                                d="M256 0c53 0 96 43 96 96l0 3.6c0 15.7-12.7 28.4-28.4 28.4l-135.1 0c-15.7 0-28.4-12.7-28.4-28.4l0-3.6c0-53 43-96 96-96zM41.4 105.4c12.5-12.5 32.8-12.5 45.3 0l64 64c.7 .7 1.3 1.4 1.9 2.1c14.2-7.3 30.4-11.4 47.5-11.4l112 0c17.1 0 33.2 4.1 47.5 11.4c.6-.7 1.2-1.4 1.9-2.1l64-64c12.5-12.5 32.8-12.5 45.3 0s12.5 32.8 0 45.3l-64 64c-.7 .7-1.4 1.3-2.1 1.9c6.2 12 10.1 25.3 11.1 39.5l64.3 0c17.7 0 32 14.3 32 32s-14.3 32-32 32l-64 0c0 24.6-5.5 47.8-15.4 68.6c2.2 1.3 4.2 2.9 6 4.8l64 64c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0l-63.1-63.1c-24.5 21.8-55.8 36.2-90.3 39.6L272 240c0-8.8-7.2-16-16-16s-16 7.2-16 16l0 239.2c-34.5-3.4-65.8-17.8-90.3-39.6L86.6 502.6c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3l64-64c1.9-1.9 3.9-3.4 6-4.8C101.5 367.8 96 344.6 96 320l-64 0c-17.7 0-32-14.3-32-32s14.3-32 32-32l64.3 0c1.1-14.1 5-27.5 11.1-39.5c-.7-.6-1.4-1.2-2.1-1.9l-64-64c-12.5-12.5-12.5-32.8 0-45.3z" />
+                        </svg>
+                        <span>What happened?</span>
+                    </h3>
+                    <div class="flex flex-col gap-2">
+
+                        <fieldset class="fieldset text-base">
+                            <label class="fieldset-label">
+                                <input type="radio" name="reason" class="radio" value="Pages out of order" checked />
+                                <span class="ml-2 cursor-pointer">Pages out of order</span>
+                            </label>
+                        </fieldset>
+
+                        <fieldset class="fieldset text-base">
+                            <label class="fieldset-label">
+                                <input type="radio" name="reason" class="radio" value="Image(s) not loading" />
+                                <span class="ml-2 cursor-pointer">Image(s) not loading</span>
+                            </label>
+                        </fieldset>
+
+                        <fieldset class="fieldset text-base">
+                            <label class="fieldset-label">
+                                <input type="radio" name="reason" class="radio" value="Wrong series" />
+                                <span class="ml-2 cursor-pointer">Wrong series</span>
+                            </label>
+                        </fieldset>
+
+                        <fieldset class="fieldset text-base">
+                            <label class="fieldset-label">
+                                <input type="radio" name="reason" class="radio" value="Wrong chapter" />
+                                <span class="ml-2 cursor-pointer">Wrong chapter</span>
+                            </label>
+                        </fieldset>
+
+                        <fieldset class="fieldset text-base">
+                            <label class="fieldset-label">
+                                <input type="radio" name="reason" class="radio" value="Missing chapter" />
+                                <span class="ml-2 cursor-pointer">Missing chapter</span>
+                            </label>
+                        </fieldset>
+
+                        <fieldset class="fieldset text-base">
+                            <label class="fieldset-label">
+                                <input type="radio" name="reason" class="radio" value="Other" />
+                                <span class="ml-2 cursor-pointer">Other</span>
+                            </label>
+                        </fieldset>
+
+                    </div>
+                    <div class="
+                    grid
+                    text-lg
+                    after:px-3.5
+                    after:py-2.5
+                    [&>textarea]:text-inherit
+                    after:text-inherit
+                    [&>textarea]:resize-none
+                    [&>textarea]:overflow-hidden
+                    [&>textarea]:[grid-area:1/1/2/2]
+                    after:[grid-area:1/1/2/2]
+                    after:whitespace-pre-wrap
+                    after:invisible
+                    after:content-[attr(data-cloned-val)_'_']
+                    after:border
+                ">
+                        <textarea id="report-reason" class="w-full textarea" name="additional_reason" rows="1"
+                            minlength="3" maxlength="1000" onInput="this.parentNode.dataset.clonedVal = this.value"
+                            placeholder="Additional explaination"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary" onclick="bug_report.close()">Submit</button>
+                </form>
+            </div>
+            <form method="dialog" class="modal-backdrop">
+                <button>close</button>
+            </form>
+        </dialog>
+        <nav class="grid grid-flow-col gap-4">
+            <a class="link link-hover" href="/">Home</a>
+            <a class="link link-hover" href="https://weebcentral.com/contact">Contact</a>
+            <a class="link link-hover" href="https://weebcentral.com/privacy">Privacy</a>
+            <a class="link link-hover" href="https://weebcentral.com/faq">FAQ</a>
+        </nav>
+    </footer>
+
+
+    <!-- 3rd Party Libaries -->
+    <script defer src="/static/js/library.min.js"></script>
+
+    <!-- My Script -->
+    <script defer src="/static/js/script.min.js"></script>
+
+
+    <script defer>
+
+        document.addEventListener('alpine:init', () => {
+            Alpine.data('singlePageNavigation', function () {
+                const readingStylesWithPage = [
+                    'single_page',
+                    'double_page',
+                    'double_page_v2'
+                ];
+                return {
+                    dark_background: this.$persist(false),
+                    gap: this.$persist(true),
+                    back_to_top: this.$persist(true),
+                    reading_style: this.$persist('long_strip'),
+                    reading_direction: this.$persist('left_right'),
+                    page: parseInt('1'),
+                    bookmarks: new Set(JSON.parse("[]")),
+                    image_fit: this.$persist('width'),
+                    max_page: parseInt('28'),
+                    double_max_page: 0,
+                    is_last_chapter: 'False'.toLowerCase() === 'true',
+                    is_first_chapter: 'False'.toLowerCase() === 'true',
+                    is_prev: 'False'.toLowerCase() === 'true',
+                    init() {
+                        if (this.page !== 1 && !this.is_prev) {
+                            this.reading_style = 'single_page';
+                        }
+                    },
+                    handleClick(element) {
+                        const clickX = element.clientX;
+                        const sectionWidth = element.currentTarget.getBoundingClientRect().width;
+
+                        const isLeftHalf = clickX < sectionWidth / 2;
+                        const isLeftToRight = this.reading_direction === 'left_right';
+
+                        if (isLeftHalf === isLeftToRight) {
+                            this.prevPage()
+                        } else {
+                            this.nextPage()
+                        }
+                    },
+                    handleShortcutKey(event) {
+                        if (document.activeElement.tagName == 'TEXTAREA') {
+                            return
+                        }
+                        if (event.key.toLowerCase() === 'g') {
+                            this.gap = !this.gap
+                        }
+                    },
+                    prevPage() {
+                        if (document.activeElement.tagName == 'TEXTAREA') {
+                            return
+                        }
+
+                        if (readingStylesWithPage.includes(this.reading_style) && this.page > 1) {
+                            this.page--
+                            scrollIntoView(this.calculateScrollOffset())
+                            return
+                        }
+
+                        if (this.is_first_chapter) {
+                            return
+                        }
+
+                        window.location.href = "https://weebcentral.com/chapters/01JFWESMBYEGFG2BXNX1C2FMVK?is_prev=True"
+                    },
+                    nextPage() {
+                        if (document.activeElement.tagName == 'TEXTAREA') {
+                            return
+                        }
+
+                        if (readingStylesWithPage.includes(this.reading_style) && this.page < this.max_page) {
+                            this.page++
+                            scrollIntoView(this.calculateScrollOffset())
+                            return
+                        }
+
+                        if (this.is_last_chapter) {
+                            document.getElementById("last_chapter_modal").showModal()
+                            return
+                        }
+
+                        window.location.href = "https://weebcentral.com/chapters/01JQ5N6QKKBWVX427RT44K14WV"
+                    },
+                    is_bookmarked() {
+                        return (this.reading_style === "single_page" && this.bookmarks.has(this.page))
+                            || (this.reading_style === "long_strip" && this.bookmarks.has(0))
+                    },
+                    get currentPage() {
+                        return this.reading_style === "single_page" ? this.page : 0
+                    },
+                    load_page() {
+                        this.max_page = parseInt(document.getElementById('max_page').value);
+                        this.page = parseInt(document.getElementById('current_page').value);
+                    },
+                    calculateScrollOffset() {
+                        if (!this.sticky_top_nav) {
+                            return 0
+                        }
+                        return -document.getElementById("main-nav").offsetHeight
+                    }
+                }
+            });
+
+            Alpine.data('history', function () {
+                return {
+                    async init() {
+                        const newHistory = {
+                            "series_id": "01J76XYCT4JVR13RN6NT1480MD",
+                            "series_name": "Heavenly Delusion",
+                            "chapter": "Chapter 70",
+                            "chapter_path": "/chapters/01JJB9BP43FHYCHAAZDVXKPSEW",
+                        }
+
+                        let currentHistoryArr = await idbKeyval.get("history");
+                        if (!currentHistoryArr) {
+                            currentHistoryArr = [newHistory]
+                        } else {
+                            currentHistoryArr = currentHistoryArr.filter(history => history.series_id !== "01J76XYCT4JVR13RN6NT1480MD")
+                            if (currentHistoryArr.length >= 10) {
+                                currentHistoryArr.splice(9)
+                            }
+                            currentHistoryArr.unshift(newHistory)
+                        }
+                        await idbKeyval.set("history", currentHistoryArr)
+                    },
+                };
+            })
+        });
+
+        document.addEventListener("DOMContentLoaded", function () {
+            const url = new URL(window.location);
+            window.history.replaceState({}, document.title, url.pathname);
+        });
+
+        function afterFirstRequest() {
+            const chapter_select_buttons = document.querySelectorAll('.load-chapter-select-btn')
+            if (chapter_select_buttons) {
+                chapter_select_buttons.forEach(button => {
+                    button.setAttribute("hx-disable", "")
+                })
+            }
+        }
+
+        function scrollIntoView(offset) {
+            document.getElementById("last-chapter-top").scrollIntoView();
+            window.scrollBy(0, offset);
+        }
+
+        function scrollToSelectedChapter() {
+            document.getElementById('selected_chapter').scrollIntoView({behavior: 'smooth', block: 'center'});
+        }
+
+        function focusOnReportReason() {
+            const reportReason = document.getElementById('report-reason')
+            if (reportReason) {
+                setTimeout(() => {
+                    reportReason.focus()
+                }, 10)
+            }
+        }
+
+    </script>
+
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            FingerprintJS
+                .load()
+                .then(fp => fp.get())
+                .then(result => {
+                    const visitorId = result.visitorId;
+                    document.getElementById('visitor-id').value = visitorId;
+                    if (navigator.serviceWorker.controller) {
+                        navigator.serviceWorker.controller.postMessage({
+                            type: 'SET_VISITOR_ID',
+                            visitorId: visitorId
+                        });
+                    }
+                })
+        })
+    </script>
+</body>
+
+</html>

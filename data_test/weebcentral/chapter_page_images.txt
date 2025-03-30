@@ -1,0 +1,131 @@
+<section class="flex-1 flex flex-col pb-4 cursor-pointer" :class="{ 'gap-4': gap }" x-data="{ 
+		scrollDown() { window.scrollBy({ top: window.innerHeight * 0.75, behavior: 'smooth' }); },
+		scrollUp() { window.scrollBy({ top: -window.innerHeight * 0.75, behavior: 'smooth' }); },
+		handleClick(e) {
+			const clickX = e.clientX;
+			const sectionWidth = e.currentTarget.getBoundingClientRect().width;
+			const isLeftHalf = clickX < sectionWidth / 2;
+
+			if (isLeftHalf) {
+				this.scrollUp();
+			} else {
+				this.scrollDown();
+			}
+		},
+	}" hx-get="https://weebcentral.com/chapters/01JJB9BP43FHYCHAAZDVXKPSEW/images"
+	hx-trigger="change from:[name='reading_style']" hx-include="[name='reading_style']" hx-swap="outerHTML"
+	@click="handleClick">
+
+	<img src="https://scans.lastation.us/manga/Tengoku-Daimakyou/0070-001.png" class="maw-w-full mx-auto"
+		width="960" height="1378" alt="Page 1" decoding="async" loading="lazy"
+		onerror="this.onerror=null; this.src='/static/images/broken_image.jpg'" />
+
+	<img src="https://scans.lastation.us/manga/Tengoku-Daimakyou/0070-002.png" class="maw-w-full mx-auto"
+		width="960" height="1378" alt="Page 2" decoding="async" loading="lazy"
+		onerror="this.onerror=null; this.src='/static/images/broken_image.jpg'" />
+
+	<img src="https://scans.lastation.us/manga/Tengoku-Daimakyou/0070-003.png" class="maw-w-full mx-auto"
+		width="960" height="1378" alt="Page 3" decoding="async" loading="lazy"
+		onerror="this.onerror=null; this.src='/static/images/broken_image.jpg'" />
+
+	<img src="https://scans.lastation.us/manga/Tengoku-Daimakyou/0070-004.png" class="maw-w-full mx-auto"
+		width="960" height="1378" alt="Page 4" decoding="async" loading="lazy"
+		onerror="this.onerror=null; this.src='/static/images/broken_image.jpg'" />
+
+	<img src="https://scans.lastation.us/manga/Tengoku-Daimakyou/0070-005.png" class="maw-w-full mx-auto"
+		width="960" height="1378" alt="Page 5" decoding="async" loading="lazy"
+		onerror="this.onerror=null; this.src='/static/images/broken_image.jpg'" />
+
+	<img src="https://scans.lastation.us/manga/Tengoku-Daimakyou/0070-006.png" class="maw-w-full mx-auto"
+		width="960" height="1378" alt="Page 6" decoding="async" loading="lazy"
+		onerror="this.onerror=null; this.src='/static/images/broken_image.jpg'" />
+
+	<img src="https://scans.lastation.us/manga/Tengoku-Daimakyou/0070-007.png" class="maw-w-full mx-auto"
+		width="960" height="1378" alt="Page 7" decoding="async" loading="lazy"
+		onerror="this.onerror=null; this.src='/static/images/broken_image.jpg'" />
+
+	<img src="https://scans.lastation.us/manga/Tengoku-Daimakyou/0070-008.png" class="maw-w-full mx-auto"
+		width="960" height="1378" alt="Page 8" decoding="async" loading="lazy"
+		onerror="this.onerror=null; this.src='/static/images/broken_image.jpg'" />
+
+	<img src="https://scans.lastation.us/manga/Tengoku-Daimakyou/0070-009.png" class="maw-w-full mx-auto"
+		width="960" height="1378" alt="Page 9" decoding="async" loading="lazy"
+		onerror="this.onerror=null; this.src='/static/images/broken_image.jpg'" />
+
+	<img src="https://scans.lastation.us/manga/Tengoku-Daimakyou/0070-010.png" class="maw-w-full mx-auto"
+		width="960" height="1378" alt="Page 10" decoding="async" loading="lazy"
+		onerror="this.onerror=null; this.src='/static/images/broken_image.jpg'" />
+
+	<img src="https://scans.lastation.us/manga/Tengoku-Daimakyou/0070-011.png" class="maw-w-full mx-auto"
+		width="960" height="1378" alt="Page 11" decoding="async" loading="lazy"
+		onerror="this.onerror=null; this.src='/static/images/broken_image.jpg'" />
+
+	<img src="https://scans.lastation.us/manga/Tengoku-Daimakyou/0070-012.png" class="maw-w-full mx-auto"
+		width="960" height="1378" alt="Page 12" decoding="async" loading="lazy"
+		onerror="this.onerror=null; this.src='/static/images/broken_image.jpg'" />
+
+	<img src="https://scans.lastation.us/manga/Tengoku-Daimakyou/0070-013.png" class="maw-w-full mx-auto"
+		width="960" height="1378" alt="Page 13" decoding="async" loading="lazy"
+		onerror="this.onerror=null; this.src='/static/images/broken_image.jpg'" />
+
+	<img src="https://scans.lastation.us/manga/Tengoku-Daimakyou/0070-014.png" class="maw-w-full mx-auto"
+		width="960" height="1378" alt="Page 14" decoding="async" loading="lazy"
+		onerror="this.onerror=null; this.src='/static/images/broken_image.jpg'" />
+
+	<img src="https://scans.lastation.us/manga/Tengoku-Daimakyou/0070-015.png" class="maw-w-full mx-auto"
+		width="960" height="1378" alt="Page 15" decoding="async" loading="lazy"
+		onerror="this.onerror=null; this.src='/static/images/broken_image.jpg'" />
+
+	<img src="https://scans.lastation.us/manga/Tengoku-Daimakyou/0070-016.png" class="maw-w-full mx-auto"
+		width="960" height="1378" alt="Page 16" decoding="async" loading="lazy"
+		onerror="this.onerror=null; this.src='/static/images/broken_image.jpg'" />
+
+	<img src="https://scans.lastation.us/manga/Tengoku-Daimakyou/0070-017.png" class="maw-w-full mx-auto"
+		width="960" height="1378" alt="Page 17" decoding="async" loading="lazy"
+		onerror="this.onerror=null; this.src='/static/images/broken_image.jpg'" />
+
+	<img src="https://scans.lastation.us/manga/Tengoku-Daimakyou/0070-018.png" class="maw-w-full mx-auto"
+		width="960" height="1378" alt="Page 18" decoding="async" loading="lazy"
+		onerror="this.onerror=null; this.src='/static/images/broken_image.jpg'" />
+
+	<img src="https://scans.lastation.us/manga/Tengoku-Daimakyou/0070-019.png" class="maw-w-full mx-auto"
+		width="960" height="1378" alt="Page 19" decoding="async" loading="lazy"
+		onerror="this.onerror=null; this.src='/static/images/broken_image.jpg'" />
+
+	<img src="https://scans.lastation.us/manga/Tengoku-Daimakyou/0070-020.png" class="maw-w-full mx-auto"
+		width="960" height="1378" alt="Page 20" decoding="async" loading="lazy"
+		onerror="this.onerror=null; this.src='/static/images/broken_image.jpg'" />
+
+	<img src="https://scans.lastation.us/manga/Tengoku-Daimakyou/0070-021.png" class="maw-w-full mx-auto"
+		width="960" height="1378" alt="Page 21" decoding="async" loading="lazy"
+		onerror="this.onerror=null; this.src='/static/images/broken_image.jpg'" />
+
+	<img src="https://scans.lastation.us/manga/Tengoku-Daimakyou/0070-022.png" class="maw-w-full mx-auto"
+		width="960" height="1378" alt="Page 22" decoding="async" loading="lazy"
+		onerror="this.onerror=null; this.src='/static/images/broken_image.jpg'" />
+
+	<img src="https://scans.lastation.us/manga/Tengoku-Daimakyou/0070-023.png" class="maw-w-full mx-auto"
+		width="960" height="1378" alt="Page 23" decoding="async" loading="lazy"
+		onerror="this.onerror=null; this.src='/static/images/broken_image.jpg'" />
+
+	<img src="https://scans.lastation.us/manga/Tengoku-Daimakyou/0070-024.png" class="maw-w-full mx-auto"
+		width="960" height="1378" alt="Page 24" decoding="async" loading="lazy"
+		onerror="this.onerror=null; this.src='/static/images/broken_image.jpg'" />
+
+	<img src="https://scans.lastation.us/manga/Tengoku-Daimakyou/0070-025.png" class="maw-w-full mx-auto"
+		width="960" height="1378" alt="Page 25" decoding="async" loading="lazy"
+		onerror="this.onerror=null; this.src='/static/images/broken_image.jpg'" />
+
+	<img src="https://scans.lastation.us/manga/Tengoku-Daimakyou/0070-026.png" class="maw-w-full mx-auto"
+		width="960" height="1378" alt="Page 26" decoding="async" loading="lazy"
+		onerror="this.onerror=null; this.src='/static/images/broken_image.jpg'" />
+
+	<img src="https://scans.lastation.us/manga/Tengoku-Daimakyou/0070-027.png" class="maw-w-full mx-auto"
+		width="960" height="1378" alt="Page 27" decoding="async" loading="lazy"
+		onerror="this.onerror=null; this.src='/static/images/broken_image.jpg'" />
+
+	<img src="https://scans.lastation.us/manga/Tengoku-Daimakyou/0070-028.png" class="maw-w-full mx-auto"
+		width="960" height="1378" alt="Page 28" decoding="async" loading="lazy"
+		onerror="this.onerror=null; this.src='/static/images/broken_image.jpg'" />
+
+</section>

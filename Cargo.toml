@@ -27,7 +27,7 @@ tui-widget-list = "0.13.0"
 crossterm = { version = "0.28.1", features = ["event-stream"] }
 directories = "6.0.0"
 image = "0.25.4"
-reqwest = { version = "0.12.4", features = ["json", "native-tls", "cookies", "http2", "gzip", "deflate"] }
+reqwest = { version = "0.12.4", features = ["json", "native-tls-alpn", "cookies", "http2", "gzip", "deflate"] }
 tokio = { version = "1.42.0", features = ["full"] }
 serde = { version = "1.0.218", features = ["derive"] }
 strum = "0.26.3"
