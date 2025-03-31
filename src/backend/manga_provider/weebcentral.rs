@@ -686,3 +686,42 @@ impl ProviderIdentity for WeebcentralProvider {
 }
 
 impl MangaProvider for WeebcentralProvider {}
+
+#[cfg(test)]
+mod tests {
+
+    use httpmock::Method::GET;
+    use httpmock::MockServer;
+
+    use super::*;
+    use crate::backend::cache::mock::EmptyCache;
+
+    #[tokio::test]
+    async fn it_calls_image_endpoint_with_expected_headers() -> Result<(), Box<dyn Error>> {
+        let server = MockServer::start_async().await;
+
+        let expected = b"some image bytes";
+
+        let request = server
+            .mock_async(|when, then| {
+                // The referer is important to be presented, if not when requesting a chapter page
+                // it will be blocked by cloudfare
+                when.method(GET)
+                    .header("user-agent", "Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0")
+                    .header("referer", "https://weebcentral.com/");
+
+                then.status(200).body(expected.clone());
+            })
+            .await;
+
+        let weebcentral_provider = WeebcentralProvider::new(server.url("/weebcentraltest").parse().unwrap(), EmptyCache::new_arc());
+
+        let response = weebcentral_provider.get_raw_image(server.base_url().as_str()).await?;
+
+        request.assert_async().await;
+
+        assert_eq!(expected.to_vec(), response);
+
+        Ok(())
+    }
+}
