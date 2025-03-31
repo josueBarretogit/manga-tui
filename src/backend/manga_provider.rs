@@ -22,7 +22,7 @@ use crate::global::PREFERRED_LANGUAGE;
 use crate::view::widgets::StatefulWidgetFrame;
 
 pub mod mangadex;
-pub mod manganato;
+pub mod weebcentral;
 
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
 pub enum Rating {
@@ -61,6 +61,7 @@ impl Genres {
     }
 }
 
+/// Implementing this trait so that making a list of genres is easier
 impl From<Genres> for Span<'_> {
     fn from(value: Genres) -> Self {
         Span::styled(format!(" {} ", value.title), value.rating.style())
@@ -652,8 +653,8 @@ pub enum MangaProviders {
     #[default]
     #[strum(to_string = "mangadex")]
     Mangadex,
-    #[strum(to_string = "manganato")]
-    Manganato,
+    #[strum(to_string = "weebcentral")]
+    Weebcentral,
 }
 
 pub trait GetRawImage {

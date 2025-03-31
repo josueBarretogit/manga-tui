@@ -14,13 +14,14 @@ use backend::manga_provider::MangaProviders;
 use backend::manga_provider::mangadex::filter::MangadexFilterProvider;
 use backend::manga_provider::mangadex::filter_widget::MangadexFilterWidget;
 use backend::manga_provider::mangadex::{API_URL_BASE, COVER_IMG_URL_BASE, MangadexClient};
-use backend::manga_provider::manganato::filter_state::{ManganatoFilterState, ManganatoFiltersProvider};
-use backend::manga_provider::manganato::filter_widget::ManganatoFilterWidget;
-use backend::manga_provider::manganato::{MANGANATO_BASE_URL, ManganatoProvider};
+use backend::manga_provider::weebcentral::filter_state::{WeebcentralFilterState, WeebcentralFiltersProvider};
+use backend::manga_provider::weebcentral::filter_widget::WeebcentralFilterWidget;
+use backend::manga_provider::weebcentral::{WEEBCENTRAL_BASE_URL, WeebcentralProvider};
 use backend::release_notifier::{GITHUB_URL, ReleaseNotifier};
-use backend::secrets::anilist::AnilistStorage;
+use backend::secrets::keyring::KeyringStorage;
 use backend::tracker::anilist::{Anilist, BASE_ANILIST_API_URL};
 use clap::Parser;
+use cli::check_anilist_credentials_are_stored;
 use crossterm::ExecutableCommand;
 use crossterm::event::{DisableMouseCapture, EnableMouseCapture};
 use http::StatusCode;
@@ -46,6 +47,7 @@ mod view;
 #[tokio::main(flavor = "multi_thread", worker_threads = 7)]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let logger = Logger;
+
     pretty_env_logger::formatted_builder()
         .format_module_path(false)
         .filter_level(LevelFilter::Info)
@@ -78,9 +80,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     }
 
-    let anilist_storage = AnilistStorage::new();
+    let anilist_storage = KeyringStorage::new();
 
-    let anilist_client = match anilist_storage.check_credentials_stored() {
+    let anilist_client = match check_anilist_credentials_are_stored(anilist_storage) {
         Ok(Some(credentials)) => {
             logger.inform("Anilist is setup, tracking reading history");
             tokio::time::sleep(Duration::from_secs(1)).await;
@@ -138,15 +140,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             run_app(ratatui::init(), mangadex_client, anilist_client, MangadexFilterProvider::new(), MangadexFilterWidget::new())
                 .await?;
         },
-        MangaProviders::Manganato => {
-            logger.inform("Using manganato as manga provider");
+        MangaProviders::Weebcentral => {
+            logger.inform("Using Weeb central as manga provider");
             tokio::time::sleep(Duration::from_secs(1)).await;
             run_app(
                 ratatui::init(),
-                ManganatoProvider::new(MANGANATO_BASE_URL.parse().unwrap(), cache_provider),
+                WeebcentralProvider::new(WEEBCENTRAL_BASE_URL.parse().unwrap(), cache_provider),
                 anilist_client,
-                ManganatoFiltersProvider::new(ManganatoFilterState {}),
-                ManganatoFilterWidget {},
+                WeebcentralFiltersProvider::new(WeebcentralFilterState::default()),
+                WeebcentralFilterWidget {},
             )
             .await?;
         },

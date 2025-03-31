@@ -1,20 +1,26 @@
-pub mod anilist;
+pub mod keyring;
 
 use std::collections::HashMap;
 use std::error::Error;
 
-/// Abstraction of the location where secrets will be stored
+/// Abstraction of the service which stores sensitive data, or secrets
 pub trait SecretStorage {
-    fn save_secret<T: Into<String>>(&mut self, secret_name: T, value: T) -> Result<(), Box<dyn Error>>;
+    /// Store the secret which will be identified by the `secret_name` and the secret itself is the
+    /// `value`
+    fn save_secret<T: Into<String>, S: Into<String>>(&self, secret_name: T, value: S) -> Result<(), Box<dyn Error>>;
 
-    fn save_multiple_secrets<T: Into<String>>(&mut self, values: HashMap<T, T>) -> Result<(), Box<dyn Error>> {
+    fn get_secret<T: Into<String>>(&self, secret_name: T) -> Result<Option<String>, Box<dyn Error>>;
+
+    fn remove_secret<T: AsRef<str>>(&self, secret_name: T) -> Result<(), Box<dyn Error>>;
+
+    fn save_multiple_secrets<T: Into<String>, S: Into<String>>(&self, values: HashMap<T, S>) -> Result<(), Box<dyn Error>> {
         for (name, value) in values {
             self.save_secret(name, value)?
         }
         Ok(())
     }
 
-    fn remove_multiple_secrets<T: AsRef<str>>(&mut self, values: impl Iterator<Item = T>) -> Result<(), Box<dyn Error>> {
+    fn remove_multiple_secrets<T: AsRef<str>>(&self, values: impl Iterator<Item = T>) -> Result<(), Box<dyn Error>> {
         for name in values {
             self.remove_secret(name)?
         }
@@ -36,8 +42,4 @@ pub trait SecretStorage {
 
         Ok(secrets_collected)
     }
-
-    fn get_secret<T: Into<String>>(&self, _secret_name: T) -> Result<Option<String>, Box<dyn Error>>;
-
-    fn remove_secret<T: AsRef<str>>(&mut self, secret_name: T) -> Result<(), Box<dyn Error>>;
 }
