@@ -171,6 +171,8 @@ manga-tui --data-dir
 manga-tui -d
 ```
 
+Which provides the following configuration:
+
 ```toml
 # The format of the manga downloaded 
 # values : cbz , raw, epub, pdf
