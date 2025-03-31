@@ -1,6 +1,6 @@
 [package]
 name = "manga-tui"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2021"
 authors = ["Josue <josuebarretogit@gmail.com>"]
 readme = "README.md"
@@ -8,7 +8,7 @@ homepage = "https://github.com/josueBarretogit/manga-tui"
 repository = "https://github.com/josueBarretogit/manga-tui"
 description = "Terminal-based manga reader and downloader with image rendering support"
 keywords = ["cli", "command-line", "terminal", "tui" ]
-categories = ["command-line-interface", "Command line utilities", ]
+categories = ["command-line-interface"]
 license = "MIT"
 exclude = [
   "public/*",
