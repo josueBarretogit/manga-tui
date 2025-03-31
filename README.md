@@ -40,7 +40,7 @@
 
 ## Features
 
-- [Mangadex](https://mangadex.org/) and [Manganato](https://manganato.com/) are available as manga providers
+- [Mangadex](https://mangadex.org/) and [Weebcentral](https://weebcentral.com/) are available as manga providers
 
 - Track your reading history with [anilist integration](./docs/anilist.md)
 
@@ -145,7 +145,7 @@ manga-tui
 ## Manga providers
 
 > [!WARNING]
-> Expect any manga provider to fail at some point, either due to them closing operations due to a [lawsuit](https://www.japantimes.co.jp/news/2024/04/18/japan/crime-legal/manga-mura-copyright-ruling/) or the provider itself having issues on their end like [manganato](https://www.reddit.com/r/mangapiracy/comments/1iumo9v/mangakakalot_and_manganato_site_shutdown_mangabat/)
+> Expect any manga provider to fail at some point, either due to them closing operations due to a [lawsuit](https://www.japantimes.co.jp/news/2024/04/18/japan/crime-legal/manga-mura-copyright-ruling/) or the provider itself having issues on their end like [manganato](https://github.com/josueBarretogit/manga-tui/issues/132)
 
 By default when you run `manga-tui` Mangadex will be used
 
@@ -153,15 +153,15 @@ By default when you run `manga-tui` Mangadex will be used
 manga-tui
 ```
 
-If you want to use manganato then run:
+If you want to use Weebcentral or any other provider available then run:
 
 ```shell
-manga-tui -p manganato
+manga-tui -p weebcentral
 ```
 
 ## Configuration
 
-Manga downloads and reading history is stored in the `manga-tui` directory, to know where it is run:
+The config file is located at `XDG_CONFIG_HOME/manga-tui/config.toml`, to know where it is you can run:
 
 ```shell
 manga-tui --data-dir 
@@ -170,13 +170,6 @@ manga-tui --data-dir
 
 manga-tui -d
 ```
-
-On linux it will output something like: `~/.local/share/manga-tui` <br />
-
-On the `manga-tui` directory there will be 4 directories
-
-- `history`, which contains a sqlite database to store reading history
-- `config`, which contains the `manga-tui-config.toml` config file with the following fields:
 
 ```toml
 # The format of the manga downloaded 
@@ -205,6 +198,21 @@ auto_bookmark = true
 track_reading_when_download = false
 ```
 
+Manga downloads and reading history is stored in the `manga-tui` directory, to know where it is run:
+
+```shell
+manga-tui --data-dir 
+
+# or
+
+manga-tui -d
+```
+
+On linux it will output something like: `~/.local/share/manga-tui` <br />
+
+On the `manga-tui` directory there will be 3 directories
+
+- `history`, which contains a sqlite database to store reading history
 - `mangaDownloads`, where manga will be downloaded
 - `errorLogs`, for storing posible errors / bugs
 
@@ -214,6 +222,8 @@ If you want to change the location of this directory you can set the environment
 export MANGA_TUI_DATA_DIR="/home/user/Desktop/mangas"
 ```
 
+> [!NOTE]
+> Mangadex-only feature
 By default `manga-tui` will search mangas in english, you can change the language by running:
 
 ```shell
@@ -221,6 +231,8 @@ By default `manga-tui` will search mangas in english, you can change the languag
 manga-tui lang --set 'es'
 ```
 
+> [!NOTE]
+> Mangadex-only feature
 Check the available languages and their Iso codes by running:
 
 ```shell
