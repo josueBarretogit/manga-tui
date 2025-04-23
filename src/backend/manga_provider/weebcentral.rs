@@ -23,7 +23,7 @@ use super::{
     ProviderIdentity, ReaderPageProvider, RecentlyAddedManga, SearchChapterById, SearchMangaById, SearchMangaPanel,
     SearchPageProvider,
 };
-use crate::backend::cache::{Cacher, InsertEntry};
+use crate::backend::cache::{CacheDuration, Cacher, InsertEntry};
 use crate::backend::html_parser::{HtmlElement, ParseHtml};
 use crate::backend::manga_provider::ChapterToRead;
 use crate::config::ImageQuality;
@@ -54,11 +54,11 @@ pub struct WeebcentralProvider {
 }
 
 impl WeebcentralProvider {
-    const CHAPTER_PAGE_CACHE_DURATION: Duration = Duration::from_secs(30);
-    const HOME_PAGE_CACHE_DURATION: Duration = Duration::from_secs(10);
-    const MANGA_PAGE_CACHE_DURATION: Duration = Duration::from_secs(40);
+    const CHAPTER_PAGE_CACHE_DURATION: CacheDuration = CacheDuration::Long;
+    const HOME_PAGE_CACHE_DURATION: CacheDuration = CacheDuration::Short;
+    const MANGA_PAGE_CACHE_DURATION: CacheDuration = CacheDuration::LongLong;
     /// The search page cache is the shortest because it may change a lot
-    const SEARCH_PAGE_CACHE_DURATION: Duration = Duration::from_secs(5);
+    const SEARCH_PAGE_CACHE_DURATION: CacheDuration = CacheDuration::VeryShort;
 
     pub fn new(base_url: Url, cache_provider: Arc<dyn Cacher>) -> Self {
         let mut default_headers = HeaderMap::new();

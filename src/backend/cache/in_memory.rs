@@ -1,9 +1,30 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use std::thread::JoinHandle;
+use std::thread::{JoinHandle, spawn};
 use std::time::{Duration, Instant};
 
-use super::{Cacher, Entry, InsertEntry};
+use super::{CacheDuration, Cacher, Entry, InsertEntry};
+
+#[derive(Debug)]
+struct EntryDuration(Duration);
+
+impl EntryDuration {
+    fn as_duration(&self) -> Duration {
+        self.0
+    }
+}
+
+impl From<CacheDuration> for EntryDuration {
+    fn from(value: CacheDuration) -> Self {
+        match value {
+            CacheDuration::LongLong => EntryDuration(Duration::from_secs(40)),
+            CacheDuration::Long => EntryDuration(Duration::from_secs(30)),
+            CacheDuration::Medium => EntryDuration(Duration::from_secs(20)),
+            CacheDuration::Short => EntryDuration(Duration::from_secs(10)),
+            CacheDuration::VeryShort => EntryDuration(Duration::from_secs(5)),
+        }
+    }
+}
 
 /// Implementation of In-memory cache, the entries stored with this struct will be dropped after the programm's execution
 /// and each entry has a time since creation and a duration or `time_to_live` so that older
@@ -23,11 +44,11 @@ pub struct InMemoryCache {
 struct MemoryEntry {
     data: String,
     time_since_creation: Instant,
-    time_to_live: Duration,
+    time_to_live: EntryDuration,
 }
 
 impl MemoryEntry {
-    fn new(data: String, time_to_live: Duration) -> Self {
+    fn new(data: String, time_to_live: EntryDuration) -> Self {
         Self {
             data,
             time_since_creation: Instant::now(),
@@ -38,7 +59,7 @@ impl MemoryEntry {
     /// Returns `true` if the time since creation that has elapsed is greatern than the time it
     /// should live
     fn is_expired(&self) -> bool {
-        self.time_since_creation.elapsed() > self.time_to_live
+        self.time_since_creation.elapsed() > self.time_to_live.as_duration()
     }
 }
 
@@ -47,7 +68,7 @@ impl InMemoryCache {
     pub fn init(capacity: usize) -> Arc<Self> {
         let cache = Arc::new(Self::new().with_capacity(capacity));
 
-        start_cleanup_task(Arc::clone(&cache));
+        Self::start_cleanup_thread(Arc::clone(&cache));
 
         cache
     }
@@ -71,6 +92,26 @@ impl InMemoryCache {
             entries: Mutex::new(data),
             capacity: 5,
         }
+    }
+
+    fn delete_expired_entries(&self) {
+        let mut entries = self.entries.lock().unwrap();
+        if entries.len() > self.capacity {
+            entries.retain(|_, entry| !entry.is_expired());
+        }
+    }
+
+    fn start_cleanup_thread(cache: Arc<Self>) -> JoinHandle<()> {
+        let tick = Duration::from_millis(500);
+        spawn(move || {
+            loop {
+                {
+                    cache.delete_expired_entries();
+                }
+
+                std::thread::sleep(tick);
+            }
+        })
     }
 }
 
@@ -96,22 +137,11 @@ impl Cacher for InMemoryCache {
         {
             let mut entries = self.entries.lock().unwrap();
 
-            entries.insert(entry.id.to_string(), MemoryEntry::new(entry.data.to_string(), entry.duration));
+            entries.insert(entry.id.to_string(), MemoryEntry::new(entry.data.to_string(), entry.duration.into()));
         }
 
         Ok(())
     }
-}
-
-fn start_cleanup_task(cache: Arc<InMemoryCache>) -> JoinHandle<()> {
-    std::thread::spawn(move || {
-        loop {
-            let mut entries = cache.entries.lock().unwrap();
-            if entries.len() > cache.capacity {
-                entries.retain(|_, entry| !entry.is_expired());
-            }
-        }
-    })
 }
 
 #[cfg(test)]
@@ -123,7 +153,7 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use super::*;
-    use crate::backend::cache::{Entry, InsertEntry};
+    use crate::backend::cache::{self, Entry, InsertEntry};
 
     #[test]
     fn it_saves_and_retrieves_data() -> Result<(), Box<dyn Error>> {
@@ -132,13 +162,13 @@ mod tests {
         let data: InsertEntry = InsertEntry {
             id: "entry1",
             data: "some data",
-            duration: Duration::from_secs(3),
+            duration: CacheDuration::VeryShort,
         };
 
         let data2: InsertEntry = InsertEntry {
             id: "entry2",
             data: "some data entry2",
-            duration: Duration::from_secs(3),
+            duration: CacheDuration::VeryShort,
         };
 
         in_memory.cache(data.clone())?;
@@ -171,12 +201,12 @@ mod tests {
             ///   expired
             ("id".to_string(), MemoryEntry {
                 time_since_creation: Instant::now() - Duration::from_secs(3),
-                time_to_live: Duration::from_secs(2),
+                time_to_live: EntryDuration(Duration::from_secs(2)),
                 data: "some data".to_string(),
             }),
             ("id_not_expired".to_string(), MemoryEntry {
                 time_since_creation: Instant::now(),
-                time_to_live: Duration::from_secs(5),
+                time_to_live: EntryDuration(Duration::from_secs(5)),
                 data: "some data 2".to_string(),
             }),
         ]));
@@ -208,31 +238,29 @@ mod tests {
                 ///   expired
                 ("id".to_string(), MemoryEntry {
                     time_since_creation: Instant::now() - Duration::from_secs(3),
-                    time_to_live: Duration::from_secs(2),
+                    time_to_live: EntryDuration(Duration::from_secs(2)),
                     data: "some data".to_string(),
                 }),
                 ("id_should_not_exist".to_string(), MemoryEntry {
                     time_since_creation: Instant::now() - Duration::from_secs(10),
-                    time_to_live: Duration::from_secs(2),
+                    time_to_live: EntryDuration(Duration::from_secs(2)),
                     data: "some data".to_string(),
                 }),
                 ("id_should_live".to_string(), MemoryEntry {
                     time_since_creation: Instant::now(),
-                    time_to_live: Duration::from_secs(10),
+                    time_to_live: EntryDuration(Duration::from_secs(10)),
                     data: "some data 2".to_string(),
                 }),
                 ("id_should_also_live".to_string(), MemoryEntry {
                     time_since_creation: Instant::now(),
-                    time_to_live: Duration::from_secs(15),
+                    time_to_live: EntryDuration(Duration::from_secs(15)),
                     data: "some data 3".to_string(),
                 }),
             ]))
             .with_capacity(3),
         );
 
-        let handle = start_cleanup_task(Arc::clone(&in_memory));
-
-        sleep(Duration::from_millis(800));
+        in_memory.delete_expired_entries();
 
         let should_not_exist = in_memory.get("id")?.is_none();
         let should_not_exist2 = in_memory.get("id_should_not_exist")?.is_none();
@@ -255,26 +283,24 @@ mod tests {
                 ///   expired
                 ("expired".to_string(), MemoryEntry {
                     time_since_creation: Instant::now() - Duration::from_secs(3),
-                    time_to_live: Duration::from_secs(2),
+                    time_to_live: EntryDuration(Duration::from_secs(2)),
                     data: "some data".to_string(),
                 }),
                 ("expired2".to_string(), MemoryEntry {
                     time_since_creation: Instant::now() - Duration::from_secs(10),
-                    time_to_live: Duration::from_secs(2),
+                    time_to_live: EntryDuration(Duration::from_secs(2)),
                     data: "some data".to_string(),
                 }),
                 ("expired3".to_string(), MemoryEntry {
                     time_since_creation: Instant::now() - Duration::from_secs(10),
-                    time_to_live: Duration::from_secs(1),
+                    time_to_live: EntryDuration(Duration::from_secs(1)),
                     data: "some data 2".to_string(),
                 }),
             ]))
             .with_capacity(5),
         );
 
-        let handle = start_cleanup_task(Arc::clone(&in_memory));
-
-        sleep(Duration::from_millis(800));
+        in_memory.delete_expired_entries();
 
         let should_exist = in_memory.get("expired")?.is_some();
         let should_exist2 = in_memory.get("expired2")?.is_some();
@@ -290,7 +316,7 @@ mod tests {
     fn if_the_entry_is_retrieved_then_time_to_live_should_be_renewed() -> Result<(), Box<dyn Error>> {
         let in_memory = InMemoryCache::with_cached_data(HashMap::from([("exists".to_string(), MemoryEntry {
             time_since_creation: Instant::now() - Duration::from_secs(10),
-            time_to_live: Duration::from_secs(5),
+            time_to_live: EntryDuration(Duration::from_secs(5)),
             data: "some data".to_string(),
         })]));
 
