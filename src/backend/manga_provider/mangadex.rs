@@ -20,7 +20,7 @@ use super::{
     ListOfChapters, Manga, MangaPageProvider, MangaProvider, MangaProviders, MangaStatus, PopularManga, ProviderIdentity, Rating,
     ReaderPageProvider, RecentlyAddedManga, SearchChapterById, SearchMangaById, SearchMangaPanel, SearchPageProvider,
 };
-use crate::backend::cache::{Cacher, InsertEntry};
+use crate::backend::cache::{CacheDuration, Cacher, InsertEntry};
 use crate::backend::database::ChapterBookmarked;
 use crate::config::ImageQuality;
 use crate::global::APP_USER_AGENT;
@@ -118,7 +118,7 @@ impl MangadexClient {
                     .cache(InsertEntry {
                         id: &endpoint,
                         data: json!(response).to_string().as_str(),
-                        duration: StdDuration::from_secs(30),
+                        duration: CacheDuration::Long,
                     })
                     .ok();
 
@@ -500,7 +500,7 @@ impl HomePageMangaProvider for MangadexClient {
                     .cache(InsertEntry {
                         id: &id_popular_manga_cache,
                         data: &json!(response).to_string(),
-                        duration: StdDuration::from_secs(10),
+                        duration: CacheDuration::Short,
                     })
                     .ok();
 
@@ -543,7 +543,7 @@ impl SearchMangaById for MangadexClient {
                     .cache(InsertEntry {
                         id: &id_cache,
                         data: &json!(manga).to_string(),
-                        duration: StdDuration::from_secs(40),
+                        duration: CacheDuration::LongLong,
                     })
                     .ok();
 
@@ -595,7 +595,7 @@ impl GetChapterPages for MangadexClient {
                     .cache(InsertEntry {
                         id: &endpoint,
                         data: json!(response).to_string().as_str(),
-                        duration: StdDuration::from_secs(30),
+                        duration: CacheDuration::Long,
                     })
                     .ok();
 
@@ -670,7 +670,7 @@ impl MangaPageProvider for MangadexClient {
                     .cache(InsertEntry {
                         id: &id_cache,
                         data: json!(response).to_string().as_str(),
-                        duration: StdDuration::from_secs(30),
+                        duration: CacheDuration::Long,
                     })
                     .ok();
 
@@ -741,7 +741,7 @@ impl MangaPageProvider for MangadexClient {
                     .cache(InsertEntry {
                         id: &id_cache,
                         data: json!(response).to_string().as_str(),
-                        duration: StdDuration::from_secs(30),
+                        duration: CacheDuration::Long,
                     })
                     .ok();
 
@@ -805,7 +805,7 @@ impl SearchChapterById for MangadexClient {
                     .cache(InsertEntry {
                         id: &endpoint,
                         data: json!(response).to_string().as_str(),
-                        duration: StdDuration::from_secs(30),
+                        duration: CacheDuration::Long,
                     })
                     .ok();
 
@@ -1008,7 +1008,7 @@ impl FeedPageProvider for MangadexClient {
                     .cache(InsertEntry {
                         id: &id_cache,
                         data: json!(response).to_string().as_str(),
-                        duration: StdDuration::from_secs(10),
+                        duration: CacheDuration::Short,
                     })
                     .ok();
 
