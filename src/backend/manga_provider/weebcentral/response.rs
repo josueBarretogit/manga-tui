@@ -288,7 +288,7 @@ impl From<MangaPageData> for Manga {
             Some(Author {
                 id: "".to_string(),
                 name: manga.authors.into_iter().fold(String::new(), |mut init, auth| {
-                    let _ = write!(init, "{},", auth);
+                    let _ = write!(init, "{auth},");
                     init
                 }),
             })

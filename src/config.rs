@@ -423,7 +423,7 @@ auto_bookmark = true
 # default: false
 track_reading_when_download = false"#;
 
-        let result = config.write_config(&mut test_file)?;
+        config.write_config(&mut test_file)?;
 
         let expected = MangaTuiConfig::default();
 
@@ -448,7 +448,7 @@ track_reading_when_download = false"#;
 download_type = "cbz"
 "#;
 
-        let result = config.update_existing_config(&mut test_file)?;
+        config.update_existing_config(&mut test_file)?;
 
         let file_contents = String::from_utf8(test_file.into_inner())?;
         let expected = toml::Table::from_str(&file_contents)?;

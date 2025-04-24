@@ -9,7 +9,7 @@ pub trait ILogger {
     }
 
     fn error(&self, error: Box<dyn Error>) {
-        println!("ERROR | {}", error)
+        println!("ERROR | {error}")
     }
 
     fn warn(&self, warning: impl AsRef<str>) {

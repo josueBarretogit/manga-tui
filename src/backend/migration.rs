@@ -55,7 +55,7 @@ impl<'a> Display for Query<'a> {
                 AlterTableCommand::Add {
                     column: column_to_add,
                     data_type,
-                } => write!(f, "ALTER TABLE {} ADD {} {}", table_name, column_to_add, data_type),
+                } => write!(f, "ALTER TABLE {table_name} ADD {column_to_add} {data_type}"),
             },
         }
     }
@@ -63,7 +63,7 @@ impl<'a> Display for Query<'a> {
 
 impl<'a> Debug for Query<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{self}")
     }
 }
 
@@ -857,8 +857,8 @@ mod tests {
 
         assert_eq!(2, migrations.len());
 
-        assert!(migrations.iter().flatten().find(|migration| migration.version == "0.4.0").is_some());
-        assert!(migrations.iter().flatten().find(|migration| migration.version == "0.6.0").is_some());
+        assert!(migrations.iter().flatten().any(|migration| migration.version == "0.4.0"));
+        assert!(migrations.iter().flatten().any(|migration| migration.version == "0.6.0"));
 
         Ok(())
     }

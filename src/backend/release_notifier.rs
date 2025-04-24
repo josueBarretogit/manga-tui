@@ -41,8 +41,7 @@ impl ReleaseNotifier {
 
         if response.status() != StatusCode::OK {
             return Err(format!(
-                "could not retrieve latest manga-tui version, more details about the api response : \n {:#?} ",
-                response
+                "could not retrieve latest manga-tui version, more details about the api response : \n {response:#?} "
             )
             .into());
         }

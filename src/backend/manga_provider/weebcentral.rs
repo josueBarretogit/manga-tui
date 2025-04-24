@@ -233,7 +233,7 @@ impl WeebcentralProvider {
                 let response = self.client.get(&chapter_page_url).send().await?;
 
                 if response.status() != StatusCode::OK {
-                    return Err(format!("Could not get additional data for chapter with id: {chapter_id} {:#?}", response).into());
+                    return Err(format!("Could not get additional data for chapter with id: {chapter_id} {response:#?}").into());
                 }
 
                 let doc = response.text().await?;
@@ -269,8 +269,7 @@ impl WeebcentralProvider {
 
                 if response.status() != StatusCode::OK {
                     return Err(format!(
-                        "Could not get list of chapters on weebcentral, more details about the response: {:#?}",
-                        response
+                        "Could not get list of chapters on weebcentral, more details about the response: {response:#?}"
                     )
                     .into());
                 }
@@ -324,8 +323,7 @@ impl HomePageMangaProvider for WeebcentralProvider {
 
                 if response.status() != StatusCode::OK {
                     return Err(format!(
-                        "could not get popular mangas on weebcentral, more details about the response : {:#?}",
-                        response
+                        "could not get popular mangas on weebcentral, more details about the response : {response:#?}"
                     )
                     .into());
                 }
@@ -401,8 +399,7 @@ impl SearchMangaById for WeebcentralProvider {
 
                 if response.status() != StatusCode::OK {
                     return Err(format!(
-                        "manga page with id: {manga_id} could not be found on weebcentral, more details about the response: {:#?}",
-                        response
+                        "manga page with id: {manga_id} could not be found on weebcentral, more details about the response: {response:#?}"
                     )
                     .into());
                 }
@@ -457,8 +454,7 @@ impl GetChapterPages for WeebcentralProvider {
 
                 if res.status() != StatusCode::OK {
                     return Err(format!(
-                        "Could not get chapter pages for chapter with id: {chapter_id}, more detailes about the response: {:#?}",
-                        res
+                        "Could not get chapter pages for chapter with id: {chapter_id}, more detailes about the response: {res:#?}"
                     )
                     .into());
                 }
@@ -510,8 +506,7 @@ impl MangaPageProvider for WeebcentralProvider {
 
                 if response.status() != StatusCode::OK {
                     return Err(format!(
-                        "Could not get chapters for manga: {manga_id}, more details about the response: {:#?}",
-                        response
+                        "Could not get chapters for manga: {manga_id}, more details about the response: {response:#?}"
                     )
                     .into());
                 }
@@ -547,8 +542,7 @@ impl MangaPageProvider for WeebcentralProvider {
 
                 if response.status() != StatusCode::OK {
                     return Err(format!(
-                        "Could not get chapters for manga: {manga_id}, more details about the response: {:#?}",
-                        response
+                        "Could not get chapters for manga: {manga_id}, more details about the response: {response:#?}"
                     )
                     .into());
                 }
@@ -616,8 +610,7 @@ impl SearchPageProvider for WeebcentralProvider {
 
                 if res.status() != StatusCode::OK {
                     return Err(format!(
-                        "Could not search on weebcentral with url: {url}, more details about the response: {:#?}",
-                        res
+                        "Could not search on weebcentral with url: {url}, more details about the response: {res:#?}"
                     )
                     .into());
                 }
@@ -656,8 +649,7 @@ impl FeedPageProvider for WeebcentralProvider {
 
                 if response.status() != StatusCode::OK {
                     return Err(format!(
-                        "Could not get chapters for manga: {manga_id}, more details about the response: {:#?}",
-                        response
+                        "Could not get chapters for manga: {manga_id}, more details about the response: {response:#?}"
                     )
                     .into());
                 }
@@ -710,7 +702,7 @@ mod tests {
                     .header("user-agent", "Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0")
                     .header("referer", "https://weebcentral.com/");
 
-                then.status(200).body(expected.clone());
+                then.status(200).body(*expected);
             })
             .await;
 
