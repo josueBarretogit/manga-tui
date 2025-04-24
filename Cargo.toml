@@ -21,7 +21,7 @@ exclude = [
 ratatui = { version = "0.29.0", features = ["all-widgets", "palette", "unstable-widget-ref"] }
 ratatui-image = { version = "1.0.5", features = ["rustix"]}
 throbber-widgets-tui = "0.8.0"
-tui-input = "0.11.0"
+tui-input = { version = "0.12.0",  features = ["crossterm"], default-features = false}
 tui-widget-list = "0.13.0"
 
 crossterm = { version = "0.29.0", features = ["event-stream"] }
