@@ -12,7 +12,7 @@ use mangadex::filter::FilterListItem;
 use ratatui::style::{Color, Style, Stylize};
 use ratatui::text::Span;
 use reqwest::Url;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use strum::{Display, EnumIter, IntoEnumIterator};
 
 use super::database::ChapterBookmarked;
@@ -24,7 +24,7 @@ use crate::view::widgets::StatefulWidgetFrame;
 pub mod mangadex;
 pub mod weebcentral;
 
-#[derive(Debug, Default, PartialEq, Eq, Clone)]
+#[derive(Debug, Default, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub enum Rating {
     #[default]
     Normal,
@@ -49,7 +49,7 @@ impl Rating {
 /// ("shounen, seinen")
 /// the genre needs to be categorized by the `Rating`, a genre named `comedy` is considered normal,
 /// `ecchi` is moderate, and stuff like `smut` or `gore` are to be considered nsfw
-#[derive(Debug, Default, PartialEq, Eq, Clone)]
+#[derive(Debug, Default, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub struct Genres {
     pub title: String,
     pub rating: Rating,
@@ -72,7 +72,7 @@ impl From<Genres> for Span<'_> {
 /// mangadex https://mangadex.org/
 /// most manga providers wont provide info such as description, status or genres, like `manganato` its fine to leave
 /// them empty to avoid making many requests
-#[derive(Debug, Default, PartialEq, Eq, Clone)]
+#[derive(Debug, Default, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub struct PopularManga {
     pub id: String,
     pub title: String,
@@ -83,7 +83,7 @@ pub struct PopularManga {
     pub cover_img_url: String,
 }
 
-#[derive(Debug, Default, PartialEq, Eq, Clone)]
+#[derive(Debug, Default, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub struct RecentlyAddedManga {
     pub id: String,
     pub title: String,
@@ -91,7 +91,7 @@ pub struct RecentlyAddedManga {
     pub cover_img_url: String,
 }
 
-#[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, Default, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
 pub enum MangaStatus {
     #[default]
     Ongoing,
@@ -112,7 +112,7 @@ impl From<MangaStatus> for Span<'_> {
 }
 
 /// NOTE this is very mangadex-specifc since its the only provider that provides a lot of languages
-#[derive(Debug, Display, EnumIter, Default, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Display, EnumIter, Default, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 pub enum Languages {
     French,
     #[default]
@@ -254,19 +254,19 @@ impl Languages {
     }
 }
 
-#[derive(Default, Clone, Debug, PartialEq)]
+#[derive(Default, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Author {
     pub id: String,
     pub name: String,
 }
 
-#[derive(Default, Clone, Debug, PartialEq)]
+#[derive(Default, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Artist {
     pub id: String,
     pub name: String,
 }
 
-#[derive(Debug, Default, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Manga {
     pub id: String,
     /// This is necessary because on mangadex ids are Uuids which are safe to be used in file

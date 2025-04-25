@@ -225,7 +225,8 @@ impl WeebcentralProvider {
 
         match cache {
             Some(cached) => {
-                let chapter_data = ChapterPageData::parse_html(HtmlElement::new(cached.data))?;
+                let doc: String = String::from_utf8(cached.data)?;
+                let chapter_data = ChapterPageData::parse_html(HtmlElement::new(doc))?;
 
                 Ok(self.map_chapter_to_read(chapter_id, chapter_data, pages_url))
             },
@@ -241,7 +242,7 @@ impl WeebcentralProvider {
                 self.cache_provider
                     .cache(InsertEntry {
                         id: &chapter_page_url,
-                        data: &doc,
+                        data: doc.as_bytes(),
                         duration: Self::CHAPTER_PAGE_CACHE_DURATION,
                     })
                     .ok();
@@ -260,7 +261,8 @@ impl WeebcentralProvider {
 
         match cache {
             Some(cached) => {
-                let chapters = WeebcentralChapters::parse_html(HtmlElement::new(cached.data))?;
+                let doc: String = String::from_utf8(cached.data)?;
+                let chapters = WeebcentralChapters::parse_html(HtmlElement::new(doc))?;
 
                 Ok(ListOfChapters::from(chapters))
             },
@@ -280,7 +282,7 @@ impl WeebcentralProvider {
                 self.cache_provider
                     .cache(InsertEntry {
                         id: &url,
-                        data: &doc,
+                        data: doc.as_bytes(),
                         duration: Self::CHAPTER_PAGE_CACHE_DURATION,
                     })
                     .ok();
@@ -315,7 +317,8 @@ impl HomePageMangaProvider for WeebcentralProvider {
 
         match cache {
             Some(cached) => {
-                let response = PopularMangasWeebCentral::parse_html(HtmlElement::new(cached.data))?;
+                let doc: String = String::from_utf8(cached.data)?;
+                let response = PopularMangasWeebCentral::parse_html(HtmlElement::new(doc))?;
 
                 Ok(response.mangas.into_iter().map(PopularManga::from).collect())
             },
@@ -335,7 +338,7 @@ impl HomePageMangaProvider for WeebcentralProvider {
                 self.cache_provider
                     .cache(InsertEntry {
                         id: self.base_url.as_str(),
-                        data: &doc,
+                        data: doc.as_bytes(),
                         duration: Self::HOME_PAGE_CACHE_DURATION,
                     })
                     .ok();
@@ -352,7 +355,8 @@ impl HomePageMangaProvider for WeebcentralProvider {
 
         match cache {
             Some(cached) => {
-                let new_mangas = LatestMangas::parse_html(HtmlElement::new(cached.data))?;
+                let doc: String = String::from_utf8(cached.data)?;
+                let new_mangas = LatestMangas::parse_html(HtmlElement::new(doc))?;
 
                 Ok(new_mangas.mangas.into_iter().map(RecentlyAddedManga::from).collect())
             },
@@ -372,7 +376,7 @@ impl HomePageMangaProvider for WeebcentralProvider {
                 self.cache_provider
                     .cache(InsertEntry {
                         id: self.base_url.as_str(),
-                        data: &doc,
+                        data: doc.as_bytes(),
                         duration: Self::HOME_PAGE_CACHE_DURATION,
                     })
                     .ok();
@@ -391,8 +395,9 @@ impl SearchMangaById for WeebcentralProvider {
         let cache = self.cache_provider.get(&url)?;
 
         match cache {
-            Some(cached_page) => {
-                let manga = MangaPageData::parse_html(HtmlElement::new(cached_page.data))?;
+            Some(cached) => {
+                let doc: String = String::from_utf8(cached.data)?;
+                let manga = MangaPageData::parse_html(HtmlElement::new(doc))?;
 
                 Ok(Manga::from(manga))
             },
@@ -412,7 +417,7 @@ impl SearchMangaById for WeebcentralProvider {
                 self.cache_provider
                     .cache(InsertEntry {
                         id: &url,
-                        data: &doc,
+                        data: doc.as_bytes(),
                         duration: Self::MANGA_PAGE_CACHE_DURATION,
                     })
                     .ok();
@@ -448,7 +453,8 @@ impl GetChapterPages for WeebcentralProvider {
 
         match cache {
             Some(cached) => {
-                let pages = ChapterPagesLinks::parse_html(HtmlElement::new(cached.data))?;
+                let doc: String = String::from_utf8(cached.data)?;
+                let pages = ChapterPagesLinks::parse_html(HtmlElement::new(doc))?;
 
                 Ok(pages.pages.into_iter().map(ChapterPageUrl::from).collect())
             },
@@ -463,17 +469,17 @@ impl GetChapterPages for WeebcentralProvider {
                     .into());
                 }
 
-                let html = res.text().await?;
+                let doc = res.text().await?;
 
                 self.cache_provider
                     .cache(InsertEntry {
                         id: &url,
-                        data: &html,
+                        data: doc.as_bytes(),
                         duration: Self::CHAPTER_PAGE_CACHE_DURATION,
                     })
                     .ok();
 
-                let pages = ChapterPagesLinks::parse_html(HtmlElement::new(html))?;
+                let pages = ChapterPagesLinks::parse_html(HtmlElement::new(doc))?;
 
                 Ok(pages.pages.into_iter().map(ChapterPageUrl::from).collect())
             },
@@ -502,7 +508,8 @@ impl MangaPageProvider for WeebcentralProvider {
         let cache = self.cache_provider.get(&full_list_url)?;
         match cache {
             Some(cached) => {
-                let chapters = WeebcentralChapters::parse_html(HtmlElement::new(cached.data))?;
+                let doc: String = String::from_utf8(cached.data)?;
+                let chapters = WeebcentralChapters::parse_html(HtmlElement::new(doc))?;
                 Ok(self.map_chapters_with_filters(chapters, manga_id, filters, pagination))
             },
             None => {
@@ -515,17 +522,18 @@ impl MangaPageProvider for WeebcentralProvider {
                     )
                     .into());
                 }
-                let response = response.text().await?;
+
+                let doc = response.text().await?;
 
                 self.cache_provider
                     .cache(InsertEntry {
                         id: &full_list_url,
-                        data: &response,
+                        data: doc.as_bytes(),
                         duration: Self::CHAPTER_PAGE_CACHE_DURATION,
                     })
                     .ok();
 
-                let chapters = WeebcentralChapters::parse_html(HtmlElement::new(response))?;
+                let chapters = WeebcentralChapters::parse_html(HtmlElement::new(doc))?;
 
                 Ok(self.map_chapters_with_filters(chapters, manga_id, filters, pagination))
             },
@@ -538,7 +546,8 @@ impl MangaPageProvider for WeebcentralProvider {
         let cache = self.cache_provider.get(&full_list_url)?;
         match cache {
             Some(cached) => {
-                let chapters = WeebcentralChapters::parse_html(HtmlElement::new(cached.data))?;
+                let doc: String = String::from_utf8(cached.data)?;
+                let chapters = WeebcentralChapters::parse_html(HtmlElement::new(doc))?;
 
                 Ok(self.map_chapters(chapters, manga_id))
             },
@@ -552,17 +561,17 @@ impl MangaPageProvider for WeebcentralProvider {
                     )
                     .into());
                 }
-                let response = response.text().await?;
+                let doc = response.text().await?;
 
                 self.cache_provider
                     .cache(InsertEntry {
                         id: &full_list_url,
-                        data: &response,
+                        data: doc.as_bytes(),
                         duration: Self::CHAPTER_PAGE_CACHE_DURATION,
                     })
                     .ok();
 
-                let chapters = WeebcentralChapters::parse_html(HtmlElement::new(response))?;
+                let chapters = WeebcentralChapters::parse_html(HtmlElement::new(doc))?;
 
                 Ok(self.map_chapters(chapters, manga_id))
             },
@@ -607,7 +616,8 @@ impl SearchPageProvider for WeebcentralProvider {
 
         match cache {
             Some(cached) => {
-                let mangas = SearchPageMangas::parse_html(HtmlElement::new(cached.data))?;
+                let doc: String = String::from_utf8(cached.data)?;
+                let mangas = SearchPageMangas::parse_html(HtmlElement::new(doc))?;
 
                 Ok(GetMangasResponse::from(mangas))
             },
@@ -627,7 +637,7 @@ impl SearchPageProvider for WeebcentralProvider {
                 self.cache_provider
                     .cache(InsertEntry {
                         id: &url,
-                        data: &doc,
+                        data: doc.as_bytes(),
                         duration: Self::SEARCH_PAGE_CACHE_DURATION,
                     })
                     .ok();
@@ -647,7 +657,8 @@ impl FeedPageProvider for WeebcentralProvider {
         let cache = self.cache_provider.get(&full_list_url)?;
         match cache {
             Some(cached) => {
-                let chapters = WeebcentralChapters::parse_html(HtmlElement::new(cached.data))?;
+                let doc: String = String::from_utf8(cached.data)?;
+                let chapters = WeebcentralChapters::parse_html(HtmlElement::new(doc))?;
 
                 Ok(self.map_chapters_latest_chapters(chapters, manga_id))
             },
@@ -661,17 +672,17 @@ impl FeedPageProvider for WeebcentralProvider {
                     )
                     .into());
                 }
-                let response = response.text().await?;
+                let doc = response.text().await?;
 
                 self.cache_provider
                     .cache(InsertEntry {
                         id: &full_list_url,
-                        data: &response,
+                        data: doc.as_bytes(),
                         duration: Self::CHAPTER_PAGE_CACHE_DURATION,
                     })
                     .ok();
 
-                let chapters = WeebcentralChapters::parse_html(HtmlElement::new(response))?;
+                let chapters = WeebcentralChapters::parse_html(HtmlElement::new(doc))?;
 
                 Ok(self.map_chapters_latest_chapters(chapters, manga_id))
             },

@@ -21,14 +21,14 @@ pub enum CacheDuration {
 #[derive(Debug, PartialEq, Clone)]
 pub struct InsertEntry<'a> {
     pub id: &'a str,
-    pub data: &'a str,
+    pub data: &'a [u8],
     /// How long this entry will last until it is removed
     pub duration: CacheDuration,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Default)]
 pub struct Entry {
-    pub data: String,
+    pub data: Vec<u8>,
 }
 
 /// Cache which is specially important when scraping sites in order to reduce making requests and
