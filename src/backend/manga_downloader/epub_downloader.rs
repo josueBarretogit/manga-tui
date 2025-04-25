@@ -51,7 +51,7 @@ impl MangaDownloader for EpubDownloader {
 
         for (index, chap) in chapter.pages.into_iter().enumerate() {
             let file_name = format!("{}.{}", index + 1, chap.extension);
-            let image_path = format!("data/{}", file_name);
+            let image_path = format!("data/{file_name}");
 
             let mime_type = format!("image/{}", chap.extension);
 
@@ -61,7 +61,7 @@ impl MangaDownloader for EpubDownloader {
 
             epub_builder.add_resource(&image_path, chap.bytes.as_ref(), &mime_type).ok();
 
-            let xml_file_path = format!("{}.xhtml", index);
+            let xml_file_path = format!("{index}.xhtml");
 
             epub_builder
                 .add_content(

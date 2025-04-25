@@ -329,7 +329,7 @@ impl MangaTracker for Anilist {
 
         if response.status() != StatusCode::OK {
             return Err(
-                format!("could not sync reading status with anilist, more details of the response : \n {:#?}  ", response).into()
+                format!("could not sync reading status with anilist, more details of the response : \n {response:#?}  ").into()
             );
         }
 
@@ -349,8 +349,7 @@ impl MangaTracker for Anilist {
 
         if response.status() != StatusCode::OK {
             return Err(format!(
-                "could not mark manga as plan to read in anilist, more details of the response : \n {:#?}  ",
-                response
+                "could not mark manga as plan to read in anilist, more details of the response : \n {response:#?}  "
             )
             .into());
         }
@@ -646,7 +645,7 @@ mod tests {
             .await;
 
         anilist
-            .mark_manga_as_plan_to_read(PlanToReadArgs { id: &manga_id })
+            .mark_manga_as_plan_to_read(PlanToReadArgs { id: manga_id })
             .await
             .expect("should not error");
 

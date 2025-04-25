@@ -411,11 +411,9 @@ impl HomePageMangaProvider for MangadexClient {
             .await?;
 
         if response.status() != StatusCode::OK {
-            return Err(format!(
-                "Could not get recently added mangas on mangadex, more details about the request : {:#?}",
-                response
-            )
-            .into());
+            return Err(
+                format!("Could not get recently added mangas on mangadex, more details about the request : {response:#?}").into()
+            );
         }
 
         let response: SearchMangaResponse = response.json().await?;
@@ -487,11 +485,9 @@ impl HomePageMangaProvider for MangadexClient {
                     .await?;
 
                 if response.status() != StatusCode::OK {
-                    return Err(format!(
-                        "Could not get popular mangas on mangadex, more details about the request: {:#?}",
-                        response
-                    )
-                    .into());
+                    return Err(
+                        format!("Could not get popular mangas on mangadex, more details about the request: {response:#?}").into()
+                    );
                 }
 
                 let response: SearchMangaResponse = response.json().await?;
@@ -532,8 +528,7 @@ impl SearchMangaById for MangadexClient {
 
                 if response.status() != StatusCode::OK {
                     return Err(format!(
-                        "failed to get manga of id {manga_id} on mangadex, more details about the response: \n {:#?}",
-                        response
+                        "failed to get manga of id {manga_id} on mangadex, more details about the response: \n {response:#?}"
                     )
                     .into());
                 }
@@ -583,8 +578,7 @@ impl GetChapterPages for MangadexClient {
 
                 if response.status() != StatusCode::OK {
                     return Err(format!(
-                                "Could not get the pages url for chapter with id {chapter_id} on mangadex, details about the response : {:#?}",
-                response
+                                "Could not get the pages url for chapter with id {chapter_id} on mangadex, details about the response : {response:#?}"
                 )
                     .into());
                 }
@@ -729,8 +723,7 @@ impl MangaPageProvider for MangadexClient {
 
                 if response.status() != StatusCode::OK {
                     return Err(format!(
-                        "Could not get all chapters for manga with id {manga_id} on mangadex, details about the response: {:#?}",
-                        response
+                        "Could not get all chapters for manga with id {manga_id} on mangadex, details about the response: {response:#?}"
                     )
                     .into());
                 }
@@ -793,8 +786,7 @@ impl SearchChapterById for MangadexClient {
 
                 if response.status() != StatusCode::OK {
                     return Err(format!(
-                        "Could not get chapter of id {chapter_id} on mangadex, details about the request: {:#?}",
-                        response
+                        "Could not get chapter of id {chapter_id} on mangadex, details about the request: {response:#?}"
                     )
                     .into());
                 }
@@ -870,7 +862,7 @@ impl SearchPageProvider for MangadexClient {
         let offset = (pagination.current_page - 1) * pagination.items_per_page;
 
         let search_by_title = match search_term {
-            Some(search) => format!("title={}", search),
+            Some(search) => format!("title={search}"),
             None => "".to_string(),
         };
 

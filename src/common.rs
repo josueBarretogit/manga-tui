@@ -41,7 +41,6 @@ pub fn format_error_message_tracking_reading_history<A: Display, B: Display, C: 
     error: C,
 ) -> String {
     format!(
-        "Could not track reading progress of chapter : {} \n of manga : {}, more details about the error : \n ERROR | {}",
-        chapter, manga_title, error
+        "Could not track reading progress of chapter : {chapter} \n of manga : {manga_title}, more details about the error : \n ERROR | {error}"
     )
 }

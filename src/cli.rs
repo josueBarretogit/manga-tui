@@ -269,7 +269,7 @@ impl CliArgs {
                     AnilistCommand::Check => {
                         let logger = Logger;
                         if let Err(e) = self.check_anilist_status(&logger).await {
-                            logger.error(format!("Some error ocurred, more details \n {}", e).into());
+                            logger.error(format!("Some error ocurred, more details \n {e}").into());
                             write_to_error_log(e.into());
                             exit(1);
                         } else {
