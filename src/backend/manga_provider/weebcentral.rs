@@ -297,13 +297,29 @@ impl WeebcentralProvider {
 
 impl GetRawImage for WeebcentralProvider {
     async fn get_raw_image(&self, url: &str) -> Result<bytes::Bytes, Box<dyn Error>> {
-        let response = self.client.get(url).headers(self.chapter_pages_header.clone()).send().await?;
+        let cache = self.cache_provider.get(url)?;
 
-        if response.status() != StatusCode::OK {
-            return Err(format!("Could not get image on weebcentral with url: {url}").into());
+        match cache {
+            Some(cached) => Ok(cached.data.into()),
+            None => {
+                let response = self.client.get(url).headers(self.chapter_pages_header.clone()).send().await?;
+
+                if response.status() != StatusCode::OK {
+                    return Err(format!("Could not get image on weebcentral with url: {url}").into());
+                }
+                let bytes = response.bytes().await?;
+
+                self.cache_provider
+                    .cache(InsertEntry {
+                        id: url,
+                        data: &bytes,
+                        duration: CacheDuration::Long,
+                    })
+                    .ok();
+
+                Ok(bytes)
+            },
         }
-
-        Ok(response.bytes().await?)
     }
 }
 

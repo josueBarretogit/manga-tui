@@ -377,13 +377,27 @@ impl MangadexClient {
 
 impl GetRawImage for MangadexClient {
     async fn get_raw_image(&self, url: &str) -> Result<Bytes, Box<dyn Error>> {
-        let response = self.client.get(url).timeout(StdDuration::from_secs(10)).send().await?;
+        let cache = self.cache_provider.get(url)?;
+        match cache {
+            Some(cached) => Ok(cached.data.into()),
+            None => {
+                let response = self.client.get(url).timeout(StdDuration::from_secs(10)).send().await?;
 
-        if response.status() != StatusCode::OK {
-            return Err(format!("Could not get image on mangadex with url : {url}").into());
+                if response.status() != StatusCode::OK {
+                    return Err(format!("Could not get image on mangadex with url : {url}").into());
+                }
+                let bytes = response.bytes().await?;
+                self.cache_provider
+                    .cache(InsertEntry {
+                        id: url,
+                        data: &bytes,
+                        duration: CacheDuration::Long,
+                    })
+                    .ok();
+
+                Ok(bytes)
+            },
         }
-
-        Ok(response.bytes().await?)
     }
 }
 
