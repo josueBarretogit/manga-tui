@@ -17,8 +17,8 @@ impl EntryDuration {
 impl From<CacheDuration> for EntryDuration {
     fn from(value: CacheDuration) -> Self {
         match value {
-            CacheDuration::LongLong => EntryDuration(Duration::from_secs(40)),
-            CacheDuration::Long => EntryDuration(Duration::from_secs(30)),
+            CacheDuration::LongLong => EntryDuration(Duration::from_secs(120)),
+            CacheDuration::Long => EntryDuration(Duration::from_secs(60)),
             CacheDuration::Medium => EntryDuration(Duration::from_secs(20)),
             CacheDuration::Short => EntryDuration(Duration::from_secs(10)),
             CacheDuration::VeryShort => EntryDuration(Duration::from_secs(5)),

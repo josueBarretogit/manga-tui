@@ -391,7 +391,7 @@ impl GetRawImage for MangadexClient {
                     .cache(InsertEntry {
                         id: url,
                         data: &bytes,
-                        duration: CacheDuration::Long,
+                        duration: CacheDuration::LongLong,
                     })
                     .ok();
 
