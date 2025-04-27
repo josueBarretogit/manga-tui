@@ -585,11 +585,8 @@ where
                         },
                         Err(e) => {
                             write_to_error_log(error_log::ErrorType::Error(
-                                format!(
-                                    "cannot read chapter with id {} of manga with id {}, more details : {e}",
-                                    id_chapter, manga_id
-                                )
-                                .into(),
+                                format!("cannot read chapter with id {id_chapter} of manga with id {manga_id}, more details : {e}")
+                                    .into(),
                             ));
                             local_tx.send(MangaPageEvents::ReadError(id_chapter)).ok();
                         },
@@ -1758,7 +1755,7 @@ mod test {
     #[tokio::test]
     async fn if_manga_tracking_fails_it_sends_event_to_write_error_to_error_log_file() -> Result<(), Box<dyn Error>> {
         let expected_error_message = "some_error_message";
-        let failing_tracker = TrackerTest::failing_with_error_message(&expected_error_message);
+        let failing_tracker = TrackerTest::failing_with_error_message(expected_error_message);
 
         let mut manga_page: MangaPage<MockMangaPageProvider, TrackerTest> =
             MangaPage::new(Manga::default(), Some(Picker::new((1, 2))), MockMangaPageProvider::new().into());

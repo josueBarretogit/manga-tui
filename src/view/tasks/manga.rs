@@ -91,11 +91,8 @@ pub async fn download_all_chapters<T: MangaPageProvider>(args: DownloadAllChapte
 
                             if let Err(e) = download_result {
                                 write_to_error_log(
-                                    format!(
-                                        "failed to download chapter : {}, details about the error : {e}",
-                                        original_chapter_title
-                                    )
-                                    .into(),
+                                    format!("failed to download chapter : {original_chapter_title}, details about the error : {e}")
+                                        .into(),
                                 );
                             }
 

@@ -197,7 +197,7 @@ impl ChapterPagesResponse {
     pub fn get_files_based_on_quality_as_url(self, quality: ImageQuality) -> Vec<Url> {
         let base_endpoint = self.get_image_url_endpoint(quality);
 
-        let endpoint_formatted = |raw_url: String| format!("{base_endpoint}/{}", raw_url).parse::<Url>();
+        let endpoint_formatted = |raw_url: String| format!("{base_endpoint}/{raw_url}").parse::<Url>();
 
         match quality {
             ImageQuality::Low => self

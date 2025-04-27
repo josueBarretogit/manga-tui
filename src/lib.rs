@@ -116,7 +116,7 @@ impl Log {
     pub fn debug<T: Debug>(val: &T, _path: &Path) {
         let mut data_file = fs::File::create("debug.txt").expect("creation failed");
 
-        data_file.write_all(format!("{:#?}", val).as_bytes()).expect("write failed");
+        data_file.write_all(format!("{val:#?}").as_bytes()).expect("write failed");
     }
 }
 
