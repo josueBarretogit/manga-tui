@@ -17,8 +17,8 @@ impl EntryDuration {
 impl From<CacheDuration> for EntryDuration {
     fn from(value: CacheDuration) -> Self {
         match value {
-            CacheDuration::LongLong => EntryDuration(Duration::from_secs(40)),
-            CacheDuration::Long => EntryDuration(Duration::from_secs(30)),
+            CacheDuration::LongLong => EntryDuration(Duration::from_secs(120)),
+            CacheDuration::Long => EntryDuration(Duration::from_secs(60)),
             CacheDuration::Medium => EntryDuration(Duration::from_secs(20)),
             CacheDuration::Short => EntryDuration(Duration::from_secs(10)),
             CacheDuration::VeryShort => EntryDuration(Duration::from_secs(5)),
@@ -42,13 +42,13 @@ pub struct InMemoryCache {
 /// `time_to_live` which indicates how long the entry should exist
 #[derive(Debug)]
 struct MemoryEntry {
-    data: String,
+    data: Vec<u8>,
     time_since_creation: Instant,
     time_to_live: EntryDuration,
 }
 
 impl MemoryEntry {
-    fn new(data: String, time_to_live: EntryDuration) -> Self {
+    fn new(data: Vec<u8>, time_to_live: EntryDuration) -> Self {
         Self {
             data,
             time_since_creation: Instant::now(),
@@ -105,9 +105,7 @@ impl InMemoryCache {
         let tick = Duration::from_millis(500);
         spawn(move || {
             loop {
-                {
-                    cache.delete_expired_entries();
-                }
+                cache.delete_expired_entries();
 
                 std::thread::sleep(tick);
             }
@@ -117,28 +115,22 @@ impl InMemoryCache {
 
 impl Cacher for InMemoryCache {
     fn get(&self, id: &str) -> Result<Option<Entry>, Box<dyn std::error::Error>> {
-        let mut cached: Option<Entry> = None;
-        {
-            let mut entries = self.entries.lock().map_err(|e| "could not get cached data")?;
+        let mut entries = self.entries.lock().unwrap();
 
-            let entry = entries.get_mut(id);
-            if let Some(en) = entry {
-                en.time_since_creation = Instant::now();
-                cached = Some(Entry {
-                    data: en.data.to_string(),
-                })
+        let entry = entries.get_mut(id);
+
+        Ok(entry.map(|en| {
+            en.time_since_creation = Instant::now();
+            Entry {
+                data: en.data.to_vec(),
             }
-        }
-
-        Ok(cached)
+        }))
     }
 
     fn cache(&self, entry: InsertEntry) -> Result<(), Box<dyn std::error::Error>> {
-        {
-            let mut entries = self.entries.lock().unwrap();
+        let mut entries = self.entries.lock().unwrap();
 
-            entries.insert(entry.id.to_string(), MemoryEntry::new(entry.data.to_string(), entry.duration.into()));
-        }
+        entries.insert(entry.id.to_string(), MemoryEntry::new(entry.data.to_vec(), entry.duration.into()));
 
         Ok(())
     }
@@ -161,13 +153,13 @@ mod tests {
 
         let data: InsertEntry = InsertEntry {
             id: "entry1",
-            data: "some data",
+            data: b"some data",
             duration: CacheDuration::VeryShort,
         };
 
         let data2: InsertEntry = InsertEntry {
             id: "entry2",
-            data: "some data entry2",
+            data: b"some data entry2",
             duration: CacheDuration::VeryShort,
         };
 
@@ -179,14 +171,14 @@ mod tests {
 
         assert_eq!(
             Some(Entry {
-                data: data.data.to_string()
+                data: data.data.to_vec()
             }),
             cache_found1
         );
 
         assert_eq!(
             Some(Entry {
-                data: data2.data.to_string()
+                data: data2.data.to_vec()
             }),
             cache_found2
         );
@@ -202,12 +194,12 @@ mod tests {
             ("id".to_string(), MemoryEntry {
                 time_since_creation: Instant::now() - Duration::from_secs(3),
                 time_to_live: EntryDuration(Duration::from_secs(2)),
-                data: "some data".to_string(),
+                data: b"some data".to_vec(),
             }),
             ("id_not_expired".to_string(), MemoryEntry {
                 time_since_creation: Instant::now(),
                 time_to_live: EntryDuration(Duration::from_secs(5)),
-                data: "some data 2".to_string(),
+                data: b"some data 2".to_vec(),
             }),
         ]));
 
@@ -239,22 +231,22 @@ mod tests {
                 ("id".to_string(), MemoryEntry {
                     time_since_creation: Instant::now() - Duration::from_secs(3),
                     time_to_live: EntryDuration(Duration::from_secs(2)),
-                    data: "some data".to_string(),
+                    data: b"some data".to_vec(),
                 }),
                 ("id_should_not_exist".to_string(), MemoryEntry {
                     time_since_creation: Instant::now() - Duration::from_secs(10),
                     time_to_live: EntryDuration(Duration::from_secs(2)),
-                    data: "some data".to_string(),
+                    data: b"some data".to_vec(),
                 }),
                 ("id_should_live".to_string(), MemoryEntry {
                     time_since_creation: Instant::now(),
                     time_to_live: EntryDuration(Duration::from_secs(10)),
-                    data: "some data 2".to_string(),
+                    data: b"some data 2".to_vec(),
                 }),
                 ("id_should_also_live".to_string(), MemoryEntry {
                     time_since_creation: Instant::now(),
                     time_to_live: EntryDuration(Duration::from_secs(15)),
-                    data: "some data 3".to_string(),
+                    data: b"some data 3".to_vec(),
                 }),
             ]))
             .with_capacity(3),
@@ -284,17 +276,17 @@ mod tests {
                 ("expired".to_string(), MemoryEntry {
                     time_since_creation: Instant::now() - Duration::from_secs(3),
                     time_to_live: EntryDuration(Duration::from_secs(2)),
-                    data: "some data".to_string(),
+                    data: b"some data".to_vec(),
                 }),
                 ("expired2".to_string(), MemoryEntry {
                     time_since_creation: Instant::now() - Duration::from_secs(10),
                     time_to_live: EntryDuration(Duration::from_secs(2)),
-                    data: "some data".to_string(),
+                    data: b"some data".to_vec(),
                 }),
                 ("expired3".to_string(), MemoryEntry {
                     time_since_creation: Instant::now() - Duration::from_secs(10),
                     time_to_live: EntryDuration(Duration::from_secs(1)),
-                    data: "some data 2".to_string(),
+                    data: b"some data 2".to_vec(),
                 }),
             ]))
             .with_capacity(5),
@@ -317,7 +309,7 @@ mod tests {
         let in_memory = InMemoryCache::with_cached_data(HashMap::from([("exists".to_string(), MemoryEntry {
             time_since_creation: Instant::now() - Duration::from_secs(10),
             time_to_live: EntryDuration(Duration::from_secs(5)),
-            data: "some data".to_string(),
+            data: b"some data".to_vec(),
         })]));
 
         in_memory.get("exists")?;

@@ -12,6 +12,7 @@ use http::header::{ACCEPT, ACCEPT_ENCODING, CACHE_CONTROL};
 use http::{HeaderMap, HeaderValue, StatusCode};
 use manga_tui::SearchTerm;
 use reqwest::{Client, Response, Url};
+use serde::Serialize;
 use serde_json::json;
 
 use super::{
@@ -110,14 +111,14 @@ impl MangadexClient {
         let cache = self.cache_provider.get(&endpoint)?;
 
         match cache {
-            Some(cached) => Ok(serde_json::from_str(&cached.data)?),
+            Some(cached) => Ok(serde_json::from_slice(&cached.data)?),
             None => {
                 let response: AggregateChapterResponse = self.client.get(&endpoint).send().await?.json().await?;
 
                 self.cache_provider
                     .cache(InsertEntry {
                         id: &endpoint,
-                        data: json!(response).to_string().as_str(),
+                        data: &serde_json::to_vec(&response)?,
                         duration: CacheDuration::Long,
                     })
                     .ok();
@@ -376,13 +377,27 @@ impl MangadexClient {
 
 impl GetRawImage for MangadexClient {
     async fn get_raw_image(&self, url: &str) -> Result<Bytes, Box<dyn Error>> {
-        let response = self.client.get(url).timeout(StdDuration::from_secs(10)).send().await?;
+        let cache = self.cache_provider.get(url)?;
+        match cache {
+            Some(cached) => Ok(cached.data.into()),
+            None => {
+                let response = self.client.get(url).timeout(StdDuration::from_secs(10)).send().await?;
 
-        if response.status() != StatusCode::OK {
-            return Err(format!("Could not get image on mangadex with url : {url}").into());
+                if response.status() != StatusCode::OK {
+                    return Err(format!("Could not get image on mangadex with url : {url}").into());
+                }
+                let bytes = response.bytes().await?;
+                self.cache_provider
+                    .cache(InsertEntry {
+                        id: url,
+                        data: &bytes,
+                        duration: CacheDuration::LongLong,
+                    })
+                    .ok();
+
+                Ok(bytes)
+            },
         }
-
-        Ok(response.bytes().await?)
     }
 }
 
@@ -463,7 +478,7 @@ impl HomePageMangaProvider for MangadexClient {
 
         match cache {
             Some(cached) => {
-                let response: SearchMangaResponse = serde_json::from_str(&cached.data)?;
+                let response: SearchMangaResponse = serde_json::from_slice(&cached.data)?;
 
                 Ok(response.data.into_iter().map(self.map_popular_mangas()).collect())
             },
@@ -492,15 +507,17 @@ impl HomePageMangaProvider for MangadexClient {
 
                 let response: SearchMangaResponse = response.json().await?;
 
+                let response = response.data.into_iter().map(self.map_popular_mangas()).collect();
+
                 self.cache_provider
                     .cache(InsertEntry {
                         id: &id_popular_manga_cache,
-                        data: &json!(response).to_string(),
+                        data: &serde_json::to_vec(&response)?,
                         duration: CacheDuration::Short,
                     })
                     .ok();
 
-                Ok(response.data.into_iter().map(self.map_popular_mangas()).collect())
+                Ok(response)
             },
         }
     }
@@ -513,11 +530,7 @@ impl SearchMangaById for MangadexClient {
         let cache = self.cache_provider.get(&id_cache)?;
 
         match cache {
-            Some(cached) => {
-                let manga: GetMangaByIdResponse = serde_json::from_str(&cached.data)?;
-
-                Ok(self.map_manga_found_by_id(manga).await)
-            },
+            Some(cached) => Ok(serde_json::from_slice(&cached.data)?),
             None => {
                 let response = self
                     .client
@@ -534,15 +547,18 @@ impl SearchMangaById for MangadexClient {
                 }
 
                 let manga: GetMangaByIdResponse = response.json().await?;
+
+                let response = self.map_manga_found_by_id(manga).await;
+
                 self.cache_provider
                     .cache(InsertEntry {
                         id: &id_cache,
-                        data: &json!(manga).to_string(),
+                        data: &serde_json::to_vec(&response)?,
                         duration: CacheDuration::LongLong,
                     })
                     .ok();
 
-                Ok(self.map_manga_found_by_id(manga).await)
+                Ok(response)
             },
         }
     }
@@ -569,7 +585,7 @@ impl GetChapterPages for MangadexClient {
         let cache = self.cache_provider.get(&endpoint)?;
         match cache {
             Some(cached) => {
-                let response: ChapterPagesResponse = serde_json::from_str(&cached.data)?;
+                let response: ChapterPagesResponse = serde_json::from_slice(&cached.data)?;
 
                 Ok(self.map_response_to_pages_url(response, self.image_quality))
             },
@@ -588,7 +604,7 @@ impl GetChapterPages for MangadexClient {
                 self.cache_provider
                     .cache(InsertEntry {
                         id: &endpoint,
-                        data: json!(response).to_string().as_str(),
+                        data: &serde_json::to_vec(&response)?,
                         duration: CacheDuration::Long,
                     })
                     .ok();
@@ -621,7 +637,7 @@ impl MangaPageProvider for MangadexClient {
 
         match cache {
             Some(cached) => {
-                let response: ChapterResponse = serde_json::from_str(&cached.data)?;
+                let response: ChapterResponse = serde_json::from_slice(&cached.data)?;
 
                 let total_items = response.total;
 
@@ -663,7 +679,7 @@ impl MangaPageProvider for MangadexClient {
                 self.cache_provider
                     .cache(InsertEntry {
                         id: &id_cache,
-                        data: json!(response).to_string().as_str(),
+                        data: &serde_json::to_vec(&response)?,
                         duration: CacheDuration::Long,
                     })
                     .ok();
@@ -691,7 +707,7 @@ impl MangaPageProvider for MangadexClient {
 
         match cache {
             Some(cached) => {
-                let response: ChapterResponse = serde_json::from_str(&cached.data)?;
+                let response: ChapterResponse = serde_json::from_slice(&cached.data)?;
 
                 let response: Vec<Chapter> =
                     response.data.into_iter().map(self.map_chapter_response(manga_id.to_string())).collect();
@@ -733,7 +749,7 @@ impl MangaPageProvider for MangadexClient {
                 self.cache_provider
                     .cache(InsertEntry {
                         id: &id_cache,
-                        data: json!(response).to_string().as_str(),
+                        data: &serde_json::to_vec(&response)?,
                         duration: CacheDuration::Long,
                     })
                     .ok();
@@ -754,7 +770,7 @@ impl SearchChapterById for MangadexClient {
 
         match cache {
             Some(cached) => {
-                let response: OneChapterResponse = serde_json::from_str(&cached.data)?;
+                let response: OneChapterResponse = serde_json::from_slice(&cached.data)?;
 
                 let pages_url: Vec<Url> = self
                     .get_chapter_pages_url_with_extension(chapter_id, "", self.image_quality)
@@ -796,7 +812,7 @@ impl SearchChapterById for MangadexClient {
                 self.cache_provider
                     .cache(InsertEntry {
                         id: &endpoint,
-                        data: json!(response).to_string().as_str(),
+                        data: &serde_json::to_vec(&response)?,
                         duration: CacheDuration::Long,
                     })
                     .ok();
@@ -973,7 +989,7 @@ impl FeedPageProvider for MangadexClient {
 
         match cache {
             Some(cached) => {
-                let response: ChapterResponse = serde_json::from_str(&cached.data)?;
+                let response: ChapterResponse = serde_json::from_slice(&cached.data)?;
 
                 Ok(response.data.into_iter().map(self.map_latest_chapter(manga_id.to_string())).collect())
             },
@@ -999,7 +1015,7 @@ impl FeedPageProvider for MangadexClient {
                 self.cache_provider
                     .cache(InsertEntry {
                         id: &id_cache,
-                        data: json!(response).to_string().as_str(),
+                        data: &serde_json::to_vec(&response)?,
                         duration: CacheDuration::Short,
                     })
                     .ok();
