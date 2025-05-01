@@ -105,9 +105,7 @@ impl InMemoryCache {
         let tick = Duration::from_millis(500);
         spawn(move || {
             loop {
-                {
-                    cache.delete_expired_entries();
-                }
+                cache.delete_expired_entries();
 
                 std::thread::sleep(tick);
             }
@@ -117,28 +115,22 @@ impl InMemoryCache {
 
 impl Cacher for InMemoryCache {
     fn get(&self, id: &str) -> Result<Option<Entry>, Box<dyn std::error::Error>> {
-        let mut cached: Option<Entry> = None;
-        {
-            let mut entries = self.entries.lock().map_err(|e| "could not get cached data")?;
+        let mut entries = self.entries.lock().unwrap();
 
-            let entry = entries.get_mut(id);
-            if let Some(en) = entry {
-                en.time_since_creation = Instant::now();
-                cached = Some(Entry {
-                    data: en.data.to_vec(),
-                })
+        let entry = entries.get_mut(id);
+
+        Ok(entry.map(|en| {
+            en.time_since_creation = Instant::now();
+            Entry {
+                data: en.data.to_vec(),
             }
-        }
-
-        Ok(cached)
+        }))
     }
 
     fn cache(&self, entry: InsertEntry) -> Result<(), Box<dyn std::error::Error>> {
-        {
-            let mut entries = self.entries.lock().unwrap();
+        let mut entries = self.entries.lock().unwrap();
 
-            entries.insert(entry.id.to_string(), MemoryEntry::new(entry.data.to_vec(), entry.duration.into()));
-        }
+        entries.insert(entry.id.to_string(), MemoryEntry::new(entry.data.to_vec(), entry.duration.into()));
 
         Ok(())
     }
