@@ -152,6 +152,7 @@ impl ConfigParam for AmountPagesParam {
         String::from(r#"amount_pages = 5"#)
     }
 }
+
 #[derive(Debug, Default)]
 struct TrackReadingWhenDownload;
 
@@ -177,6 +178,31 @@ impl ConfigParam for TrackReadingWhenDownload {
     }
 }
 
+#[derive(Debug, Default)]
+struct CheckNewUpdates;
+
+impl ConfigParam for CheckNewUpdates {
+    fn name(&self) -> &'static str {
+        "check_new_updates"
+    }
+
+    fn comments(&self) -> &'static str {
+        "Enable / disable checking for new updates"
+    }
+
+    fn values(&self) -> &'static str {
+        "true, false"
+    }
+
+    fn defaults(&self) -> &'static str {
+        "true"
+    }
+
+    fn param(&self) -> String {
+        String::from(r#"check_new_updates = true"#)
+    }
+}
+
 /// It's main job is to create the config file with the provided config params or update it if it
 /// already exists, and also to create the config directory if it does not exist
 struct ConfigBuilder<'a> {
@@ -192,6 +218,7 @@ fn config_params() -> Vec<Box<dyn ConfigParam>> {
         Box::new(AmountPagesParam),
         Box::new(AutoBookmarkParam),
         Box::new(TrackReadingWhenDownload),
+        Box::new(CheckNewUpdates),
     ]
 }
 
@@ -287,6 +314,7 @@ pub struct MangaTuiConfig {
     pub auto_bookmark: bool,
     pub amount_pages: u8,
     pub track_reading_when_download: bool,
+    pub check_new_updates: bool,
 }
 
 #[derive(Default, Debug, Serialize, Deserialize, Display, EnumIter, Clone, Copy, PartialEq, Eq)]
@@ -312,6 +340,7 @@ impl Default for MangaTuiConfig {
         Self {
             amount_pages: 5,
             auto_bookmark: true,
+            check_new_updates: true,
             download_type: DownloadType::default(),
             image_quality: ImageQuality::default(),
             track_reading_when_download: false,

@@ -59,12 +59,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     cli_args.proccess_args().await?;
 
-    let notifier = ReleaseNotifier::new(GITHUB_URL.parse().unwrap());
-
-    if let Err(e) = notifier.check_new_releases(&logger).await {
-        logger.error(e);
-    }
-
     match build_data_dir(&logger) {
         Ok(_) => {},
         Err(e) => {
@@ -100,6 +94,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let config = MangaTuiConfig::get();
+
+    if config.check_new_updates {
+        let notifier = ReleaseNotifier::new(GITHUB_URL.parse().unwrap());
+
+        if let Err(e) = notifier.check_new_releases(&logger).await {
+            logger.error(e);
+        }
+    }
 
     let mut connection = Database::get_connection()?;
     let database = Database::new(&connection);
