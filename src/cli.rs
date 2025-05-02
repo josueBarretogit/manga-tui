@@ -57,8 +57,8 @@ pub struct CliArgs {
     pub data_dir: bool,
     #[arg(short, long)]
     pub config_dir: bool,
-    #[arg(short = 'p', long = "provider", default_value = "mangadex")]
-    pub manga_provider: MangaProviders,
+    #[arg(short = 'p', long = "provider")]
+    pub manga_provider: Option<MangaProviders>,
 }
 
 pub struct AnilistCredentialsProvided<'a> {
@@ -118,7 +118,7 @@ impl CliArgs {
             config_dir: false,
             command: None,
             data_dir: false,
-            manga_provider: MangaProviders::default(),
+            manga_provider: Some(MangaProviders::default()),
         }
     }
 

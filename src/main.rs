@@ -55,7 +55,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let cli_args = CliArgs::parse();
 
-    let provider = cli_args.manga_provider;
+    let manga_provider_cli = cli_args.manga_provider;
 
     cli_args.proccess_args().await?;
 
@@ -115,6 +115,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     stdout().execute(EnableMouseCapture)?;
 
     let cache_provider: Arc<dyn Cacher> = InMemoryCache::init(8);
+
+    let provider = if let Some(pro) = manga_provider_cli { pro } else { config.default_manga_provider };
 
     match provider {
         MangaProviders::Mangadex => {

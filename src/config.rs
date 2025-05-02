@@ -12,6 +12,7 @@ use strum::{Display, EnumIter};
 use toml::Table;
 
 use crate::backend::AppDirectories;
+use crate::backend::manga_provider::MangaProviders;
 use crate::logger::{DefaultLogger, ILogger};
 
 static CONFIG_FILE_NAME: &str = "config.toml";
@@ -39,6 +40,7 @@ trait ConfigParam {
     fn comments(&self) -> &'static str;
     fn values(&self) -> &'static str;
     fn defaults(&self) -> &'static str;
+
     fn param(&self) -> String;
 
     fn build_parameter(&self) -> String {
@@ -203,6 +205,31 @@ impl ConfigParam for CheckNewUpdates {
     }
 }
 
+#[derive(Debug, Default)]
+struct DefaultMangaProvider;
+
+impl ConfigParam for DefaultMangaProvider {
+    fn name(&self) -> &'static str {
+        "default_manga_provider"
+    }
+
+    fn comments(&self) -> &'static str {
+        "Sets which manga provider will be used when running manga-tui, \n# you can override it by running manga-tui with the -p flag like this: manga-tui -p weebcentral"
+    }
+
+    fn values(&self) -> &'static str {
+        "mangadex, weebcentral"
+    }
+
+    fn defaults(&self) -> &'static str {
+        r#""mangadex""#
+    }
+
+    fn param(&self) -> String {
+        String::from(r#"default_manga_provider = "mangadex""#)
+    }
+}
+
 /// It's main job is to create the config file with the provided config params or update it if it
 /// already exists, and also to create the config directory if it does not exist
 struct ConfigBuilder<'a> {
@@ -219,6 +246,7 @@ fn config_params() -> Vec<Box<dyn ConfigParam>> {
         Box::new(AutoBookmarkParam),
         Box::new(TrackReadingWhenDownload),
         Box::new(CheckNewUpdates),
+        Box::new(DefaultMangaProvider),
     ]
 }
 
@@ -315,6 +343,7 @@ pub struct MangaTuiConfig {
     pub amount_pages: u8,
     pub track_reading_when_download: bool,
     pub check_new_updates: bool,
+    pub default_manga_provider: MangaProviders,
 }
 
 #[derive(Default, Debug, Serialize, Deserialize, Display, EnumIter, Clone, Copy, PartialEq, Eq)]
@@ -344,6 +373,7 @@ impl Default for MangaTuiConfig {
             download_type: DownloadType::default(),
             image_quality: ImageQuality::default(),
             track_reading_when_download: false,
+            default_manga_provider: MangaProviders::default(),
         }
     }
 }
