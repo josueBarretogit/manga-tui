@@ -6,6 +6,7 @@ use std::io::BufRead;
 use std::process::exit;
 
 use clap::{Parser, Subcommand, crate_version};
+use serde::{Deserialize, Serialize};
 use strum::{Display, IntoEnumIterator};
 
 use crate::backend::APP_DATA_DIR;
@@ -14,7 +15,7 @@ use crate::backend::manga_provider::{Languages, MangaProviders};
 use crate::backend::secrets::SecretStorage;
 use crate::backend::secrets::keyring::KeyringStorage;
 use crate::backend::tracker::anilist::{self, BASE_ANILIST_API_URL};
-use crate::config::get_config_directory_path;
+use crate::config::{MangaTuiConfig, get_config_directory_path};
 use crate::global::PREFERRED_LANGUAGE;
 use crate::logger::{ILogger, Logger};
 
@@ -84,7 +85,7 @@ impl From<AnilistCredentials> for String {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Credentials {
     pub access_token: String,
     pub client_id: String,

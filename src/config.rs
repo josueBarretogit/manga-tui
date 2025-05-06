@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::fmt::Write as FmtWrite;
 use std::fs::{File, OpenOptions, create_dir_all};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -13,6 +14,7 @@ use toml::Table;
 
 use crate::backend::AppDirectories;
 use crate::backend::manga_provider::MangaProviders;
+use crate::cli::Credentials;
 use crate::logger::{DefaultLogger, ILogger};
 
 static CONFIG_FILE_NAME: &str = "config.toml";
@@ -52,6 +54,30 @@ trait ConfigParam {
         let result = format!("# {comments}\n# values: {values}\n# default: {defaults}\n{param}\n\n");
 
         result
+    }
+}
+
+/// Like the `ConfigParam` trait but for making a toml table parameter
+trait TableParam {
+    fn table_name(&self) -> &'static str;
+
+    fn comments(&self) -> &'static str;
+
+    fn parameters(&self) -> Vec<Box<dyn ConfigParam>>;
+
+    fn add_parameters(&self, params: Vec<Box<dyn ConfigParam>>) -> String {
+        params.iter().fold(String::new(), |mut accum, param| {
+            let _ = write!(accum, "{}", param.build_parameter());
+            accum
+        })
+    }
+
+    fn build_full_table(&self) -> String {
+        let table_name = self.table_name();
+        let comments = self.comments();
+        let added_parameters = self.add_parameters(self.parameters());
+
+        format!("# {comments}\n[{table_name}]\n{added_parameters}")
     }
 }
 
@@ -230,14 +256,82 @@ impl ConfigParam for DefaultMangaProvider {
     }
 }
 
+#[derive(Debug, Default)]
+struct AnilistClientId;
+
+impl ConfigParam for AnilistClientId {
+    fn name(&self) -> &'static str {
+        "client_id"
+    }
+
+    fn comments(&self) -> &'static str {
+        "Your client id from your anilist account, leave it as 0 if you don't want to use the config file to read your anilist credentials"
+    }
+
+    fn values(&self) -> &'static str {
+        "string"
+    }
+
+    fn defaults(&self) -> &'static str {
+        r#""""#
+    }
+
+    fn param(&self) -> String {
+        String::from(r#"client_id = """#)
+    }
+}
+
+#[derive(Debug, Default)]
+struct AnilistAccessToken;
+
+impl ConfigParam for AnilistAccessToken {
+    fn name(&self) -> &'static str {
+        "access_token"
+    }
+
+    fn comments(&self) -> &'static str {
+        "Your acces token from your anilist account, leave it as an empty string \"\" if you don't want to use the config file to read your anilist credentials"
+    }
+
+    fn values(&self) -> &'static str {
+        "string"
+    }
+
+    fn defaults(&self) -> &'static str {
+        "\"\""
+    }
+
+    fn param(&self) -> String {
+        format!("{} = {}", self.name(), self.defaults())
+    }
+}
+
+#[derive(Debug, Default)]
+struct AnilistConfigTable;
+
+impl TableParam for AnilistConfigTable {
+    fn table_name(&self) -> &'static str {
+        "anilist"
+    }
+
+    fn comments(&self) -> &'static str {
+        "Anilist-related config"
+    }
+
+    fn parameters(&self) -> Vec<Box<dyn ConfigParam>> {
+        vec![Box::new(AnilistClientId), Box::new(AnilistAccessToken)]
+    }
+}
+
 /// It's main job is to create the config file with the provided config params or update it if it
 /// already exists, and also to create the config directory if it does not exist
 struct ConfigBuilder<'a> {
     params: Vec<Box<dyn ConfigParam>>,
+    table_params: Vec<Box<dyn TableParam>>,
     directory_path: &'a Path,
 }
 
-/// The params the config file has
+/// The params the config file has which look like: param_name = "value"
 fn config_params() -> Vec<Box<dyn ConfigParam>> {
     vec![
         Box::new(DownloadTypeParam),
@@ -250,9 +344,14 @@ fn config_params() -> Vec<Box<dyn ConfigParam>> {
     ]
 }
 
+fn table_config_params() -> Vec<Box<dyn TableParam>> {
+    vec![Box::new(AnilistConfigTable)]
+}
+
 impl<'a> ConfigBuilder<'a> {
     fn new() -> Self {
         Self {
+            table_params: table_config_params(),
             params: config_params(),
             directory_path: Path::new("./"),
         }
@@ -265,7 +364,16 @@ impl<'a> ConfigBuilder<'a> {
 
     fn with_params(params: Vec<Box<dyn ConfigParam>>) -> Self {
         Self {
+            table_params: vec![],
             params,
+            directory_path: Path::new("./"),
+        }
+    }
+
+    fn with_table_config_params(table_params: Vec<Box<dyn TableParam>>) -> Self {
+        Self {
+            table_params,
+            params: vec![],
             directory_path: Path::new("./"),
         }
     }
@@ -313,6 +421,16 @@ impl<'a> ConfigBuilder<'a> {
         for config_param in &self.params {
             file.write_all(config_param.build_parameter().as_bytes())?;
         }
+
+        for table_param in &self.table_params {
+            file.write_all(table_param.build_full_table().as_bytes())?
+        }
+
+        file.flush()?;
+        Ok(())
+    }
+
+    fn add_missing_table_param(&self, mut config: impl Write + Read) -> Result<(), Box<dyn Error>> {
         Ok(())
     }
 
@@ -336,6 +454,23 @@ impl<'a> ConfigBuilder<'a> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AnilistConfig {
+    #[serde(flatten)]
+    pub credentials: Credentials,
+}
+
+impl Default for AnilistConfig {
+    fn default() -> Self {
+        Self {
+            credentials: Credentials {
+                access_token: "".to_string(),
+                client_id: "".to_string(),
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MangaTuiConfig {
     pub download_type: DownloadType,
     pub image_quality: ImageQuality,
@@ -344,6 +479,7 @@ pub struct MangaTuiConfig {
     pub track_reading_when_download: bool,
     pub check_new_updates: bool,
     pub default_manga_provider: MangaProviders,
+    pub anilist: AnilistConfig,
 }
 
 #[derive(Default, Debug, Serialize, Deserialize, Display, EnumIter, Clone, Copy, PartialEq, Eq)]
@@ -374,6 +510,7 @@ impl Default for MangaTuiConfig {
             image_quality: ImageQuality::default(),
             track_reading_when_download: false,
             default_manga_provider: MangaProviders::default(),
+            anilist: AnilistConfig::default(),
         }
     }
 }
@@ -392,6 +529,18 @@ impl MangaTuiConfig {
 
     fn from_str(raw_file: &str) -> Result<Self, Box<dyn Error>> {
         Ok(toml::from_str(raw_file)?)
+    }
+
+    /// Check wether or not to read the anilist credentials from the config file
+    pub fn check_anilist_credentials(&self) -> Option<Credentials> {
+        if self.anilist.credentials.access_token.is_empty() || self.anilist.credentials.access_token.is_empty() {
+            return None;
+        }
+
+        Some(Credentials {
+            access_token: self.anilist.credentials.access_token.clone(),
+            client_id: self.anilist.credentials.client_id.clone(),
+        })
     }
 }
 
@@ -419,14 +568,81 @@ pub fn get_config_directory_path() -> PathBuf {
 #[cfg(test)]
 mod tests {
 
+    use std::fmt::{Debug, Write as FmtWrite};
     use std::fs;
-    use std::io::Cursor;
+    use std::io::{Cursor, Write};
 
     use pretty_assertions::{assert_eq, assert_str_eq};
 
     use super::*;
 
     const CONFIG_TEST_DIRECTORY_PATH: &str = "./test_results/config_test_dir/";
+
+    /// Should contain two keys:
+    /// param = ""
+    /// param2 = ""
+    struct TestTableConfigParam;
+
+    impl TableParam for TestTableConfigParam {
+        fn table_name(&self) -> &'static str {
+            "test_table"
+        }
+
+        fn comments(&self) -> &'static str {
+            "This table contains some example keys"
+        }
+
+        fn parameters(&self) -> Vec<Box<dyn ConfigParam>> {
+            vec![Box::new(TestConfigParam), Box::new(TestConfigParam2)]
+        }
+    }
+
+    struct TestConfigParam;
+    struct TestConfigParam2;
+
+    impl ConfigParam for TestConfigParam {
+        fn name(&self) -> &'static str {
+            "param"
+        }
+
+        fn comments(&self) -> &'static str {
+            "A test parameter of a table param"
+        }
+
+        fn values(&self) -> &'static str {
+            "string"
+        }
+
+        fn defaults(&self) -> &'static str {
+            "empty string"
+        }
+
+        fn param(&self) -> String {
+            r#"param = """#.to_string()
+        }
+    }
+
+    impl ConfigParam for TestConfigParam2 {
+        fn name(&self) -> &'static str {
+            "param2"
+        }
+
+        fn comments(&self) -> &'static str {
+            "A test parameter of a table param"
+        }
+
+        fn values(&self) -> &'static str {
+            "string"
+        }
+
+        fn defaults(&self) -> &'static str {
+            "empty string"
+        }
+
+        fn param(&self) -> String {
+            r#"param2 = """#.to_string()
+        }
+    }
 
     #[test]
     #[ignore]
@@ -452,35 +668,10 @@ mod tests {
     }
 
     #[test]
-    fn config_builder_writes_to_the_config_file_with_parameters() -> Result<(), Box<dyn Error>> {
+    fn config_builder_writes_to_the_config_file_with_default_parameters() -> Result<(), Box<dyn Error>> {
         let config = ConfigBuilder::new().dir_path(CONFIG_TEST_DIRECTORY_PATH);
 
         let mut test_file = Cursor::new(Vec::new());
-        let expected = r#"
-# The format of the manga downloaded
-# values: cbz, raw, epub, pdf
-# default: cbz
-download_type = "cbz"
-
-# Download image quality, low quality means images are compressed and is recommended for slow internet connections
-# values: low, high 
-# default: low
-image_quality = "low"
-
-# Pages around the currently selected page to try to prefetch
-# values: 0-255
-# default: 5
-amount_pages = 5
-
-# Whether or not bookmarking is done automatically, if false you decide which chapter to bookmark
-# values: true, false
-# default: true
-auto_bookmark = true
-
-# Whether or not downloading a manga counts as reading it on services like anilist
-# values: true, false
-# default: false
-track_reading_when_download = false"#;
 
         config.write_config(&mut test_file)?;
 
@@ -498,14 +689,14 @@ track_reading_when_download = false"#;
         let config = ConfigBuilder::with_params(vec![Box::new(AmountPagesParam), Box::new(AutoBookmarkParam)])
             .dir_path(CONFIG_TEST_DIRECTORY_PATH);
 
-        let mut test_file = Cursor::new(Vec::new());
-
-        let existing_file = r#"
+        let existing_file = br#"
 # The format of the manga downloaded
 # values: cbz, raw, epub, pdf
 # default: cbz
 download_type = "cbz"
 "#;
+
+        let mut test_file = Cursor::new(existing_file.to_vec());
 
         config.update_existing_config(&mut test_file)?;
 
@@ -519,17 +710,109 @@ download_type = "cbz"
     }
 
     #[test]
-    fn config_is_parse_from_raw_file() -> Result<(), Box<dyn Error>> {
-        let config = ConfigBuilder::new().dir_path(CONFIG_TEST_DIRECTORY_PATH);
+    fn config_builder_adds_missing_table_params_at_the_end() -> Result<(), Box<dyn Error>> {
+        let config = ConfigBuilder::with_table_config_params(vec![Box::new(TestTableConfigParam)]);
 
-        let mut test_file = Cursor::new(Vec::new());
+        let existing_file = br#"
+        download_type = "cbz"
 
-        config.write_config(&mut test_file)?;
+        [example_table]
+        some_param = 1
 
-        test_file.set_position(0);
+        "#;
 
-        assert_eq!(MangaTuiConfig::default(), MangaTuiConfig::read_config_file(test_file)?);
+        let mut test_file = Cursor::new(existing_file.to_vec());
+
+        config.add_missing_table_param(&mut test_file)?;
+
+        let file_contents = String::from_utf8(test_file.into_inner())?;
+        let expected = toml::Table::from_str(&file_contents)?;
+
+        let expected = expected.get("test_table").unwrap();
+
+        assert!(expected.is_table());
 
         Ok(())
     }
+
+    #[test]
+    fn anilist_credentials_are_returned_if_not_empty() {
+        let mut config = MangaTuiConfig::default();
+
+        assert!(config.check_anilist_credentials().is_none());
+
+        config.anilist.credentials.client_id = "12938".to_string();
+
+        assert!(config.check_anilist_credentials().is_none());
+
+        config.anilist.credentials.client_id = "1290347".to_string();
+        config.anilist.credentials.access_token = "some_token".to_string();
+
+        assert_eq!(
+            Credentials {
+                client_id: config.anilist.credentials.client_id.clone(),
+                access_token: config.anilist.credentials.access_token.clone()
+            },
+            config.check_anilist_credentials().unwrap()
+        );
+    }
+
+    #[test]
+    fn table_config_param_is_built_with_expected_params() {
+        let table = TestTableConfigParam;
+
+        let expected = r#"# This table contains some example keys
+[test_table]
+# A test parameter of a table param
+# values: string
+# default: empty string
+param = ""
+
+# A test parameter of a table param
+# values: string
+# default: empty string
+param2 = ""
+
+"#;
+
+        assert_eq!(expected, table.build_full_table());
+    }
+
+    //#[test]
+    //fn config_builder_adds_missing_keys_to_table() -> Result<(), Box<dyn Error>> {
+    //    let config = ConfigBuilder::with_table_config_params(vec![Box::new(TestTableConfigParam)]);
+    //
+    //    let existing_file = br#"
+    //# The format of the manga downloaded
+    //# values: cbz, raw, epub, pdf
+    //# default: cbz
+    //download_type = "cbz"
+    //
+    //[test_table]
+    //# A test parameter of a table param
+    //# values: string
+    //# default: empty string
+    //param = ""
+    //
+    //"#;
+    //
+    //    let mut test_file = Cursor::new(existing_file.to_vec());
+    //
+    //    config.update_existing_config(&mut test_file)?;
+    //
+    //    let file_contents = String::from_utf8(test_file.into_inner())?;
+    //    let result = toml::Table::from_str(&file_contents)?;
+    //
+    //    let result = result.get("test_table").unwrap();
+    //
+    //    match result {
+    //        toml::Value::Table(table) => {
+    //            assert!(table.contains_key("param"));
+    //            assert!(table.contains_key("param2"));
+    //        },
+    //        _ => panic!("test_table was not a table toml table param but something else"),
+    //    }
+    //
+    //    Ok(())
+    //}
 }

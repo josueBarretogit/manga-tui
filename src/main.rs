@@ -53,12 +53,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .filter_level(LevelFilter::Info)
         .init();
 
-    let cli_args = CliArgs::parse();
-
-    let manga_provider_cli = cli_args.manga_provider;
-
-    cli_args.proccess_args().await?;
-
     match build_data_dir(&logger) {
         Ok(_) => {},
         Err(e) => {
@@ -74,9 +68,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     }
 
+    let cli_args = CliArgs::parse();
+
+    let manga_provider_cli = cli_args.manga_provider;
+
+    cli_args.proccess_args().await?;
+
+    let config = MangaTuiConfig::get();
+
+    if config.check_new_updates {
+        let notifier = ReleaseNotifier::new(GITHUB_URL.parse().unwrap());
+
+        if let Err(e) = notifier.check_new_releases(&logger).await {
+            logger.error(e);
+        }
+    }
+
     let anilist_storage = KeyringStorage::new();
 
-    let anilist_client = match check_anilist_credentials_are_stored(anilist_storage) {
+    let anilist_client = match check_anilist_credentials_are_stored(anilist_storage).map(|from_secret_storage| {
+        if from_secret_storage.is_none() { config.check_anilist_credentials() } else { from_secret_storage }
+    }) {
         Ok(Some(credentials)) => {
             logger.inform("Anilist is setup, tracking reading history");
             tokio::time::sleep(Duration::from_secs(1)).await;
@@ -92,16 +104,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
         _ => None,
     };
-
-    let config = MangaTuiConfig::get();
-
-    if config.check_new_updates {
-        let notifier = ReleaseNotifier::new(GITHUB_URL.parse().unwrap());
-
-        if let Err(e) = notifier.check_new_releases(&logger).await {
-            logger.error(e);
-        }
-    }
 
     let mut connection = Database::get_connection()?;
     let database = Database::new(&connection);
