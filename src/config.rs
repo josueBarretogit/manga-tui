@@ -1,3 +1,10 @@
+//! Configuration management for manga-tui.
+//!
+//! This module provides the configuration system for manga-tui, including
+//! config file creation, updating, and reading. It supports default values,
+//! table parameters, and ensures the config file is always up-to-date with
+//! the latest parameters.
+
 use std::error::Error;
 use std::fmt::Write as FmtWrite;
 use std::fs::{File, OpenOptions, create_dir_all};
@@ -27,26 +34,23 @@ static CONFIG_DIR_PATH: LazyLock<Option<PathBuf>> = LazyLock::new(|| {
     directories::ProjectDirs::from("", "", "manga-tui").map(|project_dirs| project_dirs.config_dir().to_path_buf())
 });
 
-/// Defines what a parameter in the config file should implement
-/// `comments` for explaining to the user what the config param does
-/// `values` to define what kind of values the config param can take
-/// `defaults` to provide what the config param defaults to
-/// and `param` which is the actual config param as defined by toml syntax
+/// Trait for a single configuration parameter.
 ///
-///  # Example
-///  \# The format of the manga downloaded
-///  \# values: cbz , raw, epub, pdf
-///  \# default: cbz
-///  download_type = "cbz"
+/// Implementors define the name, documentation, allowed values, default,
+/// and how the parameter is rendered in the config file.
 trait ConfigParam {
-    /// The name by which the config param is identified
+    /// The name of the config parameter.
     fn name(&self) -> &'static str;
+    /// Description of what the parameter does.
     fn comments(&self) -> &'static str;
+    /// Allowed values for the parameter.
     fn values(&self) -> &'static str;
+    /// Default value for the parameter.
     fn defaults(&self) -> &'static str;
-
+    /// The TOML representation of the parameter.
     fn param(&self) -> String;
 
+    /// Builds the full parameter entry, including comments, for the config file.
     fn build_parameter(&self) -> String {
         let comments = self.comments();
         let values = self.values();
@@ -59,12 +63,16 @@ trait ConfigParam {
     }
 }
 
-/// Like the `ConfigParam` trait but for making a toml table parameter
+/// Trait for a table of configuration parameters (TOML tables).
+///
+/// Implementors define the table name, documentation, and the parameters
+/// contained within the table.
 trait TableParam {
+    /// The TOML table name.
     fn table_name(&self) -> &'static str;
-
+    /// Description of the table.
     fn comments(&self) -> &'static str;
-
+    /// The parameters contained in the table.
     fn parameters(&self) -> Vec<Box<dyn ConfigParam>>;
 
     fn add_parameters(&self, params: Vec<Box<dyn ConfigParam>>) -> String {
@@ -325,8 +333,9 @@ impl TableParam for AnilistConfigTable {
     }
 }
 
-/// It's main job is to create the config file with the provided config params or update it if it
-/// already exists, and also to create the config directory if it does not exist
+/// Builder for the configuration file.
+///
+/// Handles creation, updating, and writing of the config file and its directory.
 struct ConfigBuilder<'a> {
     params: Vec<Box<dyn ConfigParam>>,
     table_params: Vec<Box<dyn TableParam>>,
@@ -352,6 +361,7 @@ fn table_config_params() -> Vec<Box<dyn TableParam>> {
 }
 
 impl<'a> ConfigBuilder<'a> {
+    /// Creates a new `ConfigBuilder` with default parameters and tables.
     fn new() -> Self {
         Self {
             table_params: table_config_params(),
@@ -360,6 +370,7 @@ impl<'a> ConfigBuilder<'a> {
         }
     }
 
+    /// Sets the base directory for the config file.
     fn dir_path<P: AsRef<Path> + ?Sized>(mut self, dir_path: &'a P) -> Self {
         self.base_directory = dir_path.as_ref();
         self
@@ -442,9 +453,14 @@ impl<'a> ConfigBuilder<'a> {
         Ok(())
     }
 
-    /// Checks the existing config file for table-like `params` which are not present, either the user deleted
-    /// them by accident or new ones were introduced in newer `manga-tui` releases, and adds them
-    /// at the end of the file
+    /// Appends missing table parameters to the config file.
+    ///
+    /// # Why tables are appended at the end
+    /// In TOML, table definitions (e.g., `[table_name]`) must appear after all single-value parameters
+    /// (e.g., `param = "value"`). If a table is inserted before or in the middle of single-value parameters,
+    /// those parameters would be interpreted as belonging to the last table, which is not intended.
+    /// Therefore, any missing table parameters are always appended at the end of the file to maintain
+    /// correct TOML structure and parsing.
     fn append_missing_table_params(&self, file_contents: &str) -> Result<String, Box<dyn Error>> {
         let as_toml: Table = file_contents.parse()?;
         let mut updated_config = file_contents.to_string();
@@ -458,9 +474,13 @@ impl<'a> ConfigBuilder<'a> {
         Ok(updated_config)
     }
 
-    /// Checks the existing config file for `params` which are not present, either the user deleted
-    /// them by accident or new ones were introduced in newer `manga-tui` releases, and preprends
-    /// them.
+    /// Prepends missing single parameters to the config file.
+    ///
+    /// # Why single parameters are prepended
+    /// In TOML, single-value parameters (e.g., `param = "value"`) that appear after a table definition
+    /// (e.g., `[table_name]`) are considered part of that table. To ensure that all single-value parameters
+    /// are part of the root table (and not accidentally included in a table), any missing single parameters
+    /// are always prepended to the top of the file, before any table definitions.
     fn prepend_missing_config_param(&self, file_contents: &str) -> Result<String, Box<dyn Error>> {
         let as_toml_parameter: Table = file_contents.parse()?;
 
@@ -475,8 +495,7 @@ impl<'a> ConfigBuilder<'a> {
         Ok(updated_config)
     }
 
-    /// Checks for params which are missing in the existing config, either due to updates or the
-    /// user removing them accidentally
+    /// Updates the config file with any missing parameters or tables.
     fn update_existing_config(&self, mut config: impl Write + Read) -> Result<File, Box<dyn Error>> {
         let mut contents = String::new();
 
@@ -491,7 +510,7 @@ impl<'a> ConfigBuilder<'a> {
         Ok(new_config_file)
     }
 
-    /// Delete de old config file and create a new one with the updated config
+    /// Commits changes to the config file, creating a backup and writing the new config.
     fn commit_changes(&self, updated_config: &str) -> Result<File, Box<dyn Error>> {
         let config_file_path = self.get_config_file_path();
         let config_file_backup_path = self.get_config_backup_file_path();
@@ -517,8 +536,10 @@ impl<'a> ConfigBuilder<'a> {
     }
 }
 
+/// Configuration for Anilist integration.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AnilistConfig {
+    /// Credentials for Anilist API.
     #[serde(flatten)]
     pub credentials: Credentials,
 }
@@ -534,18 +555,31 @@ impl Default for AnilistConfig {
     }
 }
 
+/// Main configuration struct for manga-tui.
+///
+/// This struct is deserialized from the config file and contains all
+/// user-configurable options.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MangaTuiConfig {
+    /// The format to download manga in.
     pub download_type: DownloadType,
+    /// The image quality for downloads.
     pub image_quality: ImageQuality,
+    /// Whether to automatically bookmark chapters.
     pub auto_bookmark: bool,
+    /// Number of pages to prefetch around the current page.
     pub amount_pages: u8,
+    /// Whether downloading counts as reading for tracking services.
     pub track_reading_when_download: bool,
+    /// Whether to check for new updates.
     pub check_new_updates: bool,
+    /// The default manga provider.
     pub default_manga_provider: MangaProviders,
+    /// Anilist configuration.
     pub anilist: AnilistConfig,
 }
 
+/// Download format options.
 #[derive(Default, Debug, Serialize, Deserialize, Display, EnumIter, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum DownloadType {
@@ -556,6 +590,7 @@ pub enum DownloadType {
     Pdf,
 }
 
+/// Image quality options.
 #[derive(Default, Debug, Serialize, Deserialize, Display, EnumIter, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ImageQuality {
@@ -580,10 +615,12 @@ impl Default for MangaTuiConfig {
 }
 
 impl MangaTuiConfig {
+    /// Returns a reference to the global configuration.
     pub fn get() -> &'static Self {
         CONFIG.get_or_init(MangaTuiConfig::default)
     }
 
+    /// Reads the configuration from a reader.
     fn read_config_file(mut config: impl Read) -> Result<Self, Box<dyn Error>> {
         let mut contents = String::new();
         config.read_to_string(&mut contents)?;
@@ -591,11 +628,12 @@ impl MangaTuiConfig {
         Ok(toml::from_str(&contents)?)
     }
 
+    /// Parses the configuration from a string.
     fn from_str(raw_file: &str) -> Result<Self, Box<dyn Error>> {
         Ok(toml::from_str(raw_file)?)
     }
 
-    /// Check wether or not to read the anilist credentials from the config file
+    /// Returns Anilist credentials if both client_id and access_token are set.
     pub fn check_anilist_credentials(&self) -> Option<Credentials> {
         if self.anilist.credentials.access_token.is_empty() || self.anilist.credentials.access_token.is_empty() {
             return None;
@@ -608,9 +646,9 @@ impl MangaTuiConfig {
     }
 }
 
-/// As a part of the config setup it must:
-/// - create the config file if it doesnt exist or update it if it's missing configuration,
-/// - read the config file again this time to read the configuration and set it globally
+/// Builds the config file, creating or updating as needed, and sets the global config.
+///
+/// Returns an error if the config directory cannot be found or written.
 pub fn build_config_file() -> Result<(), Box<dyn Error>> {
     let path = CONFIG_DIR_PATH.as_ref().ok_or("No home directory was found")?;
 
@@ -625,6 +663,7 @@ pub fn build_config_file() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+/// Returns the path to the config directory.
 pub fn get_config_directory_path() -> PathBuf {
     CONFIG_DIR_PATH.as_ref().expect("Failed to find home directory").to_path_buf()
 }
