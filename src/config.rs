@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::fmt::Write as FmtWrite;
 use std::fs::{File, OpenOptions, create_dir_all};
-use std::io::{Read, Write};
+use std::io::{Cursor, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::LazyLock;
@@ -18,6 +18,8 @@ use crate::cli::Credentials;
 use crate::logger::{DefaultLogger, ILogger};
 
 static CONFIG_FILE_NAME: &str = "config.toml";
+
+static CONFIG_FILE_NAME_BACKUP: &str = "config_backup.toml";
 
 static CONFIG: OnceCell<MangaTuiConfig> = OnceCell::new();
 
@@ -328,7 +330,8 @@ impl TableParam for AnilistConfigTable {
 struct ConfigBuilder<'a> {
     params: Vec<Box<dyn ConfigParam>>,
     table_params: Vec<Box<dyn TableParam>>,
-    directory_path: &'a Path,
+    /// The directory under which the file is located
+    base_directory: &'a Path,
 }
 
 /// The params the config file has which look like: param_name = "value"
@@ -353,12 +356,12 @@ impl<'a> ConfigBuilder<'a> {
         Self {
             table_params: table_config_params(),
             params: config_params(),
-            directory_path: Path::new("./"),
+            base_directory: Path::new("./"),
         }
     }
 
     fn dir_path<P: AsRef<Path> + ?Sized>(mut self, dir_path: &'a P) -> Self {
-        self.directory_path = dir_path.as_ref();
+        self.base_directory = dir_path.as_ref();
         self
     }
 
@@ -366,7 +369,7 @@ impl<'a> ConfigBuilder<'a> {
         Self {
             table_params: vec![],
             params,
-            directory_path: Path::new("./"),
+            base_directory: Path::new("./"),
         }
     }
 
@@ -374,17 +377,28 @@ impl<'a> ConfigBuilder<'a> {
         Self {
             table_params,
             params: vec![],
-            directory_path: Path::new("./"),
+            base_directory: Path::new("./"),
         }
     }
 
     /// Creates the directory where the config file will be, so the final path looks something like
     /// this: `~/.config/manga-tui/`
     fn create_directory_if_not_exists(&self) -> Result<(), std::io::Error> {
-        if !exists!(self.directory_path) {
-            create_dir_all(self.directory_path)?
+        if !exists!(self.base_directory) {
+            create_dir_all(self.base_directory)?
         }
         Ok(())
+    }
+
+    /// Returns the path where the config file is, usually `~/.config/manga-tui/config.toml`
+    fn get_config_file_path(&self) -> PathBuf {
+        self.base_directory.join(CONFIG_FILE_NAME).to_path_buf()
+    }
+
+    /// Returns the path where the config file bakcup is, usually
+    /// `~/.config/manga-tui/config_backup.toml`
+    fn get_config_backup_file_path(&self) -> PathBuf {
+        self.base_directory.join(CONFIG_FILE_NAME_BACKUP).to_path_buf()
     }
 
     /// Creates the config file if it does not exist and write to it with the default configuration, if it exists then return the
@@ -393,7 +407,7 @@ impl<'a> ConfigBuilder<'a> {
     fn create_file_if_not_exists(&self) -> Result<File, std::io::Error> {
         self.create_directory_if_not_exists()?;
 
-        let config_path = self.directory_path.join(CONFIG_FILE_NAME);
+        let config_path = self.get_config_file_path();
 
         let mut open_options = OpenOptions::new();
         open_options.append(true).read(true);
@@ -407,9 +421,7 @@ impl<'a> ConfigBuilder<'a> {
 
             self.update_existing_config(&mut file).map_err(|e| {
                 std::io::Error::other(format!("Could not update existing config: more details about the error: \n\n {e}"))
-            })?;
-
-            open_options.open(config_path)?
+            })?
         };
 
         Ok(file)
@@ -430,26 +442,78 @@ impl<'a> ConfigBuilder<'a> {
         Ok(())
     }
 
-    fn add_missing_table_param(&self, mut config: impl Write + Read) -> Result<(), Box<dyn Error>> {
-        Ok(())
+    /// Checks the existing config file for table-like `params` which are not present, either the user deleted
+    /// them by accident or new ones were introduced in newer `manga-tui` releases, and adds them
+    /// at the end of the file
+    fn append_missing_table_params(&self, file_contents: &str) -> Result<String, Box<dyn Error>> {
+        let as_toml: Table = file_contents.parse()?;
+        let mut updated_config = file_contents.to_string();
+
+        for table in &self.table_params {
+            if !as_toml.contains_key(table.table_name()) {
+                updated_config = format!("{updated_config}{}", table.build_full_table());
+            }
+        }
+
+        Ok(updated_config)
+    }
+
+    /// Checks the existing config file for `params` which are not present, either the user deleted
+    /// them by accident or new ones were introduced in newer `manga-tui` releases, and preprends
+    /// them.
+    fn prepend_missing_config_param(&self, file_contents: &str) -> Result<String, Box<dyn Error>> {
+        let as_toml_parameter: Table = file_contents.parse()?;
+
+        let mut updated_config = file_contents.to_string();
+
+        for param in &self.params {
+            if !as_toml_parameter.contains_key(param.name()) {
+                updated_config = format!("{}{updated_config}", param.build_parameter());
+            }
+        }
+
+        Ok(updated_config)
     }
 
     /// Checks for params which are missing in the existing config, either due to updates or the
     /// user removing them accidentally
-    fn update_existing_config(&self, mut config: impl Write + Read) -> Result<(), Box<dyn Error>> {
+    fn update_existing_config(&self, mut config: impl Write + Read) -> Result<File, Box<dyn Error>> {
         let mut contents = String::new();
+
         config.read_to_string(&mut contents)?;
 
-        let as_toml_table = toml::Table::from_str(&contents)?;
+        let updated = self.prepend_missing_config_param(&contents)?;
 
-        for param in &self.params {
-            if !as_toml_table.contains_key(param.name()) {
-                config.write_all(param.build_parameter().as_bytes())?
-            }
-        }
+        let updated = self.append_missing_table_params(&updated)?;
 
-        config.flush()?;
-        Ok(())
+        let new_config_file = self.commit_changes(&updated)?;
+
+        Ok(new_config_file)
+    }
+
+    /// Delete de old config file and create a new one with the updated config
+    fn commit_changes(&self, updated_config: &str) -> Result<File, Box<dyn Error>> {
+        let config_file_path = self.get_config_file_path();
+        let config_file_backup_path = self.get_config_backup_file_path();
+
+        std::fs::copy(&config_file_path, &config_file_backup_path)?;
+
+        std::fs::remove_file(&config_file_path)?;
+
+        let mut open_options = OpenOptions::new();
+        open_options.append(true).read(true).create(true);
+
+        let mut new_config = open_options.open(&config_file_path)?;
+
+        new_config.write_all(updated_config.as_bytes())?;
+
+        new_config.flush()?;
+
+        let new_config = open_options.open(config_file_path)?;
+
+        std::fs::remove_file(&config_file_backup_path)?;
+
+        Ok(new_config)
     }
 }
 
@@ -597,6 +661,7 @@ mod tests {
         }
     }
 
+    /// Example single param which should look like this: "param = """
     struct TestConfigParam;
     struct TestConfigParam2;
 
@@ -684,27 +749,31 @@ mod tests {
         Ok(())
     }
 
+    //In this thest the config param should be added at the beginning of the file, otherwise it
+    //will belong to the last table param
     #[test]
-    fn config_builder_adds_missing_params() -> Result<(), Box<dyn Error>> {
-        let config = ConfigBuilder::with_params(vec![Box::new(AmountPagesParam), Box::new(AutoBookmarkParam)])
-            .dir_path(CONFIG_TEST_DIRECTORY_PATH);
+    fn config_builder_adds_missing_params_single_params() -> Result<(), Box<dyn Error>> {
+        let config = ConfigBuilder::with_params(vec![Box::new(AmountPagesParam), Box::new(AutoBookmarkParam)]);
 
-        let existing_file = br#"
-# The format of the manga downloaded
-# values: cbz, raw, epub, pdf
-# default: cbz
-download_type = "cbz"
-"#;
+        let existing_file_content = r#"
+        # The format of the manga downloaded
+        # values: cbz, raw, epub, pdf
+        # default: cbz
+        download_type = "cbz"
 
-        let mut test_file = Cursor::new(existing_file.to_vec());
+        [some_table]
+        param = 1
 
-        config.update_existing_config(&mut test_file)?;
+        "#;
 
-        let file_contents = String::from_utf8(test_file.into_inner())?;
-        let expected = toml::Table::from_str(&file_contents)?;
+        let updated_config = config.prepend_missing_config_param(&existing_file_content)?;
+
+        let expected = toml::Table::from_str(&updated_config)?;
 
         assert!(expected.contains_key("amount_pages"));
         assert!(expected.contains_key("auto_bookmark"));
+
+        assert_eq!("cbz", expected.get("download_type").unwrap().as_str().unwrap());
 
         Ok(())
     }
@@ -713,24 +782,29 @@ download_type = "cbz"
     fn config_builder_adds_missing_table_params_at_the_end() -> Result<(), Box<dyn Error>> {
         let config = ConfigBuilder::with_table_config_params(vec![Box::new(TestTableConfigParam)]);
 
-        let existing_file = br#"
-        download_type = "cbz"
+        let existing_file = r#"
+        download_type = "epub"
+
+        check_new_updates = true
 
         [example_table]
         some_param = 1
 
+        another_test_param_which_belongs_to_table = false
         "#;
 
-        let mut test_file = Cursor::new(existing_file.to_vec());
+        let updated = config.append_missing_table_params(existing_file)?;
 
-        config.add_missing_table_param(&mut test_file)?;
+        println!("{updated}");
 
-        let file_contents = String::from_utf8(test_file.into_inner())?;
-        let expected = toml::Table::from_str(&file_contents)?;
+        let new_config = toml::Table::from_str(&updated)?;
 
-        let expected = expected.get("test_table").unwrap();
+        let expected = new_config.get("test_table").unwrap();
 
         assert!(expected.is_table());
+
+        assert_eq!("epub", new_config.get("download_type").unwrap().as_str().unwrap());
+        assert_eq!(true, new_config.get("check_new_updates").unwrap().as_bool().unwrap());
 
         Ok(())
     }
