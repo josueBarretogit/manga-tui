@@ -48,7 +48,9 @@ trait ConfigParam {
     /// Default value for the parameter.
     fn defaults(&self) -> &'static str;
     /// The TOML representation of the parameter.
-    fn param(&self) -> String;
+    fn param(&self) -> String {
+        format!("{} = {}", self.name(), self.defaults())
+    }
 
     /// Builds the full parameter entry, including comments, for the config file.
     fn build_parameter(&self) -> String {
@@ -108,11 +110,7 @@ impl ConfigParam for DownloadTypeParam {
     }
 
     fn defaults(&self) -> &'static str {
-        "cbz"
-    }
-
-    fn param(&self) -> String {
-        String::from(r#"download_type = "cbz""#)
+        r#""cbz""#
     }
 }
 
@@ -133,11 +131,7 @@ impl ConfigParam for ImageQualityParam {
     }
 
     fn defaults(&self) -> &'static str {
-        "low"
-    }
-
-    fn param(&self) -> String {
-        String::from(r#"image_quality = "low""#)
+        r#""low""#
     }
 }
 
@@ -160,10 +154,6 @@ impl ConfigParam for AutoBookmarkParam {
     fn defaults(&self) -> &'static str {
         "true"
     }
-
-    fn param(&self) -> String {
-        String::from(r#"auto_bookmark = true"#)
-    }
 }
 
 #[derive(Debug, Default)]
@@ -184,10 +174,6 @@ impl ConfigParam for AmountPagesParam {
 
     fn defaults(&self) -> &'static str {
         "5"
-    }
-
-    fn param(&self) -> String {
-        String::from(r#"amount_pages = 5"#)
     }
 }
 
@@ -210,10 +196,6 @@ impl ConfigParam for TrackReadingWhenDownload {
     fn defaults(&self) -> &'static str {
         "false"
     }
-
-    fn param(&self) -> String {
-        String::from(r#"track_reading_when_download = false"#)
-    }
 }
 
 #[derive(Debug, Default)]
@@ -234,10 +216,6 @@ impl ConfigParam for CheckNewUpdates {
 
     fn defaults(&self) -> &'static str {
         "true"
-    }
-
-    fn param(&self) -> String {
-        String::from(r#"check_new_updates = true"#)
     }
 }
 
@@ -260,10 +238,6 @@ impl ConfigParam for DefaultMangaProvider {
     fn defaults(&self) -> &'static str {
         r#""mangadex""#
     }
-
-    fn param(&self) -> String {
-        String::from(r#"default_manga_provider = "mangadex""#)
-    }
 }
 
 #[derive(Debug, Default)]
@@ -285,10 +259,6 @@ impl ConfigParam for AnilistClientId {
     fn defaults(&self) -> &'static str {
         r#""""#
     }
-
-    fn param(&self) -> String {
-        String::from(r#"client_id = """#)
-    }
 }
 
 #[derive(Debug, Default)]
@@ -309,10 +279,6 @@ impl ConfigParam for AnilistAccessToken {
 
     fn defaults(&self) -> &'static str {
         "\"\""
-    }
-
-    fn param(&self) -> String {
-        format!("{} = {}", self.name(), self.defaults())
     }
 }
 
