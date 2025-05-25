@@ -220,6 +220,27 @@ impl ConfigParam for CheckNewUpdates {
 }
 
 #[derive(Debug, Default)]
+struct TrackReadingHistory;
+
+impl ConfigParam for TrackReadingHistory {
+    fn name(&self) -> &'static str {
+        "track_reading_history"
+    }
+
+    fn comments(&self) -> &'static str {
+        "Enable / disable tracking reading history with services like `anilist`"
+    }
+
+    fn values(&self) -> &'static str {
+        "true, false"
+    }
+
+    fn defaults(&self) -> &'static str {
+        "true"
+    }
+}
+
+#[derive(Debug, Default)]
 struct DefaultMangaProvider;
 
 impl ConfigParam for DefaultMangaProvider {
@@ -249,7 +270,7 @@ impl ConfigParam for AnilistClientId {
     }
 
     fn comments(&self) -> &'static str {
-        "Your client id from your anilist account, leave it as 0 if you don't want to use the config file to read your anilist credentials"
+        "Your client id from your anilist account\n# leave it as an empty string \"\" if you don't want to use the config file to read your anilist credentials"
     }
 
     fn values(&self) -> &'static str {
@@ -270,7 +291,7 @@ impl ConfigParam for AnilistAccessToken {
     }
 
     fn comments(&self) -> &'static str {
-        "Your acces token from your anilist account, leave it as an empty string \"\" if you don't want to use the config file to read your anilist credentials"
+        "Your acces token from your anilist account\n# leave it as an empty string \"\" if you don't want to use the config file to read your anilist credentials"
     }
 
     fn values(&self) -> &'static str {
@@ -291,7 +312,7 @@ impl TableParam for AnilistConfigTable {
     }
 
     fn comments(&self) -> &'static str {
-        "Anilist-related config"
+        "Anilist-related config, if you want `manga-tui` to read your anilist credentials from this file then place them here"
     }
 
     fn parameters(&self) -> Vec<Box<dyn ConfigParam>> {
@@ -300,7 +321,6 @@ impl TableParam for AnilistConfigTable {
 }
 
 /// Builder for the configuration file.
-///
 /// Handles creation, updating, and writing of the config file and its directory.
 struct ConfigBuilder<'a> {
     params: Vec<Box<dyn ConfigParam>>,
@@ -319,6 +339,7 @@ fn config_params() -> Vec<Box<dyn ConfigParam>> {
         Box::new(TrackReadingWhenDownload),
         Box::new(CheckNewUpdates),
         Box::new(DefaultMangaProvider),
+        Box::new(TrackReadingHistory),
     ]
 }
 
@@ -372,7 +393,7 @@ impl<'a> ConfigBuilder<'a> {
         self.base_directory.join(CONFIG_FILE_NAME).to_path_buf()
     }
 
-    /// Returns the path where the config file bakcup is, usually
+    /// Returns the path where the config file backup should be, usually
     /// `~/.config/manga-tui/config_backup.toml`
     fn get_config_backup_file_path(&self) -> PathBuf {
         self.base_directory.join(CONFIG_FILE_NAME_BACKUP).to_path_buf()
@@ -461,7 +482,8 @@ impl<'a> ConfigBuilder<'a> {
         Ok(updated_config)
     }
 
-    /// Updates the config file with any missing parameters or tables.
+    /// Updates the config file with any missing parameters or tables by copying the original
+    /// config file and then making a new one with the missing params added
     fn update_existing_config(&self, mut config: impl Write + Read) -> Result<File, Box<dyn Error>> {
         let mut contents = String::new();
 
@@ -478,47 +500,36 @@ impl<'a> ConfigBuilder<'a> {
 
     /// Commits changes to the config file, creating a backup and writing the new config.
     fn commit_changes(&self, updated_config: &str) -> Result<File, Box<dyn Error>> {
-        let config_file_path = self.get_config_file_path();
+        let original_config_path = self.get_config_file_path();
         let config_file_backup_path = self.get_config_backup_file_path();
 
-        std::fs::copy(&config_file_path, &config_file_backup_path)?;
+        std::fs::copy(&original_config_path, &config_file_backup_path)?;
 
-        std::fs::remove_file(&config_file_path)?;
+        std::fs::remove_file(&original_config_path)?;
 
         let mut open_options = OpenOptions::new();
         open_options.append(true).read(true).create(true);
 
-        let mut new_config = open_options.open(&config_file_path)?;
+        let mut new_config = open_options.open(&original_config_path)?;
 
         new_config.write_all(updated_config.as_bytes())?;
 
         new_config.flush()?;
 
-        let new_config = open_options.open(config_file_path)?;
+        let new_config = open_options.open(original_config_path)?;
 
-        std::fs::remove_file(&config_file_backup_path)?;
+        std::fs::remove_file(config_file_backup_path)?;
 
         Ok(new_config)
     }
 }
 
 /// Configuration for Anilist integration.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct AnilistConfig {
     /// Credentials for Anilist API.
     #[serde(flatten)]
     pub credentials: Credentials,
-}
-
-impl Default for AnilistConfig {
-    fn default() -> Self {
-        Self {
-            credentials: Credentials {
-                access_token: "".to_string(),
-                client_id: "".to_string(),
-            },
-        }
-    }
 }
 
 /// Main configuration struct for manga-tui.
@@ -541,6 +552,8 @@ pub struct MangaTuiConfig {
     pub check_new_updates: bool,
     /// The default manga provider.
     pub default_manga_provider: MangaProviders,
+    /// Wether or not to use services like anilist to track reading history
+    pub track_reading_history: bool,
     /// Anilist configuration.
     pub anilist: AnilistConfig,
 }
@@ -574,6 +587,7 @@ impl Default for MangaTuiConfig {
             download_type: DownloadType::default(),
             image_quality: ImageQuality::default(),
             track_reading_when_download: false,
+            track_reading_history: true,
             default_manga_provider: MangaProviders::default(),
             anilist: AnilistConfig::default(),
         }
@@ -599,9 +613,10 @@ impl MangaTuiConfig {
         Ok(toml::from_str(raw_file)?)
     }
 
-    /// Returns Anilist credentials if both client_id and access_token are set.
+    /// Returns Anilist credentials if both client_id and access_token are set, meaning the user
+    /// wants their credentials to be coming from the config file
     pub fn check_anilist_credentials(&self) -> Option<Credentials> {
-        if self.anilist.credentials.access_token.is_empty() || self.anilist.credentials.access_token.is_empty() {
+        if self.anilist.credentials.client_id.is_empty() || self.anilist.credentials.access_token.is_empty() {
             return None;
         }
 
@@ -632,6 +647,16 @@ pub fn build_config_file() -> Result<(), Box<dyn Error>> {
 /// Returns the path to the config directory.
 pub fn get_config_directory_path() -> PathBuf {
     CONFIG_DIR_PATH.as_ref().expect("Failed to find home directory").to_path_buf()
+}
+
+pub fn read_config_file() -> Result<MangaTuiConfig, Box<dyn Error>> {
+    let path = CONFIG_DIR_PATH.as_ref().ok_or("No home directory was found")?.join(CONFIG_FILE_NAME);
+
+    let mut config = File::open(path)?;
+
+    let config = MangaTuiConfig::read_config_file(&mut config)?;
+
+    Ok(config)
 }
 
 #[cfg(test)]
@@ -824,7 +849,14 @@ mod tests {
 
         assert!(config.check_anilist_credentials().is_none());
 
-        config.anilist.credentials.client_id = "1290347".to_string();
+        let mut config = MangaTuiConfig::default();
+
+        config.anilist.credentials.access_token = "some_token".to_string();
+
+        assert!(config.check_anilist_credentials().is_none());
+
+        config.anilist.credentials.client_id = "12938".to_string();
+
         config.anilist.credentials.access_token = "some_token".to_string();
 
         assert_eq!(

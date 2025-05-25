@@ -21,7 +21,7 @@ use backend::release_notifier::{GITHUB_URL, ReleaseNotifier};
 use backend::secrets::keyring::KeyringStorage;
 use backend::tracker::anilist::{Anilist, BASE_ANILIST_API_URL};
 use clap::Parser;
-use cli::check_anilist_credentials_are_stored;
+use cli::{Credentials, check_anilist_credentials_are_stored};
 use crossterm::ExecutableCommand;
 use crossterm::event::{DisableMouseCapture, EnableMouseCapture};
 use http::StatusCode;
@@ -86,24 +86,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let anilist_storage = KeyringStorage::new();
 
-    let anilist_client = match check_anilist_credentials_are_stored(anilist_storage).map(|from_secret_storage| {
-        if from_secret_storage.is_none() { config.check_anilist_credentials() } else { from_secret_storage }
-    }) {
-        Ok(Some(credentials)) => {
-            logger.inform("Anilist is setup, tracking reading history");
-            tokio::time::sleep(Duration::from_secs(1)).await;
-            Some(
-                Anilist::new(BASE_ANILIST_API_URL.parse().unwrap())
-                    .with_token(credentials.access_token)
-                    .with_client_id(credentials.client_id),
-            )
-        },
-        Err(e) => {
-            logger.warn(format!("There is an issue when trying to check for anilist, more details about the error : {e}"));
-            None
-        },
-        _ => None,
+    let init_anilist = |credentials: Credentials| {
+        Anilist::new(BASE_ANILIST_API_URL.parse().unwrap())
+            .with_token(credentials.access_token)
+            .with_client_id(credentials.client_id)
     };
+
+    let anilist_client = match config.check_anilist_credentials() {
+        Some(credentials) => Some(init_anilist(credentials)),
+        None => check_anilist_credentials_are_stored(anilist_storage)
+            .inspect_err(|e| {
+                logger.warn(format!(
+                    "There is an issue when trying to check anilist credentials, more details about the error : {e}"
+                ));
+            })
+            .ok()
+            .flatten()
+            .map(init_anilist),
+    }
+    .filter(|_| config.track_reading_history);
+
+    if anilist_client.is_some() {
+        logger.inform("Anilist is setup, tracking reading history");
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
 
     let mut connection = Database::get_connection()?;
     let database = Database::new(&connection);
