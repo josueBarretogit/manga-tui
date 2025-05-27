@@ -1,5 +1,5 @@
 [hooks]
-pre-commit = "cargo fmt && git add ."
+pre-commit = "./scripts/precommit.sh"
 
 [logging]
 verbose = true

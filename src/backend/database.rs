@@ -676,7 +676,7 @@ mod test {
     fn check_tables_exist(connection: &Connection) -> Result<()> {
         for table in Table::iter() {
             connection.query_row(
-                format!("SELECT name FROM sqlite_master WHERE type='table' AND name='{}'", table).as_str(),
+                format!("SELECT name FROM sqlite_master WHERE type='table' AND name='{table}'").as_str(),
                 [],
                 |row| row.get::<_, String>(0),
             )?;

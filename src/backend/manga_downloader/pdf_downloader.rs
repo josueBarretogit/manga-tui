@@ -75,7 +75,7 @@ impl MangaDownloader for PdfDownloader {
             let scaled_w = page_width;
             let scaled_h = img_height as f32 * scale_factor;
 
-            let contents = Stream::new(dictionary! {}, format!("q {} 0 0 {} 0 0 cm /Im Do Q\n", scaled_w, scaled_h).into_bytes());
+            let contents = Stream::new(dictionary! {}, format!("q {scaled_w} 0 0 {scaled_h} 0 0 cm /Im Do Q\n").into_bytes());
 
             let contents_id = doc.add_object(contents);
 

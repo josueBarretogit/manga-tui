@@ -1042,7 +1042,7 @@ impl IntoParam for Vec<ContentRating> {
         }
 
         for cont in self {
-            result.push_str(format!("&contentRating[]={}", cont).as_str());
+            result.push_str(format!("&contentRating[]={cont}").as_str());
         }
 
         result
@@ -1202,7 +1202,7 @@ impl IntoParam for Vec<PublicationStatus> {
             return param;
         }
         self.into_iter().fold(String::new(), |mut name, current_status| {
-            let _ = write!(name, "&status[]={}", current_status);
+            let _ = write!(name, "&status[]={current_status}");
             name
         })
     }
@@ -1492,7 +1492,7 @@ mod test {
         let language_items: Vec<Languages> =
             filter_list.items.into_iter().map(|filter_list_item| filter_list_item.into()).collect();
 
-        assert!(!language_items.iter().any(|lang| *lang == Languages::Unkown));
+        assert!(!language_items.contains(&Languages::Unkown));
     }
 
     #[test]

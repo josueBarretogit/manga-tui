@@ -4,17 +4,31 @@ use std::time::Duration;
 
 pub mod in_memory;
 
-#[derive(Debug, PartialEq, Clone, Default)]
+/// Gives a hint to `Cacher` implementations as to how long entries should last,
+/// for in-memory cache it should lasts seconds, 40 seconds or more for the `Long` variant, 20-25
+/// seconds for `Medium` and so on
+/// for file-based or database cache impĺementations it can last anywhere from minutes to days even
+/// so each implementation must know how long the cache should live
+#[derive(Debug, PartialEq, Clone)]
+pub enum CacheDuration {
+    LongLong, // longest
+    Long,
+    Medium,
+    Short,
+    VeryShort, //shortest
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub struct InsertEntry<'a> {
     pub id: &'a str,
-    pub data: &'a str,
+    pub data: &'a [u8],
     /// How long this entry will last until it is removed
-    pub duration: Duration,
+    pub duration: CacheDuration,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Default)]
 pub struct Entry {
-    pub data: String,
+    pub data: Vec<u8>,
 }
 
 /// Cache which is specially important when scraping sites in order to reduce making requests and
