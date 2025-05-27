@@ -44,8 +44,8 @@ pub fn write_to_error_log(e: ErrorType<'_>) {
 
     let error_format = match e {
         ErrorType::Panic(panic_info) => format!("{} | {} | {} \n \n", now, panic_info, panic_info.location().unwrap()),
-        ErrorType::Error(boxed_err) => format!("{} | {} \n \n", now, boxed_err),
-        ErrorType::String(str) => format!("{} | {} \n \n", now, str),
+        ErrorType::Error(boxed_err) => format!("{now} | {boxed_err} \n \n"),
+        ErrorType::String(str) => format!("{now} | {str} \n \n"),
     };
 
     let error_format_bytes = error_format.as_bytes();

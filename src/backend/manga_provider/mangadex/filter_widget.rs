@@ -81,7 +81,7 @@ impl StatefulWidgetFrame for MangadexFilterWidget {
                     filters.to_string().into(),
                     " ".into(),
                     if num_filters != 0 {
-                        Span::raw(format!("{}+", num_filters)).bold().underlined().style(Color::Yellow)
+                        Span::raw(format!("{num_filters}+")).bold().underlined().style(Color::Yellow)
                     } else {
                         "".into()
                     },
