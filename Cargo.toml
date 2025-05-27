@@ -41,7 +41,7 @@ chrono = "0.4.40"
 open = "5"
 rusqlite = { version = "0.35.0", features = ["bundled"] }
 clap = { version = "4.5.37", features = ["derive", "cargo"] }
-zip = "2.6.1"
+zip = "4.0.0"
 toml = "0.8.20"
 epub-builder = "0.8.0"
 http = "1.3"
