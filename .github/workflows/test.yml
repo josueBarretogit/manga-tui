@@ -83,10 +83,12 @@ jobs:
         uses: DeterminateSystems/flake-checker-action@v9
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@v16
-      - name: Activate Magic Nix Cache
-        uses: DeterminateSystems/magic-nix-cache-action@main
-        with:
-          use-flakehub: false
+      # according to the repository https://github.com/DeterminateSystems/magic-nix-cache
+      # The Magic Nix Cache will will stop working on February 1st , 2025 (https://determinate.systems/posts/magic-nix-cache-free-tier-eol/) unless you're on GitHub Enterprise Server.
+      # - name: Activate Magic Nix Cache
+      #   uses: DeterminateSystems/magic-nix-cache-action@main
+      #   with:
+      #     use-flakehub: false
 
       - name: Build default package
         run: nix build --print-build-logs --verbose
