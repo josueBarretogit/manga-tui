@@ -6,6 +6,7 @@ use std::io::BufRead;
 use std::process::exit;
 
 use clap::{Parser, Subcommand, crate_version};
+use serde::{Deserialize, Serialize};
 use strum::{Display, IntoEnumIterator};
 
 use crate::backend::APP_DATA_DIR;
@@ -14,7 +15,7 @@ use crate::backend::manga_provider::{Languages, MangaProviders};
 use crate::backend::secrets::SecretStorage;
 use crate::backend::secrets::keyring::KeyringStorage;
 use crate::backend::tracker::anilist::{self, BASE_ANILIST_API_URL};
-use crate::config::get_config_directory_path;
+use crate::config::{MangaTuiConfig, get_config_directory_path, read_config_file};
 use crate::global::PREFERRED_LANGUAGE;
 use crate::logger::{ILogger, Logger};
 
@@ -57,8 +58,8 @@ pub struct CliArgs {
     pub data_dir: bool,
     #[arg(short, long)]
     pub config_dir: bool,
-    #[arg(short = 'p', long = "provider", default_value = "mangadex")]
-    pub manga_provider: MangaProviders,
+    #[arg(short = 'p', long = "provider")]
+    pub manga_provider: Option<MangaProviders>,
 }
 
 pub struct AnilistCredentialsProvided<'a> {
@@ -84,7 +85,7 @@ impl From<AnilistCredentials> for String {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct Credentials {
     pub access_token: String,
     pub client_id: String,
@@ -118,7 +119,7 @@ impl CliArgs {
             config_dir: false,
             command: None,
             data_dir: false,
-            manga_provider: MangaProviders::default(),
+            manga_provider: Some(MangaProviders::default()),
         }
     }
 
@@ -184,17 +185,23 @@ impl CliArgs {
         token_checker.verify_token(token).await
     }
 
-    async fn check_anilist_status(&self, logger: &impl ILogger) -> Result<(), Box<dyn Error>> {
+    async fn check_anilist_status(&self, logger: &impl ILogger, config: MangaTuiConfig) -> Result<(), Box<dyn Error>> {
         let storage = KeyringStorage::new();
         logger.inform("Checking client id and access token are stored");
 
-        let credentials_are_stored = check_anilist_credentials_are_stored(storage)?;
+        let credentials_are_stored = config
+            .check_anilist_credentials()
+            .or_else(|| check_anilist_credentials_are_stored(storage).ok().flatten());
+
         if credentials_are_stored.is_none() {
-            logger.warn("The client id or the access token are empty, run `manga-tui anilist init`");
+            logger.warn(
+                "The client id or the access token are empty, run `manga-tui anilist init` to store your anilist credentials \n or you can store your credentials in your config file",
+            );
             exit(0)
         }
 
         let credentials = credentials_are_stored.unwrap();
+
         logger.inform("Checking your access token is valid, this may take a while");
 
         let anilist = anilist::Anilist::new(BASE_ANILIST_API_URL.parse().unwrap())
@@ -206,7 +213,7 @@ impl CliArgs {
         if access_token_is_valid {
             logger.inform("Everything is setup correctly :D");
         } else {
-            logger.error("The anilist access token is not valid, please run `manga-tui anilist init`".into());
+            logger.error("The anilist access token is not valid, please run `manga-tui anilist init` to set a new one \n or you can store your credentials in your config file".into());
             exit(0)
         }
 
@@ -268,7 +275,9 @@ impl CliArgs {
                     },
                     AnilistCommand::Check => {
                         let logger = Logger;
-                        if let Err(e) = self.check_anilist_status(&logger).await {
+
+                        let config = read_config_file()?;
+                        if let Err(e) = self.check_anilist_status(&logger, config).await {
                             logger.error(format!("Some error ocurred, more details \n {e}").into());
                             write_to_error_log(e.into());
                             exit(1);

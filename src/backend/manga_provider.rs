@@ -648,7 +648,8 @@ pub struct ChapterPageUrl {
 /// 1. determine which manga provider to use when running manga-tui
 /// 2. apply specific configuration for each provider, for example `manganato` provides larger paginations sizes than `mangadex`
 ///    since `mangadex` has been the first manga provider it is the default
-#[derive(Debug, Clone, Copy, Display, Default, clap::ValueEnum, PartialEq)]
+#[derive(Debug, Clone, Copy, Display, Default, clap::ValueEnum, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum MangaProviders {
     #[default]
     #[strum(to_string = "mangadex")]
