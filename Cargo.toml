@@ -22,15 +22,12 @@ ratatui = { version = "0.29.0", features = ["all-widgets", "palette", "unstable-
 ratatui-image = { version = "1.0.5", features = ["rustix"]}
 throbber-widgets-tui = "0.8.0"
 tui-input = "0.12.1"
-# =======
-# tui-input = { version = "0.12.0",  features = ["crossterm"], default-features = false}
-# >>>>>>> develop
 tui-widget-list = "0.13.0"
 
 crossterm = { version = "0.29.0", features = ["event-stream"] }
 directories = "6.0.0"
 image = "0.25.4"
-reqwest = { version = "0.12.15", features = ["json", "native-tls-alpn", "cookies", "http2", "gzip", "deflate"] }
+reqwest = { version = "0.12.16", features = ["json", "native-tls-alpn", "cookies", "http2", "gzip", "deflate"] }
 tokio = { version = "1.45.1", features = ["full"] }
 serde = { version = "1.0.219", features = ["derive"] }
 strum = "0.26.3"
