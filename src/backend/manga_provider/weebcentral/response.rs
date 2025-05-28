@@ -105,13 +105,13 @@ impl ParseHtml for PopularMangasWeebCentral {
 
     fn parse_html(html: HtmlElement) -> Result<Self, Self::ParseError> {
         let doc = html::Html::parse_document(html.as_str());
-        let section_containing_mangas_selector = "main > section".as_selector();
+        let section_containing_mangas_selector = ".md\\:grid-cols-3".as_selector();
 
         let mut mangas: Vec<Result<PopularMangaItem, <PopularMangaItem as ParseHtml>::ParseError>> = vec![];
 
         let section_containing_mangas = doc
             .select(&section_containing_mangas_selector)
-            .nth(1)
+            .next()
             .ok_or("The section containing mangas was not found")?;
 
         let mangas_selector = "article.md\\:hidden".as_selector();
@@ -218,13 +218,13 @@ impl ParseHtml for LatestMangas {
 
     fn parse_html(html: HtmlElement) -> Result<Self, Self::ParseError> {
         let doc = html::Html::parse_document(html.as_str());
-        let section_containing_mangas_selector = "main > section".as_selector();
+        let section_containing_mangas_selector = ".cols-span-1 > section:nth-child(2)".as_selector();
 
         let mut mangas: Vec<Result<LatestMangItem, <LatestMangItem as ParseHtml>::ParseError>> = vec![];
 
         let section_containing_mangas = doc
             .select(&section_containing_mangas_selector)
-            .nth(2)
+            .next()
             .ok_or("The section containing mangas was not found")?;
 
         let mangas_selector = "article".as_selector();
@@ -288,7 +288,7 @@ impl From<MangaPageData> for Manga {
             Some(Author {
                 id: "".to_string(),
                 name: manga.authors.into_iter().fold(String::new(), |mut init, auth| {
-                    let _ = write!(init, "{},", auth);
+                    let _ = write!(init, "{auth},");
                     init
                 }),
             })
@@ -807,7 +807,13 @@ mod tests {
     use crate::backend::html_parser::{HtmlElement, ParseHtml};
 
     /// Obtained via: curl https://weebcentral.com/
+    /// Due to https://github.com/josueBarretogit/manga-tui/issues/163 this one is outdated
     static HOME_PAGE_DOC: &str = include_str!("../../../../data_test/weebcentral/home_page.txt");
+
+    /// Obtained via: curl https://weebcentral.com/
+    /// Due to https://github.com/josueBarretogit/manga-tui/issues/163 the logic had to be changed
+    static HOME_PAGE_DOC_V2: &str = include_str!("../../../../data_test/weebcentral/home_page_v2.txt");
+
     /// Obtained via: curl https://weebcentral.com/series/01J76XYCT4JVR13RN6NT1480MD/Tengoku-Daimakyou
     static MANGA_PAGE_DOC: &str = include_str!("../../../../data_test/weebcentral/manga_page.txt");
 
@@ -823,13 +829,13 @@ mod tests {
 
     #[test]
     fn popular_manga_is_parsed_from_html() -> Result<(), Box<dyn Error>> {
-        let html = HOME_PAGE_DOC;
+        let html = HOME_PAGE_DOC_V2;
 
         let expected: PopularMangaItem = PopularMangaItem {
-            id: "01J76XYEGBDP7J5P4S4QGZS05N".to_string(),
-            cover_url: "https://temp.compsci88.com/cover/fallback/01J76XYEGBDP7J5P4S4QGZS05N.jpg".to_string(),
-            title: "The Frozen Player Returns".to_string(),
-            latest_chapter: Some("Chapter 160".to_string()),
+            id: "01J76XYCMB1GPHFV1SCDE4KHB2".to_string(),
+            cover_url: "https://temp.compsci88.com/cover/fallback/01J76XYCMB1GPHFV1SCDE4KHB2.jpg".to_string(),
+            title: "Martial Peak".to_string(),
+            latest_chapter: Some("Chapter 3835".to_string()),
         };
 
         let result = PopularMangasWeebCentral::parse_html(HtmlElement::new(html))?;
@@ -845,19 +851,23 @@ mod tests {
 
     #[test]
     fn latest_manga_is_parsed_from_html() -> Result<(), Box<dyn Error>> {
-        let html = HOME_PAGE_DOC;
+        let html = HOME_PAGE_DOC_V2;
 
         let expected: LatestMangItem = LatestMangItem {
-            id: "01J76XYCT4JVR13RN6NT1480MD".to_string(),
-            cover_url: "https://temp.compsci88.com/cover/fallback/01J76XYCT4JVR13RN6NT1480MD.jpg".to_string(),
-            title: "Heavenly Delusion".to_string(),
-            latest_chapter: Some("Chapter 71".to_string()),
+            id: "01JJ89VG5KD6FFA5S0NHHZCC9C".to_string(),
+            cover_url: "https://temp.compsci88.com/cover/fallback/01JJ89VG5KD6FFA5S0NHHZCC9C.jpg".to_string(),
+            title: "Mr. Magic Man".to_string(),
+            latest_chapter: Some("Episode 93".to_string()),
         };
         let result = LatestMangas::parse_html(HtmlElement::new(html))?;
 
         assert!(result.mangas.len() > 1);
 
-        let manga = result.mangas.iter().find(|man| man.id == expected.id).unwrap();
+        let manga = result
+            .mangas
+            .iter()
+            .find(|man| man.id == expected.id)
+            .ok_or("Expected latest manga was not found")?;
 
         assert_eq!(expected, *manga);
 

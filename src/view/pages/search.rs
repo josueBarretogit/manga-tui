@@ -252,7 +252,7 @@ where
         render_search_bar(self.input_mode == InputMode::Typing, input_help, &self.search_bar, frame, input_area);
 
         if let Some(name) = self.manga_added_to_plan_to_read.as_ref() {
-            Paragraph::new(format!("Added: {} to plan to read 📖", name).to_span().underlined())
+            Paragraph::new(format!("Added: {name} to plan to read 📖").to_span().underlined())
                 .wrap(Wrap { trim: true })
                 .render(
                     information_area.inner(Margin {

@@ -164,40 +164,70 @@ manga-tui -p weebcentral
 The config file is located at `XDG_CONFIG_HOME/manga-tui/config.toml`, to know where it is you can run:
 
 ```shell
-manga-tui --data-dir 
+manga-tui --config-dir 
 
 # or
 
-manga-tui -d
+manga-tui -c
 ```
 
 Which provides the following configuration:
 
 ```toml
-# The format of the manga downloaded 
-# values : cbz , raw, epub, pdf
-# default : cbz 
+# The format of the manga downloaded
+# values: cbz, raw, epub, pdf
+# default: "cbz"
 download_type = "cbz"
 
-# Download image quality, low quality means images are compressed and is recommended for slow internet connections 
-# values : low, high 
-# default : low 
+# Download image quality, low quality means images are compressed and is recommended for slow internet connections
+# values: low, high 
+# default: "low"
 image_quality = "low"
 
 # Pages around the currently selected page to try to prefetch
-# values : 0-255
-# default : 5
+# values: 0-255
+# default: 5
 amount_pages = 5
 
 # Whether or not bookmarking is done automatically, if false you decide which chapter to bookmark
-# values : true, false
-# default : true
+# values: true, false
+# default: true
 auto_bookmark = true
 
 # Whether or not downloading a manga counts as reading it on services like anilist
-# values : true, false
-# default : false
+# values: true, false
+# default: false
 track_reading_when_download = false
+
+# Enable / disable checking for new updates
+# values: true, false
+# default: true
+check_new_updates = true
+
+# Sets which manga provider will be used when running manga-tui, 
+# you can override it by running manga-tui with the -p flag like this: manga-tui -p weebcentral
+# values: mangadex, weebcentral
+# default: "mangadex"
+default_manga_provider = "mangadex"
+
+# Enable / disable tracking reading history with services like `anilist`
+# values: true, false
+# default: true
+track_reading_history = true
+
+# Anilist-related config, if you want `manga-tui` to read your anilist credentials from this file then place them here
+[anilist]
+# Your client id from your anilist account
+# leave it as an empty string "" if you don't want to use the config file to read your anilist credentials
+# values: string
+# default: ""
+client_id = ""
+
+# Your acces token from your anilist account
+# leave it as an empty string "" if you don't want to use the config file to read your anilist credentials
+# values: string
+# default: ""
+access_token = ""
 ```
 
 Manga downloads and reading history is stored in the `manga-tui` directory, to know where it is run:
