@@ -27,9 +27,9 @@ pub fn display_dates_since_publication(date: NaiveDate) -> String {
     if day <= 31 {
         format!("{} days ago", day.abs())
     } else if month <= 12 {
-        return format!("{month} months ago");
+        format!("{month} months ago")
     } else {
-        return format!("{year} years ago");
+        format!("{year} years ago")
     }
 }
 
