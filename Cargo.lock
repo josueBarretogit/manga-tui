@@ -2719,7 +2719,7 @@ dependencies = [
 
 [[package]]
 name = "manga-tui"
-version = "0.8.0"
+version = "0.8.1"
 dependencies = [
  "bytes",
  "chrono",
