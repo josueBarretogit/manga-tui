@@ -8,7 +8,7 @@ use bytes::Bytes;
 use chrono::NaiveDate;
 use image::{DynamicImage, GenericImageView, ImageReader};
 use manga_tui::{SearchTerm, SortedVec};
-use mangadex::filter::FilterListItem;
+use mangadex::filters::filter_provider::FilterListItem;
 use ratatui::style::{Color, Style, Stylize};
 use ratatui::text::Span;
 use reqwest::Url;

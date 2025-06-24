@@ -5,15 +5,14 @@ use std::time::Duration as StdDuration;
 
 use api_responses::*;
 use bytes::Bytes;
-use chrono::{Duration, Months};
-use filter::{Filters, IntoParam, MangadexFilterProvider};
+use chrono::Months;
 use filter_widget::MangadexFilterWidget;
+use filters::api_parameter::{Filters, IntoParam};
+use filters::filter_provider::MangadexFilterProvider;
 use http::header::{ACCEPT, ACCEPT_ENCODING, CACHE_CONTROL};
 use http::{HeaderMap, HeaderValue, StatusCode};
 use manga_tui::SearchTerm;
 use reqwest::{Client, Response, Url};
-use serde::Serialize;
-use serde_json::json;
 
 use super::{
     Artist, Author, Chapter, ChapterPageUrl, ChapterToRead, DecodeBytesToImage, FeedPageProvider, FetchChapterBookmarked, Genres,
@@ -28,8 +27,8 @@ use crate::global::APP_USER_AGENT;
 use crate::view::widgets::StatefulWidgetFrame;
 
 pub mod api_responses;
-pub mod filter;
 pub mod filter_widget;
+pub mod filters;
 
 pub static API_URL_BASE: &str = "https://api.mangadex.org";
 
