@@ -80,7 +80,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check Nix flake inputs
-        uses: DeterminateSystems/flake-checker-action@v9
+        uses: DeterminateSystems/flake-checker-action@v11
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@v16
       # according to the repository https://github.com/DeterminateSystems/magic-nix-cache
