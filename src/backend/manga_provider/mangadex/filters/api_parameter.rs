@@ -1,6 +1,24 @@
 //! The `Mangadex` represented as the Api parameters
 use std::fmt::{Debug, Write};
 
+use serde::{Deserialize, Serialize};
+/*
+*
+```pseudocode
+
+read mangadex_filters:
+    if mangadex_filters: set filters from mangadex_filter
+    else use default filters
+
+filter is used:
+    if mangadex_filter not exist
+    create file mangadex_filter.toml
+  else
+      write filter value
+        to mangadex_filter.toml
+
+```
+* */
 use strum::{Display, EnumIter, IntoEnumIterator};
 
 use super::filter_provider::{TagListItem, TagListItemState};
@@ -10,8 +28,9 @@ pub trait IntoParam: Debug {
     fn into_param(self) -> String;
 }
 
-#[derive(Display, Clone, Debug)]
+#[derive(Display, Clone, Debug, EnumIter, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ContentRating {
+    #[default]
     #[strum(to_string = "safe")]
     Safe,
     #[strum(to_string = "suggestive")]
@@ -34,7 +53,7 @@ impl From<&str> for ContentRating {
     }
 }
 
-#[derive(Display, Clone, EnumIter, PartialEq, Eq, Default, Debug)]
+#[derive(Display, Clone, EnumIter, PartialEq, Eq, Default, Debug, Serialize, Deserialize)]
 pub enum SortBy {
     #[strum(to_string = "Best match")]
     BestMatch,
@@ -65,13 +84,13 @@ pub enum SortBy {
     YearAscending,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum TagSelection {
     Included,
     Excluded,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct TagData {
     id: String,
     state: TagSelection,
@@ -92,7 +111,7 @@ impl From<&TagListItem> for TagData {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct Tags(Vec<TagData>);
 
 impl Tags {
@@ -167,7 +186,7 @@ impl IntoParam for SortBy {
     }
 }
 
-#[derive(Display, Clone, EnumIter, PartialEq, Eq, Debug)]
+#[derive(Display, Clone, EnumIter, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum MagazineDemographic {
     Shounen,
     Shoujo,
@@ -197,7 +216,8 @@ impl IntoParam for Vec<MagazineDemographic> {
     }
 }
 
-#[derive(Default, Clone, Debug)]
+#[derive(Default, Clone, Debug, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct AuthorFilterState(String);
 
 impl AuthorFilterState {
@@ -206,7 +226,8 @@ impl AuthorFilterState {
     }
 }
 
-#[derive(Default, Clone, Debug)]
+#[derive(Default, Clone, Debug, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct ArtistFilterState(String);
 
 impl ArtistFilterState {
@@ -215,7 +236,7 @@ impl ArtistFilterState {
     }
 }
 
-#[derive(Default, Clone, Debug)]
+#[derive(Default, Clone, Debug, Serialize, Deserialize)]
 pub struct User<T: Clone + Default>(pub Vec<T>);
 
 impl IntoParam for User<AuthorFilterState> {
@@ -269,7 +290,7 @@ impl IntoParam for Vec<Languages> {
     }
 }
 
-#[derive(Clone, Display, EnumIter, Debug)]
+#[derive(Clone, Display, EnumIter, Debug, Serialize, Deserialize)]
 pub enum PublicationStatus {
     #[strum(to_string = "ongoing")]
     Ongoing,
@@ -300,7 +321,7 @@ impl IntoParam for Vec<PublicationStatus> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Filters {
     pub content_rating: Vec<ContentRating>,
     pub publication_status: Vec<PublicationStatus>,

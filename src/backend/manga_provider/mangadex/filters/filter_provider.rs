@@ -53,7 +53,7 @@ pub const FILTERS: [MangaFilters; 8] = [
     MangaFilters::Artists,
 ];
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct FilterListItem {
     pub is_selected: bool,
     pub name: String,
@@ -65,18 +65,22 @@ impl FilterListItem {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct ContentRatingState;
-#[derive(Debug)]
+
+#[derive(Debug, PartialEq, Eq)]
 pub struct PublicationStatusState;
-#[derive(Debug)]
+
+#[derive(Debug, PartialEq, Eq)]
 pub struct SortByState;
-#[derive(Debug)]
+
+#[derive(Debug, PartialEq, Eq)]
 pub struct MagazineDemographicState;
-#[derive(Debug)]
+
+#[derive(Debug, PartialEq, Eq)]
 pub struct LanguageState;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct FilterList<T> {
     pub items: Vec<FilterListItem>,
     pub state: ListState,
@@ -116,24 +120,27 @@ impl<T> FilterList<T> {
 impl Default for FilterList<ContentRatingState> {
     fn default() -> Self {
         Self {
-            items: vec![
-                FilterListItem {
-                    is_selected: true,
-                    name: ContentRating::Safe.to_string(),
-                },
-                FilterListItem {
-                    is_selected: false,
-                    name: ContentRating::Suggestive.to_string(),
-                },
-                FilterListItem {
-                    is_selected: false,
-                    name: ContentRating::Erotic.to_string(),
-                },
-                FilterListItem {
-                    is_selected: false,
-                    name: ContentRating::Pornographic.to_string(),
-                },
-            ],
+            items: ContentRating::iter()
+                .map(|rating| FilterListItem {
+                    is_selected: rating == ContentRating::default(),
+                    name: rating.to_string(),
+                })
+                .collect(),
+            state: ListState::default(),
+            _state: PhantomData::<ContentRatingState>,
+        }
+    }
+}
+
+impl FilterList<ContentRatingState> {
+    fn from_content_ratings(content_ratings: &[ContentRating]) -> Self {
+        Self {
+            items: ContentRating::iter()
+                .map(|rating| FilterListItem {
+                    is_selected: content_ratings.contains(&rating),
+                    name: rating.to_string(),
+                })
+                .collect(),
             state: ListState::default(),
             _state: PhantomData::<ContentRatingState>,
         }
@@ -144,6 +151,21 @@ impl Default for FilterList<SortByState> {
     fn default() -> Self {
         let sort_by_items = SortBy::iter().map(|sort_by_elem| FilterListItem {
             is_selected: sort_by_elem == SortBy::default(),
+            name: sort_by_elem.to_string(),
+        });
+
+        Self {
+            items: sort_by_items.collect(),
+            state: ListState::default(),
+            _state: PhantomData::<SortByState>,
+        }
+    }
+}
+
+impl FilterList<SortByState> {
+    fn from_sort_by(cached_sort_by: &SortBy) -> Self {
+        let sort_by_items = SortBy::iter().map(|sort_by_elem| FilterListItem {
+            is_selected: sort_by_elem == *cached_sort_by,
             name: sort_by_elem.to_string(),
         });
 
@@ -444,6 +466,35 @@ pub struct MangadexFilterProvider {
     rx: UnboundedReceiver<FilterEvents>,
 }
 
+impl From<Filters> for MangadexFilterProvider {
+    fn from(filters: Filters) -> Self {
+        let (tx, rx) = mpsc::unbounded_channel::<FilterEvents>();
+        tx.send(FilterEvents::SearchTags).ok();
+
+        Self {
+            is_open: false,
+            id_filter: 0,
+            content_rating: FilterList::<ContentRatingState>::from_content_ratings(&filters.content_rating),
+            sort_by_state: FilterList::<SortByState>::from_sort_by(&filters.sort_by),
+            publication_status: FilterList::<PublicationStatusState>::default(),
+            tags_state: TagsState::default(),
+            magazine_demographic: FilterList::<MagazineDemographicState>::default(),
+            author_state: FilterListDynamic::<AuthorState>::default(),
+            artist_state: FilterListDynamic::<ArtistState>::default(),
+            lang_state: FilterList::<LanguageState>::default(),
+            api_client: MangadexClient::new(
+                API_URL_BASE.parse().unwrap(),
+                COVER_IMG_URL_BASE.parse().unwrap(),
+                InMemoryCache::init(2),
+            ),
+            is_typing: false,
+            tx,
+            rx,
+            filters,
+        }
+    }
+}
+
 impl FiltersEventHandler for MangadexFilterProvider {
     fn handle_events(&mut self, events: Events) {
         match events {
@@ -478,6 +529,7 @@ impl MangadexFilterProvider {
     pub fn new() -> Self {
         let (tx, rx) = mpsc::unbounded_channel::<FilterEvents>();
         tx.send(FilterEvents::SearchTags).ok();
+        let fil = Filters::default();
         Self {
             is_open: false,
             id_filter: 0,
@@ -918,6 +970,8 @@ impl MangadexFilterProvider {
 
 #[cfg(test)]
 mod tests {
+    use pretty_assertions::assert_eq;
+
     use super::*;
     use crate::backend::manga_provider::mangadex::authors::Data;
     use crate::backend::manga_provider::mangadex::tags::TagsData;
@@ -1150,5 +1204,53 @@ mod tests {
         close_filter(&mut filter_state);
 
         assert!(!filter_state.is_open);
+    }
+
+    #[test]
+    fn filter_provider_is_initialized_from_filters() {
+        let filters: Filters = Filters {
+            content_rating: vec![ContentRating::Suggestive, ContentRating::Erotic],
+            publication_status: vec![PublicationStatus::Completed],
+            sort_by: SortBy::HighestRating,
+            tags: Tags::new(vec![TagData::new("id_tag1".to_string(), TagSelection::Included)]),
+            magazine_demographic: vec![],
+            authors: User::default(),
+            artists: User::default(),
+            languages: vec![Languages::English, Languages::Spanish],
+        };
+
+        let filters_provider = MangadexFilterProvider::from(filters);
+
+        let expected_content_rating: FilterList<ContentRatingState> = FilterList {
+            items: vec![
+                FilterListItem {
+                    is_selected: false,
+                    name: ContentRating::Safe.to_string(),
+                },
+                FilterListItem {
+                    is_selected: true,
+                    name: ContentRating::Suggestive.to_string(),
+                },
+                FilterListItem {
+                    is_selected: true,
+                    name: ContentRating::Erotic.to_string(),
+                },
+                FilterListItem {
+                    is_selected: false,
+                    name: ContentRating::Pornographic.to_string(),
+                },
+            ],
+            state: ListState::default(),
+            _state: PhantomData,
+        };
+
+        assert_eq!(expected_content_rating, filters_provider.content_rating);
+
+        let expected_sort_by_selected = filters_provider
+            .sort_by_state
+            .items
+            .iter()
+            .find(|item| item.is_selected && item.name == SortBy::HighestRating.to_string())
+            .expect("sort_by state is not the one that should be selected");
     }
 }
