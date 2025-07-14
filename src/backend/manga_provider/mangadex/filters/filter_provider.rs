@@ -87,7 +87,37 @@ pub struct FilterList<T> {
     _state: PhantomData<T>,
 }
 
+struct FilterListIter<'a> {
+    items: &'a Vec<FilterListItem>,
+    index: usize,
+}
+
+impl<'a> FilterListIter<'a> {
+    fn new<T>(filter_list: &'a FilterList<T>) -> Self {
+        Self {
+            items: &filter_list.items,
+            index: 0,
+        }
+    }
+}
+
+impl<'a> Iterator for FilterListIter<'a> {
+    type Item = &'a FilterListItem;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let next = self.items.get(self.index);
+
+        self.index += 1;
+
+        next
+    }
+}
+
 impl<T> FilterList<T> {
+    fn iter(&self) -> FilterListIter<'_> {
+        FilterListIter::new(self)
+    }
+
     pub fn toggle(&mut self) {
         if let Some(index) = self.state.selected() {
             if let Some(content_rating) = self.items.get_mut(index) {
@@ -195,6 +225,20 @@ impl Default for FilterList<PublicationStatusState> {
     fn default() -> Self {
         let items = PublicationStatus::iter().map(|status| FilterListItem {
             is_selected: false,
+            name: status.to_string(),
+        });
+        Self {
+            items: items.collect(),
+            state: ListState::default(),
+            _state: PhantomData,
+        }
+    }
+}
+
+impl FilterList<PublicationStatusState> {
+    fn from_publication_status(publication_statuses: &[PublicationStatus]) -> Self {
+        let items = PublicationStatus::iter().map(|status| FilterListItem {
+            is_selected: publication_statuses.contains(&status),
             name: status.to_string(),
         });
         Self {
@@ -476,7 +520,7 @@ impl From<Filters> for MangadexFilterProvider {
             id_filter: 0,
             content_rating: FilterList::<ContentRatingState>::from_content_ratings(&filters.content_rating),
             sort_by_state: FilterList::<SortByState>::from_sort_by(&filters.sort_by),
-            publication_status: FilterList::<PublicationStatusState>::default(),
+            publication_status: FilterList::<PublicationStatusState>::from_publication_status(&filters.publication_status),
             tags_state: TagsState::default(),
             magazine_demographic: FilterList::<MagazineDemographicState>::default(),
             author_state: FilterListDynamic::<AuthorState>::default(),
@@ -1210,7 +1254,7 @@ mod tests {
     fn filter_provider_is_initialized_from_filters() {
         let filters: Filters = Filters {
             content_rating: vec![ContentRating::Suggestive, ContentRating::Erotic],
-            publication_status: vec![PublicationStatus::Completed],
+            publication_status: vec![PublicationStatus::Completed, PublicationStatus::Ongoing],
             sort_by: SortBy::HighestRating,
             tags: Tags::new(vec![TagData::new("id_tag1".to_string(), TagSelection::Included)]),
             magazine_demographic: vec![],
@@ -1246,11 +1290,27 @@ mod tests {
 
         assert_eq!(expected_content_rating, filters_provider.content_rating);
 
-        let expected_sort_by_selected = filters_provider
+        filters_provider
             .sort_by_state
-            .items
             .iter()
             .find(|item| item.is_selected && item.name == SortBy::HighestRating.to_string())
             .expect("sort_by state is not the one that should be selected");
+
+        let num_publication_status_expected = filters_provider
+            .publication_status
+            .iter()
+            .filter_map(|item| {
+                if item.is_selected
+                    && (item.name == PublicationStatus::Ongoing.to_string()
+                        || item.name == PublicationStatus::Completed.to_string())
+                {
+                    Some(item)
+                } else {
+                    None
+                }
+            })
+            .count();
+
+        assert_eq!(num_publication_status_expected, 2);
     }
 }

@@ -290,7 +290,7 @@ impl IntoParam for Vec<Languages> {
     }
 }
 
-#[derive(Clone, Display, EnumIter, Debug, Serialize, Deserialize)]
+#[derive(Clone, Display, EnumIter, Debug, Serialize, Deserialize, PartialEq)]
 pub enum PublicationStatus {
     #[strum(to_string = "ongoing")]
     Ongoing,
