@@ -1,5 +1,6 @@
 //! The `Mangadex` represented as the Api parameters
 use std::fmt::{Debug, Write};
+use std::ops::Deref;
 
 use serde::{Deserialize, Serialize};
 /*
@@ -93,12 +94,13 @@ pub enum TagSelection {
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct TagData {
     id: String,
+    name: String,
     state: TagSelection,
 }
 
 impl TagData {
-    pub fn new(id: String, state: TagSelection) -> Self {
-        Self { id, state }
+    pub fn new(id: String, state: TagSelection, name: String) -> Self {
+        Self { id, state, name }
     }
 }
 
@@ -107,6 +109,17 @@ impl From<&TagListItem> for TagData {
         Self {
             id: value.id.clone(),
             state: if value.state == TagListItemState::Included { TagSelection::Included } else { TagSelection::Excluded },
+            name: value.name.to_string(),
+        }
+    }
+}
+
+impl From<&TagData> for TagListItem {
+    fn from(value: &TagData) -> Self {
+        Self {
+            id: value.id.to_string(),
+            name: value.name.to_string(),
+            state: TagListItemState::default(),
         }
     }
 }
@@ -118,9 +131,13 @@ impl Tags {
     pub fn new(tags: Vec<TagData>) -> Self {
         Self(tags)
     }
+}
 
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
+impl Deref for Tags {
+    type Target = Vec<TagData>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
@@ -216,7 +233,7 @@ impl IntoParam for Vec<MagazineDemographic> {
     }
 }
 
-#[derive(Default, Clone, Debug, Serialize, Deserialize)]
+#[derive(Default, Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(transparent)]
 pub struct AuthorFilterState(String);
 
@@ -226,7 +243,7 @@ impl AuthorFilterState {
     }
 }
 
-#[derive(Default, Clone, Debug, Serialize, Deserialize)]
+#[derive(Default, Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(transparent)]
 pub struct ArtistFilterState(String);
 
@@ -236,7 +253,7 @@ impl ArtistFilterState {
     }
 }
 
-#[derive(Default, Clone, Debug, Serialize, Deserialize)]
+#[derive(Default, Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct User<T: Clone + Default>(pub Vec<T>);
 
 impl IntoParam for User<AuthorFilterState> {
@@ -321,7 +338,7 @@ impl IntoParam for Vec<PublicationStatus> {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Filters {
     pub content_rating: Vec<ContentRating>,
     pub publication_status: Vec<PublicationStatus>,
@@ -513,10 +530,12 @@ mod test {
             TagData {
                 id: "id_tag_included".to_string(),
                 state: TagSelection::Included,
+                name: "".to_string(),
             },
             TagData {
                 id: "id_tag_excluded".to_string(),
                 state: TagSelection::Excluded,
+                name: "".to_string(),
             },
         ]);
 
@@ -534,7 +553,7 @@ mod test {
 
         let mut filters = Filters::default();
 
-        filters.set_tags(vec![TagData::new("id_1".to_string(), TagSelection::Included)]);
+        filters.set_tags(vec![TagData::new("id_1".to_string(), TagSelection::Included, "".to_string())]);
 
         filters.set_authors(vec![AuthorFilterState::new("id_1".to_string()), AuthorFilterState::new("id_2".to_string())]);
 

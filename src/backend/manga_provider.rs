@@ -203,6 +203,11 @@ impl Languages {
         }
     }
 
+    /// Returns an iterator which discards the 'Unknown' variant
+    pub fn iterate() -> std::iter::Filter<LanguagesIter, impl FnMut(&Languages) -> bool> {
+        Self::iter().filter(|lan| *lan != Self::Unkown)
+    }
+
     pub fn get_preferred_lang() -> &'static Languages {
         PREFERRED_LANGUAGE.get_or_init(Self::default)
     }

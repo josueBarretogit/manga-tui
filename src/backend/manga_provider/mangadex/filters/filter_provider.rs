@@ -3,6 +3,8 @@ use std::marker::PhantomData;
 
 use crossterm::event::{KeyCode, KeyEvent};
 use manga_tui::SearchTerm;
+use ratatui::style::Stylize;
+use ratatui::text::Span;
 use ratatui::widgets::*;
 use strum::{Display, IntoEnumIterator};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
@@ -88,7 +90,7 @@ pub struct FilterList<T> {
 }
 
 struct FilterListIter<'a> {
-    items: &'a Vec<FilterListItem>,
+    items: &'a [FilterListItem],
     index: usize,
 }
 
@@ -221,6 +223,20 @@ impl Default for FilterList<MagazineDemographicState> {
     }
 }
 
+impl FilterList<MagazineDemographicState> {
+    fn from_magazine_demographic(magazine_demographic: &[MagazineDemographic]) -> Self {
+        let items = MagazineDemographic::iter().map(|mag| FilterListItem {
+            name: mag.to_string(),
+            is_selected: magazine_demographic.contains(&mag),
+        });
+        Self {
+            items: items.collect(),
+            state: ListState::default(),
+            _state: PhantomData,
+        }
+    }
+}
+
 impl Default for FilterList<PublicationStatusState> {
     fn default() -> Self {
         let items = PublicationStatus::iter().map(|status| FilterListItem {
@@ -268,6 +284,21 @@ impl Default for FilterList<LanguageState> {
         let items = Languages::iter().filter(|lang| *lang != Languages::Unkown).map(|lang| FilterListItem {
             name: format!("{} {}", lang.as_emoji(), lang.as_human_readable()),
             is_selected: lang == *Languages::get_preferred_lang(),
+        });
+
+        Self {
+            items: items.collect(),
+            state: ListState::default(),
+            _state: PhantomData,
+        }
+    }
+}
+
+impl FilterList<LanguageState> {
+    fn from_languages(from_languages: &[Languages]) -> Self {
+        let items = Languages::iterate().map(|lang| FilterListItem {
+            name: format!("{} {}", lang.as_emoji(), lang.as_human_readable()),
+            is_selected: from_languages.contains(&lang),
         });
 
         Self {
@@ -408,6 +439,14 @@ impl TagListItem {
         }
     }
 
+    pub fn set_filter_tags_style(&self) -> Span<'_> {
+        match self.state {
+            TagListItemState::Included => format!(" {} ", self.name).black().on_green(),
+            TagListItemState::Excluded => format!(" {} ", self.name).black().on_red(),
+            TagListItemState::NotSelected => Span::from(self.name.clone()),
+        }
+    }
+
     pub fn toggle_exclude(&mut self) {
         match self.state {
             TagListItemState::NotSelected | TagListItemState::Included => {
@@ -427,15 +466,49 @@ pub struct TagsState {
     pub filter_input: Input,
 }
 
-impl TagsState {
-    pub fn num_filters_active(&self) -> usize {
-        match self.tags.as_ref() {
-            Some(tags) => tags
-                .iter()
-                .filter(|tag| tag.state == TagListItemState::Included || tag.state == TagListItemState::Excluded)
-                .count(),
-            None => 0,
+pub struct TagsStateIter<'a> {
+    tags: Option<&'a [TagListItem]>,
+    current: usize,
+}
+
+impl<'a> TagsStateIter<'a> {
+    pub fn new(tags: Option<&'a [TagListItem]>) -> Self {
+        Self { tags, current: 0 }
+    }
+}
+
+impl<'a> Iterator for TagsStateIter<'a> {
+    type Item = &'a TagListItem;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.tags.as_ref().and_then(|tags| {
+            let next = tags.get(self.current);
+            self.current += 1;
+            next
+        })
+    }
+}
+
+impl From<&Tags> for TagsState {
+    fn from(value: &Tags) -> Self {
+        Self {
+            tags: if value.is_empty() { None } else { Some(value.iter().map(TagListItem::from).collect()) },
+            ..Default::default()
         }
+    }
+}
+
+impl TagsState {
+    pub fn iter(&self) -> TagsStateIter<'_> {
+        TagsStateIter::new(self.tags.as_deref())
+    }
+
+    pub fn num_filters_active(&self) -> usize {
+        self.tags.as_ref().map_or(0, |tags| {
+            tags.iter()
+                .filter(|tag| tag.state == TagListItemState::Included || tag.state == TagListItemState::Excluded)
+                .count()
+        })
     }
 
     pub fn is_filter_empty(&mut self) -> bool {
@@ -521,11 +594,11 @@ impl From<Filters> for MangadexFilterProvider {
             content_rating: FilterList::<ContentRatingState>::from_content_ratings(&filters.content_rating),
             sort_by_state: FilterList::<SortByState>::from_sort_by(&filters.sort_by),
             publication_status: FilterList::<PublicationStatusState>::from_publication_status(&filters.publication_status),
-            tags_state: TagsState::default(),
-            magazine_demographic: FilterList::<MagazineDemographicState>::default(),
+            tags_state: TagsState::from(&filters.tags),
+            magazine_demographic: FilterList::<MagazineDemographicState>::from_magazine_demographic(&filters.magazine_demographic),
             author_state: FilterListDynamic::<AuthorState>::default(),
             artist_state: FilterListDynamic::<ArtistState>::default(),
-            lang_state: FilterList::<LanguageState>::default(),
+            lang_state: FilterList::<LanguageState>::from_languages(filters.languages.as_ref()),
             api_client: MangadexClient::new(
                 API_URL_BASE.parse().unwrap(),
                 COVER_IMG_URL_BASE.parse().unwrap(),
@@ -1018,6 +1091,7 @@ mod tests {
 
     use super::*;
     use crate::backend::manga_provider::mangadex::authors::Data;
+    use crate::backend::manga_provider::mangadex::filters::filter_provider;
     use crate::backend::manga_provider::mangadex::tags::TagsData;
 
     #[test]
@@ -1256,9 +1330,9 @@ mod tests {
             content_rating: vec![ContentRating::Suggestive, ContentRating::Erotic],
             publication_status: vec![PublicationStatus::Completed, PublicationStatus::Ongoing],
             sort_by: SortBy::HighestRating,
-            tags: Tags::new(vec![TagData::new("id_tag1".to_string(), TagSelection::Included)]),
-            magazine_demographic: vec![],
-            authors: User::default(),
+            tags: Tags::new(vec![TagData::new("id_tag".to_string(), TagSelection::Included, "fantasy".to_string())]),
+            magazine_demographic: vec![MagazineDemographic::Shoujo, MagazineDemographic::Seinen],
+            authors: User::new(vec![AuthorFilterState::new("user_id".to_string())]),
             artists: User::default(),
             languages: vec![Languages::English, Languages::Spanish],
         };
@@ -1312,5 +1386,27 @@ mod tests {
             .count();
 
         assert_eq!(num_publication_status_expected, 2);
+
+        let num_languages_expected = filters_provider
+            .lang_state
+            .iter()
+            .filter_map(|lan| lan.is_selected.then_some(lan))
+            .count();
+
+        assert_eq!(num_languages_expected, 2);
+
+        filters_provider
+            .tags_state
+            .iter()
+            .find(|tag| tag.id == "id_tag")
+            .expect("tag state was not initialized correctly");
+
+        let num_magazine_demographic_expected = filters_provider
+            .magazine_demographic
+            .iter()
+            .filter_map(|magazine| magazine.is_selected.then_some(magazine))
+            .count();
+
+        assert_eq!(num_magazine_demographic_expected, 2);
     }
 }
