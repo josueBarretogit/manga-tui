@@ -13,10 +13,11 @@ use tui_input::backend::crossterm::EventHandler;
 
 use super::super::{API_URL_BASE, COVER_IMG_URL_BASE};
 use crate::backend::cache::in_memory::InMemoryCache;
-use crate::backend::manga_provider::mangadex::MangadexClient;
+use crate::backend::manga_provider::filters::FiltersCache;
 use crate::backend::manga_provider::mangadex::api_responses::authors::AuthorsResponse;
 use crate::backend::manga_provider::mangadex::api_responses::tags::TagsResponse;
 use crate::backend::manga_provider::mangadex::filters::api_parameter::*;
+use crate::backend::manga_provider::mangadex::{MANGADEX_CACHE_BASE_DIRECTORY, MANGADEX_CACHE_FILENAME, MangadexClient};
 use crate::backend::manga_provider::{EventHandler as FiltersEventHandler, FiltersHandler, Languages};
 use crate::backend::tui::Events;
 
@@ -420,6 +421,15 @@ pub enum TagListItemState {
     NotSelected,
 }
 
+impl From<TagSelection> for TagListItemState {
+    fn from(value: TagSelection) -> Self {
+        match value {
+            TagSelection::Included => Self::Included,
+            TagSelection::Excluded => Self::Excluded,
+        }
+    }
+}
+
 #[derive(Default, Clone, Debug)]
 pub struct TagListItem {
     pub id: String,
@@ -573,6 +583,7 @@ pub struct MangadexFilterProvider {
     pub publication_status: FilterList<PublicationStatusState>,
     pub sort_by_state: FilterList<SortByState>,
     pub magazine_demographic: FilterList<MagazineDemographicState>,
+    already_existings_tags: Option<Tags>,
     pub tags_state: TagsState,
     pub author_state: FilterListDynamic<AuthorState>,
     pub artist_state: FilterListDynamic<ArtistState>,
@@ -588,6 +599,8 @@ impl From<Filters> for MangadexFilterProvider {
         let (tx, rx) = mpsc::unbounded_channel::<FilterEvents>();
         tx.send(FilterEvents::SearchTags).ok();
 
+        let already_existings_tags = if filters.tags.is_empty() { None } else { Some(filters.tags.clone()) };
+
         Self {
             is_open: false,
             id_filter: 0,
@@ -599,6 +612,7 @@ impl From<Filters> for MangadexFilterProvider {
             author_state: FilterListDynamic::<AuthorState>::default(),
             artist_state: FilterListDynamic::<ArtistState>::default(),
             lang_state: FilterList::<LanguageState>::from_languages(filters.languages.as_ref()),
+            already_existings_tags,
             api_client: MangadexClient::new(
                 API_URL_BASE.parse().unwrap(),
                 COVER_IMG_URL_BASE.parse().unwrap(),
@@ -626,48 +640,34 @@ impl FiltersHandler for MangadexFilterProvider {
     type InnerState = Filters;
 
     fn toggle(&mut self) {
+        if self.is_open {
+            self.save_filters_on_close();
+        }
+
         self.is_open = !self.is_open;
     }
 
+    #[inline]
     fn is_typing(&self) -> bool {
         self.is_typing
     }
 
+    #[inline]
     fn is_open(&self) -> bool {
         self.is_open
     }
 
+    #[inline]
     fn get_state(&self) -> &Self::InnerState {
         &self.filters
     }
 }
 
 impl MangadexFilterProvider {
-    pub fn new() -> Self {
-        let (tx, rx) = mpsc::unbounded_channel::<FilterEvents>();
-        tx.send(FilterEvents::SearchTags).ok();
-        let fil = Filters::default();
-        Self {
-            is_open: false,
-            id_filter: 0,
-            filters: Filters::default(),
-            content_rating: FilterList::<ContentRatingState>::default(),
-            publication_status: FilterList::<PublicationStatusState>::default(),
-            sort_by_state: FilterList::<SortByState>::default(),
-            tags_state: TagsState::default(),
-            magazine_demographic: FilterList::<MagazineDemographicState>::default(),
-            author_state: FilterListDynamic::<AuthorState>::default(),
-            artist_state: FilterListDynamic::<ArtistState>::default(),
-            lang_state: FilterList::<LanguageState>::default(),
-            api_client: MangadexClient::new(
-                API_URL_BASE.parse().unwrap(),
-                COVER_IMG_URL_BASE.parse().unwrap(),
-                InMemoryCache::init(2),
-            ),
-            is_typing: false,
-            tx,
-            rx,
-        }
+    fn save_filters_on_close(&self) {
+        let filters_cache_writer = FiltersCache::new(&*MANGADEX_CACHE_BASE_DIRECTORY, MANGADEX_CACHE_FILENAME);
+
+        filters_cache_writer.write_to_cache(&self.filters).ok();
     }
 
     pub fn reset(&mut self) {
@@ -946,9 +946,17 @@ impl MangadexFilterProvider {
             .data
             .into_iter()
             .map(|data| TagListItem {
-                id: data.id,
+                id: data.id.to_string(),
                 name: data.attributes.name.en,
-                state: TagListItemState::default(),
+                state: self
+                    .already_existings_tags
+                    .as_ref()
+                    .and_then(|tags| {
+                        let found_tag = tags.iter().find(|tag| tag.id == data.id);
+
+                        found_tag.map(|existing_tag| TagListItemState::from(existing_tag.state))
+                    })
+                    .unwrap_or_default(),
             })
             .collect();
 
@@ -1091,7 +1099,6 @@ mod tests {
 
     use super::*;
     use crate::backend::manga_provider::mangadex::authors::Data;
-    use crate::backend::manga_provider::mangadex::filters::filter_provider;
     use crate::backend::manga_provider::mangadex::tags::TagsData;
 
     #[test]
@@ -1254,7 +1261,7 @@ mod tests {
 
     #[test]
     fn filter_state() {
-        let mut filter_state = MangadexFilterProvider::new();
+        let mut filter_state = MangadexFilterProvider::from(Filters::default());
 
         filter_state.is_open = true;
 

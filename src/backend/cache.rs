@@ -1,6 +1,5 @@
 use std::error::Error;
-use std::fmt::{Debug, Display};
-use std::time::Duration;
+use std::fmt::Debug;
 
 pub mod in_memory;
 

@@ -3,23 +3,6 @@ use std::fmt::{Debug, Write};
 use std::ops::Deref;
 
 use serde::{Deserialize, Serialize};
-/*
-*
-```pseudocode
-
-read mangadex_filters:
-    if mangadex_filters: set filters from mangadex_filter
-    else use default filters
-
-filter is used:
-    if mangadex_filter not exist
-    create file mangadex_filter.toml
-  else
-      write filter value
-        to mangadex_filter.toml
-
-```
-* */
 use strum::{Display, EnumIter, IntoEnumIterator};
 
 use super::filter_provider::{TagListItem, TagListItemState};
@@ -85,7 +68,7 @@ pub enum SortBy {
     YearAscending,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum TagSelection {
     Included,
     Excluded,
@@ -93,9 +76,9 @@ pub enum TagSelection {
 
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct TagData {
-    id: String,
-    name: String,
-    state: TagSelection,
+    pub id: String,
+    pub name: String,
+    pub state: TagSelection,
 }
 
 impl TagData {

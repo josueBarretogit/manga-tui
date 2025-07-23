@@ -21,6 +21,7 @@ use crate::config::ImageQuality;
 use crate::global::PREFERRED_LANGUAGE;
 use crate::view::widgets::StatefulWidgetFrame;
 
+pub mod filters;
 pub mod mangadex;
 pub mod weebcentral;
 
