@@ -21,6 +21,7 @@ use crate::config::ImageQuality;
 use crate::global::PREFERRED_LANGUAGE;
 use crate::view::widgets::StatefulWidgetFrame;
 
+pub mod filters;
 pub mod mangadex;
 pub mod weebcentral;
 
@@ -201,6 +202,11 @@ impl Languages {
             Self::Portuguese => "🇵🇹",
             Self::Unkown => unreachable!(),
         }
+    }
+
+    /// Returns an iterator which discards the 'Unknown' variant
+    pub fn iterate() -> std::iter::Filter<LanguagesIter, impl FnMut(&Languages) -> bool> {
+        Self::iter().filter(|lan| *lan != Self::Unkown)
     }
 
     pub fn get_preferred_lang() -> &'static Languages {

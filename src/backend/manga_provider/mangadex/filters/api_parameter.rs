@@ -1,6 +1,8 @@
 //! The `Mangadex` represented as the Api parameters
 use std::fmt::{Debug, Write};
+use std::ops::Deref;
 
+use serde::{Deserialize, Serialize};
 use strum::{Display, EnumIter, IntoEnumIterator};
 
 use super::filter_provider::{TagListItem, TagListItemState};
@@ -10,8 +12,9 @@ pub trait IntoParam: Debug {
     fn into_param(self) -> String;
 }
 
-#[derive(Display, Clone, Debug)]
+#[derive(Display, Clone, Debug, EnumIter, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ContentRating {
+    #[default]
     #[strum(to_string = "safe")]
     Safe,
     #[strum(to_string = "suggestive")]
@@ -34,7 +37,7 @@ impl From<&str> for ContentRating {
     }
 }
 
-#[derive(Display, Clone, EnumIter, PartialEq, Eq, Default, Debug)]
+#[derive(Display, Clone, EnumIter, PartialEq, Eq, Default, Debug, Serialize, Deserialize)]
 pub enum SortBy {
     #[strum(to_string = "Best match")]
     BestMatch,
@@ -65,21 +68,22 @@ pub enum SortBy {
     YearAscending,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum TagSelection {
     Included,
     Excluded,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct TagData {
-    id: String,
-    state: TagSelection,
+    pub id: String,
+    pub name: String,
+    pub state: TagSelection,
 }
 
 impl TagData {
-    pub fn new(id: String, state: TagSelection) -> Self {
-        Self { id, state }
+    pub fn new(id: String, state: TagSelection, name: String) -> Self {
+        Self { id, state, name }
     }
 }
 
@@ -88,20 +92,35 @@ impl From<&TagListItem> for TagData {
         Self {
             id: value.id.clone(),
             state: if value.state == TagListItemState::Included { TagSelection::Included } else { TagSelection::Excluded },
+            name: value.name.to_string(),
         }
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+impl From<&TagData> for TagListItem {
+    fn from(value: &TagData) -> Self {
+        Self {
+            id: value.id.to_string(),
+            name: value.name.to_string(),
+            state: TagListItemState::default(),
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct Tags(Vec<TagData>);
 
 impl Tags {
     pub fn new(tags: Vec<TagData>) -> Self {
         Self(tags)
     }
+}
 
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
+impl Deref for Tags {
+    type Target = Vec<TagData>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
@@ -167,7 +186,7 @@ impl IntoParam for SortBy {
     }
 }
 
-#[derive(Display, Clone, EnumIter, PartialEq, Eq, Debug)]
+#[derive(Display, Clone, EnumIter, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum MagazineDemographic {
     Shounen,
     Shoujo,
@@ -197,26 +216,51 @@ impl IntoParam for Vec<MagazineDemographic> {
     }
 }
 
-#[derive(Default, Clone, Debug)]
-pub struct AuthorFilterState(String);
+#[derive(Default, Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct AuthorFilterState {
+    pub id: String,
+    pub name: String,
+}
 
 impl AuthorFilterState {
-    pub fn new(id_author: String) -> Self {
-        AuthorFilterState(id_author)
+    pub fn new(id_author: String, name: String) -> Self {
+        AuthorFilterState {
+            id: id_author,
+            name,
+        }
     }
 }
 
-#[derive(Default, Clone, Debug)]
-pub struct ArtistFilterState(String);
+#[derive(Default, Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct ArtistFilterState {
+    pub id: String,
+    pub name: String,
+}
 
 impl ArtistFilterState {
     pub fn new(id_artist: String) -> Self {
-        ArtistFilterState(id_artist)
+        ArtistFilterState {
+            id: id_artist,
+            name: "".to_string(),
+        }
+    }
+
+    pub fn with_name(mut self, name: &str) -> Self {
+        self.name = name.to_string();
+        self
     }
 }
 
-#[derive(Default, Clone, Debug)]
+#[derive(Default, Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct User<T: Clone + Default>(pub Vec<T>);
+
+impl<T: Clone + Default> Deref for User<T> {
+    type Target = Vec<T>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 impl IntoParam for User<AuthorFilterState> {
     fn into_param(self) -> String {
@@ -224,7 +268,7 @@ impl IntoParam for User<AuthorFilterState> {
             return String::new();
         }
         self.0.into_iter().fold(String::new(), |mut ids, author| {
-            let _ = write!(ids, "&authors[]={}", author.0);
+            let _ = write!(ids, "&authors[]={}", author.id);
             ids
         })
     }
@@ -236,7 +280,7 @@ impl IntoParam for User<ArtistFilterState> {
             return String::new();
         }
         self.0.into_iter().fold(String::new(), |mut ids, artist| {
-            let _ = write!(ids, "&artists[]={}", artist.0);
+            let _ = write!(ids, "&artists[]={}", artist.id);
             ids
         })
     }
@@ -269,7 +313,7 @@ impl IntoParam for Vec<Languages> {
     }
 }
 
-#[derive(Clone, Display, EnumIter, Debug)]
+#[derive(Clone, Display, EnumIter, Debug, Serialize, Deserialize, PartialEq)]
 pub enum PublicationStatus {
     #[strum(to_string = "ongoing")]
     Ongoing,
@@ -300,7 +344,7 @@ impl IntoParam for Vec<PublicationStatus> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Filters {
     pub content_rating: Vec<ContentRating>,
     pub publication_status: Vec<PublicationStatus>,
@@ -458,8 +502,10 @@ mod test {
 
     #[test]
     fn filter_by_author_works() {
-        let sample_authors: Vec<AuthorFilterState> =
-            vec![AuthorFilterState::new("id_author1".to_string()), AuthorFilterState::new("id_author2".to_string())];
+        let sample_authors: Vec<AuthorFilterState> = vec![
+            AuthorFilterState::new("id_author1".to_string(), "".to_string()),
+            AuthorFilterState::new("id_author2".to_string(), "".to_string()),
+        ];
         let filter_artist = User::<AuthorFilterState>::new(sample_authors);
         assert_eq!("&authors[]=id_author1&authors[]=id_author2", filter_artist.into_param());
     }
@@ -492,10 +538,12 @@ mod test {
             TagData {
                 id: "id_tag_included".to_string(),
                 state: TagSelection::Included,
+                name: "".to_string(),
             },
             TagData {
                 id: "id_tag_excluded".to_string(),
                 state: TagSelection::Excluded,
+                name: "".to_string(),
             },
         ]);
 
@@ -513,9 +561,12 @@ mod test {
 
         let mut filters = Filters::default();
 
-        filters.set_tags(vec![TagData::new("id_1".to_string(), TagSelection::Included)]);
+        filters.set_tags(vec![TagData::new("id_1".to_string(), TagSelection::Included, "".to_string())]);
 
-        filters.set_authors(vec![AuthorFilterState::new("id_1".to_string()), AuthorFilterState::new("id_2".to_string())]);
+        filters.set_authors(vec![
+            AuthorFilterState::new("id_1".to_string(), "".to_string()),
+            AuthorFilterState::new("id_2".to_string(), "".to_string()),
+        ]);
 
         filters.set_languages(vec![Languages::French, Languages::Spanish]);
 

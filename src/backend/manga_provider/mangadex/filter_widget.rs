@@ -204,7 +204,7 @@ impl MangadexFilterWidget {
             let tags_filtered: Vec<Span<'_>> = tags
                 .iter()
                 .filter(|tag| tag.state != TagListItemState::NotSelected)
-                .map(|tag| set_filter_tags_style(tag))
+                .map(|tag| tag.set_filter_tags_style())
                 .collect();
 
             Paragraph::new(Line::from(tags_filtered))

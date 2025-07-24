@@ -34,6 +34,7 @@ use self::backend::migration::update_database_with_migrations;
 use self::backend::tui::run_app;
 use self::cli::CliArgs;
 use self::config::MangaTuiConfig;
+use crate::backend::manga_provider::mangadex::get_cached_filters;
 
 mod backend;
 mod cli;
@@ -149,8 +150,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 },
             }
 
-            run_app(ratatui::init(), mangadex_client, anilist_client, MangadexFilterProvider::new(), MangadexFilterWidget::new())
-                .await?;
+            run_app(
+                ratatui::init(),
+                mangadex_client,
+                anilist_client,
+                MangadexFilterProvider::from(get_cached_filters()),
+                MangadexFilterWidget::new(),
+            )
+            .await?;
         },
         MangaProviders::Weebcentral => {
             logger.inform("Using Weeb central as manga provider");
@@ -160,7 +167,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 WeebcentralProvider::new(WEEBCENTRAL_BASE_URL.parse().unwrap(), cache_provider),
                 anilist_client,
                 WeebcentralFiltersProvider::new(WeebcentralFilterState::default()),
-                WeebcentralFilterWidget {},
+                WeebcentralFilterWidget::new(),
             )
             .await?;
         },

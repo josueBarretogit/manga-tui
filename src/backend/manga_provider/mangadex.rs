@@ -1,6 +1,6 @@
 use std::error::Error;
-use std::path::Path;
-use std::sync::Arc;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, LazyLock};
 use std::time::Duration as StdDuration;
 
 use api_responses::*;
@@ -22,6 +22,7 @@ use super::{
 };
 use crate::backend::cache::{CacheDuration, Cacher, InsertEntry};
 use crate::backend::database::ChapterBookmarked;
+use crate::backend::manga_provider::filters::FiltersCache;
 use crate::config::ImageQuality;
 use crate::global::APP_USER_AGENT;
 use crate::view::widgets::StatefulWidgetFrame;
@@ -33,6 +34,15 @@ pub mod filters;
 pub static API_URL_BASE: &str = "https://api.mangadex.org";
 
 pub static COVER_IMG_URL_BASE: &str = "https://uploads.mangadex.org/covers";
+
+pub static MANGADEX_CACHE_FILENAME: &str = "filters.toml";
+
+pub static MANGADEX_CACHE_BASE_DIRECTORY: LazyLock<PathBuf> = LazyLock::new(|| {
+    let cache_path = directories::ProjectDirs::from("", "", "manga-tui")
+        .map(|project_dirs| project_dirs.cache_dir().join("mangadex").to_path_buf())
+        .unwrap_or_default();
+    cache_path
+});
 
 /// Mangadex: `https://mangadex.org`
 /// This is the first manga provider since the first versions of manga-tui, thats why it is the
@@ -1032,6 +1042,13 @@ impl ProviderIdentity for MangadexClient {
 }
 
 impl MangaProvider for MangadexClient {}
+
+/// Returns the cached mangadex filters or default if it hasnt been cached yet
+pub fn get_cached_filters() -> Filters {
+    FiltersCache::new(&*MANGADEX_CACHE_BASE_DIRECTORY, MANGADEX_CACHE_FILENAME)
+        .get_cached_filters()
+        .unwrap_or_default()
+}
 
 #[cfg(test)]
 mod test {
