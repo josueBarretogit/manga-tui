@@ -717,7 +717,17 @@ impl MangadexFilterProvider {
     fn save_filters_on_close(&self) {
         let filters_cache_writer = FiltersCache::new(&*MANGADEX_CACHE_BASE_DIRECTORY, MANGADEX_CACHE_FILENAME);
 
-        filters_cache_writer.write_to_cache(&self.filters).ok();
+        filters_cache_writer
+            .write_to_cache(&self.filters)
+            .inspect_err(|e| {
+                #[cfg(not(test))]
+                {
+                    use crate::backend::error_log::{ErrorType, write_to_error_log};
+
+                    write_to_error_log(ErrorType::String(&e.to_string()));
+                }
+            })
+            .ok();
     }
 
     pub fn reset(&mut self) {

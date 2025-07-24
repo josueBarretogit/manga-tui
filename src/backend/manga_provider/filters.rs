@@ -1,3 +1,16 @@
+//! This module provides the `FiltersCache` struct, which is responsible for caching and retrieving filter data used in manga search
+//! operations.
+//!
+//! The `FiltersCache` allows you to serialize filter configurations (such as languages, publication status, sort order, tags,
+//! authors, and more) into TOML files for persistent storage, and deserialize them back when needed. This is useful for persisting
+//! user-selected filters or default filter sets between application runs.
+//!
+//! The cache is stored in a specified directory and file, and the module provides methods to write filter data to the cache and
+//! read it back. The filter data must implement `serde::Serialize` and `serde::de::DeserializeOwned`, making it flexible for
+//! various filter types.
+//!
+//! Example use cases include caching search filters for manga providers like MangaDex, where filters may include fields such as
+//! languages, publication status, sort order, tags, magazine demographics, authors, and artists.
 use std::error::Error;
 use std::fs::{File, create_dir_all};
 use std::io::{Read, Write};
@@ -6,6 +19,40 @@ use std::path::PathBuf;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
+/// A cache handler for serializing and deserializing filter data to and from TOML files.
+///
+/// `FiltersCache` is designed to persist filter configurations used in manga search operations, such as those for MangaDex.
+/// It stores filter data (implementing `serde::Serialize` and `serde::de::DeserializeOwned`) in a specified directory and file.
+///
+/// # Example Usage
+///
+/// The struct is typically used to cache filters like the following (see tests for more details):
+///
+/// ```rust
+/// # use crate::backend::manga_provider::mangadex::filters::api_parameter::{Filters, ContentRating, PublicationStatus, SortBy, Tags, TagData, TagSelection, MagazineDemographic, User, AuthorFilterState};
+/// # use crate::backend::manga_provider::Languages;
+/// let filters = Filters {
+///     content_rating: vec![ContentRating::Suggestive, ContentRating::Erotic],
+///     publication_status: vec![PublicationStatus::Completed, PublicationStatus::Ongoing],
+///     sort_by: SortBy::HighestRating,
+///     tags: Tags::new(vec![TagData::new("id_tag".to_string(), TagSelection::Included, "fantasy".to_string())]),
+///     magazine_demographic: vec![MagazineDemographic::Shoujo, MagazineDemographic::Seinen],
+///     authors: User::new(vec![AuthorFilterState::new("user_id".to_string(), "".to_string())]),
+///     artists: User::default(),
+///     languages: vec![Languages::English, Languages::Spanish],
+/// };
+/// ```
+///
+/// You can then write these filters to a cache file and retrieve them later:
+///
+/// ```rust
+/// # use std::path::Path;
+/// # let filters_cache = FiltersCache::new(Path::new("./cache_dir"), "filters.toml");
+/// filters_cache.write_to_cache(&filters).unwrap();
+/// let cached: Option<Filters> = filters_cache.get_cached_filters();
+/// ```
+///
+/// This enables persistent storage and retrieval of user or default filter sets between application runs.
 pub struct FiltersCache {
     base_directory: PathBuf,
     cache_filename: &'static str,
