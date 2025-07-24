@@ -217,27 +217,50 @@ impl IntoParam for Vec<MagazineDemographic> {
 }
 
 #[derive(Default, Clone, Debug, Serialize, Deserialize, PartialEq)]
-#[serde(transparent)]
-pub struct AuthorFilterState(String);
+pub struct AuthorFilterState {
+    pub id: String,
+    pub name: String,
+}
 
 impl AuthorFilterState {
-    pub fn new(id_author: String) -> Self {
-        AuthorFilterState(id_author)
+    pub fn new(id_author: String, name: String) -> Self {
+        AuthorFilterState {
+            id: id_author,
+            name,
+        }
     }
 }
 
 #[derive(Default, Clone, Debug, Serialize, Deserialize, PartialEq)]
-#[serde(transparent)]
-pub struct ArtistFilterState(String);
+pub struct ArtistFilterState {
+    pub id: String,
+    pub name: String,
+}
 
 impl ArtistFilterState {
     pub fn new(id_artist: String) -> Self {
-        ArtistFilterState(id_artist)
+        ArtistFilterState {
+            id: id_artist,
+            name: "".to_string(),
+        }
+    }
+
+    pub fn with_name(mut self, name: &str) -> Self {
+        self.name = name.to_string();
+        self
     }
 }
 
 #[derive(Default, Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct User<T: Clone + Default>(pub Vec<T>);
+
+impl<T: Clone + Default> Deref for User<T> {
+    type Target = Vec<T>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 impl IntoParam for User<AuthorFilterState> {
     fn into_param(self) -> String {
@@ -245,7 +268,7 @@ impl IntoParam for User<AuthorFilterState> {
             return String::new();
         }
         self.0.into_iter().fold(String::new(), |mut ids, author| {
-            let _ = write!(ids, "&authors[]={}", author.0);
+            let _ = write!(ids, "&authors[]={}", author.id);
             ids
         })
     }
@@ -257,7 +280,7 @@ impl IntoParam for User<ArtistFilterState> {
             return String::new();
         }
         self.0.into_iter().fold(String::new(), |mut ids, artist| {
-            let _ = write!(ids, "&artists[]={}", artist.0);
+            let _ = write!(ids, "&artists[]={}", artist.id);
             ids
         })
     }
@@ -479,8 +502,10 @@ mod test {
 
     #[test]
     fn filter_by_author_works() {
-        let sample_authors: Vec<AuthorFilterState> =
-            vec![AuthorFilterState::new("id_author1".to_string()), AuthorFilterState::new("id_author2".to_string())];
+        let sample_authors: Vec<AuthorFilterState> = vec![
+            AuthorFilterState::new("id_author1".to_string(), "".to_string()),
+            AuthorFilterState::new("id_author2".to_string(), "".to_string()),
+        ];
         let filter_artist = User::<AuthorFilterState>::new(sample_authors);
         assert_eq!("&authors[]=id_author1&authors[]=id_author2", filter_artist.into_param());
     }
@@ -538,7 +563,10 @@ mod test {
 
         filters.set_tags(vec![TagData::new("id_1".to_string(), TagSelection::Included, "".to_string())]);
 
-        filters.set_authors(vec![AuthorFilterState::new("id_1".to_string()), AuthorFilterState::new("id_2".to_string())]);
+        filters.set_authors(vec![
+            AuthorFilterState::new("id_1".to_string(), "".to_string()),
+            AuthorFilterState::new("id_2".to_string(), "".to_string()),
+        ]);
 
         filters.set_languages(vec![Languages::French, Languages::Spanish]);
 

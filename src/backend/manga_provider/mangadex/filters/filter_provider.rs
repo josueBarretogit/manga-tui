@@ -343,6 +343,56 @@ impl SendEventOnSuccess for ArtistState {
     }
 }
 
+impl FilterListDynamic<AuthorState> {
+    fn from_authors(authors: &User<AuthorFilterState>) -> Self {
+        Self {
+            items: if authors.is_empty() {
+                None
+            } else {
+                Some(
+                    authors
+                        .iter()
+                        .map(|author| ListItemId {
+                            is_selected: true,
+                            id: author.id.to_string(),
+                            name: author.name.to_string(),
+                        })
+                        .collect(),
+                )
+            },
+            state: ListState::default(),
+            search_bar: Input::default(),
+            _is_found: true,
+            _state: PhantomData,
+        }
+    }
+}
+
+impl FilterListDynamic<ArtistState> {
+    fn from_artist(artists: &User<ArtistFilterState>) -> Self {
+        Self {
+            items: if artists.is_empty() {
+                None
+            } else {
+                Some(
+                    artists
+                        .iter()
+                        .map(|artist| ListItemId {
+                            is_selected: true,
+                            id: artist.id.to_string(),
+                            name: artist.name.to_string(),
+                        })
+                        .collect(),
+                )
+            },
+            state: ListState::default(),
+            search_bar: Input::default(),
+            _is_found: true,
+            _state: PhantomData,
+        }
+    }
+}
+
 impl SendEventOnSuccess for AuthorState {
     fn send(data: Option<AuthorsResponse>) -> FilterEvents {
         FilterEvents::LoadAuthors(data)
@@ -609,8 +659,8 @@ impl From<Filters> for MangadexFilterProvider {
             publication_status: FilterList::<PublicationStatusState>::from_publication_status(&filters.publication_status),
             tags_state: TagsState::from(&filters.tags),
             magazine_demographic: FilterList::<MagazineDemographicState>::from_magazine_demographic(&filters.magazine_demographic),
-            author_state: FilterListDynamic::<AuthorState>::default(),
-            artist_state: FilterListDynamic::<ArtistState>::default(),
+            author_state: FilterListDynamic::<AuthorState>::from_authors(&filters.authors),
+            artist_state: FilterListDynamic::<ArtistState>::from_artist(&filters.artists),
             lang_state: FilterList::<LanguageState>::from_languages(filters.languages.as_ref()),
             already_existings_tags,
             api_client: MangadexClient::new(
@@ -1024,7 +1074,7 @@ impl MangadexFilterProvider {
                     .iter()
                     .filter_map(|item| {
                         if item.is_selected {
-                            return Some(AuthorFilterState::new(item.id.to_string()));
+                            return Some(AuthorFilterState::new(item.id.to_string(), item.name.clone()));
                         }
                         None
                     })
@@ -1040,7 +1090,7 @@ impl MangadexFilterProvider {
                     .iter()
                     .filter_map(|item| {
                         if item.is_selected {
-                            return Some(ArtistFilterState::new(item.id.to_string()));
+                            return Some(ArtistFilterState::new(item.id.to_string()).with_name(&item.name));
                         }
                         None
                     })
@@ -1339,8 +1389,8 @@ mod tests {
             sort_by: SortBy::HighestRating,
             tags: Tags::new(vec![TagData::new("id_tag".to_string(), TagSelection::Included, "fantasy".to_string())]),
             magazine_demographic: vec![MagazineDemographic::Shoujo, MagazineDemographic::Seinen],
-            authors: User::new(vec![AuthorFilterState::new("user_id".to_string())]),
-            artists: User::default(),
+            authors: User::new(vec![AuthorFilterState::new("author_id".to_string(), "name_author".to_string())]),
+            artists: User::new(vec![ArtistFilterState::new("artist_id".to_string()).with_name("artist_name")]),
             languages: vec![Languages::English, Languages::Spanish],
         };
 
@@ -1415,5 +1465,23 @@ mod tests {
             .count();
 
         assert_eq!(num_magazine_demographic_expected, 2);
+
+        filters_provider
+            .artist_state
+            .items
+            .as_ref()
+            .unwrap()
+            .iter()
+            .find(|artist| artist.id == "artist_id" && artist.name == "artist_name")
+            .expect("Expected artist was not found");
+
+        filters_provider
+            .author_state
+            .items
+            .as_ref()
+            .unwrap()
+            .iter()
+            .find(|author| author.id == "author_id" && author.name == "name_author")
+            .expect("Expected author was not found");
     }
 }

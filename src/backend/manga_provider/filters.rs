@@ -118,7 +118,7 @@ mod tests {
             sort_by: SortBy::HighestRating,
             tags: Tags::new(vec![TagData::new("id_tag".to_string(), TagSelection::Included, "fantasy".to_string())]),
             magazine_demographic: vec![MagazineDemographic::Shoujo, MagazineDemographic::Seinen],
-            authors: User::new(vec![AuthorFilterState::new("user_id".to_string())]),
+            authors: User::new(vec![AuthorFilterState::new("user_id".to_string(), "".to_string())]),
             artists: User::default(),
             languages: vec![Languages::English, Languages::Spanish],
         };
@@ -146,7 +146,7 @@ mod tests {
             sort_by: SortBy::HighestRating,
             tags: Tags::new(vec![TagData::new("id_tag".to_string(), TagSelection::Included, "fantasy".to_string())]),
             magazine_demographic: vec![MagazineDemographic::Shoujo, MagazineDemographic::Seinen],
-            authors: User::new(vec![AuthorFilterState::new("user_id".to_string())]),
+            authors: User::new(vec![AuthorFilterState::new("user_id".to_string(), "".to_string())]),
             artists: User::default(),
             languages: vec![Languages::English, Languages::Spanish],
         };
@@ -177,7 +177,7 @@ mod tests {
             sort_by: SortBy::HighestRating,
             tags: Tags::new(vec![TagData::new("id_tag".to_string(), TagSelection::Included, "fantasy".to_string())]),
             magazine_demographic: vec![MagazineDemographic::Shoujo, MagazineDemographic::Seinen],
-            authors: User::new(vec![AuthorFilterState::new("user_id".to_string())]),
+            authors: User::new(vec![AuthorFilterState::new("user_id".to_string(), "".to_string())]),
             artists: User::default(),
             languages: vec![Languages::English, Languages::Spanish],
         };
