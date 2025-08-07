@@ -1,6 +1,7 @@
 use chrono::Utc;
 use manga_tui::SearchTerm;
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::types::ToSqlOutput;
+use rusqlite::{Connection, OptionalExtension, ToSql, params};
 use strum::{Display, EnumIter};
 
 use super::AppDirectories;
@@ -11,6 +12,14 @@ use crate::view::widgets::feed::FeedTabs;
 pub enum MangaHistoryType {
     PlanToRead,
     ReadingHistory,
+}
+
+impl ToSql for MangaHistoryType {
+    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+        let as_string = self.to_string();
+
+        Ok(ToSqlOutput::from(as_string))
+    }
 }
 
 impl From<FeedTabs> for MangaHistoryType {
@@ -77,6 +86,7 @@ pub struct MangaHistoryResponse {
     pub total_items: u32,
 }
 
+#[derive(Debug)]
 pub struct GetHistoryArgs {
     pub hist_type: MangaHistoryType,
     pub page: u32,
@@ -107,7 +117,7 @@ pub struct SetChapterDownloaded<'a> {
 
 // First check if the chapters is already in the database, if not insert it, or else update and set
 // its download status to true
-
+#[derive(Debug)]
 pub struct Database<'a> {
     connection: &'a Connection,
 }
@@ -193,6 +203,7 @@ impl<'a> Database<'a> {
         Ok(())
     }
 
+    #[inline]
     pub fn get_connection() -> rusqlite::Result<Connection> {
         if cfg!(test) { Connection::open_in_memory() } else { Connection::open(AppDirectories::History.get_full_path()) }
     }
@@ -349,7 +360,7 @@ impl<'a> Database<'a> {
     }
 
     /// Insert a manga in the reading history type or update the `last_read` field
-    fn update_or_insert_manga_most_recent_read(&self, manga_id: &str) -> rusqlite::Result<()> {
+    fn update_or_insert_manga_in_most_recent_reading_history(&self, manga_id: &str) -> rusqlite::Result<()> {
         if !self.manga_is_reading(manga_id)? {
             self.insert_manga_in_reading_history(manga_id)?;
             Ok(())
@@ -363,7 +374,7 @@ impl<'a> Database<'a> {
 
     pub fn set_chapter_downloaded(&self, chapter: SetChapterDownloaded<'_>) -> rusqlite::Result<()> {
         if self.check_exists(chapter.manga_id, Table::Mangas)? {
-            self.update_or_insert_manga_most_recent_read(chapter.manga_id)?;
+            self.update_or_insert_manga_in_most_recent_reading_history(chapter.manga_id)?;
 
             if self.check_exists(chapter.id, Table::Chapters)? {
                 self.connection
@@ -434,13 +445,7 @@ impl<'a> Database<'a> {
             number_page_bookmarked: None,
         })?;
 
-        if !self.manga_is_reading(data.id)? {
-            self.insert_manga_in_reading_history(data.id)?;
-        } else {
-            let now = Utc::now().naive_utc();
-            self.connection
-                .execute("UPDATE mangas SET last_read = ?1 WHERE id = ?2", params![now.to_string(), data.id])?;
-        }
+        self.update_or_insert_manga_in_most_recent_reading_history(data.id)?;
 
         self.connection
             .execute("UPDATE chapters SET is_read = true WHERE id = ?1", params![data.chapter.id])?;
@@ -466,8 +471,6 @@ impl<'a> Database<'a> {
 
             self.connection
                 .execute("INSERT INTO manga_history_union VALUES (?1, ?2)", (manga.id, history_type))?;
-
-            return Ok(());
         }
         Ok(())
     }
@@ -608,6 +611,30 @@ impl<'a> Database<'a> {
             page: args.page,
         })
     }
+
+    pub fn remove_from_history(&self, manga_id: &str) -> rusqlite::Result<()> {
+        self.connection
+            .execute("DELETE FROM manga_history_union WHERE manga_history_union.manga_id = ?1", params![manga_id])?;
+
+        Ok(())
+    }
+
+    pub fn remove_all_from_history(&self, hist_type: MangaHistoryType, provider: MangaProviders) -> rusqlite::Result<()> {
+        let history_type_id = self.get_history_type(hist_type)?;
+
+        let get_ids_manga_to_delete_statement = r#"SELECT  mangas.id from mangas 
+                     INNER JOIN manga_history_union ON mangas.id = manga_history_union.manga_id 
+                     WHERE manga_history_union.type_id = ?1 AND mangas.manga_provider = ?2
+            "#;
+
+        let delete_statement =
+            format!("DELETE FROM manga_history_union WHERE manga_history_union.manga_id IN ({get_ids_manga_to_delete_statement})");
+
+        self.connection
+            .execute(&delete_statement, params![history_type_id, provider.to_string()])?;
+
+        Ok(())
+    }
 }
 
 #[derive(Default, Debug, Clone)]
@@ -665,6 +692,8 @@ impl<'a> RetrieveBookmark for Database<'a> {
 
 #[cfg(test)]
 mod test {
+
+    use std::error::Error;
 
     use pretty_assertions::assert_eq;
     use rusqlite::Result;
@@ -1661,6 +1690,263 @@ mod test {
         let result = database.get_bookmarked(&manga_id).expect("should be ok").expect("should not be none");
 
         assert_eq!(expected, result);
+
+        Ok(())
+    }
+
+    #[test]
+    fn it_deletes_a_manga_from_reading_history() -> Result<(), Box<dyn Error>> {
+        let connection = Database::get_connection()?;
+        let database = Database::new(&connection);
+        database.setup()?;
+
+        let manga_id_mangadex = Uuid::new_v4().to_string();
+        let manga_id_mangadex2 = Uuid::new_v4().to_string();
+
+        database.create_manga_if_not_exists(MangaInsert {
+            id: &manga_id_mangadex,
+            title: "of mangadex 1",
+            img_url: None,
+            provider: MangaProviders::Mangadex,
+        })?;
+
+        database.insert_manga_in_reading_history(&manga_id_mangadex)?;
+
+        database.create_manga_if_not_exists(MangaInsert {
+            id: &manga_id_mangadex2,
+            title: "of mangadex 2",
+            img_url: None,
+            provider: MangaProviders::Mangadex,
+        })?;
+
+        database.insert_manga_in_reading_history(&manga_id_mangadex2)?;
+
+        let expected = database.get_history(GetHistoryArgs {
+            hist_type: MangaHistoryType::ReadingHistory,
+            page: 1,
+            search: None,
+            items_per_page: 10,
+            provider: MangaProviders::Mangadex,
+        })?;
+
+        /* at this point 2 mangas must be stored in reading history */
+        assert_eq!(expected.mangas.len(), 2);
+
+        database.remove_from_history(&manga_id_mangadex)?;
+
+        let expected = database.get_history(GetHistoryArgs {
+            hist_type: MangaHistoryType::ReadingHistory,
+            page: 1,
+            search: None,
+            items_per_page: 10,
+            provider: MangaProviders::Mangadex,
+        })?;
+
+        /* now only one should exist */
+        assert_eq!(expected.mangas.len(), 1);
+
+        Ok(())
+    }
+
+    #[test]
+    fn it_deletes_a_manga_from_plan_to_read() -> Result<(), Box<dyn Error>> {
+        let connection = Database::get_connection()?;
+        let database = Database::new(&connection);
+        database.setup()?;
+
+        let manga_id_mangadex = Uuid::new_v4().to_string();
+        let manga_id_mangadex2 = Uuid::new_v4().to_string();
+
+        database.save_plan_to_read(MangaPlanToReadSave {
+            id: &manga_id_mangadex,
+            title: "of mangadex 1",
+            img_url: None,
+            provider: MangaProviders::Mangadex,
+        })?;
+
+        database.insert_manga_in_reading_history(&manga_id_mangadex)?;
+
+        database.save_plan_to_read(MangaPlanToReadSave {
+            id: &manga_id_mangadex2,
+            title: "of mangadex 2",
+            img_url: None,
+            provider: MangaProviders::Mangadex,
+        })?;
+
+        database.insert_manga_in_reading_history(&manga_id_mangadex2)?;
+
+        let expected = database.get_history(GetHistoryArgs {
+            hist_type: MangaHistoryType::PlanToRead,
+            page: 1,
+            search: None,
+            items_per_page: 10,
+            provider: MangaProviders::Mangadex,
+        })?;
+
+        /* at this point 2 mangas must be stored in reading history */
+        assert_eq!(expected.mangas.len(), 2);
+
+        database.remove_from_history(&manga_id_mangadex)?;
+
+        let expected = database.get_history(GetHistoryArgs {
+            hist_type: MangaHistoryType::PlanToRead,
+            page: 1,
+            search: None,
+            items_per_page: 10,
+            provider: MangaProviders::Mangadex,
+        })?;
+
+        /* now only one should exist */
+        assert_eq!(expected.mangas.len(), 1);
+
+        Ok(())
+    }
+
+    #[test]
+    fn it_delets_all_mangas_from_history() -> Result<(), Box<dyn Error>> {
+        let connection = Database::get_connection()?;
+        let database = Database::new(&connection);
+        database.setup()?;
+
+        let manga_id_mangadex = Uuid::new_v4().to_string();
+        let manga_id_mangadex2 = Uuid::new_v4().to_string();
+        let manga_id_mangadex3 = Uuid::new_v4().to_string();
+
+        let manga_id_plan_to_read = Uuid::new_v4().to_string();
+        let manga_id_plan_to_read2 = Uuid::new_v4().to_string();
+
+        let manga_id_weeb_central = Uuid::new_v4().to_string();
+        let manga_id_weeb_centra2 = Uuid::new_v4().to_string();
+
+        database.create_manga_if_not_exists(MangaInsert {
+            id: &manga_id_mangadex,
+            title: "of mangadex 1",
+            img_url: None,
+            provider: MangaProviders::Mangadex,
+        })?;
+
+        database.insert_manga_in_reading_history(&manga_id_mangadex)?;
+
+        database.create_manga_if_not_exists(MangaInsert {
+            id: &manga_id_mangadex2,
+            title: "of mangadex 2",
+            img_url: None,
+            provider: MangaProviders::Mangadex,
+        })?;
+
+        database.insert_manga_in_reading_history(&manga_id_mangadex2)?;
+
+        database.create_manga_if_not_exists(MangaInsert {
+            id: &manga_id_mangadex3,
+            title: "of mangadex 3",
+            img_url: None,
+            provider: MangaProviders::Mangadex,
+        })?;
+
+        database.insert_manga_in_reading_history(&manga_id_mangadex3)?;
+
+        database.create_manga_if_not_exists(MangaInsert {
+            id: &manga_id_weeb_central,
+            title: "of weebcentral",
+            img_url: None,
+            provider: MangaProviders::Weebcentral,
+        })?;
+
+        database.insert_manga_in_reading_history(&manga_id_weeb_central)?;
+
+        database.create_manga_if_not_exists(MangaInsert {
+            id: &manga_id_weeb_centra2,
+            title: "of weebcentral #2",
+            img_url: None,
+            provider: MangaProviders::Weebcentral,
+        })?;
+
+        database.insert_manga_in_reading_history(&manga_id_weeb_centra2)?;
+
+        let expected = database.get_history(GetHistoryArgs {
+            hist_type: MangaHistoryType::ReadingHistory,
+            page: 1,
+            search: None,
+            items_per_page: 10,
+            provider: MangaProviders::Mangadex,
+        })?;
+
+        /* at this point 3 mangas must be stored in reading history */
+        assert_eq!(expected.mangas.len(), 3);
+
+        database.create_manga_if_not_exists(MangaInsert {
+            id: &manga_id_plan_to_read,
+            title: "of mangadex 1",
+            img_url: None,
+            provider: MangaProviders::Mangadex,
+        })?;
+
+        database.save_plan_to_read(MangaPlanToReadSave {
+            id: &manga_id_plan_to_read,
+            title: "of mangadex 1 plan to read",
+            img_url: None,
+            provider: MangaProviders::Mangadex,
+        })?;
+
+        database.create_manga_if_not_exists(MangaInsert {
+            id: &manga_id_plan_to_read2,
+            title: "of mangadex 1",
+            img_url: None,
+            provider: MangaProviders::Mangadex,
+        })?;
+
+        database.save_plan_to_read(MangaPlanToReadSave {
+            id: &manga_id_plan_to_read2,
+            title: "of mangadex 2 plan to read",
+            img_url: None,
+            provider: MangaProviders::Mangadex,
+        })?;
+
+        let expected = database.get_history(GetHistoryArgs {
+            hist_type: MangaHistoryType::PlanToRead,
+            page: 1,
+            search: None,
+            items_per_page: 10,
+            provider: MangaProviders::Mangadex,
+        })?;
+
+        /* at this point 2 mangas in plant to read should exist */
+        assert_eq!(expected.mangas.len(), 2);
+
+        database.remove_all_from_history(MangaHistoryType::ReadingHistory, MangaProviders::Mangadex)?;
+
+        let expected = database.get_history(GetHistoryArgs {
+            hist_type: MangaHistoryType::ReadingHistory,
+            page: 1,
+            search: None,
+            items_per_page: 10,
+            provider: MangaProviders::Mangadex,
+        })?;
+
+        /* now none from mangadex should exist */
+        assert_eq!(expected.mangas.len(), 0);
+
+        let expected = database.get_history(GetHistoryArgs {
+            hist_type: MangaHistoryType::ReadingHistory,
+            page: 1,
+            search: None,
+            items_per_page: 10,
+            provider: MangaProviders::Weebcentral,
+        })?;
+
+        /* weebcentral reading history should remain untouched */
+        assert_eq!(expected.mangas.len(), 2);
+
+        let expected = database.get_history(GetHistoryArgs {
+            hist_type: MangaHistoryType::PlanToRead,
+            page: 1,
+            search: None,
+            items_per_page: 10,
+            provider: MangaProviders::Mangadex,
+        })?;
+
+        /* the plan to read history should remain untouched */
+        assert_eq!(expected.mangas.len(), 2);
 
         Ok(())
     }

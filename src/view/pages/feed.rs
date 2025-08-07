@@ -21,7 +21,7 @@ use crate::backend::tui::Events;
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
 use crate::utils::render_search_bar;
 use crate::view::widgets::Component;
-use crate::view::widgets::feed::{FeedTabs, HistoryWidget};
+use crate::view::widgets::feed::{FeedTabs, HistoryWidget, MangasRead};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum FeedState {
@@ -197,12 +197,30 @@ where
         self.render_searching_status(searching_area, frame.buffer_mut());
     }
 
+    #[inline]
+    fn get_currently_selected_manga(&self) -> Option<&MangasRead> {
+        self.history.as_ref().and_then(|widg| widg.get_current_manga_selected())
+    }
+
     pub fn init_search(&mut self) {
         self.local_event_tx.send(FeedEvents::SearchHistory).ok();
     }
 
+    fn remove_currently_selected_manga(&mut self) {
+        if let Some(manga) = self.get_currently_selected_manga() {
+            let connection = Database::get_connection().unwrap();
+            let database = Database::new(&connection);
+
+            if let Err(err) = database.remove_from_history(&manga.id) {
+                println!("{err}")
+            }
+
+            self.search_history();
+        }
+    }
+
     fn handle_key_events(&mut self, key_event: KeyEvent) {
-        if self.is_typing && self.state != FeedState::SearchingMangaPage {
+        if self.is_typing {
             match key_event.code {
                 KeyCode::Enter => {
                     self.local_event_tx.send(FeedEvents::SearchHistory).ok();
@@ -237,6 +255,9 @@ where
                 },
                 KeyCode::Char('s') => {
                     self.local_action_tx.send(FeedActions::ToggleSearchBar).ok();
+                },
+                KeyCode::Char('d') => {
+                    self.remove_currently_selected_manga();
                 },
                 _ => {},
             }
