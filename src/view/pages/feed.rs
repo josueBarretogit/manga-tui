@@ -21,7 +21,7 @@ use crate::backend::tui::Events;
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
 use crate::utils::render_search_bar;
 use crate::view::widgets::Component;
-use crate::view::widgets::feed::{FeedTabs, HistoryWidget, MangasRead};
+use crate::view::widgets::feed::{AskConfirmationDeleteAllModal, FeedTabs, HistoryWidget, MangasRead};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum FeedState {
@@ -31,6 +31,7 @@ pub enum FeedState {
     SearchingMangaPage,
     MangaPageNotFound,
     DisplayingHistory,
+    AskingDeleteAllConfirmation,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -98,6 +99,7 @@ where
         }
     }
 
+    #[inline]
     pub fn is_typing(&self) -> bool {
         self.is_typing
     }
@@ -197,6 +199,14 @@ where
         self.render_searching_status(searching_area, frame.buffer_mut());
     }
 
+    fn render_ask_modal_confirmation_delete_all_mangas(&mut self, area: Rect, buf: &mut Buffer) {
+        if self.state == FeedState::AskingDeleteAllConfirmation {
+            AskConfirmationDeleteAllModal::new()
+                .with_manga_provider(self.manga_provider.as_ref().unwrap().name())
+                .render(area, buf);
+        }
+    }
+
     #[inline]
     fn get_currently_selected_manga(&self) -> Option<&MangasRead> {
         self.history.as_ref().and_then(|widg| widg.get_current_manga_selected())
@@ -212,11 +222,20 @@ where
             let database = Database::new(&connection);
 
             if let Err(err) = database.remove_from_history(&manga.id) {
-                println!("{err}")
+                self.global_event_tx.as_ref().unwrap().send(Events::Error(err.to_string()));
+            } else {
+                self.search_history();
             }
-
-            self.search_history();
         }
+    }
+
+    fn remove_all_mangas(&mut self) {
+        let connection = Database::get_connection().unwrap();
+        let database = Database::new(&connection);
+        if let Err(e) = database.remove_all_from_history(self.tabs.into(), self.manga_provider.as_ref().unwrap().name()) {
+            self.global_event_tx.as_ref().unwrap().send(Events::Error(e.to_string())).ok();
+        };
+        self.search_history();
     }
 
     fn handle_key_events(&mut self, key_event: KeyEvent) {
@@ -232,6 +251,12 @@ where
                     self.search_bar.handle_event(&crossterm::event::Event::Key(key_event));
                 },
             };
+        } else if self.state == FeedState::AskingDeleteAllConfirmation {
+            match key_event.code {
+                KeyCode::Char('w') => self.remove_all_mangas(),
+                KeyCode::Char('q') => self.state = FeedState::DisplayingHistory,
+                _ => {},
+            }
         } else {
             match key_event.code {
                 KeyCode::Tab => {
@@ -258,6 +283,9 @@ where
                 },
                 KeyCode::Char('d') => {
                     self.remove_currently_selected_manga();
+                },
+                KeyCode::Char('D') => {
+                    self.state = FeedState::AskingDeleteAllConfirmation;
                 },
                 _ => {},
             }
@@ -404,30 +432,30 @@ where
     }
 
     pub fn go_to_manga_page(&mut self) {
-        if let Some(history) = self.history.as_mut() {
-            if let Some(currently_selected_manga) = history.get_current_manga_selected() {
-                self.state = FeedState::SearchingMangaPage;
-                let tx = self.global_event_tx.as_ref().cloned().unwrap();
-                let local_tx = self.local_event_tx.clone();
-                let manga_id = currently_selected_manga.id.clone();
+        self.state = FeedState::SearchingMangaPage;
+        if let Some(currently_selected_manga) = self.get_currently_selected_manga() {
+            let tx = self.global_event_tx.as_ref().cloned().unwrap();
+            let local_tx = self.local_event_tx.clone();
+            let manga_id = currently_selected_manga.id.clone();
 
-                self.loading_state = Some(ThrobberState::default());
+            self.loading_state = Some(ThrobberState::default());
 
-                let client = self.manga_provider.as_ref().cloned().unwrap();
+            let client = self.manga_provider.as_ref().cloned().unwrap();
 
-                self.tasks.spawn(async move {
-                    let response = client.get_manga_by_id(&manga_id).await;
-                    match response {
-                        Ok(res) => {
-                            tx.send(Events::GoToMangaPage(res)).ok();
-                        },
-                        Err(e) => {
-                            write_to_error_log(e.into());
-                            local_tx.send(FeedEvents::ErrorSearchingMangaData).ok();
-                        },
-                    }
-                });
-            }
+            self.tasks.spawn(async move {
+                let response = client.get_manga_by_id(&manga_id).await;
+                match response {
+                    Ok(res) => {
+                        tx.send(Events::GoToMangaPage(res)).ok();
+                    },
+                    Err(e) => {
+                        write_to_error_log(e.into());
+                        local_tx.send(FeedEvents::ErrorSearchingMangaData).ok();
+                    },
+                }
+            });
+        } else {
+            self.state = FeedState::DisplayingHistory;
         }
     }
 
@@ -473,6 +501,8 @@ where
         self.render_top_area(tabs_area, frame);
 
         self.render_history(history_area, frame.buffer_mut());
+
+        self.render_ask_modal_confirmation_delete_all_mangas(area, frame.buffer_mut());
     }
 
     fn update(&mut self, action: Self::Actions) {
@@ -930,5 +960,14 @@ mod tests {
             Events::GoToMangaPage(_) => {},
             _ => panic!("wrong event was sent"),
         }
+    }
+
+    #[test]
+    fn when_pressed_d_it_ask_for_confirmation() {
+        let mut feed_page: Feed<MockMangaPageProvider> = Feed::new().with_api_client(MockMangaPageProvider::new().into());
+
+        press_key(&mut feed_page, KeyCode::Char('D'));
+
+        assert_eq!(FeedState::AskingDeleteAllConfirmation, feed_page.state)
     }
 }
