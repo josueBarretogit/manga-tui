@@ -911,9 +911,13 @@ impl<'a> Database<'a> {
     /// // Remove manga from user's history lists
     /// db.remove_from_history("manga_123")?;
     /// ```
-    pub fn remove_from_history(&self, manga_id: &str) -> rusqlite::Result<()> {
-        self.connection
-            .execute("DELETE FROM manga_history_union WHERE manga_history_union.manga_id = ?1", params![manga_id])?;
+    pub fn remove_from_history(&self, manga_id: &str, hist_type: MangaHistoryType) -> rusqlite::Result<()> {
+        let hist_type_id = self.get_history_type(hist_type)?;
+
+        self.connection.execute(
+            "DELETE FROM manga_history_union WHERE manga_history_union.manga_id = ?1 AND manga_history_union.type_id = ?2",
+            params![manga_id, hist_type_id],
+        )?;
 
         Ok(())
     }
@@ -938,16 +942,17 @@ impl<'a> Database<'a> {
     pub fn remove_all_from_history(&self, hist_type: MangaHistoryType, provider: MangaProviders) -> rusqlite::Result<()> {
         let history_type_id = self.get_history_type(hist_type)?;
 
-        let get_ids_manga_to_delete_statement = r#"SELECT  mangas.id from mangas 
+        let get_ids_manga_to_delete_statement = r#"SELECT mangas.id from mangas 
                      INNER JOIN manga_history_union ON mangas.id = manga_history_union.manga_id 
                      WHERE manga_history_union.type_id = ?1 AND mangas.manga_provider = ?2
             "#;
 
-        let delete_statement =
-            format!("DELETE FROM manga_history_union WHERE manga_history_union.manga_id IN ({get_ids_manga_to_delete_statement})");
+        let delete_statement = format!(
+            "DELETE FROM manga_history_union WHERE manga_history_union.manga_id IN ({get_ids_manga_to_delete_statement}) AND manga_history_union.type_id = ?3"
+        );
 
         self.connection
-            .execute(&delete_statement, params![history_type_id, provider.to_string()])?;
+            .execute(&delete_statement, params![history_type_id, provider.to_string(), history_type_id])?;
 
         Ok(())
     }
@@ -2179,7 +2184,7 @@ mod test {
         /* at this point 2 mangas must be stored in reading history */
         assert_eq!(expected.mangas.len(), 2);
 
-        database.remove_from_history(&manga_id_mangadex)?;
+        database.remove_from_history(&manga_id_mangadex, MangaHistoryType::ReadingHistory)?;
 
         let expected = database.get_history(GetHistoryArgs {
             hist_type: MangaHistoryType::ReadingHistory,
@@ -2233,7 +2238,7 @@ mod test {
         /* at this point 2 mangas must be stored in reading history */
         assert_eq!(expected.mangas.len(), 2);
 
-        database.remove_from_history(&manga_id_mangadex)?;
+        database.remove_from_history(&manga_id_mangadex, MangaHistoryType::PlanToRead)?;
 
         let expected = database.get_history(GetHistoryArgs {
             hist_type: MangaHistoryType::PlanToRead,
@@ -2245,6 +2250,17 @@ mod test {
 
         /* now only one should exist */
         assert_eq!(expected.mangas.len(), 1);
+
+        let expected = database.get_history(GetHistoryArgs {
+            hist_type: MangaHistoryType::ReadingHistory,
+            page: 1,
+            search: None,
+            items_per_page: 10,
+            provider: MangaProviders::Mangadex,
+        })?;
+
+        /* the reading history should be ketp the same */
+        assert_eq!(expected.mangas.len(), 2);
 
         Ok(())
     }
@@ -2265,7 +2281,7 @@ mod test {
         let manga_id_weeb_central = Uuid::new_v4().to_string();
         let manga_id_weeb_centra2 = Uuid::new_v4().to_string();
 
-        database.create_manga_if_not_exists(MangaInsert {
+        database.save_plan_to_read(MangaPlanToReadSave {
             id: &manga_id_mangadex,
             title: "of mangadex 1",
             img_url: None,
@@ -2274,7 +2290,7 @@ mod test {
 
         database.insert_manga_in_reading_history(&manga_id_mangadex)?;
 
-        database.create_manga_if_not_exists(MangaInsert {
+        database.save_plan_to_read(MangaPlanToReadSave {
             id: &manga_id_mangadex2,
             title: "of mangadex 2",
             img_url: None,
@@ -2357,8 +2373,8 @@ mod test {
             provider: MangaProviders::Mangadex,
         })?;
 
-        /* at this point 2 mangas in plant to read should exist */
-        assert_eq!(expected.mangas.len(), 2);
+        /* at this point 4 mangas in plant to read should exist */
+        assert_eq!(expected.mangas.len(), 4);
 
         database.remove_all_from_history(MangaHistoryType::ReadingHistory, MangaProviders::Mangadex)?;
 
@@ -2393,7 +2409,7 @@ mod test {
         })?;
 
         /* the plan to read history should remain untouched */
-        assert_eq!(expected.mangas.len(), 2);
+        assert_eq!(expected.mangas.len(), 4);
 
         Ok(())
     }

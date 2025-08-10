@@ -399,9 +399,7 @@ where
 
     fn render_ask_modal_confirmation_delete_all_mangas(&mut self, area: Rect, buf: &mut Buffer) {
         if self.state == FeedState::AskingDeleteAllConfirmation {
-            AskConfirmationDeleteAllModal::new()
-                .with_manga_provider(self.manga_provider.as_ref().unwrap().name())
-                .render(area, buf);
+            AskConfirmationDeleteAllModal::new(self.tabs, self.manga_provider.as_ref().unwrap().name()).render(area, buf);
         }
     }
 
@@ -445,8 +443,8 @@ where
             let connection = Database::get_connection().unwrap();
             let database = Database::new(&connection);
 
-            if let Err(err) = database.remove_from_history(&manga.id) {
-                self.global_event_tx.as_ref().unwrap().send(Events::Error(err.to_string()));
+            if let Err(err) = database.remove_from_history(&manga.id, self.tabs.into()) {
+                self.global_event_tx.as_ref().unwrap().send(Events::Error(err.to_string())).ok();
             } else {
                 self.search_history();
             }
@@ -496,7 +494,7 @@ where
         } else if self.state == FeedState::AskingDeleteAllConfirmation {
             match key_event.code {
                 KeyCode::Char('w') => self.remove_all_mangas(),
-                KeyCode::Char('q') => self.state = FeedState::DisplayingHistory,
+                KeyCode::Char('q') | KeyCode::Esc => self.state = FeedState::DisplayingHistory,
                 _ => {},
             }
         } else {

@@ -1,16 +1,16 @@
+use std::fmt::Display;
+
 use chrono::NaiveDate;
-use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Margin, Rect};
-use ratatui::style::{Color, Style, Styled, Stylize};
+use ratatui::style::{Color, Style, Stylize};
 use ratatui::text::Line;
-use ratatui::widgets::block::Title;
 use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph, StatefulWidget, Widget, WidgetRef, Wrap};
 use tui_widget_list::PreRender;
 
 use crate::backend::database::MangaHistoryResponse;
-use crate::backend::manga_provider::{Languages, LatestChapter, MangaProvider, MangaProviders};
-use crate::global::{CURRENT_LIST_ITEM_STYLE, INSTRUCTIONS_STYLE};
+use crate::backend::manga_provider::{Languages, LatestChapter, MangaProviders};
+use crate::global::CURRENT_LIST_ITEM_STYLE;
 use crate::utils::display_dates_since_publication;
 use crate::view::widgets::ModalBuilder;
 
@@ -18,6 +18,15 @@ use crate::view::widgets::ModalBuilder;
 pub enum FeedTabs {
     History,
     PlantToRead,
+}
+
+impl Display for FeedTabs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::History => write!(f, "Reading history"),
+            Self::PlantToRead => write!(f, "Plan to Read"),
+        }
+    }
 }
 
 impl FeedTabs {
@@ -220,29 +229,27 @@ impl StatefulWidget for HistoryWidget {
 #[derive(Debug)]
 struct AskConfirmationDeleteAllModalBody {
     manga_provider: MangaProviders,
+    tab: FeedTabs,
 }
 
 impl WidgetRef for AskConfirmationDeleteAllModalBody {
     fn render_ref(&self, area: Rect, buf: &mut Buffer) {
-        Block::bordered()
-            //.title(Title::from(Line::from(vec![
-            //    "Some error ocurred, press ".into(),
-            //    "<q>".set_style(*INSTRUCTIONS_STYLE),
-            //    " to close this popup".into(),
-            //])))
-            .render(area, buf);
+        Block::bordered().render(area, buf);
 
         let inner = area.inner(Margin {
             horizontal: 2,
             vertical: 2,
         });
 
-        let warning = format!("Are you sure you want to delete ALL mangas from the manga provider: {}?", self.manga_provider);
+        let warning = format!(
+            "Are you sure you want to delete ALL mangas from the manga provider: {} in the section {}?",
+            self.manga_provider, self.tab
+        );
 
         let as_list = List::new(Line::from(vec![
             warning.into(),
             "".into(),
-            "Your reading history will still be kept but not from this `Feed` page".into(),
+            "Your reading history and download status will still be kept but not from this `Feed` page".into(),
             "Yes: <w>".bold().fg(Color::Red),
             "No: <q>".bold().fg(Color::Green),
         ]));
@@ -254,18 +261,15 @@ impl WidgetRef for AskConfirmationDeleteAllModalBody {
 #[derive(Debug)]
 pub struct AskConfirmationDeleteAllModal {
     manga_provider: MangaProviders,
+    tab: FeedTabs,
 }
 
 impl AskConfirmationDeleteAllModal {
-    pub fn new() -> Self {
+    pub fn new(tab: FeedTabs, provider: MangaProviders) -> Self {
         Self {
-            manga_provider: MangaProviders::default(),
+            manga_provider: provider,
+            tab,
         }
-    }
-
-    pub fn with_manga_provider(mut self, manga_prov: MangaProviders) -> Self {
-        self.manga_provider = manga_prov;
-        self
     }
 }
 
@@ -276,6 +280,7 @@ impl Widget for AskConfirmationDeleteAllModal {
     {
         let modal = ModalBuilder::new(AskConfirmationDeleteAllModalBody {
             manga_provider: self.manga_provider,
+            tab: self.tab,
         })
         .with_dimensions(super::ModalDimensions {
             width: 70,

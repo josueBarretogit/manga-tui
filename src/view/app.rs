@@ -4,11 +4,8 @@ use ::crossterm::event::KeyCode;
 use crossterm::event::{KeyEvent, KeyModifiers};
 use ratatui::Frame;
 use ratatui::buffer::Buffer;
-use ratatui::layout::{Constraint, Layout, Margin, Rect};
-use ratatui::style::Styled;
-use ratatui::text::Line;
-use ratatui::widgets::block::Title;
-use ratatui::widgets::{Block, Borders, Clear, Paragraph, Tabs, Widget, Wrap};
+use ratatui::layout::{Constraint, Layout, Rect};
+use ratatui::widgets::{Block, Borders, Tabs, Widget};
 use ratatui_image::picker::Picker;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
@@ -23,7 +20,6 @@ use crate::backend::tracker::MangaTracker;
 use crate::backend::tui::{Action, Events};
 use crate::config::MangaTuiConfig;
 use crate::global::INSTRUCTIONS_STYLE;
-use crate::utils::centered_rect;
 use crate::view::pages::*;
 use crate::view::widgets::ErrorModal;
 

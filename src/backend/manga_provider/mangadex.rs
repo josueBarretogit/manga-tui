@@ -382,6 +382,22 @@ impl MangadexClient {
             }
         }
     }
+
+    fn save_filters_on_close(&self, filters: Filters) {
+        let filters_cache_writer = FiltersCache::new(&*MANGADEX_CACHE_BASE_DIRECTORY, MANGADEX_CACHE_FILENAME);
+
+        filters_cache_writer
+            .write_to_cache(&filters)
+            .inspect_err(|e| {
+                #[cfg(not(test))]
+                {
+                    use crate::backend::error_log::{ErrorType, write_to_error_log};
+
+                    write_to_error_log(ErrorType::String(&e.to_string()));
+                }
+            })
+            .ok();
+    }
 }
 
 impl GetRawImage for MangadexClient {
@@ -891,6 +907,7 @@ impl SearchPageProvider for MangadexClient {
             None => "".to_string(),
         };
 
+        let filters_to_save = filters.clone();
         let filters = filters.into_param();
         let items_per_page = pagination.items_per_page;
 
@@ -981,6 +998,8 @@ impl SearchPageProvider for MangadexClient {
                 }
             })
             .collect();
+
+        self.save_filters_on_close(filters_to_save);
 
         Ok(GetMangasResponse {
             mangas,

@@ -13,11 +13,10 @@ use tui_input::backend::crossterm::EventHandler;
 
 use super::super::{API_URL_BASE, COVER_IMG_URL_BASE};
 use crate::backend::cache::in_memory::InMemoryCache;
-use crate::backend::manga_provider::filters::FiltersCache;
+use crate::backend::manga_provider::mangadex::MangadexClient;
 use crate::backend::manga_provider::mangadex::api_responses::authors::AuthorsResponse;
 use crate::backend::manga_provider::mangadex::api_responses::tags::TagsResponse;
 use crate::backend::manga_provider::mangadex::filters::api_parameter::*;
-use crate::backend::manga_provider::mangadex::{MANGADEX_CACHE_BASE_DIRECTORY, MANGADEX_CACHE_FILENAME, MangadexClient};
 use crate::backend::manga_provider::{EventHandler as FiltersEventHandler, FiltersHandler, Languages};
 use crate::backend::tui::Events;
 
@@ -689,11 +688,8 @@ impl FiltersEventHandler for MangadexFilterProvider {
 impl FiltersHandler for MangadexFilterProvider {
     type InnerState = Filters;
 
+    #[inline]
     fn toggle(&mut self) {
-        if self.is_open {
-            self.save_filters_on_close();
-        }
-
         self.is_open = !self.is_open;
     }
 
@@ -714,22 +710,6 @@ impl FiltersHandler for MangadexFilterProvider {
 }
 
 impl MangadexFilterProvider {
-    fn save_filters_on_close(&self) {
-        let filters_cache_writer = FiltersCache::new(&*MANGADEX_CACHE_BASE_DIRECTORY, MANGADEX_CACHE_FILENAME);
-
-        filters_cache_writer
-            .write_to_cache(&self.filters)
-            .inspect_err(|e| {
-                #[cfg(not(test))]
-                {
-                    use crate::backend::error_log::{ErrorType, write_to_error_log};
-
-                    write_to_error_log(ErrorType::String(&e.to_string()));
-                }
-            })
-            .ok();
-    }
-
     pub fn reset(&mut self) {
         if self.tags_state.tags.is_some() {
             self.tags_state
@@ -1012,7 +992,7 @@ impl MangadexFilterProvider {
                     .already_existings_tags
                     .as_ref()
                     .and_then(|tags| {
-                        let found_tag = tags.iter().find(|tag| tag.id == data.id);
+                        let found_tag = tags.iter().find(|tag| !tag.id.is_empty() && tag.id == data.id);
 
                         found_tag.map(|existing_tag| TagListItemState::from(existing_tag.state))
                     })
