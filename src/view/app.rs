@@ -25,6 +25,7 @@ use crate::config::MangaTuiConfig;
 use crate::global::INSTRUCTIONS_STYLE;
 use crate::utils::centered_rect;
 use crate::view::pages::*;
+use crate::view::widgets::ErrorModal;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
 pub enum AppState {
@@ -88,7 +89,7 @@ where
         }
 
         if let Some(message) = self.error_message.as_ref().cloned() {
-            self.render_popup_error_message(area, frame.buffer_mut(), message);
+            self.render_modal_error_message(area, frame.buffer_mut(), &message);
         }
     }
 
@@ -206,24 +207,8 @@ where
             .render(area, buf);
     }
 
-    fn render_popup_error_message(&self, area: Rect, buf: &mut Buffer, message: String) {
-        let area = centered_rect(area, 50, 50);
-        Clear.render(area, buf);
-
-        Block::bordered()
-            .title(Title::from(Line::from(vec![
-                "Some error ocurred, press ".into(),
-                "<q>".set_style(*INSTRUCTIONS_STYLE),
-                " to close this popup".into(),
-            ])))
-            .render(area, buf);
-
-        let inner = area.inner(Margin {
-            horizontal: 2,
-            vertical: 2,
-        });
-
-        Paragraph::new(message).wrap(Wrap { trim: true }).render(inner, buf);
+    fn render_modal_error_message(&self, area: Rect, buf: &mut Buffer, message: &str) {
+        ErrorModal::new(message).render(area, buf);
     }
 
     fn display_error_message(&mut self, error_message: String) {
