@@ -1,3 +1,51 @@
+//! Feed page module for displaying and managing manga reading history and plan-to-read lists.
+//!
+//! This module provides the main feed interface where users can:
+//! - View their reading history and plan-to-read manga
+//! - Search and filter manga by title
+//! - Navigate between different manga providers
+//! - Delete individual manga or clear entire collections
+//! - Navigate to detailed manga pages
+//! - View latest chapters for each manga
+//!
+//! ## Key Features
+//!
+//! ### Dual Tab Interface
+//! - **Reading History**: Shows manga the user has actually read
+//! - **Plan to Read**: Shows manga the user wants to read later
+//!
+//! ### Search and Navigation
+//! - Real-time search filtering by manga title
+//! - Pagination support for large collections
+//! - Keyboard navigation (j/k for up/down, w/b for next/previous page)
+//! - Mouse wheel scrolling support
+//!
+//! ### Manga Management
+//! - Delete individual manga from history (`d` key)
+//! - Bulk delete all manga from a provider (`D` key with confirmation)
+//! - Navigate to detailed manga pages (`r` key)
+//!
+//! ### Async Data Loading
+//! - Background loading of latest chapters for each manga
+//! - Loading states with visual feedback
+//! - Error handling for failed API requests
+//!
+//! ## State Management
+//!
+//! The feed uses a state machine to manage different UI states:
+//! - `DisplayingHistory`: Normal display mode
+//! - `SearchingHistory`: Loading history from database
+//! - `SearchingMangaPage`: Loading detailed manga data
+//! - `AskingDeleteAllConfirmation`: Confirmation dialog for bulk deletion
+//! - Various error states for failed operations
+//!
+//! ## Event System
+//!
+//! Uses a dual-channel event system:
+//! - **Actions**: User interactions (key presses, mouse events)
+//! - **Events**: Internal state changes and async results
+//!
+//! This separation allows for responsive UI while handling async operations.
 use std::sync::Arc;
 
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent, MouseEventKind};
@@ -21,55 +69,152 @@ use crate::backend::tui::Events;
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
 use crate::utils::render_search_bar;
 use crate::view::widgets::Component;
-use crate::view::widgets::feed::{FeedTabs, HistoryWidget};
+use crate::view::widgets::feed::{AskConfirmationDeleteAllModal, FeedTabs, HistoryWidget, MangasRead};
 
+/// Represents the current state of the feed page UI.
+///
+/// The feed uses a state machine to manage different UI modes and loading states.
+/// This ensures proper user feedback and prevents invalid interactions during async operations.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum FeedState {
+    /// Currently searching/filtering the reading history
     SearchingHistory,
+    /// An error occurred while searching history
     ErrorSearchingHistory,
+    /// No manga found in the current history tab
     HistoryNotFound,
+    /// Loading detailed manga page data
     SearchingMangaPage,
+    /// Failed to load manga page data
     MangaPageNotFound,
+    /// Normal display mode showing manga history
     DisplayingHistory,
+    /// Showing confirmation dialog for bulk deletion
+    AskingDeleteAllConfirmation,
 }
 
+/// User actions that can be triggered by keyboard or mouse input.
+///
+/// These actions are sent through the local action channel and processed
+/// by the `update()` method to modify the feed state.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum FeedActions {
+    /// Scroll up in the manga list (k key or mouse wheel up)
     ScrollHistoryUp,
+    /// Scroll down in the manga list (j key or mouse wheel down)
     ScrollHistoryDown,
+    /// Toggle search bar focus (s key)
     ToggleSearchBar,
+    /// Go to next page of results (w key)
     NextPage,
+    /// Go to previous page of results (b key)
     PreviousPage,
+    /// Switch between History and Plan to Read tabs (Tab key)
     SwitchTab,
+    /// Navigate to detailed manga page (r key)
     GoToMangaPage,
 }
 
+/// Internal events for managing async operations and state changes.
+///
+/// These events are sent through the local event channel and processed
+/// by the `tick()` method to handle async results and state transitions.
 #[derive(Debug, PartialEq)]
 pub enum FeedEvents {
+    /// Trigger a search of the reading history
     SearchHistory,
+    /// Start loading latest chapters for all displayed manga
     SearchRecentChapters,
+    /// Load latest chapters for a specific manga
     LoadLatestChapters(String, Option<Vec<LatestChapter>>),
+    /// Handle error when searching manga data
     ErrorSearchingMangaData,
+    /// Load history results from database
     LoadHistory(Option<MangaHistoryResponse>),
 }
 
+/// Main feed page component for displaying and managing manga collections.
+///
+/// The `Feed` struct manages the complete feed page interface, including:
+/// - UI state management and rendering
+/// - User input handling (keyboard and mouse)
+/// - Async data loading and caching
+/// - Navigation between different views
+/// - Search and filtering functionality
+///
+/// ## Generic Parameter
+///
+/// `T: FeedPageProvider` - The manga provider implementation that supplies
+/// manga data and latest chapters. This allows the feed to work with different
+/// manga sources (MangaDx, Weebcentral, etc.).
+///
+/// ## Key Components
+///
+/// - **Tabs**: Switch between Reading History and Plan to Read
+/// - **Search Bar**: Filter manga by title
+/// - **History Widget**: Display manga list with navigation
+/// - **Loading States**: Visual feedback during async operations
+/// - **Confirmation Dialogs**: For destructive actions
+///
+/// ## Event Handling
+///
+/// Uses a dual-channel system for responsive UI:
+/// - `local_action_tx/rx`: Handle immediate user interactions
+/// - `local_event_tx/rx`: Process async results and state changes
+/// - `global_event_tx`: Communicate with the main application
+///
+/// ## Example Usage
+///
+/// ```rust
+/// # use crate::view::pages::feed::Feed;
+/// # use crate::backend::manga_provider::mock::MockMangaPageProvider;
+/// let mut feed = Feed::new()
+///     .with_api_client(Arc::new(MockMangaPageProvider::new()))
+///     .with_global_sender(global_event_tx);
+///
+/// // Initialize with search
+/// feed.init_search();
+///
+/// // Handle user input
+/// feed.handle_events(Events::Key(key_event));
+///
+/// // Process async results
+/// feed.tick();
+///
+/// // Render the UI
+/// feed.render(area, frame);
+/// ```
 pub struct Feed<T>
 where
     T: FeedPageProvider,
 {
+    /// Current active tab (History or Plan to Read)
     pub tabs: FeedTabs,
+    /// Current UI state
     state: FeedState,
+    /// Widget for displaying manga history
     pub history: Option<HistoryWidget>,
+    /// Loading animation state
     pub loading_state: Option<ThrobberState>,
+    /// Channel for sending events to the main application
     pub global_event_tx: Option<UnboundedSender<Events>>,
+    /// Channel for sending user actions
     pub local_action_tx: UnboundedSender<FeedActions>,
+    /// Channel for receiving user actions
     pub local_action_rx: UnboundedReceiver<FeedActions>,
+    /// Channel for sending internal events
     pub local_event_tx: UnboundedSender<FeedEvents>,
+    /// Channel for receiving internal events
     pub local_event_rx: UnboundedReceiver<FeedEvents>,
+    /// Search input field
     search_bar: Input,
+    /// Whether the search bar is currently focused
     is_typing: bool,
+    /// Number of manga to display per page
     items_per_page: u32,
+    /// Background tasks for async operations
     tasks: JoinSet<()>,
+    /// Manga provider for fetching data
     manga_provider: Option<Arc<T>>,
 }
 
@@ -77,6 +222,22 @@ impl<T> Feed<T>
 where
     T: FeedPageProvider,
 {
+    /// Creates a new feed page with default settings.
+    ///
+    /// Initializes with:
+    /// - History tab selected
+    /// - DisplayingHistory state
+    /// - 5 items per page
+    /// - Empty search bar
+    /// - No manga provider (must be set with `with_api_client()`)
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use crate::view::pages::feed::Feed;
+    /// # use crate::backend::manga_provider::mock::MockMangaPageProvider;
+    /// let feed = Feed::new();
+    /// ```
     pub fn new() -> Self {
         let (local_action_tx, local_action_rx) = mpsc::unbounded_channel::<FeedActions>();
         let (local_event_tx, local_event_rx) = mpsc::unbounded_channel::<FeedEvents>();
@@ -98,15 +259,54 @@ where
         }
     }
 
+    /// Returns whether the search bar is currently focused for text input.
+    ///
+    /// Used to determine if keyboard events should be handled as text input
+    /// or as navigation commands.
+    #[inline]
     pub fn is_typing(&self) -> bool {
         self.is_typing
     }
 
+    /// Sets the global event sender for communicating with the main application.
+    ///
+    /// This channel is used to send events like navigation requests and errors
+    /// to the main application loop.
+    ///
+    /// # Arguments
+    ///
+    /// * `sender` - Channel sender for global events
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use tokio::sync::mpsc;
+    /// # use crate::backend::tui::Events;
+    /// # let (tx, _) = mpsc::unbounded_channel::<Events>();
+    /// let feed = Feed::new().with_global_sender(tx);
+    /// ```
     pub fn with_global_sender(mut self, sender: UnboundedSender<Events>) -> Self {
         self.global_event_tx = Some(sender);
         self
     }
 
+    /// Sets the manga provider for fetching data.
+    ///
+    /// The provider is responsible for fetching manga details and latest chapters
+    /// from the manga source (MangaDx, Weebcentral, etc.).
+    ///
+    /// # Arguments
+    ///
+    /// * `api_client` - Arc-wrapped manga provider implementation
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use std::sync::Arc;
+    /// # use crate::backend::manga_provider::mock::MockMangaPageProvider;
+    /// let provider = Arc::new(MockMangaPageProvider::new());
+    /// let feed = Feed::new().with_api_client(provider);
+    /// ```
     pub fn with_api_client(mut self, api_client: Arc<T>) -> Self {
         self.manga_provider = Some(api_client);
         self
@@ -197,12 +397,91 @@ where
         self.render_searching_status(searching_area, frame.buffer_mut());
     }
 
+    fn render_ask_modal_confirmation_delete_all_mangas(&mut self, area: Rect, buf: &mut Buffer) {
+        if self.state == FeedState::AskingDeleteAllConfirmation {
+            AskConfirmationDeleteAllModal::new()
+                .with_manga_provider(self.manga_provider.as_ref().unwrap().name())
+                .render(area, buf);
+        }
+    }
+
+    #[inline]
+    fn get_currently_selected_manga(&self) -> Option<&MangasRead> {
+        self.history.as_ref().and_then(|widg| widg.get_current_manga_selected())
+    }
+
+    /// Initiates a search of the reading history.
+    ///
+    /// Triggers an async search operation that will load manga from the database
+    /// based on the current tab, search term, and pagination settings.
+    ///
+    /// This method is typically called:
+    /// - On initial page load
+    /// - When switching tabs
+    /// - When changing search terms
+    /// - When navigating pages
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # let mut feed = setup_test_feed();
+    /// feed.init_search(); // Triggers FeedEvents::SearchHistory
+    /// ```
     pub fn init_search(&mut self) {
         self.local_event_tx.send(FeedEvents::SearchHistory).ok();
     }
 
+    /// Removes the currently selected manga from the reading history.
+    ///
+    /// This method:
+    /// 1. Gets the currently selected manga
+    /// 2. Removes it from the database using `Database::remove_from_history()`
+    /// 3. Triggers a new search to refresh the display
+    /// 4. Sends an error event if the removal fails
+    ///
+    /// Called when the user presses the `d` key.
+    fn remove_currently_selected_manga(&mut self) {
+        if let Some(manga) = self.get_currently_selected_manga() {
+            let connection = Database::get_connection().unwrap();
+            let database = Database::new(&connection);
+
+            if let Err(err) = database.remove_from_history(&manga.id) {
+                self.global_event_tx.as_ref().unwrap().send(Events::Error(err.to_string()));
+            } else {
+                self.search_history();
+            }
+        }
+    }
+
+    /// Removes all manga from the current provider and history type.
+    ///
+    /// This is a bulk deletion operation that:
+    /// 1. Removes all manga for the current provider from the selected history type
+    /// 2. Triggers a new search to refresh the display
+    /// 3. Sends an error event if the operation fails
+    ///
+    /// Called when the user confirms bulk deletion (presses `w` in confirmation dialog).
+    fn remove_all_mangas(&mut self) {
+        let connection = Database::get_connection().unwrap();
+        let database = Database::new(&connection);
+        if let Err(e) = database.remove_all_from_history(self.tabs.into(), self.manga_provider.as_ref().unwrap().name()) {
+            self.global_event_tx.as_ref().unwrap().send(Events::Error(e.to_string())).ok();
+        };
+        self.search_history();
+    }
+
+    /// Handles keyboard input based on the current state and focus.
+    ///
+    /// This method routes keyboard events to appropriate handlers:
+    /// - If typing: handles text input and Enter/Esc for search
+    /// - If in confirmation dialog: handles w/q for confirm/cancel
+    /// - Otherwise: handles navigation keys (j/k, w/b, Tab, r, s, d, D)
+    ///
+    /// # Arguments
+    ///
+    /// * `key_event` - The keyboard event to handle
     fn handle_key_events(&mut self, key_event: KeyEvent) {
-        if self.is_typing && self.state != FeedState::SearchingMangaPage {
+        if self.is_typing {
             match key_event.code {
                 KeyCode::Enter => {
                     self.local_event_tx.send(FeedEvents::SearchHistory).ok();
@@ -214,6 +493,12 @@ where
                     self.search_bar.handle_event(&crossterm::event::Event::Key(key_event));
                 },
             };
+        } else if self.state == FeedState::AskingDeleteAllConfirmation {
+            match key_event.code {
+                KeyCode::Char('w') => self.remove_all_mangas(),
+                KeyCode::Char('q') => self.state = FeedState::DisplayingHistory,
+                _ => {},
+            }
         } else {
             match key_event.code {
                 KeyCode::Tab => {
@@ -238,11 +523,32 @@ where
                 KeyCode::Char('s') => {
                     self.local_action_tx.send(FeedActions::ToggleSearchBar).ok();
                 },
+                KeyCode::Char('d') => {
+                    self.remove_currently_selected_manga();
+                },
+                KeyCode::Char('D') => {
+                    self.state = FeedState::AskingDeleteAllConfirmation;
+                },
                 _ => {},
             }
         }
     }
 
+    /// Processes async events and updates the feed state.
+    ///
+    /// This method should be called regularly (typically on each tick) to:
+    /// - Update loading animations
+    /// - Process async results from background tasks
+    /// - Handle state transitions
+    /// - Update the UI based on new data
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # let mut feed = setup_test_feed();
+    /// // In the main loop:
+    /// feed.tick(); // Process any pending events
+    /// ```
     pub fn tick(&mut self) {
         if let Some(loader_state) = self.loading_state.as_mut() {
             loader_state.calc_next();
@@ -268,6 +574,13 @@ where
         }
     }
 
+    /// Loads latest chapters for all displayed manga asynchronously.
+    ///
+    /// This method spawns background tasks to fetch the latest chapters for each
+    /// manga in the current display. The results are processed asynchronously
+    /// and update the manga entries with their latest chapter information.
+    ///
+    /// Called automatically after loading history to provide up-to-date chapter info.
     fn search_latest_chapters(&mut self) {
         if let Some(history) = self.history.as_mut() {
             for manga in history.mangas.clone() {
@@ -295,6 +608,15 @@ where
         self.state = FeedState::MangaPageNotFound;
     }
 
+    /// Initiates a search of the reading history from the database.
+    ///
+    /// This method:
+    /// 1. Sets the state to `SearchingHistory`
+    /// 2. Aborts any existing background tasks
+    /// 3. Spawns a new async task to query the database
+    /// 4. Uses current search term, page, and tab settings
+    ///
+    /// The search results are sent back via the event channel and processed by `load_history()`.
     fn search_history(&mut self) {
         self.state = FeedState::SearchingHistory;
         let tx = self.local_event_tx.clone();
@@ -338,6 +660,10 @@ where
         });
     }
 
+    /// Navigates to the next page of results if available.
+    ///
+    /// Checks if there are more pages available and, if so, increments the page
+    /// number and triggers a new search to load the next page of manga.
     fn search_next_page(&mut self) {
         if let Some(history) = self.history.as_mut() {
             if history.can_search_next_page(self.items_per_page as f64) {
@@ -347,6 +673,10 @@ where
         }
     }
 
+    /// Navigates to the previous page of results if available.
+    ///
+    /// Checks if there's a previous page and, if so, decrements the page number
+    /// and triggers a new search to load the previous page of manga.
     fn search_previous_page(&mut self) {
         if let Some(history) = self.history.as_mut() {
             if history.can_search_previous_page() {
@@ -356,6 +686,17 @@ where
         }
     }
 
+    /// Loads and displays the search results from the database.
+    ///
+    /// This method processes the results from `search_history()` and:
+    /// 1. Creates a new `HistoryWidget` from the database response
+    /// 2. Sets the state to `DisplayingHistory` if manga were found
+    /// 3. Sets the state to `HistoryNotFound` if no manga were found
+    /// 4. Triggers loading of latest chapters for the displayed manga
+    ///
+    /// # Arguments
+    ///
+    /// * `maybe_history` - Optional search results from the database
     fn load_history(&mut self, maybe_history: Option<MangaHistoryResponse>) {
         match maybe_history.filter(|history| !history.mangas.is_empty()) {
             Some(history) => {
@@ -382,31 +723,47 @@ where
         }
     }
 
+    /// Navigates to the detailed manga page for the currently selected manga.
+    ///
+    /// This method:
+    /// 1. Sets the state to `SearchingMangaPage`
+    /// 2. Shows a loading indicator
+    /// 3. Fetches detailed manga data asynchronously
+    /// 4. Sends a `GoToMangaPage` event to the main application
+    ///
+    /// If no manga is selected or the provider is not set, this method does nothing.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # let mut feed = setup_test_feed_with_selection();
+    /// feed.go_to_manga_page(); // Will trigger Events::GoToMangaPage
+    /// ```
     pub fn go_to_manga_page(&mut self) {
-        if let Some(history) = self.history.as_mut() {
-            if let Some(currently_selected_manga) = history.get_current_manga_selected() {
-                self.state = FeedState::SearchingMangaPage;
-                let tx = self.global_event_tx.as_ref().cloned().unwrap();
-                let local_tx = self.local_event_tx.clone();
-                let manga_id = currently_selected_manga.id.clone();
+        self.state = FeedState::SearchingMangaPage;
+        if let Some(currently_selected_manga) = self.get_currently_selected_manga() {
+            let tx = self.global_event_tx.as_ref().cloned().unwrap();
+            let local_tx = self.local_event_tx.clone();
+            let manga_id = currently_selected_manga.id.clone();
 
-                self.loading_state = Some(ThrobberState::default());
+            self.loading_state = Some(ThrobberState::default());
 
-                let client = self.manga_provider.as_ref().cloned().unwrap();
+            let client = self.manga_provider.as_ref().cloned().unwrap();
 
-                self.tasks.spawn(async move {
-                    let response = client.get_manga_by_id(&manga_id).await;
-                    match response {
-                        Ok(res) => {
-                            tx.send(Events::GoToMangaPage(res)).ok();
-                        },
-                        Err(e) => {
-                            write_to_error_log(e.into());
-                            local_tx.send(FeedEvents::ErrorSearchingMangaData).ok();
-                        },
-                    }
-                });
-            }
+            self.tasks.spawn(async move {
+                let response = client.get_manga_by_id(&manga_id).await;
+                match response {
+                    Ok(res) => {
+                        tx.send(Events::GoToMangaPage(res)).ok();
+                    },
+                    Err(e) => {
+                        write_to_error_log(e.into());
+                        local_tx.send(FeedEvents::ErrorSearchingMangaData).ok();
+                    },
+                }
+            });
+        } else {
+            self.state = FeedState::DisplayingHistory;
         }
     }
 
@@ -414,6 +771,14 @@ where
         self.is_typing = !self.is_typing;
     }
 
+    /// Switches between the History and Plan to Read tabs.
+    ///
+    /// This method:
+    /// 1. Cycles to the next tab
+    /// 2. Cleans up the current state (clears history, search bar, etc.)
+    /// 3. Triggers a new search for the new tab
+    ///
+    /// Called when the user presses the Tab key.
     fn switch_tabs(&mut self) {
         self.tabs = self.tabs.cycle();
         self.clean_up();
@@ -452,6 +817,8 @@ where
         self.render_top_area(tabs_area, frame);
 
         self.render_history(history_area, frame.buffer_mut());
+
+        self.render_ask_modal_confirmation_delete_all_mangas(area, frame.buffer_mut());
     }
 
     fn update(&mut self, action: Self::Actions) {
@@ -909,5 +1276,14 @@ mod tests {
             Events::GoToMangaPage(_) => {},
             _ => panic!("wrong event was sent"),
         }
+    }
+
+    #[test]
+    fn when_pressed_d_it_ask_for_confirmation() {
+        let mut feed_page: Feed<MockMangaPageProvider> = Feed::new().with_api_client(MockMangaPageProvider::new().into());
+
+        press_key(&mut feed_page, KeyCode::Char('D'));
+
+        assert_eq!(FeedState::AskingDeleteAllConfirmation, feed_page.state)
     }
 }
