@@ -384,19 +384,21 @@ impl MangadexClient {
     }
 
     fn save_filters_on_close(&self, filters: Filters) {
-        let filters_cache_writer = FiltersCache::new(&*MANGADEX_CACHE_BASE_DIRECTORY, MANGADEX_CACHE_FILENAME);
+        std::thread::spawn(move || {
+            let filters_cache_writer = FiltersCache::new(&*MANGADEX_CACHE_BASE_DIRECTORY, MANGADEX_CACHE_FILENAME);
 
-        filters_cache_writer
-            .write_to_cache(&filters)
-            .inspect_err(|e| {
-                #[cfg(not(test))]
-                {
-                    use crate::backend::error_log::{ErrorType, write_to_error_log};
+            filters_cache_writer
+                .write_to_cache(&filters)
+                .inspect_err(|e| {
+                    #[cfg(not(test))]
+                    {
+                        use crate::backend::error_log::{ErrorType, write_to_error_log};
 
-                    write_to_error_log(ErrorType::String(&e.to_string()));
-                }
-            })
-            .ok();
+                        write_to_error_log(ErrorType::String(&e.to_string()));
+                    }
+                })
+                .ok();
+        });
     }
 }
 

@@ -30,6 +30,7 @@ impl Display for FeedTabs {
 }
 
 impl FeedTabs {
+    #[inline]
     pub fn cycle(self) -> Self {
         match self {
             Self::History => Self::PlantToRead,
@@ -241,20 +242,22 @@ impl WidgetRef for AskConfirmationDeleteAllModalBody {
             vertical: 2,
         });
 
+        let [warning_area, options_area] = Layout::vertical([Constraint::Percentage(20), Constraint::Percentage(80)]).areas(inner);
+
         let warning = format!(
             "Are you sure you want to delete ALL mangas from the manga provider: {} in the section {}?",
             self.manga_provider, self.tab
         );
 
+        Paragraph::new(warning).wrap(Wrap { trim: true }).render(warning_area, buf);
+
         let as_list = List::new(Line::from(vec![
-            warning.into(),
-            "".into(),
             "Your reading history and download status will still be kept but not from this `Feed` page".into(),
             "Yes: <w>".bold().fg(Color::Red),
             "No: <q>".bold().fg(Color::Green),
         ]));
 
-        Widget::render(as_list, inner, buf);
+        Widget::render(as_list, options_area, buf);
     }
 }
 
