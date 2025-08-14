@@ -1,16 +1,90 @@
+//! Database module for managing manga reading history, bookmarks, and user data persistence.
+//!
+//! This module provides the `Database` struct and related types for managing manga-related data in a SQLite database.
+//! It handles various aspects of manga tracking including:
+//!
+//! - **Reading History**: Track which manga chapters have been read and when
+//! - **Plan to Read**: Manage a list of manga that users plan to read later
+//! - **Downloads**: Track which chapters have been downloaded for offline reading
+//! - **Bookmarks**: Save reading progress within specific chapters
+//! - **Multi-provider Support**: Handle manga from different sources (MangaDx, Weebcentral, etc.)
+//!
+//! ## Database Schema
+//!
+//! The database consists of several interconnected tables:
+//! - `mangas`: Core manga information (id, title, cover image, provider)
+//! - `chapters`: Chapter details with read/download/bookmark status
+//! - `history_types`: Categories for organizing manga (ReadingHistory, PlanToRead)
+//! - `manga_history_union`: Links manga to history categories
+//!
+//! ## Key Features
+//!
+//! ### History Management
+//! - Separate tracking for "currently reading" vs "plan to read" manga
+//! - Search and pagination support for large manga collections
+//! - Provider-specific filtering (e.g., only show MangaDx manga)
+//!
+//! ### Chapter Tracking  
+//! - Mark chapters as read/unread
+//! - Track download status for offline reading
+//! - Bookmark specific pages within chapters
+//! - Only one bookmark per manga (automatically replaces previous bookmarks)
+//!
+//! ### Data Integrity
+//! - Automatic creation of manga records when adding chapters
+//! - Foreign key relationships ensure data consistency
+//! - Graceful handling of duplicate entries
+//!
+//! ## Example Usage
+//!
+//! ```rust
+//! # use rusqlite::Connection;
+//! # use crate::backend::database::{Database, MangaReadingHistorySave, ChapterToSaveHistory};
+//! # use crate::backend::manga_provider::MangaProviders;
+//! let conn = Connection::open("manga.db")?;
+//! let db = Database::new(&conn);
+//! db.setup()?;
+//!
+//! // Save reading progress
+//! db.save_history(MangaReadingHistorySave {
+//!     id: "manga_123",
+//!     title: "One Piece",
+//!     img_url: Some("cover.jpg"),
+//!     chapter: ChapterToSaveHistory {
+//!         id: "chapter_456",
+//!         title: "Chapter 1000",
+//!         translated_language: "en",
+//!     },
+//!     provider: MangaProviders::Mangadx,
+//! })?;
+//! ```
 use chrono::Utc;
 use manga_tui::SearchTerm;
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::types::ToSqlOutput;
+use rusqlite::{Connection, OptionalExtension, ToSql, params};
 use strum::{Display, EnumIter};
 
 use super::AppDirectories;
 use super::manga_provider::{Languages, MangaProviders};
 use crate::view::widgets::feed::FeedTabs;
 
+/// Represents the type of manga history list.
+///
+/// Manga can be categorized into different lists for user organization:
+/// - `PlanToRead`: Manga the user intends to read in the future
+/// - `ReadingHistory`: Manga the user has actually started reading
 #[derive(Display, Debug, Clone, Copy)]
 pub enum MangaHistoryType {
     PlanToRead,
     ReadingHistory,
+}
+
+impl ToSql for MangaHistoryType {
+    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+        let as_string = self.to_string();
+
+        Ok(ToSqlOutput::from(as_string))
+    }
 }
 
 impl From<FeedTabs> for MangaHistoryType {
@@ -77,11 +151,21 @@ pub struct MangaHistoryResponse {
     pub total_items: u32,
 }
 
+/// Arguments for retrieving manga history with filtering and pagination.
+///
+/// Used with `Database::get_history()` to specify exactly what manga to retrieve.
+/// Supports complex queries with provider filtering, text search, and pagination.
+#[derive(Debug)]
 pub struct GetHistoryArgs {
+    /// Which type of history to retrieve (ReadingHistory or PlanToRead)
     pub hist_type: MangaHistoryType,
+    /// Page number (1-based) for pagination
     pub page: u32,
+    /// Optional search term to filter by manga title
     pub search: Option<SearchTerm>,
+    /// Number of items to return per page
     pub items_per_page: u32,
+    /// Filter results to only this manga provider
     pub provider: MangaProviders,
 }
 
@@ -93,6 +177,11 @@ pub struct MangaPlanToReadSave<'a> {
     pub provider: MangaProviders,
 }
 
+/// Information needed to mark a chapter as downloaded.
+///
+/// Used with `Database::set_chapter_downloaded()` when a user downloads
+/// a chapter for offline reading. Contains both manga and chapter information
+/// since the manga record may need to be created.
 pub struct SetChapterDownloaded<'a> {
     pub id: &'a str,
     pub title: &'a str,
@@ -102,21 +191,63 @@ pub struct SetChapterDownloaded<'a> {
     pub provider: MangaProviders,
 }
 
-// a chapter cannot exist if a manga doesnt exist
-// therefore if manga exists chapter exists
-
-// First check if the chapters is already in the database, if not insert it, or else update and set
-// its download status to true
-
+/// Database wrapper providing high-level operations for manga data management.
+///
+/// The `Database` struct encapsulates a SQLite connection and provides methods for:
+/// - Managing reading history and "plan to read" lists
+/// - Tracking chapter read/download status
+/// - Handling bookmarks with page-level precision
+/// - Multi-provider manga support
+///
+/// ## Lifecycle
+///
+/// 1. Create with `Database::new(&connection)`
+/// 2. Initialize schema with `setup()`
+/// 3. Use various methods to manage manga data
+///
+/// ## Thread Safety
+///
+/// This struct holds a reference to a SQLite connection. SQLite connections are not
+/// thread-safe by default, so ensure proper synchronization if using across threads.
+#[derive(Debug)]
 pub struct Database<'a> {
     connection: &'a Connection,
 }
 
 impl<'a> Database<'a> {
+    /// Creates a new Database instance wrapping the provided SQLite connection.
+    ///
+    /// # Arguments
+    ///
+    /// * `conn` - Reference to an open SQLite connection
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use rusqlite::Connection;
+    /// # use crate::backend::database::Database;
+    /// let conn = Connection::open_in_memory()?;
+    /// let db = Database::new(&conn);
+    /// ```
+    #[inline]
     pub fn new(conn: &'a Connection) -> Self {
         Self { connection: conn }
     }
 
+    /// Initializes the database schema and default data.
+    ///
+    /// Creates all required tables if they don't exist:
+    /// - `app_version`: Tracks application version
+    /// - `mangas`: Core manga information
+    /// - `chapters`: Chapter details and status
+    /// - `history_types`: Categories (ReadingHistory, PlanToRead)
+    /// - `manga_history_union`: Links manga to categories
+    ///
+    /// This method is idempotent - safe to call multiple times.
+    ///
+    /// # Errors
+    ///
+    /// Returns `rusqlite::Result<()>` on database errors.
     pub fn setup(&self) -> rusqlite::Result<()> {
         self.connection.execute(
             "CREATE TABLE if not exists app_version (
@@ -193,11 +324,38 @@ impl<'a> Database<'a> {
         Ok(())
     }
 
+    /// Gets a database connection, using in-memory for tests or file-based for production.
+    ///
+    /// # Returns
+    ///
+    /// - In test mode: Returns an in-memory SQLite connection
+    /// - In production: Returns a file-based connection to the app's history database
+    #[inline]
     pub fn get_connection() -> rusqlite::Result<Connection> {
         if cfg!(test) { Connection::open_in_memory() } else { Connection::open(AppDirectories::History.get_full_path()) }
     }
 
-    pub fn check_chapter_is_already_reading(&self, id: &str) -> rusqlite::Result<bool> {
+    /// Checks if a chapter has already been marked as read.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - Chapter ID to check
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(true)` if chapter exists and is marked as read
+    /// - `Ok(false)` if chapter doesn't exist or is not read
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # let db = setup_test_db();
+    /// if !db.check_chapter_is_already_reading("chapter_123")? {
+    ///     // Chapter not read yet, safe to mark as read
+    ///     db.save_history(reading_data)?;
+    /// }
+    /// ```
+    fn check_chapter_is_already_reading(&self, id: &str) -> rusqlite::Result<bool> {
         let exists = self.check_exists(id, Table::Chapters)?;
 
         if !exists {
@@ -349,7 +507,7 @@ impl<'a> Database<'a> {
     }
 
     /// Insert a manga in the reading history type or update the `last_read` field
-    fn update_or_insert_manga_most_recent_read(&self, manga_id: &str) -> rusqlite::Result<()> {
+    fn update_or_insert_manga_in_most_recent_reading_history(&self, manga_id: &str) -> rusqlite::Result<()> {
         if !self.manga_is_reading(manga_id)? {
             self.insert_manga_in_reading_history(manga_id)?;
             Ok(())
@@ -361,9 +519,35 @@ impl<'a> Database<'a> {
         }
     }
 
+    /// Marks a chapter as downloaded and read.
+    ///
+    /// This method handles the complete flow for downloaded chapters:
+    /// 1. Creates manga record if it doesn't exist
+    /// 2. Adds chapter to reading history
+    /// 3. Marks chapter as both downloaded and read
+    ///
+    /// Used when a user downloads a chapter for offline reading.
+    ///
+    /// # Arguments
+    ///
+    /// * `chapter` - Chapter download information
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use crate::backend::database::SetChapterDownloaded;
+    /// db.set_chapter_downloaded(SetChapterDownloaded {
+    ///     id: "chapter_123",
+    ///     title: "Chapter 1",
+    ///     manga_id: "manga_456",
+    ///     manga_title: "One Piece",
+    ///     img_url: Some("cover.jpg"),
+    ///     provider: MangaProviders::Mangadx,
+    /// })?;
+    /// ```
     pub fn set_chapter_downloaded(&self, chapter: SetChapterDownloaded<'_>) -> rusqlite::Result<()> {
         if self.check_exists(chapter.manga_id, Table::Mangas)? {
-            self.update_or_insert_manga_most_recent_read(chapter.manga_id)?;
+            self.update_or_insert_manga_in_most_recent_reading_history(chapter.manga_id)?;
 
             if self.check_exists(chapter.id, Table::Chapters)? {
                 self.connection
@@ -409,8 +593,36 @@ impl<'a> Database<'a> {
         }
     }
 
-    /// This function creates a manga in the database if it does not exists and saves it in the reading
-    /// history section
+    /// Records that a user has read a chapter, adding it to reading history.
+    ///
+    /// This is the main method for tracking reading progress. It:
+    /// 1. Creates manga and chapter records if they don't exist
+    /// 2. Adds manga to reading history (if not already there)
+    /// 3. Marks the specific chapter as read
+    /// 4. Updates the manga's last_read timestamp
+    ///
+    /// If the chapter is already marked as read, this method does nothing.
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - Reading history data including manga and chapter info
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use crate::backend::database::{MangaReadingHistorySave, ChapterToSaveHistory};
+    /// db.save_history(MangaReadingHistorySave {
+    ///     id: "manga_123",
+    ///     title: "Attack on Titan",
+    ///     img_url: Some("cover.jpg"),
+    ///     chapter: ChapterToSaveHistory {
+    ///         id: "chapter_456",
+    ///         title: "The Final Chapter",
+    ///         translated_language: "en",
+    ///     },
+    ///     provider: MangaProviders::Mangadx,
+    /// })?;
+    /// ```
     pub fn save_history(&self, data: MangaReadingHistorySave<'_>) -> rusqlite::Result<()> {
         if self.check_chapter_is_already_reading(data.chapter.id)? {
             return Ok(());
@@ -434,19 +646,33 @@ impl<'a> Database<'a> {
             number_page_bookmarked: None,
         })?;
 
-        if !self.manga_is_reading(data.id)? {
-            self.insert_manga_in_reading_history(data.id)?;
-        } else {
-            let now = Utc::now().naive_utc();
-            self.connection
-                .execute("UPDATE mangas SET last_read = ?1 WHERE id = ?2", params![now.to_string(), data.id])?;
-        }
+        self.update_or_insert_manga_in_most_recent_reading_history(data.id)?;
 
         self.connection
             .execute("UPDATE chapters SET is_read = true WHERE id = ?1", params![data.chapter.id])?;
         Ok(())
     }
 
+    /// Adds a manga to the "Plan to Read" list.
+    ///
+    /// This method allows users to bookmark manga they want to read later.
+    /// If the manga is already in the plan to read list, this method does nothing.
+    ///
+    /// # Arguments
+    ///
+    /// * `manga` - Manga information to add to plan to read
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use crate::backend::database::MangaPlanToReadSave;
+    /// db.save_plan_to_read(MangaPlanToReadSave {
+    ///     id: "manga_789",
+    ///     title: "Demon Slayer",
+    ///     img_url: Some("cover.jpg"),
+    ///     provider: MangaProviders::Mangadx,
+    /// })?;
+    /// ```
     pub fn save_plan_to_read(&self, manga: MangaPlanToReadSave<'_>) -> rusqlite::Result<()> {
         let history_type = self.get_history_type(MangaHistoryType::PlanToRead)?;
 
@@ -466,13 +692,34 @@ impl<'a> Database<'a> {
 
             self.connection
                 .execute("INSERT INTO manga_history_union VALUES (?1, ?2)", (manga.id, history_type))?;
-
-            return Ok(());
         }
         Ok(())
     }
 
-    // retrieve the `is_reading` and `is_downloaded` data for a chapter
+    /// Retrieves the read/download status of all chapters for a specific manga.
+    ///
+    /// Returns a list of all chapters associated with the manga, along with their
+    /// current read and download status. Useful for displaying chapter lists in the UI.
+    ///
+    /// # Arguments
+    ///
+    /// * `manga_id` - ID of the manga to get chapter status for
+    ///
+    /// # Returns
+    ///
+    /// Vector of `MangaReadingHistoryRetrieve` containing chapter IDs and their status.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// let chapters = db.get_chapters_history_status("manga_123")?;
+    /// for chapter in chapters {
+    ///     println!(
+    ///         "Chapter {}: read={}, downloaded={}",
+    ///         chapter.id, chapter.is_read, chapter.is_downloaded
+    ///     );
+    /// }
+    /// ```
     pub fn get_chapters_history_status(&self, manga_id: &str) -> rusqlite::Result<Vec<MangaReadingHistoryRetrieve>> {
         let mut chapter_ids: Vec<MangaReadingHistoryRetrieve> = vec![];
 
@@ -556,6 +803,46 @@ impl<'a> Database<'a> {
         })
     }
 
+    /// Retrieves manga from reading history or plan to read list with pagination and search.
+    ///
+    /// This is the main method for fetching manga collections for display in the UI.
+    /// Supports:
+    /// - Pagination for large collections
+    /// - Text search by manga title
+    /// - Provider filtering (only show manga from specific sources)
+    /// - Separate history types (ReadingHistory vs PlanToRead)
+    ///
+    /// Results are ordered by last_read timestamp (most recent first).
+    ///
+    /// # Arguments
+    ///
+    /// * `args` - Query parameters including page, search term, provider filter
+    ///
+    /// # Returns
+    ///
+    /// `MangaHistoryResponse` containing:
+    /// - `mangas`: List of manga for the requested page
+    /// - `page`: Current page number
+    /// - `total_items`: Total count of matching manga (for pagination)
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use crate::backend::database::{GetHistoryArgs, MangaHistoryType};
+    /// # use manga_tui::SearchTerm;
+    /// let history = db.get_history(GetHistoryArgs {
+    ///     hist_type: MangaHistoryType::ReadingHistory,
+    ///     page: 1,
+    ///     search: Some(SearchTerm::new("attack on titan")),
+    ///     items_per_page: 20,
+    ///     provider: MangaProviders::Mangadx,
+    /// })?;
+    ///
+    /// println!("Found {} manga", history.total_items);
+    /// for manga in history.mangas {
+    ///     println!("- {}", manga.title);
+    /// }
+    /// ```
     pub fn get_history(&self, args: GetHistoryArgs) -> rusqlite::Result<MangaHistoryResponse> {
         let items_per_page = args.items_per_page;
         let offset = (args.page - 1) * items_per_page;
@@ -608,6 +895,67 @@ impl<'a> Database<'a> {
             page: args.page,
         })
     }
+
+    /// Removes a specific manga from all history lists.
+    ///
+    /// This removes the manga from both reading history and plan to read lists,
+    /// but does not delete the manga or chapter records themselves.
+    ///
+    /// # Arguments
+    ///
+    /// * `manga_id` - ID of manga to remove from history
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// // Remove manga from user's history lists
+    /// db.remove_from_history("manga_123")?;
+    /// ```
+    pub fn remove_from_history(&self, manga_id: &str, hist_type: MangaHistoryType) -> rusqlite::Result<()> {
+        let hist_type_id = self.get_history_type(hist_type)?;
+
+        self.connection.execute(
+            "DELETE FROM manga_history_union WHERE manga_history_union.manga_id = ?1 AND manga_history_union.type_id = ?2",
+            params![manga_id, hist_type_id],
+        )?;
+
+        Ok(())
+    }
+
+    /// Removes all manga of a specific provider from a specific history type.
+    ///
+    /// This is a bulk operation to clear entire sections of a user's library.
+    /// For example, removing all MangaDx manga from reading history while
+    /// leaving plan to read and other providers untouched.
+    ///
+    /// # Arguments
+    ///
+    /// * `hist_type` - Which history list to clear (ReadingHistory or PlanToRead)
+    /// * `provider` - Which manga provider to remove (Mangadx, Weebcentral, etc.)
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// // Clear all MangaDx manga from reading history
+    /// db.remove_all_from_history(MangaHistoryType::ReadingHistory, MangaProviders::Mangadx)?;
+    /// ```
+    pub fn remove_all_from_history(&self, hist_type: MangaHistoryType, provider: MangaProviders) -> rusqlite::Result<()> {
+        let history_type_id = self.get_history_type(hist_type)?;
+
+        let get_ids_manga_to_delete_statement = r#"SELECT mangas.id from mangas 
+                     INNER JOIN manga_history_union ON mangas.id = manga_history_union.manga_id 
+                     WHERE manga_history_union.type_id = ?1 AND mangas.manga_provider = ?2
+            "#;
+
+        let delete_statement = format!(
+            "DELETE FROM manga_history_union WHERE manga_history_union.manga_id IN ({get_ids_manga_to_delete_statement}) AND manga_history_union.type_id = ?3"
+        );
+
+        self.connection
+            .execute(&delete_statement, params![history_type_id, provider.to_string(), history_type_id])?;
+
+        Ok(())
+    }
 }
 
 #[derive(Default, Debug, Clone)]
@@ -622,6 +970,11 @@ pub struct ChapterToInsert<'a> {
     pub number_page_bookmarked: Option<u32>,
 }
 
+/// Information needed to save a chapter bookmark.
+///
+/// Bookmarks allow users to save their exact reading position within a chapter,
+/// including the specific page number. Only one bookmark per manga is allowed -
+/// setting a new bookmark automatically removes any previous bookmark for that manga.
 #[derive(Default, Debug)]
 pub struct ChapterToBookmark<'a> {
     pub chapter_id: &'a str,
@@ -634,10 +987,31 @@ pub struct ChapterToBookmark<'a> {
     pub provider: MangaProviders,
 }
 
+/// Trait for types that can create chapter bookmarks.
+///
+/// Implementing this trait allows a type to save user bookmarks, which track
+/// the exact page where a user stopped reading within a chapter.
 pub trait Bookmark {
+    /// Creates or updates a bookmark for the specified chapter.
+    ///
+    /// If a bookmark already exists for this manga, it will be replaced.
+    /// Only one bookmark per manga is allowed at a time.
+    ///
+    /// # Arguments
+    ///
+    /// * `chapter_to_bookmark` - Complete bookmark information
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails.
     fn bookmark(&mut self, chapter_to_bookmark: ChapterToBookmark<'_>) -> Result<(), Box<dyn std::error::Error>>;
 }
 
+/// A retrieved bookmark containing the user's saved reading position.
+///
+/// This represents a bookmark that was previously saved and is now being
+/// retrieved from the database. Contains all the information needed to
+/// resume reading at the exact position where the user left off.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ChapterBookmarked {
     pub id: String,
@@ -647,17 +1021,122 @@ pub struct ChapterBookmarked {
     pub manga_id: String,
 }
 
+/// Trait for types that can retrieve saved bookmarks.
+///
+/// Implementing this trait allows a type to fetch previously saved bookmarks,
+/// enabling users to resume reading exactly where they left off.
 pub trait RetrieveBookmark {
+    /// Gets the current bookmark for a specific manga.
+    ///
+    /// Since only one bookmark per manga is allowed, this returns the single
+    /// active bookmark if one exists.
+    ///
+    /// # Arguments
+    ///
+    /// * `manga_id` - ID of the manga to get the bookmark for
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(Some(bookmark))` if a bookmark exists
+    /// - `Ok(None)` if no bookmark is set for this manga
+    /// - `Err(...)` if the database operation fails
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # let db = setup_test_db();
+    /// if let Some(bookmark) = db.get_bookmarked("manga_123")? {
+    ///     println!("Resume reading at page {}", bookmark.number_page_bookmarked.unwrap_or(1));
+    /// }
+    /// ```
     fn get_bookmarked(&self, manga_id: &str) -> Result<Option<ChapterBookmarked>, Box<dyn std::error::Error>>;
 }
 
 impl<'a> Bookmark for Database<'a> {
+    /// Creates or updates a bookmark for the specified chapter.
+    ///
+    /// This implementation handles the complete bookmark workflow:
+    /// 1. Creates manga record if it doesn't exist
+    /// 2. Creates chapter record if it doesn't exist
+    /// 3. Removes any existing bookmark for this manga (only one bookmark per manga allowed)
+    /// 4. Sets the new bookmark with the specified page number
+    ///
+    /// Bookmarks are used to save the exact page where a user stopped reading,
+    /// allowing them to resume exactly where they left off.
+    ///
+    /// # Arguments
+    ///
+    /// * `chapter_to_bookmark` - Complete bookmark information including manga, chapter, and page number
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any database operation fails (insert, update, etc.)
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use crate::backend::database::{Database, ChapterToBookmark};
+    /// # use crate::backend::manga_provider::{MangaProviders, Languages};
+    /// # let mut db = setup_test_db();
+    /// let bookmark_data = ChapterToBookmark {
+    ///     chapter_id: "chapter_123",
+    ///     manga_id: "manga_456",
+    ///     chapter_title: "Chapter 1",
+    ///     manga_title: "One Piece",
+    ///     manga_cover_url: Some("cover.jpg"),
+    ///     translated_language: Languages::English,
+    ///     page_number: Some(15), // User stopped at page 15
+    ///     provider: MangaProviders::Mangadx,
+    /// };
+    ///
+    /// db.bookmark(bookmark_data)?;
+    /// ```
     fn bookmark(&mut self, chapter_to_bookmark: ChapterToBookmark<'_>) -> Result<(), Box<dyn std::error::Error>> {
         Ok(self.bookmark_chapter(chapter_to_bookmark)?)
     }
 }
 
 impl<'a> RetrieveBookmark for Database<'a> {
+    /// Retrieves the current bookmark for a specific manga.
+    ///
+    /// This implementation queries the database to find the active bookmark for the given manga.
+    /// Since only one bookmark per manga is allowed, this returns the single bookmark if it exists.
+    ///
+    /// The bookmark contains all information needed to resume reading:
+    /// - Chapter ID and title
+    /// - Manga ID and title
+    /// - Translated language
+    /// - Exact page number where reading stopped
+    ///
+    /// # Arguments
+    ///
+    /// * `manga_id` - ID of the manga to get the bookmark for
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(Some(bookmark))` if a bookmark exists for this manga
+    /// - `Ok(None)` if no bookmark is set for this manga
+    /// - `Err(...)` if the database query fails
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use crate::backend::database::Database;
+    /// # let db = setup_test_db();
+    /// match db.get_bookmarked("manga_456")? {
+    ///     Some(bookmark) => {
+    ///         println!(
+    ///             "Resume reading '{}' at chapter '{}', page {}",
+    ///             bookmark.manga_title,
+    ///             bookmark.id,
+    ///             bookmark.number_page_bookmarked.unwrap_or(1)
+    ///         );
+    ///     },
+    ///     None => {
+    ///         println!("No bookmark found for this manga");
+    ///     },
+    /// }
+    /// ```
     fn get_bookmarked(&self, manga_id: &str) -> Result<Option<ChapterBookmarked>, Box<dyn std::error::Error>> {
         Ok(self.get_chapter_bookmarked(manga_id)?)
     }
@@ -665,6 +1144,8 @@ impl<'a> RetrieveBookmark for Database<'a> {
 
 #[cfg(test)]
 mod test {
+
+    use std::error::Error;
 
     use pretty_assertions::assert_eq;
     use rusqlite::Result;
@@ -1661,6 +2142,274 @@ mod test {
         let result = database.get_bookmarked(&manga_id).expect("should be ok").expect("should not be none");
 
         assert_eq!(expected, result);
+
+        Ok(())
+    }
+
+    #[test]
+    fn it_deletes_a_manga_from_reading_history() -> Result<(), Box<dyn Error>> {
+        let connection = Database::get_connection()?;
+        let database = Database::new(&connection);
+        database.setup()?;
+
+        let manga_id_mangadex = Uuid::new_v4().to_string();
+        let manga_id_mangadex2 = Uuid::new_v4().to_string();
+
+        database.create_manga_if_not_exists(MangaInsert {
+            id: &manga_id_mangadex,
+            title: "of mangadex 1",
+            img_url: None,
+            provider: MangaProviders::Mangadex,
+        })?;
+
+        database.insert_manga_in_reading_history(&manga_id_mangadex)?;
+
+        database.create_manga_if_not_exists(MangaInsert {
+            id: &manga_id_mangadex2,
+            title: "of mangadex 2",
+            img_url: None,
+            provider: MangaProviders::Mangadex,
+        })?;
+
+        database.insert_manga_in_reading_history(&manga_id_mangadex2)?;
+
+        let expected = database.get_history(GetHistoryArgs {
+            hist_type: MangaHistoryType::ReadingHistory,
+            page: 1,
+            search: None,
+            items_per_page: 10,
+            provider: MangaProviders::Mangadex,
+        })?;
+
+        /* at this point 2 mangas must be stored in reading history */
+        assert_eq!(expected.mangas.len(), 2);
+
+        database.remove_from_history(&manga_id_mangadex, MangaHistoryType::ReadingHistory)?;
+
+        let expected = database.get_history(GetHistoryArgs {
+            hist_type: MangaHistoryType::ReadingHistory,
+            page: 1,
+            search: None,
+            items_per_page: 10,
+            provider: MangaProviders::Mangadex,
+        })?;
+
+        /* now only one should exist */
+        assert_eq!(expected.mangas.len(), 1);
+
+        Ok(())
+    }
+
+    #[test]
+    fn it_deletes_a_manga_from_plan_to_read() -> Result<(), Box<dyn Error>> {
+        let connection = Database::get_connection()?;
+        let database = Database::new(&connection);
+        database.setup()?;
+
+        let manga_id_mangadex = Uuid::new_v4().to_string();
+        let manga_id_mangadex2 = Uuid::new_v4().to_string();
+
+        database.save_plan_to_read(MangaPlanToReadSave {
+            id: &manga_id_mangadex,
+            title: "of mangadex 1",
+            img_url: None,
+            provider: MangaProviders::Mangadex,
+        })?;
+
+        database.insert_manga_in_reading_history(&manga_id_mangadex)?;
+
+        database.save_plan_to_read(MangaPlanToReadSave {
+            id: &manga_id_mangadex2,
+            title: "of mangadex 2",
+            img_url: None,
+            provider: MangaProviders::Mangadex,
+        })?;
+
+        database.insert_manga_in_reading_history(&manga_id_mangadex2)?;
+
+        let expected = database.get_history(GetHistoryArgs {
+            hist_type: MangaHistoryType::PlanToRead,
+            page: 1,
+            search: None,
+            items_per_page: 10,
+            provider: MangaProviders::Mangadex,
+        })?;
+
+        /* at this point 2 mangas must be stored in reading history */
+        assert_eq!(expected.mangas.len(), 2);
+
+        database.remove_from_history(&manga_id_mangadex, MangaHistoryType::PlanToRead)?;
+
+        let expected = database.get_history(GetHistoryArgs {
+            hist_type: MangaHistoryType::PlanToRead,
+            page: 1,
+            search: None,
+            items_per_page: 10,
+            provider: MangaProviders::Mangadex,
+        })?;
+
+        /* now only one should exist */
+        assert_eq!(expected.mangas.len(), 1);
+
+        let expected = database.get_history(GetHistoryArgs {
+            hist_type: MangaHistoryType::ReadingHistory,
+            page: 1,
+            search: None,
+            items_per_page: 10,
+            provider: MangaProviders::Mangadex,
+        })?;
+
+        /* the reading history should be ketp the same */
+        assert_eq!(expected.mangas.len(), 2);
+
+        Ok(())
+    }
+
+    #[test]
+    fn it_delets_all_mangas_from_history() -> Result<(), Box<dyn Error>> {
+        let connection = Database::get_connection()?;
+        let database = Database::new(&connection);
+        database.setup()?;
+
+        let manga_id_mangadex = Uuid::new_v4().to_string();
+        let manga_id_mangadex2 = Uuid::new_v4().to_string();
+        let manga_id_mangadex3 = Uuid::new_v4().to_string();
+
+        let manga_id_plan_to_read = Uuid::new_v4().to_string();
+        let manga_id_plan_to_read2 = Uuid::new_v4().to_string();
+
+        let manga_id_weeb_central = Uuid::new_v4().to_string();
+        let manga_id_weeb_centra2 = Uuid::new_v4().to_string();
+
+        database.save_plan_to_read(MangaPlanToReadSave {
+            id: &manga_id_mangadex,
+            title: "of mangadex 1",
+            img_url: None,
+            provider: MangaProviders::Mangadex,
+        })?;
+
+        database.insert_manga_in_reading_history(&manga_id_mangadex)?;
+
+        database.save_plan_to_read(MangaPlanToReadSave {
+            id: &manga_id_mangadex2,
+            title: "of mangadex 2",
+            img_url: None,
+            provider: MangaProviders::Mangadex,
+        })?;
+
+        database.insert_manga_in_reading_history(&manga_id_mangadex2)?;
+
+        database.create_manga_if_not_exists(MangaInsert {
+            id: &manga_id_mangadex3,
+            title: "of mangadex 3",
+            img_url: None,
+            provider: MangaProviders::Mangadex,
+        })?;
+
+        database.insert_manga_in_reading_history(&manga_id_mangadex3)?;
+
+        database.create_manga_if_not_exists(MangaInsert {
+            id: &manga_id_weeb_central,
+            title: "of weebcentral",
+            img_url: None,
+            provider: MangaProviders::Weebcentral,
+        })?;
+
+        database.insert_manga_in_reading_history(&manga_id_weeb_central)?;
+
+        database.create_manga_if_not_exists(MangaInsert {
+            id: &manga_id_weeb_centra2,
+            title: "of weebcentral #2",
+            img_url: None,
+            provider: MangaProviders::Weebcentral,
+        })?;
+
+        database.insert_manga_in_reading_history(&manga_id_weeb_centra2)?;
+
+        let expected = database.get_history(GetHistoryArgs {
+            hist_type: MangaHistoryType::ReadingHistory,
+            page: 1,
+            search: None,
+            items_per_page: 10,
+            provider: MangaProviders::Mangadex,
+        })?;
+
+        /* at this point 3 mangas must be stored in reading history */
+        assert_eq!(expected.mangas.len(), 3);
+
+        database.create_manga_if_not_exists(MangaInsert {
+            id: &manga_id_plan_to_read,
+            title: "of mangadex 1",
+            img_url: None,
+            provider: MangaProviders::Mangadex,
+        })?;
+
+        database.save_plan_to_read(MangaPlanToReadSave {
+            id: &manga_id_plan_to_read,
+            title: "of mangadex 1 plan to read",
+            img_url: None,
+            provider: MangaProviders::Mangadex,
+        })?;
+
+        database.create_manga_if_not_exists(MangaInsert {
+            id: &manga_id_plan_to_read2,
+            title: "of mangadex 1",
+            img_url: None,
+            provider: MangaProviders::Mangadex,
+        })?;
+
+        database.save_plan_to_read(MangaPlanToReadSave {
+            id: &manga_id_plan_to_read2,
+            title: "of mangadex 2 plan to read",
+            img_url: None,
+            provider: MangaProviders::Mangadex,
+        })?;
+
+        let expected = database.get_history(GetHistoryArgs {
+            hist_type: MangaHistoryType::PlanToRead,
+            page: 1,
+            search: None,
+            items_per_page: 10,
+            provider: MangaProviders::Mangadex,
+        })?;
+
+        /* at this point 4 mangas in plant to read should exist */
+        assert_eq!(expected.mangas.len(), 4);
+
+        database.remove_all_from_history(MangaHistoryType::ReadingHistory, MangaProviders::Mangadex)?;
+
+        let expected = database.get_history(GetHistoryArgs {
+            hist_type: MangaHistoryType::ReadingHistory,
+            page: 1,
+            search: None,
+            items_per_page: 10,
+            provider: MangaProviders::Mangadex,
+        })?;
+
+        /* now none from mangadex should exist */
+        assert_eq!(expected.mangas.len(), 0);
+
+        let expected = database.get_history(GetHistoryArgs {
+            hist_type: MangaHistoryType::ReadingHistory,
+            page: 1,
+            search: None,
+            items_per_page: 10,
+            provider: MangaProviders::Weebcentral,
+        })?;
+
+        /* weebcentral reading history should remain untouched */
+        assert_eq!(expected.mangas.len(), 2);
+
+        let expected = database.get_history(GetHistoryArgs {
+            hist_type: MangaHistoryType::PlanToRead,
+            page: 1,
+            search: None,
+            items_per_page: 10,
+            provider: MangaProviders::Mangadex,
+        })?;
+
+        /* the plan to read history should remain untouched */
+        assert_eq!(expected.mangas.len(), 4);
 
         Ok(())
     }

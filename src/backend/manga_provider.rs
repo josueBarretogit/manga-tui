@@ -8,7 +8,7 @@ use bytes::Bytes;
 use chrono::NaiveDate;
 use image::{DynamicImage, GenericImageView, ImageReader};
 use manga_tui::{SearchTerm, SortedVec};
-use mangadex::filter::FilterListItem;
+use mangadex::filters::filter_provider::FilterListItem;
 use ratatui::style::{Color, Style, Stylize};
 use ratatui::text::Span;
 use reqwest::Url;
@@ -21,6 +21,7 @@ use crate::config::ImageQuality;
 use crate::global::PREFERRED_LANGUAGE;
 use crate::view::widgets::StatefulWidgetFrame;
 
+pub mod filters;
 pub mod mangadex;
 pub mod weebcentral;
 
@@ -201,6 +202,11 @@ impl Languages {
             Self::Portuguese => "🇵🇹",
             Self::Unkown => unreachable!(),
         }
+    }
+
+    /// Returns an iterator which discards the 'Unknown' variant
+    pub fn iterate() -> std::iter::Filter<LanguagesIter, impl FnMut(&Languages) -> bool> {
+        Self::iter().filter(|lan| *lan != Self::Unkown)
     }
 
     pub fn get_preferred_lang() -> &'static Languages {

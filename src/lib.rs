@@ -40,11 +40,10 @@ impl SearchTerm {
 }
 
 /// Remove special characteres that may cause errors when creating directories or files
-fn remove_conflicting_characteres<T: AsRef<Path>>(title: T) -> PathBuf {
+fn remove_conflicting_characteres<T: AsRef<str>>(title: T) -> PathBuf {
     let invalid_chars = ['\\', '/', ':', '*', '?', '"', '<', '>', '|'];
 
-    let title: &Path = title.as_ref();
-    let title = title.to_str().unwrap().trim();
+    let title: &str = title.as_ref().trim();
 
     let sanitized_title: String = title.chars().map(|c| if invalid_chars.contains(&c) { '_' } else { c }).collect();
 
@@ -63,7 +62,7 @@ impl Display for SanitizedFilename {
 }
 
 impl SanitizedFilename {
-    pub fn new<T: AsRef<Path>>(name: T) -> Self {
+    pub fn new<T: AsRef<str>>(name: T) -> Self {
         Self(remove_conflicting_characteres(name))
     }
 
@@ -72,7 +71,7 @@ impl SanitizedFilename {
     }
 }
 
-impl<T: AsRef<Path>> From<T> for SanitizedFilename {
+impl<T: AsRef<str>> From<T> for SanitizedFilename {
     fn from(value: T) -> Self {
         Self::new(value)
     }
@@ -161,7 +160,7 @@ mod test {
 
         assert_eq!(Path::new("some name which contains _"), file_name.as_path());
 
-        let file_name = SanitizedFilename::new("some / name / which contains ");
+        let file_name = SanitizedFilename::new("  some / name / which contains ");
 
         assert_eq!(Path::new("some _ name _ which contains"), file_name.as_path())
     }

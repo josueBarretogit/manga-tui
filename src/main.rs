@@ -11,8 +11,8 @@ use std::time::Duration;
 use backend::cache::Cacher;
 use backend::cache::in_memory::InMemoryCache;
 use backend::manga_provider::MangaProviders;
-use backend::manga_provider::mangadex::filter::MangadexFilterProvider;
 use backend::manga_provider::mangadex::filter_widget::MangadexFilterWidget;
+use backend::manga_provider::mangadex::filters::filter_provider::MangadexFilterProvider;
 use backend::manga_provider::mangadex::{API_URL_BASE, COVER_IMG_URL_BASE, MangadexClient};
 use backend::manga_provider::weebcentral::filter_state::{WeebcentralFilterState, WeebcentralFiltersProvider};
 use backend::manga_provider::weebcentral::filter_widget::WeebcentralFilterWidget;
@@ -34,6 +34,7 @@ use self::backend::migration::update_database_with_migrations;
 use self::backend::tui::run_app;
 use self::cli::CliArgs;
 use self::config::MangaTuiConfig;
+use crate::backend::manga_provider::mangadex::get_cached_filters;
 
 mod backend;
 mod cli;
@@ -149,8 +150,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 },
             }
 
-            run_app(ratatui::init(), mangadex_client, anilist_client, MangadexFilterProvider::new(), MangadexFilterWidget::new())
-                .await?;
+            run_app(
+                ratatui::init(),
+                mangadex_client,
+                anilist_client,
+                MangadexFilterProvider::from(get_cached_filters()),
+                MangadexFilterWidget::new(),
+            )
+            .await?;
         },
         MangaProviders::Weebcentral => {
             logger.inform("Using Weeb central as manga provider");
@@ -160,7 +167,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 WeebcentralProvider::new(WEEBCENTRAL_BASE_URL.parse().unwrap(), cache_provider),
                 anilist_client,
                 WeebcentralFiltersProvider::new(WeebcentralFilterState::default()),
-                WeebcentralFilterWidget {},
+                WeebcentralFilterWidget::new(),
             )
             .await?;
         },

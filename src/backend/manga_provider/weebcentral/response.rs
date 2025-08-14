@@ -1,22 +1,16 @@
-use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Display, Write};
-use std::iter;
-use std::num::ParseIntError;
 use std::path::Path;
 
 use chrono::NaiveDate;
-use image::GenericImageView;
-use regex::Regex;
 use scraper::selectable::Selectable;
-use scraper::{ElementRef, Selector, html};
-use serde::{Deserialize, Serialize};
+use scraper::{ElementRef, html};
 
 use crate::backend::html_parser::scraper::AsSelector;
 use crate::backend::html_parser::{HtmlElement, ParseHtml};
 use crate::backend::manga_provider::{
-    Author, Chapter, ChapterPageUrl, ChapterReader, Genres, GetChaptersResponse, GetMangasResponse, Languages, ListOfChapters,
-    Manga, MangaStatus, PopularManga, Rating, RecentlyAddedManga, SearchManga, SortedChapters, SortedVolumes, Volumes,
+    Author, ChapterPageUrl, ChapterReader, Genres, GetMangasResponse, Languages, ListOfChapters, Manga, MangaStatus, PopularManga,
+    Rating, RecentlyAddedManga, SearchManga, SortedChapters, SortedVolumes, Volumes,
 };
 
 #[derive(Debug)]
@@ -798,10 +792,7 @@ impl From<SearchPageMangas> for GetMangasResponse {
 mod tests {
     use std::error::Error;
 
-    use fake::rand::seq::IndexedRandom;
     use pretty_assertions::assert_eq;
-    use reqwest::Url;
-    use scraper::Html;
 
     use super::*;
     use crate::backend::html_parser::{HtmlElement, ParseHtml};

@@ -1,15 +1,18 @@
+use std::fmt::Display;
+
 use chrono::NaiveDate;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Margin, Rect};
 use ratatui::style::{Color, Style, Stylize};
 use ratatui::text::Line;
-use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph, StatefulWidget, Widget, Wrap};
+use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph, StatefulWidget, Widget, WidgetRef, Wrap};
 use tui_widget_list::PreRender;
 
 use crate::backend::database::MangaHistoryResponse;
-use crate::backend::manga_provider::{Languages, LatestChapter};
+use crate::backend::manga_provider::{Languages, LatestChapter, MangaProviders};
 use crate::global::CURRENT_LIST_ITEM_STYLE;
 use crate::utils::display_dates_since_publication;
+use crate::view::widgets::ModalBuilder;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum FeedTabs {
@@ -17,7 +20,17 @@ pub enum FeedTabs {
     PlantToRead,
 }
 
+impl Display for FeedTabs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::History => write!(f, "Reading history"),
+            Self::PlantToRead => write!(f, "Plan to Read"),
+        }
+    }
+}
+
 impl FeedTabs {
+    #[inline]
     pub fn cycle(self) -> Self {
         match self {
             Self::History => Self::PlantToRead,
@@ -123,25 +136,27 @@ pub struct HistoryWidget {
 }
 
 impl HistoryWidget {
+    #[inline]
     pub fn select_next(&mut self) {
         self.state.next();
     }
 
+    #[inline]
     pub fn select_previous(&mut self) {
         self.state.previous();
     }
 
+    #[inline]
     pub fn get_current_manga_selected(&self) -> Option<&MangasRead> {
-        match self.state.selected {
-            Some(index) => self.mangas.get(index),
-            None => None,
-        }
+        self.state.selected.and_then(|index| self.mangas.get(index))
     }
 
+    #[inline]
     pub fn next_page(&mut self) {
         self.page += 1
     }
 
+    #[inline]
     pub fn previous_page(&mut self) {
         self.page -= 1;
     }
@@ -180,7 +195,7 @@ impl HistoryWidget {
         }
     }
 
-    fn render_pagination_data(&mut self, area: Rect, buf: &mut Buffer) {
+    fn render_pagination_data_and_instructions(&mut self, area: Rect, buf: &mut Buffer) {
         let amount_pages = self.total_results as f64 / 5_f64;
         Paragraph::new(Line::from(vec![
             "Total results ".into(),
@@ -190,6 +205,10 @@ impl HistoryWidget {
             " <w> ".bold().fg(Color::Yellow),
             " Previous page: ".into(),
             " <b> ".bold().fg(Color::Yellow),
+            " Delete current manga: ".into(),
+            " <d> ".bold().fg(Color::Red),
+            " Delete all history: ".into(),
+            " <D> ".bold().fg(Color::Red),
         ]))
         .render(area, buf);
     }
@@ -202,8 +221,76 @@ impl StatefulWidget for HistoryWidget {
         let layout = Layout::vertical([Constraint::Percentage(10), Constraint::Percentage(90)]);
         let [total_results_area, list_area] = layout.areas(area);
 
-        self.render_pagination_data(total_results_area, buf);
+        self.render_pagination_data_and_instructions(total_results_area, buf);
         let list = tui_widget_list::List::new(self.mangas);
         StatefulWidget::render(list, list_area, buf, state);
+    }
+}
+
+#[derive(Debug)]
+struct AskConfirmationDeleteAllModalBody {
+    manga_provider: MangaProviders,
+    tab: FeedTabs,
+}
+
+impl WidgetRef for AskConfirmationDeleteAllModalBody {
+    fn render_ref(&self, area: Rect, buf: &mut Buffer) {
+        Block::bordered().render(area, buf);
+
+        let inner = area.inner(Margin {
+            horizontal: 2,
+            vertical: 2,
+        });
+
+        let [warning_area, options_area] = Layout::vertical([Constraint::Percentage(20), Constraint::Percentage(80)]).areas(inner);
+
+        let warning = format!(
+            "Are you sure you want to delete ALL mangas from the manga provider: {} in the section {}?",
+            self.manga_provider, self.tab
+        );
+
+        Paragraph::new(warning).wrap(Wrap { trim: true }).render(warning_area, buf);
+
+        let as_list = List::new(Line::from(vec![
+            "Your reading history and download status will still be kept but not from this `Feed` page".into(),
+            "Yes: <w>".bold().fg(Color::Red),
+            "No: <q>".bold().fg(Color::Green),
+        ]));
+
+        Widget::render(as_list, options_area, buf);
+    }
+}
+
+#[derive(Debug)]
+pub struct AskConfirmationDeleteAllModal {
+    manga_provider: MangaProviders,
+    tab: FeedTabs,
+}
+
+impl AskConfirmationDeleteAllModal {
+    pub fn new(tab: FeedTabs, provider: MangaProviders) -> Self {
+        Self {
+            manga_provider: provider,
+            tab,
+        }
+    }
+}
+
+impl Widget for AskConfirmationDeleteAllModal {
+    fn render(self, area: Rect, buf: &mut Buffer)
+    where
+        Self: Sized,
+    {
+        let modal = ModalBuilder::new(AskConfirmationDeleteAllModalBody {
+            manga_provider: self.manga_provider,
+            tab: self.tab,
+        })
+        .with_dimensions(super::ModalDimensions {
+            width: 70,
+            height: 60,
+        })
+        .build();
+
+        modal.render(area, buf);
     }
 }

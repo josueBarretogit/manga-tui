@@ -1,9 +1,5 @@
-use std::error::Error;
-use std::string;
-
 use clap::crate_name;
 use keyring::Entry;
-use strum::Display;
 
 use super::SecretStorage;
 

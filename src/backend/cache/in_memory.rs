@@ -139,13 +139,12 @@ impl Cacher for InMemoryCache {
 #[cfg(test)]
 mod tests {
     use std::error::Error;
-    use std::thread::sleep;
     use std::time::{Duration, Instant};
 
     use pretty_assertions::assert_eq;
 
     use super::*;
-    use crate::backend::cache::{self, Entry, InsertEntry};
+    use crate::backend::cache::{Entry, InsertEntry};
 
     #[test]
     fn it_saves_and_retrieves_data() -> Result<(), Box<dyn Error>> {

@@ -4,13 +4,11 @@
 //! config file creation, updating, and reading. It supports default values,
 //! table parameters, and ensures the config file is always up-to-date with
 //! the latest parameters.
-
 use std::error::Error;
 use std::fmt::Write as FmtWrite;
 use std::fs::{File, OpenOptions, create_dir_all};
-use std::io::{Cursor, Read, Seek, Write};
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 use std::sync::LazyLock;
 
 use manga_tui::exists;
@@ -19,10 +17,8 @@ use serde::{Deserialize, Serialize};
 use strum::{Display, EnumIter};
 use toml::Table;
 
-use crate::backend::AppDirectories;
 use crate::backend::manga_provider::MangaProviders;
 use crate::cli::Credentials;
-use crate::logger::{DefaultLogger, ILogger};
 
 static CONFIG_FILE_NAME: &str = "config.toml";
 
@@ -662,11 +658,11 @@ pub fn read_config_file() -> Result<MangaTuiConfig, Box<dyn Error>> {
 #[cfg(test)]
 mod tests {
 
-    use std::fmt::{Debug, Write as FmtWrite};
     use std::fs;
-    use std::io::{Cursor, Write};
+    use std::io::Cursor;
+    use std::str::FromStr;
 
-    use pretty_assertions::{assert_eq, assert_str_eq};
+    use pretty_assertions::assert_eq;
 
     use super::*;
 

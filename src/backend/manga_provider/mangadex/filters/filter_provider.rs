@@ -1,25 +1,24 @@
-use std::fmt::{Debug, Write};
+use std::fmt::Debug;
 use std::marker::PhantomData;
 
 use crossterm::event::{KeyCode, KeyEvent};
 use manga_tui::SearchTerm;
+use ratatui::style::Stylize;
+use ratatui::text::Span;
 use ratatui::widgets::*;
-use strum::{Display, EnumIter, IntoEnumIterator};
+use strum::{Display, IntoEnumIterator};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tui_input::Input;
 use tui_input::backend::crossterm::EventHandler;
 
-use super::{API_URL_BASE, COVER_IMG_URL_BASE};
+use super::super::{API_URL_BASE, COVER_IMG_URL_BASE};
 use crate::backend::cache::in_memory::InMemoryCache;
 use crate::backend::manga_provider::mangadex::MangadexClient;
 use crate::backend::manga_provider::mangadex::api_responses::authors::AuthorsResponse;
 use crate::backend::manga_provider::mangadex::api_responses::tags::TagsResponse;
-use crate::backend::manga_provider::{Artist, Author, EventHandler as FiltersEventHandler, FiltersHandler, Languages};
+use crate::backend::manga_provider::mangadex::filters::api_parameter::*;
+use crate::backend::manga_provider::{EventHandler as FiltersEventHandler, FiltersHandler, Languages};
 use crate::backend::tui::Events;
-
-pub trait IntoParam: Debug {
-    fn into_param(self) -> String;
-}
 
 #[derive(Debug, PartialEq)]
 pub enum FilterEvents {
@@ -56,7 +55,7 @@ pub const FILTERS: [MangaFilters; 8] = [
     MangaFilters::Artists,
 ];
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct FilterListItem {
     pub is_selected: bool,
     pub name: String,
@@ -68,25 +67,59 @@ impl FilterListItem {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct ContentRatingState;
-#[derive(Debug)]
+
+#[derive(Debug, PartialEq, Eq)]
 pub struct PublicationStatusState;
-#[derive(Debug)]
+
+#[derive(Debug, PartialEq, Eq)]
 pub struct SortByState;
-#[derive(Debug)]
+
+#[derive(Debug, PartialEq, Eq)]
 pub struct MagazineDemographicState;
-#[derive(Debug)]
+
+#[derive(Debug, PartialEq, Eq)]
 pub struct LanguageState;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct FilterList<T> {
     pub items: Vec<FilterListItem>,
     pub state: ListState,
     _state: PhantomData<T>,
 }
 
+struct FilterListIter<'a> {
+    items: &'a [FilterListItem],
+    index: usize,
+}
+
+impl<'a> FilterListIter<'a> {
+    fn new<T>(filter_list: &'a FilterList<T>) -> Self {
+        Self {
+            items: &filter_list.items,
+            index: 0,
+        }
+    }
+}
+
+impl<'a> Iterator for FilterListIter<'a> {
+    type Item = &'a FilterListItem;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let next = self.items.get(self.index);
+
+        self.index += 1;
+
+        next
+    }
+}
+
 impl<T> FilterList<T> {
+    fn iter(&self) -> FilterListIter<'_> {
+        FilterListIter::new(self)
+    }
+
     pub fn toggle(&mut self) {
         if let Some(index) = self.state.selected() {
             if let Some(content_rating) = self.items.get_mut(index) {
@@ -119,24 +152,27 @@ impl<T> FilterList<T> {
 impl Default for FilterList<ContentRatingState> {
     fn default() -> Self {
         Self {
-            items: vec![
-                FilterListItem {
-                    is_selected: true,
-                    name: ContentRating::Safe.to_string(),
-                },
-                FilterListItem {
-                    is_selected: false,
-                    name: ContentRating::Suggestive.to_string(),
-                },
-                FilterListItem {
-                    is_selected: false,
-                    name: ContentRating::Erotic.to_string(),
-                },
-                FilterListItem {
-                    is_selected: false,
-                    name: ContentRating::Pornographic.to_string(),
-                },
-            ],
+            items: ContentRating::iter()
+                .map(|rating| FilterListItem {
+                    is_selected: rating == ContentRating::default(),
+                    name: rating.to_string(),
+                })
+                .collect(),
+            state: ListState::default(),
+            _state: PhantomData::<ContentRatingState>,
+        }
+    }
+}
+
+impl FilterList<ContentRatingState> {
+    fn from_content_ratings(content_ratings: &[ContentRating]) -> Self {
+        Self {
+            items: ContentRating::iter()
+                .map(|rating| FilterListItem {
+                    is_selected: content_ratings.contains(&rating),
+                    name: rating.to_string(),
+                })
+                .collect(),
             state: ListState::default(),
             _state: PhantomData::<ContentRatingState>,
         }
@@ -147,6 +183,21 @@ impl Default for FilterList<SortByState> {
     fn default() -> Self {
         let sort_by_items = SortBy::iter().map(|sort_by_elem| FilterListItem {
             is_selected: sort_by_elem == SortBy::default(),
+            name: sort_by_elem.to_string(),
+        });
+
+        Self {
+            items: sort_by_items.collect(),
+            state: ListState::default(),
+            _state: PhantomData::<SortByState>,
+        }
+    }
+}
+
+impl FilterList<SortByState> {
+    fn from_sort_by(cached_sort_by: &SortBy) -> Self {
+        let sort_by_items = SortBy::iter().map(|sort_by_elem| FilterListItem {
+            is_selected: sort_by_elem == *cached_sort_by,
             name: sort_by_elem.to_string(),
         });
 
@@ -172,10 +223,38 @@ impl Default for FilterList<MagazineDemographicState> {
     }
 }
 
+impl FilterList<MagazineDemographicState> {
+    fn from_magazine_demographic(magazine_demographic: &[MagazineDemographic]) -> Self {
+        let items = MagazineDemographic::iter().map(|mag| FilterListItem {
+            name: mag.to_string(),
+            is_selected: magazine_demographic.contains(&mag),
+        });
+        Self {
+            items: items.collect(),
+            state: ListState::default(),
+            _state: PhantomData,
+        }
+    }
+}
+
 impl Default for FilterList<PublicationStatusState> {
     fn default() -> Self {
         let items = PublicationStatus::iter().map(|status| FilterListItem {
             is_selected: false,
+            name: status.to_string(),
+        });
+        Self {
+            items: items.collect(),
+            state: ListState::default(),
+            _state: PhantomData,
+        }
+    }
+}
+
+impl FilterList<PublicationStatusState> {
+    fn from_publication_status(publication_statuses: &[PublicationStatus]) -> Self {
+        let items = PublicationStatus::iter().map(|status| FilterListItem {
+            is_selected: publication_statuses.contains(&status),
             name: status.to_string(),
         });
         Self {
@@ -205,6 +284,21 @@ impl Default for FilterList<LanguageState> {
         let items = Languages::iter().filter(|lang| *lang != Languages::Unkown).map(|lang| FilterListItem {
             name: format!("{} {}", lang.as_emoji(), lang.as_human_readable()),
             is_selected: lang == *Languages::get_preferred_lang(),
+        });
+
+        Self {
+            items: items.collect(),
+            state: ListState::default(),
+            _state: PhantomData,
+        }
+    }
+}
+
+impl FilterList<LanguageState> {
+    fn from_languages(from_languages: &[Languages]) -> Self {
+        let items = Languages::iterate().map(|lang| FilterListItem {
+            name: format!("{} {}", lang.as_emoji(), lang.as_human_readable()),
+            is_selected: from_languages.contains(&lang),
         });
 
         Self {
@@ -245,6 +339,56 @@ pub trait SendEventOnSuccess {
 impl SendEventOnSuccess for ArtistState {
     fn send(data: Option<AuthorsResponse>) -> FilterEvents {
         FilterEvents::LoadArtists(data)
+    }
+}
+
+impl FilterListDynamic<AuthorState> {
+    fn from_authors(authors: &User<AuthorFilterState>) -> Self {
+        Self {
+            items: if authors.is_empty() {
+                None
+            } else {
+                Some(
+                    authors
+                        .iter()
+                        .map(|author| ListItemId {
+                            is_selected: true,
+                            id: author.id.to_string(),
+                            name: author.name.to_string(),
+                        })
+                        .collect(),
+                )
+            },
+            state: ListState::default(),
+            search_bar: Input::default(),
+            _is_found: true,
+            _state: PhantomData,
+        }
+    }
+}
+
+impl FilterListDynamic<ArtistState> {
+    fn from_artist(artists: &User<ArtistFilterState>) -> Self {
+        Self {
+            items: if artists.is_empty() {
+                None
+            } else {
+                Some(
+                    artists
+                        .iter()
+                        .map(|artist| ListItemId {
+                            is_selected: true,
+                            id: artist.id.to_string(),
+                            name: artist.name.to_string(),
+                        })
+                        .collect(),
+                )
+            },
+            state: ListState::default(),
+            search_bar: Input::default(),
+            _is_found: true,
+            _state: PhantomData,
+        }
     }
 }
 
@@ -326,6 +470,15 @@ pub enum TagListItemState {
     NotSelected,
 }
 
+impl From<TagSelection> for TagListItemState {
+    fn from(value: TagSelection) -> Self {
+        match value {
+            TagSelection::Included => Self::Included,
+            TagSelection::Excluded => Self::Excluded,
+        }
+    }
+}
+
 #[derive(Default, Clone, Debug)]
 pub struct TagListItem {
     pub id: String,
@@ -342,6 +495,14 @@ impl TagListItem {
             TagListItemState::Included => {
                 self.state = TagListItemState::NotSelected;
             },
+        }
+    }
+
+    pub fn set_filter_tags_style(&self) -> Span<'_> {
+        match self.state {
+            TagListItemState::Included => format!(" {} ", self.name).black().on_green(),
+            TagListItemState::Excluded => format!(" {} ", self.name).black().on_red(),
+            TagListItemState::NotSelected => Span::from(self.name.clone()),
         }
     }
 
@@ -364,15 +525,49 @@ pub struct TagsState {
     pub filter_input: Input,
 }
 
-impl TagsState {
-    pub fn num_filters_active(&self) -> usize {
-        match self.tags.as_ref() {
-            Some(tags) => tags
-                .iter()
-                .filter(|tag| tag.state == TagListItemState::Included || tag.state == TagListItemState::Excluded)
-                .count(),
-            None => 0,
+pub struct TagsStateIter<'a> {
+    tags: Option<&'a [TagListItem]>,
+    current: usize,
+}
+
+impl<'a> TagsStateIter<'a> {
+    pub fn new(tags: Option<&'a [TagListItem]>) -> Self {
+        Self { tags, current: 0 }
+    }
+}
+
+impl<'a> Iterator for TagsStateIter<'a> {
+    type Item = &'a TagListItem;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.tags.as_ref().and_then(|tags| {
+            let next = tags.get(self.current);
+            self.current += 1;
+            next
+        })
+    }
+}
+
+impl From<&Tags> for TagsState {
+    fn from(value: &Tags) -> Self {
+        Self {
+            tags: if value.is_empty() { None } else { Some(value.iter().map(TagListItem::from).collect()) },
+            ..Default::default()
         }
+    }
+}
+
+impl TagsState {
+    pub fn iter(&self) -> TagsStateIter<'_> {
+        TagsStateIter::new(self.tags.as_deref())
+    }
+
+    pub fn num_filters_active(&self) -> usize {
+        self.tags.as_ref().map_or(0, |tags| {
+            tags.iter()
+                .filter(|tag| tag.state == TagListItemState::Included || tag.state == TagListItemState::Excluded)
+                .count()
+        })
     }
 
     pub fn is_filter_empty(&mut self) -> bool {
@@ -437,6 +632,7 @@ pub struct MangadexFilterProvider {
     pub publication_status: FilterList<PublicationStatusState>,
     pub sort_by_state: FilterList<SortByState>,
     pub magazine_demographic: FilterList<MagazineDemographicState>,
+    already_existings_tags: Option<Tags>,
     pub tags_state: TagsState,
     pub author_state: FilterListDynamic<AuthorState>,
     pub artist_state: FilterListDynamic<ArtistState>,
@@ -445,6 +641,38 @@ pub struct MangadexFilterProvider {
     api_client: MangadexClient,
     tx: UnboundedSender<FilterEvents>,
     rx: UnboundedReceiver<FilterEvents>,
+}
+
+impl From<Filters> for MangadexFilterProvider {
+    fn from(filters: Filters) -> Self {
+        let (tx, rx) = mpsc::unbounded_channel::<FilterEvents>();
+        tx.send(FilterEvents::SearchTags).ok();
+
+        let already_existings_tags = if filters.tags.is_empty() { None } else { Some(filters.tags.clone()) };
+
+        Self {
+            is_open: false,
+            id_filter: 0,
+            content_rating: FilterList::<ContentRatingState>::from_content_ratings(&filters.content_rating),
+            sort_by_state: FilterList::<SortByState>::from_sort_by(&filters.sort_by),
+            publication_status: FilterList::<PublicationStatusState>::from_publication_status(&filters.publication_status),
+            tags_state: TagsState::from(&filters.tags),
+            magazine_demographic: FilterList::<MagazineDemographicState>::from_magazine_demographic(&filters.magazine_demographic),
+            author_state: FilterListDynamic::<AuthorState>::from_authors(&filters.authors),
+            artist_state: FilterListDynamic::<ArtistState>::from_artist(&filters.artists),
+            lang_state: FilterList::<LanguageState>::from_languages(filters.languages.as_ref()),
+            already_existings_tags,
+            api_client: MangadexClient::new(
+                API_URL_BASE.parse().unwrap(),
+                COVER_IMG_URL_BASE.parse().unwrap(),
+                InMemoryCache::init(2),
+            ),
+            is_typing: false,
+            tx,
+            rx,
+            filters,
+        }
+    }
 }
 
 impl FiltersEventHandler for MangadexFilterProvider {
@@ -460,50 +688,28 @@ impl FiltersEventHandler for MangadexFilterProvider {
 impl FiltersHandler for MangadexFilterProvider {
     type InnerState = Filters;
 
+    #[inline]
     fn toggle(&mut self) {
         self.is_open = !self.is_open;
     }
 
+    #[inline]
     fn is_typing(&self) -> bool {
         self.is_typing
     }
 
+    #[inline]
     fn is_open(&self) -> bool {
         self.is_open
     }
 
+    #[inline]
     fn get_state(&self) -> &Self::InnerState {
         &self.filters
     }
 }
 
 impl MangadexFilterProvider {
-    pub fn new() -> Self {
-        let (tx, rx) = mpsc::unbounded_channel::<FilterEvents>();
-        tx.send(FilterEvents::SearchTags).ok();
-        Self {
-            is_open: false,
-            id_filter: 0,
-            filters: Filters::default(),
-            content_rating: FilterList::<ContentRatingState>::default(),
-            publication_status: FilterList::<PublicationStatusState>::default(),
-            sort_by_state: FilterList::<SortByState>::default(),
-            tags_state: TagsState::default(),
-            magazine_demographic: FilterList::<MagazineDemographicState>::default(),
-            author_state: FilterListDynamic::<AuthorState>::default(),
-            artist_state: FilterListDynamic::<ArtistState>::default(),
-            lang_state: FilterList::<LanguageState>::default(),
-            api_client: MangadexClient::new(
-                API_URL_BASE.parse().unwrap(),
-                COVER_IMG_URL_BASE.parse().unwrap(),
-                InMemoryCache::init(2),
-            ),
-            is_typing: false,
-            tx,
-            rx,
-        }
-    }
-
     pub fn reset(&mut self) {
         if self.tags_state.tags.is_some() {
             self.tags_state
@@ -780,9 +986,17 @@ impl MangadexFilterProvider {
             .data
             .into_iter()
             .map(|data| TagListItem {
-                id: data.id,
+                id: data.id.to_string(),
                 name: data.attributes.name.en,
-                state: TagListItemState::default(),
+                state: self
+                    .already_existings_tags
+                    .as_ref()
+                    .and_then(|tags| {
+                        let found_tag = tags.iter().find(|tag| !tag.id.is_empty() && tag.id == data.id);
+
+                        found_tag.map(|existing_tag| TagListItemState::from(existing_tag.state))
+                    })
+                    .unwrap_or_default(),
             })
             .collect();
 
@@ -850,7 +1064,7 @@ impl MangadexFilterProvider {
                     .iter()
                     .filter_map(|item| {
                         if item.is_selected {
-                            return Some(AuthorFilterState::new(item.id.to_string()));
+                            return Some(AuthorFilterState::new(item.id.to_string(), item.name.clone()));
                         }
                         None
                     })
@@ -866,7 +1080,7 @@ impl MangadexFilterProvider {
                     .iter()
                     .filter_map(|item| {
                         if item.is_selected {
-                            return Some(ArtistFilterState::new(item.id.to_string()));
+                            return Some(ArtistFilterState::new(item.id.to_string()).with_name(&item.name));
                         }
                         None
                     })
@@ -890,413 +1104,37 @@ impl MangadexFilterProvider {
         )
     }
 
-    /// This function is called from manga page
-    pub fn set_author(&mut self, author: Author) {
-        self.filters.reset_author();
-        self.filters.reset_artist();
-        self.artist_state.items = None;
-        self.author_state.items = Some(vec![ListItemId {
-            id: author.id.clone(),
-            is_selected: true,
-            name: author.name,
-        }]);
-        self.filters.authors.set_one_user(AuthorFilterState::new(author.id))
-    }
-
-    /// This function is called from manga page
-    pub fn set_artist(&mut self, artist: Artist) {
-        self.filters.reset_author();
-        self.filters.reset_artist();
-
-        self.author_state.items = None;
-        self.artist_state.items = Some(vec![ListItemId {
-            id: artist.id.clone(),
-            is_selected: true,
-            name: artist.name,
-        }]);
-        self.filters.artists.set_one_user(ArtistFilterState::new(artist.id))
-    }
+    // This function is called from manga page
+    // Deprecated functionality but maybe re-implemented in the future
+    //pub fn set_author(&mut self, author: Author) {
+    //    self.filters.reset_author();
+    //    self.filters.reset_artist();
+    //    self.artist_state.items = None;
+    //    self.author_state.items = Some(vec![ListItemId {
+    //        id: author.id.clone(),
+    //        is_selected: true,
+    //        name: author.name,
+    //    }]);
+    //    self.filters.authors.set_one_user(AuthorFilterState::new(author.id))
+    //}
+    //
+    ///// This function is called from manga page
+    //pub fn set_artist(&mut self, artist: Artist) {
+    //    self.filters.reset_author();
+    //    self.filters.reset_artist();
+    //
+    //    self.author_state.items = None;
+    //    self.artist_state.items = Some(vec![ListItemId {
+    //        id: artist.id.clone(),
+    //        is_selected: true,
+    //        name: artist.name,
+    //    }]);
+    //    self.filters.artists.set_one_user(ArtistFilterState::new(artist.id))
+    //}
 }
 
-#[derive(Display, Clone, Debug)]
-pub enum ContentRating {
-    #[strum(to_string = "safe")]
-    Safe,
-    #[strum(to_string = "suggestive")]
-    Suggestive,
-    #[strum(to_string = "erotica")]
-    Erotic,
-    #[strum(to_string = "pornographic")]
-    Pornographic,
-}
-
-impl From<&str> for ContentRating {
-    fn from(value: &str) -> Self {
-        match value {
-            "safe" => Self::Safe,
-            "suggestive" => Self::Suggestive,
-            "erotica" => Self::Erotic,
-            "pornographic" => Self::Pornographic,
-            _ => Self::Safe,
-        }
-    }
-}
-
-#[derive(Display, Clone, EnumIter, PartialEq, Eq, Default, Debug)]
-pub enum SortBy {
-    #[strum(to_string = "Best match")]
-    BestMatch,
-    #[strum(to_string = "Latest upload")]
-    #[default]
-    LatestUpload,
-    #[strum(to_string = "Oldest upload")]
-    OldestUpload,
-    #[strum(to_string = "Highest rating")]
-    HighestRating,
-    #[strum(to_string = "Lowest rating")]
-    LowestRating,
-    #[strum(to_string = "Title ascending")]
-    TitleAscending,
-    #[strum(to_string = "Title descending")]
-    TitleDescending,
-    #[strum(to_string = "Oldest added")]
-    OldestAdded,
-    #[strum(to_string = "Recently added")]
-    RecentlyAdded,
-    #[strum(to_string = "Most follows")]
-    MostFollows,
-    #[strum(to_string = "Fewest follows")]
-    FewestFollows,
-    #[strum(to_string = "Year descending")]
-    YearDescending,
-    #[strum(to_string = "Year ascending")]
-    YearAscending,
-}
-
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub enum TagSelection {
-    Included,
-    Excluded,
-}
-
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct TagData {
-    id: String,
-    state: TagSelection,
-}
-
-impl TagData {
-    pub fn new(id: String, state: TagSelection) -> Self {
-        Self { id, state }
-    }
-}
-
-impl From<&TagListItem> for TagData {
-    fn from(value: &TagListItem) -> Self {
-        Self {
-            id: value.id.clone(),
-            state: if value.state == TagListItemState::Included { TagSelection::Included } else { TagSelection::Excluded },
-        }
-    }
-}
-
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct Tags(Vec<TagData>);
-
-impl Tags {
-    pub fn new(tags: Vec<TagData>) -> Self {
-        Self(tags)
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
-}
-
-impl IntoParam for Tags {
-    fn into_param(self) -> String {
-        let mut param = String::new();
-
-        if self.0.is_empty() {
-            return param;
-        }
-
-        for tag in self.0 {
-            let parameter = match tag.state {
-                TagSelection::Included => "&includedTags[]=",
-                TagSelection::Excluded => "&excludedTags[]=",
-            };
-            param.push_str(format!("{}{}", parameter, tag.id).as_str());
-        }
-
-        param
-    }
-}
-
-impl IntoParam for Vec<ContentRating> {
-    fn into_param(self) -> String {
-        let mut result = String::new();
-
-        if self.is_empty() {
-            return format!("&contentRating[]={}", ContentRating::Safe);
-        }
-
-        for cont in self {
-            result.push_str(format!("&contentRating[]={cont}").as_str());
-        }
-
-        result
-    }
-}
-
-impl From<&str> for SortBy {
-    fn from(value: &str) -> Self {
-        SortBy::iter().find(|sort_by| sort_by.to_string() == value).unwrap()
-    }
-}
-
-impl IntoParam for SortBy {
-    fn into_param(self) -> String {
-        match self {
-            Self::BestMatch => "&order[relevance]=desc".to_string(),
-            Self::LatestUpload => "&order[latestUploadedChapter]=desc".to_string(),
-            Self::OldestUpload => "&order[latestUploadedChapter]=asc".to_string(),
-            Self::OldestAdded => "&order[createdAt]=asc".to_string(),
-            Self::MostFollows => "&order[followedCount]=desc".to_string(),
-            Self::LowestRating => "&order[rating]=asc".to_string(),
-            Self::HighestRating => "&order[rating]=desc".to_string(),
-            Self::RecentlyAdded => "&order[createdAt]=desc".to_string(),
-            Self::FewestFollows => "&order[followedCount]=asc".to_string(),
-            Self::TitleAscending => "&order[title]=asc".to_string(),
-            Self::TitleDescending => "&order[title]=desc".to_string(),
-            Self::YearAscending => "&order[year]=asc".to_string(),
-            Self::YearDescending => "&order[year]=desc".to_string(),
-        }
-    }
-}
-
-#[derive(Display, Clone, EnumIter, PartialEq, Eq, Debug)]
-pub enum MagazineDemographic {
-    Shounen,
-    Shoujo,
-    Seinen,
-    Josei,
-}
-
-impl From<&str> for MagazineDemographic {
-    fn from(value: &str) -> Self {
-        Self::iter().find(|mag| mag.to_string().to_lowercase() == value.to_lowercase()).unwrap()
-    }
-}
-
-impl IntoParam for Vec<MagazineDemographic> {
-    fn into_param(self) -> String {
-        let mut param = String::new();
-
-        if self.is_empty() {
-            return param;
-        }
-
-        for magazine in self {
-            param.push_str(format!("&publicationDemographic[]={}", magazine.to_string().to_lowercase()).as_str());
-        }
-
-        param
-    }
-}
-
-#[derive(Default, Clone, Debug)]
-pub struct AuthorFilterState(String);
-
-impl AuthorFilterState {
-    pub fn new(id_author: String) -> Self {
-        AuthorFilterState(id_author)
-    }
-}
-
-#[derive(Default, Clone, Debug)]
-pub struct ArtistFilterState(String);
-
-impl ArtistFilterState {
-    pub fn new(id_artist: String) -> Self {
-        ArtistFilterState(id_artist)
-    }
-}
-
-#[derive(Default, Clone, Debug)]
-pub struct User<T: Clone + Default>(pub Vec<T>);
-
-impl IntoParam for User<AuthorFilterState> {
-    fn into_param(self) -> String {
-        if self.0.is_empty() {
-            return String::new();
-        }
-        self.0.into_iter().fold(String::new(), |mut ids, author| {
-            let _ = write!(ids, "&authors[]={}", author.0);
-            ids
-        })
-    }
-}
-
-impl IntoParam for User<ArtistFilterState> {
-    fn into_param(self) -> String {
-        if self.0.is_empty() {
-            return String::new();
-        }
-        self.0.into_iter().fold(String::new(), |mut ids, artist| {
-            let _ = write!(ids, "&artists[]={}", artist.0);
-            ids
-        })
-    }
-}
-
-impl<T> User<T>
-where
-    T: Clone + Default + Sized,
-{
-    pub fn new(users: Vec<T>) -> Self {
-        Self(users)
-    }
-
-    pub fn set_one_user(&mut self, user: T) {
-        self.0.push(user);
-    }
-}
-
-impl IntoParam for Vec<Languages> {
-    fn into_param(self) -> String {
-        if self.is_empty() {
-            return format!("&availableTranslatedLanguage[]={}", Languages::get_preferred_lang().as_iso_code());
-        }
-        self.into_iter()
-            .filter(|lang| *lang != Languages::Unkown)
-            .fold(String::new(), |mut languages, language| {
-                let _ = write!(languages, "&availableTranslatedLanguage[]={}", language.as_iso_code());
-                languages
-            })
-    }
-}
-
-#[derive(Clone, Display, EnumIter, Debug)]
-pub enum PublicationStatus {
-    #[strum(to_string = "ongoing")]
-    Ongoing,
-    #[strum(to_string = "completed")]
-    Completed,
-    #[strum(to_string = "hiatus")]
-    Hiatus,
-    #[strum(to_string = "cancelled")]
-    Cancelled,
-}
-
-impl From<&str> for PublicationStatus {
-    fn from(value: &str) -> Self {
-        PublicationStatus::iter().find(|status| status.to_string() == value).unwrap()
-    }
-}
-
-impl IntoParam for Vec<PublicationStatus> {
-    fn into_param(self) -> String {
-        let param = String::new();
-        if self.is_empty() {
-            return param;
-        }
-        self.into_iter().fold(String::new(), |mut name, current_status| {
-            let _ = write!(name, "&status[]={current_status}");
-            name
-        })
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct Filters {
-    pub content_rating: Vec<ContentRating>,
-    pub publication_status: Vec<PublicationStatus>,
-    pub sort_by: SortBy,
-    pub tags: Tags,
-    pub magazine_demographic: Vec<MagazineDemographic>,
-    pub authors: User<AuthorFilterState>,
-    pub artists: User<ArtistFilterState>,
-    pub languages: Vec<Languages>,
-}
-
-impl IntoParam for Filters {
-    fn into_param(self) -> String {
-        format!(
-            "{}{}{}{}{}{}{}{}",
-            self.authors.into_param(),
-            self.artists.into_param(),
-            self.publication_status.into_param(),
-            self.languages.into_param(),
-            self.tags.into_param(),
-            self.magazine_demographic.into_param(),
-            self.content_rating.into_param(),
-            self.sort_by.into_param(),
-        )
-    }
-}
-
-impl Default for Filters {
-    fn default() -> Self {
-        Self {
-            content_rating: vec![ContentRating::Safe],
-            publication_status: vec![],
-            sort_by: SortBy::default(),
-            tags: Tags(vec![]),
-            magazine_demographic: vec![],
-            authors: User::<AuthorFilterState>::default(),
-            artists: User::<ArtistFilterState>::default(),
-            languages: vec![*Languages::get_preferred_lang()],
-        }
-    }
-}
-
-impl Filters {
-    pub fn set_content_rating(&mut self, ratings: Vec<ContentRating>) {
-        self.content_rating = ratings;
-    }
-
-    pub fn set_publication_status(&mut self, status: Vec<PublicationStatus>) {
-        self.publication_status = status;
-    }
-
-    pub fn set_sort_by(&mut self, sort_by: SortBy) {
-        self.sort_by = sort_by;
-    }
-
-    pub fn set_tags(&mut self, tags: Vec<TagData>) {
-        self.tags.0 = tags;
-    }
-
-    pub fn set_languages(&mut self, languages: Vec<Languages>) {
-        self.languages = languages;
-    }
-
-    pub fn set_magazine_demographic(&mut self, magazine_demographics: Vec<MagazineDemographic>) {
-        self.magazine_demographic = magazine_demographics;
-    }
-
-    pub fn set_authors(&mut self, author_ids: Vec<AuthorFilterState>) {
-        self.authors.0 = author_ids;
-    }
-
-    pub fn set_artists(&mut self, artist_ids: Vec<ArtistFilterState>) {
-        self.artists.0 = artist_ids;
-    }
-
-    pub fn reset_author(&mut self) {
-        self.authors.0 = vec![];
-    }
-
-    pub fn reset_artist(&mut self) {
-        self.artists.0 = vec![];
-    }
-}
-
-/// This test may be changed depending on the Mangadex Api
 #[cfg(test)]
-mod test {
-
+mod tests {
     use pretty_assertions::assert_eq;
 
     use super::*;
@@ -1314,139 +1152,6 @@ mod test {
 
         assert_eq!(conversion, Languages::Spanish);
     }
-
-    #[test]
-    fn filter_by_content_rating_works() {
-        let content_rating =
-            vec![ContentRating::Safe, ContentRating::Erotic, ContentRating::Pornographic, ContentRating::Suggestive];
-
-        assert_eq!(
-            "&contentRating[]=safe&contentRating[]=erotica&contentRating[]=pornographic&contentRating[]=suggestive",
-            content_rating.into_param()
-        );
-    }
-
-    #[test]
-    fn sort_by_works() {
-        assert_eq!("&order[relevance]=desc", SortBy::BestMatch.into_param());
-
-        assert_eq!("&order[createdAt]=asc", SortBy::OldestAdded.into_param());
-
-        assert_eq!("&order[followedCount]=desc", SortBy::MostFollows.into_param());
-
-        assert_eq!("&order[followedCount]=asc", SortBy::FewestFollows.into_param());
-
-        assert_eq!("&order[latestUploadedChapter]=desc", SortBy::LatestUpload.into_param());
-
-        assert_eq!("&order[latestUploadedChapter]=asc", SortBy::OldestUpload.into_param());
-
-        assert_eq!("&order[rating]=desc", SortBy::HighestRating.into_param());
-
-        assert_eq!("&order[rating]=asc", SortBy::LowestRating.into_param());
-
-        assert_eq!("&order[createdAt]=desc", SortBy::RecentlyAdded.into_param());
-
-        assert_eq!("&order[year]=asc", SortBy::YearAscending.into_param());
-
-        assert_eq!("&order[year]=desc", SortBy::YearDescending.into_param());
-
-        assert_eq!("&order[title]=asc", SortBy::TitleAscending.into_param());
-
-        assert_eq!("&order[title]=desc", SortBy::TitleDescending.into_param());
-    }
-
-    #[test]
-    fn filter_by_magazine_demographic_works() {
-        let magazine_demographic = vec![
-            MagazineDemographic::Shounen,
-            MagazineDemographic::Shoujo,
-            MagazineDemographic::Josei,
-            MagazineDemographic::Seinen,
-        ];
-
-        assert_eq!(
-            "&publicationDemographic[]=shounen&publicationDemographic[]=shoujo&publicationDemographic[]=josei&publicationDemographic[]=seinen",
-            magazine_demographic.into_param()
-        );
-    }
-
-    #[test]
-    fn filter_by_artist_works() {
-        let sample_artists: Vec<ArtistFilterState> =
-            vec![ArtistFilterState::new("id_artist1".to_string()), ArtistFilterState::new("id_artist2".to_string())];
-        let filter_artist = User::<ArtistFilterState>::new(sample_artists);
-        assert_eq!("&artists[]=id_artist1&artists[]=id_artist2", filter_artist.into_param());
-    }
-
-    #[test]
-    fn filter_by_author_works() {
-        let sample_authors: Vec<AuthorFilterState> =
-            vec![AuthorFilterState::new("id_author1".to_string()), AuthorFilterState::new("id_author2".to_string())];
-        let filter_artist = User::<AuthorFilterState>::new(sample_authors);
-        assert_eq!("&authors[]=id_author1&authors[]=id_author2", filter_artist.into_param());
-    }
-
-    #[test]
-    fn filter_by_language_works() {
-        let default_language: Vec<Languages> = vec![];
-        assert_eq!("&availableTranslatedLanguage[]=en", default_language.into_param());
-
-        let languages: Vec<Languages> =
-            vec![Languages::English, Languages::Spanish, Languages::SpanishLa, Languages::BrazilianPortuguese];
-
-        assert_eq!(
-            "&availableTranslatedLanguage[]=en&availableTranslatedLanguage[]=es&availableTranslatedLanguage[]=es-la&availableTranslatedLanguage[]=pt-br",
-            languages.into_param()
-        );
-    }
-
-    #[test]
-    fn filter_by_publication_status_works() {
-        let publication_status: Vec<PublicationStatus> =
-            vec![PublicationStatus::Ongoing, PublicationStatus::Hiatus, PublicationStatus::Completed, PublicationStatus::Cancelled];
-
-        assert_eq!("&status[]=ongoing&status[]=hiatus&status[]=completed&status[]=cancelled", publication_status.into_param());
-    }
-
-    #[test]
-    fn filter_by_tags_works() {
-        let tags = Tags::new(vec![
-            TagData {
-                id: "id_tag_included".to_string(),
-                state: TagSelection::Included,
-            },
-            TagData {
-                id: "id_tag_excluded".to_string(),
-                state: TagSelection::Excluded,
-            },
-        ]);
-
-        assert_eq!("&includedTags[]=id_tag_included&excludedTags[]=id_tag_excluded", tags.into_param());
-    }
-
-    #[test]
-    fn filters_combined_work() {
-        let filters = Filters::default();
-
-        assert_eq!(
-            "&availableTranslatedLanguage[]=en&contentRating[]=safe&order[latestUploadedChapter]=desc",
-            filters.into_param()
-        );
-
-        let mut filters = Filters::default();
-
-        filters.set_tags(vec![TagData::new("id_1".to_string(), TagSelection::Included)]);
-
-        filters.set_authors(vec![AuthorFilterState::new("id_1".to_string()), AuthorFilterState::new("id_2".to_string())]);
-
-        filters.set_languages(vec![Languages::French, Languages::Spanish]);
-
-        assert_eq!(
-            "&authors[]=id_1&authors[]=id_2&availableTranslatedLanguage[]=fr&availableTranslatedLanguage[]=es&includedTags[]=id_1&contentRating[]=safe&order[latestUploadedChapter]=desc",
-            filters.into_param()
-        );
-    }
-
     #[test]
     fn filter_list_works() {
         let mut filter_list: FilterList<MagazineDemographicState> = FilterList::default();
@@ -1596,7 +1301,7 @@ mod test {
 
     #[test]
     fn filter_state() {
-        let mut filter_state = MangadexFilterProvider::new();
+        let mut filter_state = MangadexFilterProvider::from(Filters::default());
 
         filter_state.is_open = true;
 
@@ -1666,37 +1371,107 @@ mod test {
         assert!(!filter_state.is_open);
     }
 
-    //#[tokio::test]
-    //async fn search_authors_sends_expected_event() {
-    //    let (tx, mut rx) = unbounded_channel::<FilterEvents>();
-    //    let mut filter_state_author: FilterListDynamic<AuthorState> = FilterListDynamic::default();
-    //
-    //    let client = MockMangadexClient::new();
-    //    filter_state_author.set_search_term("some thing");
-    //
-    //    filter_state_author.search_items(tx, client);
-    //
-    //    let event_sent = rx.recv().await.expect("no event was sent");
-    //
-    //    let expected = FilterEvents::LoadAuthors(Some(AuthorsResponse::default()));
-    //
-    //    assert_eq!(event_sent, expected);
-    //}
-    //
-    //#[tokio::test]
-    //async fn search_artist_sends_expected_event() {
-    //    let (tx, mut rx) = unbounded_channel::<FilterEvents>();
-    //    let mut filter_state_artist: FilterListDynamic<ArtistState> = FilterListDynamic::default();
-    //
-    //    let client = MockMangadexClient::new();
-    //    filter_state_artist.set_search_term("some thing");
-    //
-    //    filter_state_artist.search_items(tx, client);
-    //
-    //    let event_sent = rx.recv().await.expect("no event was sent");
-    //
-    //    let expected = FilterEvents::LoadArtists(Some(AuthorsResponse::default()));
-    //
-    //    assert_eq!(event_sent, expected);
-    //}
+    #[test]
+    fn filter_provider_is_initialized_from_filters() {
+        let filters: Filters = Filters {
+            content_rating: vec![ContentRating::Suggestive, ContentRating::Erotic],
+            publication_status: vec![PublicationStatus::Completed, PublicationStatus::Ongoing],
+            sort_by: SortBy::HighestRating,
+            tags: Tags::new(vec![TagData::new("id_tag".to_string(), TagSelection::Included, "fantasy".to_string())]),
+            magazine_demographic: vec![MagazineDemographic::Shoujo, MagazineDemographic::Seinen],
+            authors: User::new(vec![AuthorFilterState::new("author_id".to_string(), "name_author".to_string())]),
+            artists: User::new(vec![ArtistFilterState::new("artist_id".to_string()).with_name("artist_name")]),
+            languages: vec![Languages::English, Languages::Spanish],
+        };
+
+        let filters_provider = MangadexFilterProvider::from(filters);
+
+        let expected_content_rating: FilterList<ContentRatingState> = FilterList {
+            items: vec![
+                FilterListItem {
+                    is_selected: false,
+                    name: ContentRating::Safe.to_string(),
+                },
+                FilterListItem {
+                    is_selected: true,
+                    name: ContentRating::Suggestive.to_string(),
+                },
+                FilterListItem {
+                    is_selected: true,
+                    name: ContentRating::Erotic.to_string(),
+                },
+                FilterListItem {
+                    is_selected: false,
+                    name: ContentRating::Pornographic.to_string(),
+                },
+            ],
+            state: ListState::default(),
+            _state: PhantomData,
+        };
+
+        assert_eq!(expected_content_rating, filters_provider.content_rating);
+
+        filters_provider
+            .sort_by_state
+            .iter()
+            .find(|item| item.is_selected && item.name == SortBy::HighestRating.to_string())
+            .expect("sort_by state is not the one that should be selected");
+
+        let num_publication_status_expected = filters_provider
+            .publication_status
+            .iter()
+            .filter_map(|item| {
+                if item.is_selected
+                    && (item.name == PublicationStatus::Ongoing.to_string()
+                        || item.name == PublicationStatus::Completed.to_string())
+                {
+                    Some(item)
+                } else {
+                    None
+                }
+            })
+            .count();
+
+        assert_eq!(num_publication_status_expected, 2);
+
+        let num_languages_expected = filters_provider
+            .lang_state
+            .iter()
+            .filter_map(|lan| lan.is_selected.then_some(lan))
+            .count();
+
+        assert_eq!(num_languages_expected, 2);
+
+        filters_provider
+            .tags_state
+            .iter()
+            .find(|tag| tag.id == "id_tag")
+            .expect("tag state was not initialized correctly");
+
+        let num_magazine_demographic_expected = filters_provider
+            .magazine_demographic
+            .iter()
+            .filter_map(|magazine| magazine.is_selected.then_some(magazine))
+            .count();
+
+        assert_eq!(num_magazine_demographic_expected, 2);
+
+        filters_provider
+            .artist_state
+            .items
+            .as_ref()
+            .unwrap()
+            .iter()
+            .find(|artist| artist.id == "artist_id" && artist.name == "artist_name")
+            .expect("Expected artist was not found");
+
+        filters_provider
+            .author_state
+            .items
+            .as_ref()
+            .unwrap()
+            .iter()
+            .find(|author| author.id == "author_id" && author.name == "name_author")
+            .expect("Expected author was not found");
+    }
 }
