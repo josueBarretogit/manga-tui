@@ -4,8 +4,8 @@ use std::path::Path;
 
 use flate2::Compression;
 use flate2::write::ZlibEncoder;
-use image::{DynamicImage, GenericImageView, ImageFormat};
-use lopdf::{Document, Object, Stream, dictionary};
+use image::{GenericImageView, ImageFormat};
+use lopdf::{Document, Stream, dictionary};
 
 use super::MangaDownloader;
 
@@ -28,14 +28,15 @@ impl MangaDownloader for PdfDownloader {
 
         let pdf_path = base_directory.join(format!("{}.pdf", self.make_chapter_name(&chapter).display()));
 
+        let file = File::create(pdf_path)?;
         let mut doc = Document::with_version("1.7");
         let mut pages = Vec::new();
         let page_width = 595.0;
 
-        for (index, page) in chapter.pages.iter().enumerate() {
+        for page in chapter.pages.iter() {
             let img = image::load_from_memory(&page.bytes)?;
             let (img_width, img_height) = img.dimensions();
-            let mut img_data = Vec::new();
+            let mut img_data = Vec::with_capacity(page.bytes.len());
             let filter;
             let color_space = if img.color().has_color() { "DeviceRGB" } else { "DeviceGray" };
 
@@ -105,7 +106,6 @@ impl MangaDownloader for PdfDownloader {
 
         doc.trailer.set("Root", catalog_id);
 
-        let mut file = File::create(pdf_path)?;
         doc.save_to(&mut BufWriter::new(file))?;
 
         Ok(())
@@ -115,12 +115,9 @@ impl MangaDownloader for PdfDownloader {
 #[cfg(test)]
 mod tests {
     use std::error::Error;
-    use std::fs;
-    use std::path::PathBuf;
 
     use fake::Fake;
     use fake::faker::name::en::Name;
-    use lopdf::Document;
     use uuid::Uuid;
 
     use super::*;

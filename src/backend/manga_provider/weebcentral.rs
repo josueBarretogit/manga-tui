@@ -1,15 +1,12 @@
 use std::error::Error;
-use std::fmt::Write;
-use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
 use filter_state::{WeebcentralFilterState, WeebcentralFiltersProvider};
 use filter_widget::WeebcentralFilterWidget;
 use http::header::{ACCEPT, ACCEPT_ENCODING, ACCEPT_LANGUAGE, CACHE_CONTROL, CONNECTION, HOST, REFERER};
-use http::{HeaderMap, HeaderValue, StatusCode, status};
+use http::{HeaderMap, HeaderValue, StatusCode};
 use manga_tui::SearchTerm;
-use reqwest::cookie::Jar;
 use reqwest::{Client, Url};
 use response::{
     ChapterPageData, ChapterPagesLinks, LatestMangas, MangaPageData, PopularMangasWeebCentral, SearchPageMangas,
@@ -17,9 +14,9 @@ use response::{
 };
 
 use super::{
-    Author, Chapter, ChapterFilters, ChapterOrderBy, ChapterPageUrl, DecodeBytesToImage, FeedPageProvider, FetchChapterBookmarked,
-    Genres, GetChapterPages, GetChaptersResponse, GetMangasResponse, GetRawImage, GoToReadChapter, HomePageMangaProvider,
-    Languages, LatestChapter, ListOfChapters, Manga, MangaPageProvider, MangaProvider, MangaProviders, Pagination, PopularManga,
+    Chapter, ChapterFilters, ChapterOrderBy, ChapterPageUrl, DecodeBytesToImage, FeedPageProvider, FetchChapterBookmarked,
+    GetChapterPages, GetChaptersResponse, GetMangasResponse, GetRawImage, GoToReadChapter, HomePageMangaProvider, Languages,
+    LatestChapter, ListOfChapters, Manga, MangaPageProvider, MangaProvider, MangaProviders, Pagination, PopularManga,
     ProviderIdentity, ReaderPageProvider, RecentlyAddedManga, SearchChapterById, SearchMangaById, SearchMangaPanel,
     SearchPageProvider,
 };

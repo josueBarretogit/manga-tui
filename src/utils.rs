@@ -1,20 +1,10 @@
 use chrono::NaiveDate;
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::style::{Color, Style, Stylize};
-use ratatui::text::{Line, Span};
+use ratatui::style::{Color, Style};
+use ratatui::text::Line;
 use ratatui::widgets::{Block, Paragraph, Widget};
 use tui_input::Input;
-
-use crate::backend::manga_provider::mangadex::filter::{TagListItem, TagListItemState};
-
-pub fn set_filter_tags_style(tag: &TagListItem) -> Span<'_> {
-    match tag.state {
-        TagListItemState::Included => format!(" {} ", tag.name).black().on_green(),
-        TagListItemState::Excluded => format!(" {} ", tag.name).black().on_red(),
-        TagListItemState::NotSelected => Span::from(tag.name.clone()),
-    }
-}
 
 /// Convert a `NaiveDate` to a user friendly date, like: "2 days ago"
 pub fn display_dates_since_publication(date: NaiveDate) -> String {

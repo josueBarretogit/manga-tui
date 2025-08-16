@@ -1,19 +1,18 @@
 use std::error::Error;
-use std::path::Path;
-use std::sync::Arc;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, LazyLock};
 use std::time::Duration as StdDuration;
 
 use api_responses::*;
 use bytes::Bytes;
-use chrono::{Duration, Months};
-use filter::{Filters, IntoParam, MangadexFilterProvider};
+use chrono::Months;
 use filter_widget::MangadexFilterWidget;
+use filters::api_parameter::{Filters, IntoParam};
+use filters::filter_provider::MangadexFilterProvider;
 use http::header::{ACCEPT, ACCEPT_ENCODING, CACHE_CONTROL};
 use http::{HeaderMap, HeaderValue, StatusCode};
 use manga_tui::SearchTerm;
 use reqwest::{Client, Response, Url};
-use serde::Serialize;
-use serde_json::json;
 
 use super::{
     Artist, Author, Chapter, ChapterPageUrl, ChapterToRead, DecodeBytesToImage, FeedPageProvider, FetchChapterBookmarked, Genres,
@@ -23,17 +22,27 @@ use super::{
 };
 use crate::backend::cache::{CacheDuration, Cacher, InsertEntry};
 use crate::backend::database::ChapterBookmarked;
+use crate::backend::manga_provider::filters::FiltersCache;
 use crate::config::ImageQuality;
 use crate::global::APP_USER_AGENT;
 use crate::view::widgets::StatefulWidgetFrame;
 
 pub mod api_responses;
-pub mod filter;
 pub mod filter_widget;
+pub mod filters;
 
 pub static API_URL_BASE: &str = "https://api.mangadex.org";
 
 pub static COVER_IMG_URL_BASE: &str = "https://uploads.mangadex.org/covers";
+
+pub static MANGADEX_CACHE_FILENAME: &str = "filters.toml";
+
+pub static MANGADEX_CACHE_BASE_DIRECTORY: LazyLock<PathBuf> = LazyLock::new(|| {
+    let cache_path = directories::ProjectDirs::from("", "", "manga-tui")
+        .map(|project_dirs| project_dirs.cache_dir().join("mangadex").to_path_buf())
+        .unwrap_or_default();
+    cache_path
+});
 
 /// Mangadex: `https://mangadex.org`
 /// This is the first manga provider since the first versions of manga-tui, thats why it is the
@@ -372,6 +381,24 @@ impl MangadexClient {
                 volume_number,
             }
         }
+    }
+
+    fn save_filters_on_close(&self, filters: Filters) {
+        std::thread::spawn(move || {
+            let filters_cache_writer = FiltersCache::new(&*MANGADEX_CACHE_BASE_DIRECTORY, MANGADEX_CACHE_FILENAME);
+
+            filters_cache_writer
+                .write_to_cache(&filters)
+                .inspect_err(|e| {
+                    #[cfg(not(test))]
+                    {
+                        use crate::backend::error_log::{ErrorType, write_to_error_log};
+
+                        write_to_error_log(ErrorType::String(&e.to_string()));
+                    }
+                })
+                .ok();
+        });
     }
 }
 
@@ -882,6 +909,7 @@ impl SearchPageProvider for MangadexClient {
             None => "".to_string(),
         };
 
+        let filters_to_save = filters.clone();
         let filters = filters.into_param();
         let items_per_page = pagination.items_per_page;
 
@@ -973,6 +1001,8 @@ impl SearchPageProvider for MangadexClient {
             })
             .collect();
 
+        self.save_filters_on_close(filters_to_save);
+
         Ok(GetMangasResponse {
             mangas,
             total_mangas,
@@ -1033,6 +1063,13 @@ impl ProviderIdentity for MangadexClient {
 }
 
 impl MangaProvider for MangadexClient {}
+
+/// Returns the cached mangadex filters or default if it hasnt been cached yet
+pub fn get_cached_filters() -> Filters {
+    FiltersCache::new(&*MANGADEX_CACHE_BASE_DIRECTORY, MANGADEX_CACHE_FILENAME)
+        .get_cached_filters()
+        .unwrap_or_default()
+}
 
 #[cfg(test)]
 mod test {

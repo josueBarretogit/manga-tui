@@ -1,3 +1,4 @@
+use filter_provider::{FILTERS, FilterListItem, ListItemId, MangaFilters, MangadexFilterProvider, TagListItem, TagListItemState};
 use ratatui::Frame;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Rect};
@@ -6,10 +7,10 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, HighlightSpacing, List, ListItem, ListState, Paragraph, StatefulWidget, Tabs, Widget, Wrap};
 
 use super::StatefulWidgetFrame;
-use super::filter::*;
+use super::filters::*;
 use crate::backend::manga_provider::FiltersWidget;
 use crate::global::CURRENT_LIST_ITEM_STYLE;
-use crate::utils::{render_search_bar, set_filter_tags_style};
+use crate::utils::render_search_bar;
 
 #[derive(Clone)]
 pub struct MangadexFilterWidget {
@@ -203,7 +204,7 @@ impl MangadexFilterWidget {
             let tags_filtered: Vec<Span<'_>> = tags
                 .iter()
                 .filter(|tag| tag.state != TagListItemState::NotSelected)
-                .map(|tag| set_filter_tags_style(tag))
+                .map(|tag| tag.set_filter_tags_style())
                 .collect();
 
             Paragraph::new(Line::from(tags_filtered))
