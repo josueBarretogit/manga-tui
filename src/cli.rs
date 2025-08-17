@@ -6,7 +6,8 @@ use std::process::exit;
 
 use clap::{Parser, Subcommand, crate_version};
 use serde::{Deserialize, Serialize};
-use strum::{Display, IntoEnumIterator};
+use strum::IntoEnumIterator;
+use strum_macros::Display;
 
 use crate::backend::APP_DATA_DIR;
 use crate::backend::error_log::write_to_error_log;

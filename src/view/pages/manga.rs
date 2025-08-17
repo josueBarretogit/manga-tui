@@ -11,7 +11,7 @@ use ratatui::widgets::{Block, Clear, List, ListState, Paragraph, StatefulWidget,
 use ratatui_image::picker::Picker;
 use ratatui_image::protocol::Protocol;
 use ratatui_image::{Image, Resize};
-use strum::EnumIs;
+use strum_macros::EnumIs;
 use throbber_widgets_tui::{Throbber, ThrobberState};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;

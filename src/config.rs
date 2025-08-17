@@ -14,7 +14,7 @@ use std::sync::LazyLock;
 use manga_tui::exists;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
-use strum::{Display, EnumIter};
+use strum_macros::{Display, EnumIter};
 use toml::Table;
 
 use crate::backend::manga_provider::MangaProviders;

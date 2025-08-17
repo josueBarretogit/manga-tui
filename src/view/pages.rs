@@ -1,4 +1,4 @@
-use strum::{Display, EnumCount, EnumIter, FromRepr};
+use strum_macros::{Display, EnumCount, EnumIter, FromRepr};
 
 pub mod feed;
 pub mod home;
