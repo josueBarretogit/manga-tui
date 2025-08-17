@@ -19,7 +19,7 @@ exclude = [
 [dependencies]
 # ratatui related dependencies
 ratatui = { version = "0.29.0", features = ["all-widgets", "palette", "unstable-widget-ref"] }
-ratatui-image = { version = "2.0.1", features = ["rustix"]}
+ratatui-image = { version = "1.0.5", features = ["rustix"]}
 throbber-widgets-tui = "0.8.0"
 tui-input = { version = "0.14.0",  features = ["crossterm"], default-features = false}
 tui-widget-list = "0.13.0"
@@ -54,7 +54,7 @@ lopdf = "0.37.0"
 flate2 = "1.1.2"
 
 [dev-dependencies]
-httpmock = "0.8.0-alpha.1"
+httpmock = "0.7.0-rc.1"
 pretty_assertions = "1.4.0"
 rusty-hook = "0.11.2"
 fake = "4.4.0"

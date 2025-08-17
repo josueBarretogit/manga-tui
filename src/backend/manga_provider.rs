@@ -13,7 +13,8 @@ use ratatui::style::{Color, Style, Stylize};
 use ratatui::text::Span;
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
-use strum::{Display, EnumIter, IntoEnumIterator};
+use strum::IntoEnumIterator;
+use strum_macros::{Display, EnumIter};
 
 use super::database::ChapterBookmarked;
 use super::tui::Events;

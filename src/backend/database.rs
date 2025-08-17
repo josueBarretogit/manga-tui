@@ -62,7 +62,7 @@ use chrono::Utc;
 use manga_tui::SearchTerm;
 use rusqlite::types::ToSqlOutput;
 use rusqlite::{Connection, OptionalExtension, ToSql, params};
-use strum::{Display, EnumIter};
+use strum_macros::{Display, EnumIter};
 
 use super::AppDirectories;
 use super::manga_provider::{Languages, MangaProviders};
