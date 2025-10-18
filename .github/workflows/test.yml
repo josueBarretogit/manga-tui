@@ -16,7 +16,7 @@ jobs:
     name: Check code formatting and linting
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: Swatinem/rust-cache@v2
 
       - name: setup toolchain
@@ -43,7 +43,7 @@ jobs:
     name: Build and test manga tui
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: Swatinem/rust-cache@v2
 
@@ -78,11 +78,11 @@ jobs:
       id-token: "write"
       contents: "read"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Check Nix flake inputs
-        uses: DeterminateSystems/flake-checker-action@v9
+        uses: DeterminateSystems/flake-checker-action@v12
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@v16
+        uses: DeterminateSystems/nix-installer-action@v20
       # according to the repository https://github.com/DeterminateSystems/magic-nix-cache
       # The Magic Nix Cache will will stop working on February 1st , 2025 (https://determinate.systems/posts/magic-nix-cache-free-tier-eol/) unless you're on GitHub Enterprise Server.
       # - name: Activate Magic Nix Cache

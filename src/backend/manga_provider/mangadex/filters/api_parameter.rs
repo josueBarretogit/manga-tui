@@ -3,7 +3,8 @@ use std::fmt::{Debug, Write};
 use std::ops::Deref;
 
 use serde::{Deserialize, Serialize};
-use strum::{Display, EnumIter, IntoEnumIterator};
+use strum::IntoEnumIterator;
+use strum_macros::{Display, EnumIter};
 
 use super::filter_provider::{TagListItem, TagListItemState};
 use crate::backend::manga_provider::Languages;
@@ -12,7 +13,7 @@ pub trait IntoParam: Debug {
     fn into_param(self) -> String;
 }
 
-#[derive(Display, Clone, Debug, EnumIter, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Display, EnumIter, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ContentRating {
     #[default]
     #[strum(to_string = "safe")]
