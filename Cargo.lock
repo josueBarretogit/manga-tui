@@ -2719,8 +2719,8 @@ dependencies = [
  "scraper",
  "serde",
  "serde_json",
- "strum 0.27.2",
- "strum_macros 0.27.2",
+ "strum",
+ "strum_macros",
  "throbber-widgets-tui",
  "tokio",
  "toml 0.9.8",
@@ -3515,7 +3515,7 @@ dependencies = [
  "lru",
  "palette",
  "paste",
- "strum 0.26.3",
+ "strum",
  "time",
  "unicode-segmentation",
  "unicode-truncate",
@@ -4207,14 +4207,8 @@ version = "0.26.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8fec0f0aef304996cf250b31b5a10dee7980c85da9d759361292b8bca5a18f06"
 dependencies = [
- "strum_macros 0.26.4",
+ "strum_macros",
 ]
-
-[[package]]
-name = "strum"
-version = "0.27.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af23d6f6c1a224baef9d3f61e287d2761385a5b88fdab4eb4c6f11aeb54c4bcf"
 
 [[package]]
 name = "strum_macros"
@@ -4227,18 +4221,6 @@ dependencies = [
  "quote",
  "rustversion",
  "syn 2.0.107",
-]
-
-[[package]]
-name = "strum_macros"
-version = "0.27.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7695ce3845ea4b33927c055a39dc438a45b059f7c1b3d91d38d10355fb8cbca7"
-dependencies = [
- "heck",
- "proc-macro2",
- "quote",
- "syn 2.0.100",
 ]
 
 [[package]]
