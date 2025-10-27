@@ -24,6 +24,7 @@ use crate::view::widgets::StatefulWidgetFrame;
 
 pub mod filters;
 pub mod mangadex;
+pub mod mangapill;
 pub mod weebcentral;
 
 #[derive(Debug, Default, PartialEq, Eq, Clone, Serialize, Deserialize)]

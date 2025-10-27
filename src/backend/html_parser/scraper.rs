@@ -41,6 +41,14 @@ impl HtmlParser for Scraper {
     }
 
     #[inline]
+    fn get_element_from(&self, from: &HtmlElement, class: &str) -> Option<HtmlElement> {
+        html::Html::parse_fragment(&from)
+            .select(&class.as_selector())
+            .next()
+            .map(|el| HtmlElement::new(el.html()))
+    }
+
+    #[inline]
     fn get_inner_html(&self, document: &super::HtmlElement) -> String {
         let el = html::Html::parse_fragment(document);
         el.select(&"*".as_selector()).skip(1).next().map(|el| el.inner_html()).unwrap_or_default()
@@ -48,7 +56,7 @@ impl HtmlParser for Scraper {
 
     #[inline]
     fn get_element(&self, class: &str) -> Option<super::HtmlElement> {
-        dbg!(self.document.select(&class.as_selector()).next().map(|el| HtmlElement::new(el.html())))
+        self.document.select(&class.as_selector()).next().map(|el| HtmlElement::new(el.html()))
     }
 
     #[inline]
@@ -73,6 +81,13 @@ impl HtmlParser for Scraper {
     fn get_matching_elements(&self, selector: &str) -> Vec<HtmlElement> {
         self.document
             .select(&selector.as_selector())
+            .map(|el| HtmlElement::new(el.html()))
+            .collect()
+    }
+
+    fn get_matching_elements_from(&self, from: &HtmlElement, class: &str) -> Vec<HtmlElement> {
+        html::Html::parse_fragment(&from)
+            .select(&class.as_selector())
             .map(|el| HtmlElement::new(el.html()))
             .collect()
     }
@@ -204,5 +219,63 @@ mod tests {
         let result = dbg!(scraper.get_inner_html(&scraper.get_element("div").unwrap()));
 
         assert_eq!(expected, result.trim())
+    }
+
+    #[test]
+    fn it_gets_elements_from_element() {
+        let example = r#"
+        <div><ul>
+                <li> 
+
+                    <div>
+                        <h1> title </h1>
+                        <h2> subtitle </h2>
+                    </div>
+
+                </li>
+                <li> 2 </li>
+                <li> 3 </li>
+                <li> 4 </li></ul>
+        </div>
+
+        "#;
+
+        let example2 = r#"
+                    <div>
+                        <a href="/chapters/8834-10007000/haikyo-no-meshi-chapter-7" class="relative block">
+                            <figure class="w-full h-40 overflow-hidden bg-card rounded-md">
+                                <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/8834.jpeg"
+                                    alt="Haikyo no Meshi Chapter 7"
+                                    class="text-transparent lazy object-cover w-full h-full" />
+                            </figure>
+                        </a>
+                        <div class="px-1">
+                            <a href="/chapters/8834-10007000/haikyo-no-meshi-chapter-7">
+                                <div class="mt-3 text-lg font-black leading-tight">#7</div>
+                            </a>
+                            <a href="/manga/8834/haikyo-no-meshi" class="mt-1.5 leading-tight text-secondary">
+                                <div class="line-clamp-2 text-sm font-bold">Haikyo no Meshi</div>
+                                <div class="line-clamp-2 text-xs mt-1">The Common Bread,Meals in the Ruins</div>
+                            </a>
+                            <div class="mt-1.5 text-xs text-secondary">
+                                <time-ago datetime="2025-10-26T21:43:16Z">2025-10-26</time-ago>
+                            </div>
+                        </div>
+                    </div>
+
+        "#;
+
+        let expected = HtmlElement::new(
+            r#"<a class="mt-1.5 leading-tight text-secondary" href="/manga/8834/haikyo-no-meshi">
+                                <div class="line-clamp-2 text-sm font-bold">Haikyo no Meshi</div>
+                                <div class="line-clamp-2 text-xs mt-1">The Common Bread,Meals in the Ruins</div>
+                            </a>"#,
+        );
+
+        let scraper = Scraper::new(HtmlElement::new(example2));
+
+        let li = dbg!(scraper.get_element("div").unwrap());
+
+        assert_eq!(expected, scraper.get_element_from(&li, ".px-1 > a:nth-of-type(2)").unwrap());
     }
 }

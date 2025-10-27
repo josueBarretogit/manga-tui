@@ -29,10 +29,19 @@ impl HtmlElement {
 
 pub trait HtmlParser {
     fn get_element_children(&self, element: &HtmlElement) -> Vec<HtmlElement>;
+    /// "Document-wide"
     /// Get the first matching element for the given selector / class
     fn get_element(&self, class: &str) -> Option<HtmlElement>;
+
+    /// Like get_element but from an specific tag
+    fn get_element_from(&self, from: &HtmlElement, class: &str) -> Option<HtmlElement>;
+
+    /// Like get_matching_elements but from an specific tag
+    fn get_matching_elements_from(&self, from: &HtmlElement, class: &str) -> Vec<HtmlElement>;
+
+    /// "Document-wide"
     fn get_matching_elements(&self, selector: &str) -> Vec<HtmlElement>;
-    fn get_inner_html<'a>(&'a self, document: &'a HtmlElement) -> String;
+    fn get_inner_html(&self, document: &HtmlElement) -> String;
     fn get_inner_text(&self, document: &HtmlElement) -> String;
     fn get_element_attr(&self, element: &HtmlElement, attr_to_find: &str) -> Option<String>;
 }
