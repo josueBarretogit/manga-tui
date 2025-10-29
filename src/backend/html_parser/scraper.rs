@@ -42,7 +42,7 @@ impl HtmlParser for Scraper {
 
     #[inline]
     fn get_element_from(&self, from: &HtmlElement, class: &str) -> Option<HtmlElement> {
-        html::Html::parse_fragment(&from)
+        html::Html::parse_fragment(from)
             .select(&class.as_selector())
             .next()
             .map(|el| HtmlElement::new(el.html()))
@@ -51,7 +51,7 @@ impl HtmlParser for Scraper {
     #[inline]
     fn get_inner_html(&self, document: &super::HtmlElement) -> String {
         let el = html::Html::parse_fragment(document);
-        el.select(&"*".as_selector()).skip(1).next().map(|el| el.inner_html()).unwrap_or_default()
+        el.select(&"*".as_selector()).nth(1).map(|el| el.inner_html()).unwrap_or_default()
     }
 
     #[inline]
@@ -63,7 +63,7 @@ impl HtmlParser for Scraper {
     fn get_element_attr(&self, element: &super::HtmlElement, attr_to_find: &str) -> Option<String> {
         let el = html::Html::parse_fragment(element);
 
-        for e in el.select(&"*".as_selector()).skip(1) {
+        if let Some(e) = el.select(&"*".as_selector()).nth(1) {
             return e.attr(attr_to_find).map(|atr| atr.to_string());
         }
 
@@ -86,7 +86,7 @@ impl HtmlParser for Scraper {
     }
 
     fn get_matching_elements_from(&self, from: &HtmlElement, class: &str) -> Vec<HtmlElement> {
-        html::Html::parse_fragment(&from)
+        html::Html::parse_fragment(from)
             .select(&class.as_selector())
             .map(|el| HtmlElement::new(el.html()))
             .collect()
