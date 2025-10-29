@@ -3,10 +3,12 @@ use std::fmt::{Display, Write};
 use std::path::Path;
 
 use chrono::NaiveDate;
+use regex::Regex;
+use reqwest::Url;
 use scraper::{ElementRef, html};
 
 use crate::backend::html_parser::scraper::AsSelector;
-use crate::backend::html_parser::{HtmlElement, HtmlParser, ParseHtml};
+use crate::backend::html_parser::{HtmlElement, HtmlParser};
 use crate::backend::manga_provider::{
     Author, ChapterPageUrl, ChapterReader, Genres, GetMangasResponse, Languages, ListOfChapters, Manga, MangaStatus, PopularManga,
     Rating, RecentlyAddedManga, SearchManga, SortedChapters, SortedVolumes, Volumes,
@@ -35,23 +37,24 @@ impl Error for PopularMangaParseError {}
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(super) struct PopularMangaItem {
     pub(super) id: String,
+    pub(super) page_url: String,
     pub(super) cover_url: String,
     pub(super) title: String,
     pub(super) latest_chapter: Option<String>,
 }
 
-impl From<PopularMangaItem> for PopularManga {
-    fn from(manga: PopularMangaItem) -> Self {
-        Self {
-            id: manga.id,
-            title: manga.title,
-            genres: vec![],
-            description: format!("Latest chapter: {}", manga.latest_chapter.unwrap_or_default()),
-            status: None,
-            cover_img_url: manga.cover_url,
-        }
-    }
-}
+//impl From<PopularMangaItem> for PopularManga {
+//    fn from(manga: PopularMangaItem) -> Self {
+//        Self {
+//            id: manga.id,
+//            title: manga.title,
+//            genres: vec![],
+//            description: format!("Latest chapter: {}", manga.latest_chapter.unwrap_or_default()),
+//            status: None,
+//            cover_img_url: manga.cover_url,
+//        }
+//    }
+//}
 
 /// How to scrape the popoular mangas from weebcentral:
 /// - The `section` which contains the mangas is the first one
@@ -84,15 +87,16 @@ impl<T: HtmlParser> PopularMangasMangaPill<T> {
         let title = self.parser.get_element_from(title_and_id, "div").ok_or("title not found")?;
         let title = self.parser.get_inner_text(&title);
 
-        let id = self
+        let page_url = self
             .parser
             .get_element_attr(title_and_id, "href")
             .ok_or("a tag containing id was not found")?;
 
-        let id = id.split("/").nth(2).ok_or("id wasnt succesfully extracted")?;
+        let id = page_url.split("/").nth(2).ok_or("id wasnt succesfully extracted")?;
 
         Ok(PopularMangaItem {
             id: id.to_string(),
+            page_url,
             title,
             cover_url: img,
             latest_chapter: Some(chapter_number),
@@ -107,10 +111,12 @@ impl<T: HtmlParser> PopularMangasMangaPill<T> {
         let div_containing_mangas = self.parser.get_matching_elements(selector_popular_mangas);
 
         for el in div_containing_mangas.iter() {
-            res.push(self.parse_popular_manga(el));
+            if let Ok(parsed) = self.parse_popular_manga(el) {
+                res.push(parsed);
+            }
         }
 
-        Ok(res.into_iter().flatten().collect())
+        Ok(res)
     }
 }
 
@@ -137,21 +143,22 @@ impl Error for LatestMangaError {}
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(super) struct LatestMangItem {
     pub(super) id: String,
+    pub(super) page_url: String,
     pub(super) cover_url: String,
     pub(super) title: String,
     pub(super) latest_chapter: Option<String>,
 }
 
-impl From<LatestMangItem> for RecentlyAddedManga {
-    fn from(manga: LatestMangItem) -> Self {
-        Self {
-            id: manga.id,
-            title: manga.title,
-            description: manga.latest_chapter.unwrap_or_default(),
-            cover_img_url: manga.cover_url,
-        }
-    }
-}
+//impl From<LatestMangItem> for RecentlyAddedManga {
+//    fn from(manga: LatestMangItem) -> Self {
+//        Self {
+//            id: manga.id,
+//            title: manga.title,
+//            description: manga.latest_chapter.unwrap_or_default(),
+//            cover_img_url: manga.cover_url,
+//        }
+//    }
+//}
 
 /// How to scrape the latest mangas from weebcentral:
 /// - The `section` which contains the mangas is the second one
@@ -168,7 +175,7 @@ impl<T: HtmlParser> LatestMangas<T> {
     fn parse_latest_manga(&self, div: &HtmlElement) -> Result<LatestMangItem, LatestMangaError> {
         let a_containing_latest_chapter = self
             .parser
-            .get_element_from(dbg!(div), "a > div:nth-of-type(1)")
+            .get_element_from(div, "a > div:nth-of-type(1)")
             .map(|el| self.parser.get_inner_text(&el));
 
         let img = self
@@ -189,15 +196,13 @@ impl<T: HtmlParser> LatestMangas<T> {
 
         let title = self.parser.get_inner_text(&title);
 
-        let id = self
-            .parser
-            .get_element_attr(dbg!(&a_containing_title_and_id), "href")
-            .ok_or("no id found")?;
+        let page_url = self.parser.get_element_attr(&a_containing_title_and_id, "href").ok_or("no id found")?;
 
-        let id = id.split("/").nth(2).ok_or("failed to parse id")?;
+        let id = page_url.split("/").nth(2).ok_or("failed to parse id")?;
 
         Ok(LatestMangItem {
             id: id.to_string(),
+            page_url,
             title,
             cover_url: img,
             latest_chapter: a_containing_latest_chapter,
@@ -212,22 +217,35 @@ impl<T: HtmlParser> LatestMangas<T> {
         let div_containing_mangas = self.parser.get_matching_elements(selector_popular_mangas);
 
         for el in div_containing_mangas.iter().take(5) {
-            res.push(self.parse_latest_manga(el));
+            if let Ok(parsed) = self.parse_latest_manga(el) {
+                res.push(parsed);
+            }
         }
 
-        Ok(dbg!(res.into_iter().flatten().collect()))
+        Ok(res)
     }
 }
 
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub(super) struct MangaPillStatus {
     pub(super) name: String,
+}
+
+impl Default for MangaPillStatus {
+    fn default() -> Self {
+        Self {
+            name: "publishing".to_string(),
+        }
+    }
 }
 
 impl From<MangaPillStatus> for MangaStatus {
     fn from(value: MangaPillStatus) -> Self {
         match value.name.to_lowercase().as_str() {
             "ongoing" | "publishing" => MangaStatus::Ongoing,
+            "finished" => MangaStatus::Completed,
+            "on hiatus" => MangaStatus::Hiatus,
+            "discontinued" => MangaStatus::Cancelled,
             _ => MangaStatus::default(),
         }
     }
@@ -251,7 +269,6 @@ impl From<MangaPillTag> for Genres {
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(super) struct MangaPageData {
-    pub(super) id: String,
     pub(super) cover_url: String,
     pub(super) title: String,
     pub(super) description: Option<String>,
@@ -259,48 +276,23 @@ pub(super) struct MangaPageData {
     pub(super) status: MangaPillStatus,
 }
 
-impl From<MangaPageData> for Manga {
-    fn from(manga: MangaPageData) -> Self {
-        Self {
-            id: manga.id.clone(),
-            id_safe_for_download: manga.id,
-            title: manga.title,
-            genres: manga.tags.into_iter().map(Genres::from).collect(),
-            description: manga.description.unwrap_or("No description".to_string()),
-            status: manga.status.into(),
-            cover_img_url: manga.cover_url,
-            languages: vec![Languages::English],
-            rating: "".to_string(),
-            artist: None,
-            author: None,
-        }
-    }
-}
-
-/// Extracts the id from the manga page
-/// # Examples
-/// https://weebcentral.com/series/01J76XYCT4JVR13RN6NT1480MD/Tengoku-Daimakyou
-/// returns : 01J76XYCT4JVR13RN6NT1480MD
-pub(super) fn extract_manga_id_from_url(url: &str) -> String {
-    let mut parts: Vec<&str> = url.split("/").collect();
-
-    parts.reverse();
-
-    parts.get(1).map(|id| id.to_string()).unwrap_or_default()
-}
-
-/// From a url replaces the last part after `/` with `full-chapter-list`
-/// # Examples
-/// https://weebcentral.com/series/01J76XYCT4JVR13RN6NT1480MD/Tengoku-Daimakyou
-/// returns : https://weebcentral.com/series/01J76XYCT4JVR13RN6NT1480MD/full-chapter-list
-pub(super) fn replace_last_segment_url(url: &str) -> String {
-    let mut parts: Vec<&str> = url.rsplitn(2, '/').collect();
-    if parts.len() > 1 {
-        format!("{}/full-chapter-list", parts[1])
-    } else {
-        url.to_string() // If there's no "/", return the original URL
-    }
-}
+//impl From<MangaPageData> for Manga {
+//    fn from(manga: MangaPageData) -> Self {
+//        Self {
+//            id: manga.id.clone(),
+//            id_safe_for_download: manga.id,
+//            title: manga.title,
+//            genres: manga.tags.into_iter().map(Genres::from).collect(),
+//            description: manga.description.unwrap_or("No description".to_string()),
+//            status: manga.status.into(),
+//            cover_img_url: manga.cover_url,
+//            languages: vec![Languages::English],
+//            rating: "".to_string(),
+//            artist: None,
+//            author: None,
+//        }
+//    }
+//}
 
 #[derive(Debug)]
 pub(super) struct MangaPageError {
@@ -324,12 +316,11 @@ impl Error for MangaPageError {}
 
 pub(super) struct MangaPageDataParser<T: HtmlParser> {
     scraper: T,
-    id: String,
 }
 
 impl<T: HtmlParser> MangaPageDataParser<T> {
-    pub(super) fn new(scraper: T, id: String) -> Self {
-        Self { scraper, id }
+    pub(super) fn new(scraper: T) -> Self {
+        Self { scraper }
     }
 
     pub(super) fn scrape_manga_page(self) -> Result<MangaPageData, MangaPageError> {
@@ -368,15 +359,12 @@ impl<T: HtmlParser> MangaPageDataParser<T> {
             })
             .collect();
 
-        let id = self.id;
-
         Ok(MangaPageData {
             cover_url: img,
             title,
             description,
             status: MangaPillStatus { name: status },
             tags: genres,
-            id,
         })
     }
 }
@@ -402,61 +390,49 @@ impl<T: Into<String>> From<T> for ChaptersError {
 impl Error for ChaptersError {}
 
 #[derive(Debug, Default, PartialEq, Eq)]
-pub(super) struct WeebcentralChapter {
+pub(super) struct MangaPillChapterListItem {
     pub(super) id: String,
+    pub(super) full_url: String,
     pub(super) number: String,
-    pub(super) datetime: NaiveDate,
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
-pub(super) struct WeebcentralChapters {
-    pub(super) chapters: Vec<WeebcentralChapter>,
+pub(super) struct MangaPillChapters {
+    pub(super) chapters: Vec<MangaPillChapterListItem>,
 }
 
-fn parse_chapter_from_tag(a: ElementRef<'_>) -> Result<WeebcentralChapter, ChaptersError> {
-    let page_url = a.attr("href").ok_or("No href found")?.to_string();
-    let id = page_url.split("/").last().ok_or("No chapter id found")?.to_string();
-
-    let span_with_chapter = a
-        .select(&"span.grow.flex.items-center.gap-2".as_selector())
-        .next()
-        .ok_or("No tag which contains chap number found")?;
-
-    let chapter = span_with_chapter
-        .select(&"span".as_selector())
-        .next()
-        .ok_or("No tag with chapter title")?;
-
-    let number = chapter.inner_html();
-    let number = number.split(" ").last().ok_or("No number found")?;
-
-    let datetime = a.select(&"time".as_selector()).next().ok_or("No datetime found")?;
-    let datetime = datetime.attr("datetime").ok_or("No datetime attribute found")?.to_string();
-
-    let chapter: WeebcentralChapter = WeebcentralChapter {
-        id,
-        number: number.to_string(),
-        datetime: chrono::DateTime::parse_from_rfc3339(&datetime).unwrap_or_default().date_naive(),
-    };
-    Ok(chapter)
+#[derive(Debug)]
+pub(super) struct MangaPillChaptersParser<T: HtmlParser> {
+    scraper: T,
 }
 
-impl ParseHtml for WeebcentralChapters {
-    type ParseError = ChaptersError;
+impl<T: HtmlParser> MangaPillChaptersParser<T> {
+    pub(super) fn new(scraper: T) -> Self {
+        Self { scraper }
+    }
 
-    fn parse_html(html: HtmlElement) -> Result<Self, Self::ParseError> {
-        let doc = html::Html::parse_document(html.as_str());
-        let chapter_selector = "div > a".as_selector();
+    pub(super) fn scrape_list_of_chapters(self) -> Result<MangaPillChapters, ChaptersError> {
+        let chapters_selector = "a.border";
 
-        let mut chapters: Vec<Result<WeebcentralChapter, ChaptersError>> = vec![];
+        let scrape_a = |a: &HtmlElement| -> Option<MangaPillChapterListItem> {
+            let url = self.scraper.get_element_attr(a, "href")?;
+            let id = url.split("/").nth(2)?.split("-").last()?;
 
-        for a in doc.select(&chapter_selector) {
-            chapters.push(parse_chapter_from_tag(a));
-        }
+            Some(MangaPillChapterListItem {
+                id: id.to_string(),
+                full_url: url,
+                number: self.scraper.get_inner_text(a).split(" ").nth(1)?.to_string(),
+            })
+        };
 
-        Ok(Self {
-            chapters: chapters.into_iter().flatten().collect(),
-        })
+        let chapters: Vec<MangaPillChapterListItem> = self
+            .scraper
+            .get_matching_elements(chapters_selector)
+            .iter()
+            .filter_map(scrape_a)
+            .collect();
+
+        Ok(MangaPillChapters { chapters })
     }
 }
 
@@ -480,55 +456,14 @@ impl<T: Into<String>> From<T> for ChapterPagesError {
 
 impl Error for ChapterPagesError {}
 
-#[derive(Debug, Default, PartialEq, Eq)]
-pub(super) struct WeebcentralPage {
-    pub(super) url: String,
-    pub(super) extension: String,
-}
-
-#[derive(Debug, Default, PartialEq, Eq)]
-pub(super) struct ChapterPagesLinks {
-    pub(super) pages: Vec<WeebcentralPage>,
-}
-
-impl From<WeebcentralPage> for ChapterPageUrl {
-    fn from(value: WeebcentralPage) -> Self {
-        Self {
-            url: value.url.parse().unwrap(),
-            extension: value.extension,
-        }
-    }
-}
-
-impl ParseHtml for ChapterPagesLinks {
-    type ParseError = ChapterPagesError;
-
-    fn parse_html(html: HtmlElement) -> Result<Self, Self::ParseError> {
-        let section = html::Html::parse_fragment(html.as_str());
-
-        let mut pages: Vec<WeebcentralPage> = vec![];
-
-        for img in section.select(&"img".as_selector()) {
-            let src = img.attr("src").map(|src| src.to_string());
-            if let Some(sr) = src {
-                /// Safe unwrapping because the src is always a valid url and thus has a extension
-                let extension = Path::new(&sr).extension().unwrap().to_str().unwrap().to_string();
-                pages.push(WeebcentralPage { url: sr, extension });
-            }
-        }
-
-        Ok(Self { pages })
-    }
-}
-
-/// Weeb central does not provide volume of mangas so they are all grouped in the `none` volume
-impl From<WeebcentralChapters> for ListOfChapters {
-    fn from(value: WeebcentralChapters) -> Self {
+/// Manga pill central does not provide volume of mangas so they are all grouped in the `none` volume
+impl From<MangaPillChapters> for ListOfChapters {
+    fn from(value: MangaPillChapters) -> Self {
         let chapters: Vec<ChapterReader> = value
             .chapters
             .into_iter()
             .map(|chap| ChapterReader {
-                id: chap.id,
+                id: chap.full_url,
                 number: chap.number,
                 volume: "none".to_string(),
             })
@@ -563,50 +498,134 @@ impl<T: Into<String>> From<T> for ChapterPageDataError {
 
 impl Error for ChapterPageDataError {}
 
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default, PartialEq)]
 pub(super) struct ChapterPageData {
-    pub(super) number: String,
+    pub(super) manga_title: String,
+    pub(super) number: f64,
+    pub(super) pages_url: Vec<Url>,
 }
 
-impl ParseHtml for ChapterPageData {
-    type ParseError = ChapterPageDataError;
+#[derive(Debug)]
+pub(super) struct ChapterPageDataParser<T: HtmlParser> {
+    scraper: T,
+}
 
-    fn parse_html(html: HtmlElement) -> Result<Self, Self::ParseError> {
-        let html = html::Html::parse_document(html.as_str());
-        let number = html
-            .select(&"#nav-top > div:nth-child(1) > div:nth-child(1) > button:nth-child(2)".as_selector())
-            .next()
-            .ok_or("Button with chapter number was not found")?;
+impl<T: HtmlParser> ChapterPageDataParser<T> {
+    pub(super) fn new(scraper: T) -> Self {
+        Self { scraper }
+    }
 
-        let number = number
-            .select(&"span".as_selector())
-            .next()
-            .ok_or("No span containing chapter number was found")?
-            .inner_html();
+    pub(super) fn scrape_page(self) -> Result<ChapterPageData, ChapterPageDataError> {
+        let pages_selector = ".js-page";
 
-        let number = number.split(" ").last().ok_or("No number found")?;
+        let title = self
+            .scraper
+            .get_element("h1")
+            .map(|h1| self.scraper.get_inner_text(&h1))
+            .unwrap_or("No title".to_string());
+        let regex_find_number = Regex::new(r"\d+(\.\d+)?").unwrap();
 
-        Ok(Self {
-            number: number.to_string(),
+        let number = regex_find_number
+            .find(&title)
+            .and_then(|mat| mat.as_str().parse::<f64>().ok())
+            .unwrap_or_default();
+
+        let pages_url: Vec<Url> = self
+            .scraper
+            .get_matching_elements(pages_selector)
+            .iter()
+            .filter_map(|img| self.scraper.get_element_attr(img, "data-src").and_then(|url| Url::parse(&url).ok()))
+            .collect();
+
+        Ok(ChapterPageData {
+            manga_title: title,
+            number,
+            pages_url,
         })
     }
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(super) struct SearchPageItem {
-    pub(super) id: String,
-    pub(super) title: String,
+    pub(super) page_url: String,
     pub(super) cover_url: String,
+    pub(super) title: String,
     pub(super) status: MangaPillStatus,
-    pub(super) authors: Vec<String>,
-    pub(super) tags: Vec<MangaPillTag>,
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(super) struct SearchPageMangas {
     pub(super) mangas: Vec<SearchPageItem>,
     /// Indicated wether or not more mangas can be fetched
-    pub(super) more_result: bool,
+    pub(super) next_page: Option<String>,
+    pub(super) previous_page: Option<String>,
+}
+
+#[derive(Debug)]
+pub(super) struct SearchPageMangasParser<T: HtmlParser> {
+    scraper: T,
+}
+
+impl<T: HtmlParser> SearchPageMangasParser<T> {
+    pub(super) fn new(scraper: T) -> Self {
+        Self { scraper }
+    }
+
+    fn scrape_search_item(&self, div: &HtmlElement) -> Result<SearchPageItem, SearchPageError> {
+        let cover_url = self
+            .scraper
+            .get_element_from(div, "img")
+            .and_then(|img| self.scraper.get_element_attr(&img, "data-src"))
+            .ok_or("No img tag found")?;
+
+        let a_containing_url_and_title = self.scraper.get_element_from(div, "a.mb-2").ok_or("a containing most info not found")?;
+
+        let page_url = self
+            .scraper
+            .get_element_attr(&a_containing_url_and_title, "href")
+            .map(|attr| attr.replace("/manga/", ""))
+            .ok_or("Page url not found")?;
+
+        let title = self
+            .scraper
+            .get_element_from(&a_containing_url_and_title, "div")
+            .map(|el| self.scraper.get_inner_text(&el))
+            .ok_or("No title found")?;
+
+        let status = self
+            .scraper
+            .get_element_from(div, "div.text-xs.leading-5:last-of-type")
+            .map(|di| MangaPillStatus {
+                name: self.scraper.get_inner_text(&di),
+            })
+            .unwrap_or_default();
+
+        Ok(SearchPageItem {
+            page_url,
+            cover_url,
+            title,
+            status,
+        })
+    }
+
+    pub(super) fn scrape_search_page(self) -> Result<SearchPageMangas, SearchPageError> {
+        let divs_selector = "div.my-3:nth-child(3) > div";
+        let selector_not_found = ".text-lg > div:nth-child(1)";
+
+        let div_containing_search_items = self.scraper.get_matching_elements(divs_selector);
+        let mut mangas: Vec<_> = vec![];
+
+        for div in div_containing_search_items.iter() {
+            if let Ok(scraped) = self.scrape_search_item(div) {
+                mangas.push(scraped);
+            }
+        }
+
+        Ok(SearchPageMangas {
+            mangas,
+            ..Default::default()
+        })
+    }
 }
 
 #[derive(Debug)]
@@ -629,121 +648,37 @@ impl<T: Into<String>> From<T> for SearchPageError {
 
 impl Error for SearchPageError {}
 
-impl ParseHtml for SearchPageItem {
-    type ParseError = SearchPageError;
+///// Weebcentral does not provide the description of the manga and the artist
+//impl From<SearchPageItem> for SearchManga {
+//    fn from(manga: SearchPageItem) -> Self {
+//        Self {
+//            id: manga.id,
+//            title: manga.title,
+//            genres: manga.tags.into_iter().map(Genres::from).collect(),
+//            description: None,
+//            status: Some(manga.status.into()),
+//            cover_img_url: manga.cover_url,
+//            languages: vec![Languages::English],
+//            artist: None,
+//            author: None,
+//        }
+//    }
+//}
 
-    fn parse_html(html: HtmlElement) -> Result<Self, Self::ParseError> {
-        let article = html::Html::parse_fragment(html.as_str());
-
-        let a_selector = "span.tooltip.tooltip-bottom a".as_selector();
-
-        let manga_url = article
-            .select(&a_selector)
-            .next()
-            .ok_or(format!("No a tag containing id was found in {}", html.as_str()))?
-            .attr("href")
-            .ok_or("No href found")?;
-
-        let img_selector = "source".as_selector();
-
-        let cover_url = article
-            .select(&img_selector)
-            .next()
-            .ok_or("No cover url tag found")?
-            .attr("srcset")
-            .ok_or("No srcset attribute found")?
-            .to_string();
-
-        let title_selector = ".line-clamp-1".as_selector();
-
-        let title = article.select(&title_selector).next().ok_or("No title found")?.inner_html();
-
-        let authors_selector =
-            "article.bg-base-300:nth-child(1) > section:nth-child(2) > div:nth-child(5) > span > a".as_selector();
-
-        let authors = article.select(&authors_selector).map(|a| a.inner_html().trim().to_string()).collect();
-
-        let status_selector =
-            "article.bg-base-300:nth-child(1) > section:nth-child(2) > div:nth-child(3) > span:nth-child(2)".as_selector();
-
-        let status = MangaPillStatus {
-            name: article.select(&status_selector).next().ok_or("No status tag found")?.inner_html(),
-        };
-
-        let tags_selector = "article.bg-base-300:nth-child(1) > section:nth-child(2) > div:nth-child(6) > span".as_selector();
-
-        let tags = article
-            .select(&tags_selector)
-            .map(|tag| MangaPillTag {
-                name: tag.inner_html().replace(",", ""),
-            })
-            .collect();
-
-        Ok(Self {
-            cover_url,
-            id: extract_manga_id_from_url(manga_url),
-            title,
-            authors,
-            status,
-            tags,
-        })
-    }
-}
-
-impl ParseHtml for SearchPageMangas {
-    type ParseError = SearchPageError;
-
-    fn parse_html(html: HtmlElement) -> Result<Self, Self::ParseError> {
-        let doc = html::Html::parse_fragment(html.as_str());
-        let article_selector = "article.bg-base-300".as_selector();
-        let more_mangas_button = "button.col-span-2".as_selector();
-
-        let mut mangas: Vec<Result<SearchPageItem, <SearchPageItem as ParseHtml>::ParseError>> = vec![];
-
-        for article in doc.select(&article_selector) {
-            mangas.push(SearchPageItem::parse_html(HtmlElement::new(article.html())).inspect_err(|e| println!("{e}")));
-        }
-
-        let more_result = doc.select(&more_mangas_button).next().is_some();
-
-        Ok(Self {
-            mangas: mangas.into_iter().flatten().take(24).collect(),
-            more_result,
-        })
-    }
-}
-
-/// Weebcentral does not provide the description of the manga and the artist
-impl From<SearchPageItem> for SearchManga {
-    fn from(manga: SearchPageItem) -> Self {
-        Self {
-            id: manga.id,
-            title: manga.title,
-            genres: manga.tags.into_iter().map(Genres::from).collect(),
-            description: None,
-            status: Some(manga.status.into()),
-            cover_img_url: manga.cover_url,
-            languages: vec![Languages::English],
-            artist: None,
-            author: None,
-        }
-    }
-}
-
-/// There is no way of knowing the total mangas of the search
-impl From<SearchPageMangas> for GetMangasResponse {
-    fn from(value: SearchPageMangas) -> Self {
-        let amount_mangas = value.mangas.len();
-        Self {
-            mangas: value.mangas.into_iter().map(SearchManga::from).collect(),
-            /// Since v0.7.0 weebcentral does not provide the total mangas and the pagination
-            /// implementation requires it so that it knows it can query more mangas, so for now we
-            /// put a ver large number as total mangas
-            total_mangas: if value.more_result { 1000000 } else { amount_mangas as u32 },
-        }
-    }
-}
-
+///// There is no way of knowing the total mangas of the search
+//impl From<SearchPageMangas> for GetMangasResponse {
+//    fn from(value: SearchPageMangas) -> Self {
+//        let amount_mangas = value.mangas.len();
+//        Self {
+//            mangas: value.mangas.into_iter().map(SearchManga::from).collect(),
+//            /// Since v0.7.0 weebcentral does not provide the total mangas and the pagination
+//            /// implementation requires it so that it knows it can query more mangas, so for now we
+//            /// put a ver large number as total mangas
+//            total_mangas: if value.more_result { 1000000 } else { amount_mangas as u32 },
+//        }
+//    }
+//}
+//
 #[cfg(test)]
 mod tests {
     use std::error::Error;
@@ -751,22 +686,17 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use super::*;
+    use crate::backend::html_parser::HtmlElement;
     use crate::backend::html_parser::scraper::Scraper;
-    use crate::backend::html_parser::{HtmlElement, ParseHtml};
 
     static HOME_PAGE_DOC: &str = include_str!("../../../../data_test/mangapill/home_page.txt");
 
     static MANGA_PAGE_DOC: &str = include_str!("../../../../data_test/mangapill/manga_page.txt");
 
-    /// Obtained via: curl https://weebcentral.com/series/01J76XYCT4JVR13RN6NT1480MD/full-chapter-list
-    static CHAPTER_LIST: &str = include_str!("../../../../data_test/weebcentral/full_chapters.txt");
+    static CHAPTER_PAGE: &str = include_str!("../../../../data_test/mangapill/chapter-page.txt");
 
-    /// Obtained via: curl https://weebcentral.com/chapters/01JJB9BP43FHYCHAAZDVXKPSEW/images?is_prev=False&current_page=1&reading_style=long_strip
-    static CHAPTER_PAGE_IMAGES_LIST: &str = include_str!("../../../../data_test/weebcentral/chapter_page_images.txt");
-
-    /// Obtained via: curl https://weebcentral.com/search/data?limit=32&offset=0&sort=Best%20Match&order=Descending&official=Any&anime=Any&adult=Any&display_mode=Full%20Display
-    static SEARCH_PAGE_DOC: &str = include_str!("../../../../data_test/weebcentral/search_page_paginated.txt");
-    static SEARCH_PAGE_DOC_NOT_PAGINATED: &str = include_str!("../../../../data_test/weebcentral/search_page_no_more_result.txt");
+    static SEARCH_PAGE_DOC: &str = include_str!("../../../../data_test/mangapill/search_page.txt");
+    static SEARCH_PAGE_DOC_NOT_FOUND: &str = include_str!("../../../../data_test/mangapill/search_page_not_found.txt");
 
     #[test]
     fn popular_manga_is_parsed_from_html() -> Result<(), Box<dyn Error>> {
@@ -774,6 +704,7 @@ mod tests {
 
         let expected: PopularMangaItem = PopularMangaItem {
             id: "5281".to_string(),
+            page_url: "/manga/5281/sakamoto-days".to_string(),
             cover_url: "https://cdn.readdetectiveconan.com/file/mangapill/i/5281.jpeg".to_string(),
             title: "Sakamoto Days".to_string(),
             latest_chapter: Some("#234".to_string()),
@@ -781,6 +712,7 @@ mod tests {
 
         let expected2: PopularMangaItem = PopularMangaItem {
             id: "2".to_string(),
+            page_url: "/manga/2/one-piece".to_string(),
             cover_url: "https://cdn.readdetectiveconan.com/file/mangapill/i/2.webp?h=01971742-5d7f-7f32-8d2b-d038279f8a73"
                 .to_string(),
             title: "One Piece".to_string(),
@@ -808,6 +740,7 @@ mod tests {
 
         let expected: LatestMangItem = LatestMangItem {
             id: "8834".to_string(),
+            page_url: "/manga/8834/haikyo-no-meshi".to_string(),
             cover_url: "https://cdn.readdetectiveconan.com/file/mangapill/i/8834.jpeg".to_string(),
             title: "Haikyo no Meshi".to_string(),
             latest_chapter: Some("#7".to_string()),
@@ -815,6 +748,7 @@ mod tests {
 
         let expected2: LatestMangItem = LatestMangItem {
             id: "2140".to_string(),
+            page_url: "/manga/2140/kakegurui".to_string(),
             cover_url: "https://cdn.readdetectiveconan.com/file/mangapill/i/2140.jpg".to_string(),
             title: "Kakegurui".to_string(),
             latest_chapter: Some("#121".to_string()),
@@ -857,7 +791,6 @@ mod tests {
         ];
 
         let expected: MangaPageData = MangaPageData {
-            id: "5281".to_string(),
             cover_url: "https://cdn.readdetectiveconan.com/file/mangapill/i/5281.jpeg".to_string(),
             title: "Sakamoto Days".to_string(),
             description: Some(description),
@@ -867,7 +800,7 @@ mod tests {
             },
         };
 
-        let scraper = MangaPageDataParser::new(Scraper::new(HtmlElement::new(html)), "5281".to_string());
+        let scraper = MangaPageDataParser::new(Scraper::new(HtmlElement::new(html)));
 
         let result = scraper.scrape_manga_page().unwrap();
 
@@ -878,88 +811,110 @@ mod tests {
 
     #[test]
     fn list_of_chapters_if_parsed_from_html() -> Result<(), Box<dyn Error>> {
-        let html = CHAPTER_LIST;
+        let html = MANGA_PAGE_DOC;
 
-        let expected: WeebcentralChapter = WeebcentralChapter {
-            id: "01JQ5N6QKKBWVX427RT44K14WV".to_string(),
-            number: "71".to_string(),
-            datetime: chrono::DateTime::parse_from_rfc3339("2025-03-25T03:23:13.393Z")
-                .unwrap_or_default()
-                .date_naive(),
+        let expected: MangaPillChapterListItem = MangaPillChapterListItem {
+            id: "10234000".to_string(),
+            full_url: "/chapters/5281-10234000/sakamoto-days-chapter-234".to_string(),
+            number: "234".to_string(),
         };
 
-        let result = WeebcentralChapters::parse_html(HtmlElement::new(html))?;
-        assert!(result.chapters.len() > 70);
+        let expected2: MangaPillChapterListItem = MangaPillChapterListItem {
+            id: "10233000".to_string(),
+            full_url: "/chapters/5281-10233000/sakamoto-days-chapter-233".to_string(),
+            number: "233".to_string(),
+        };
+
+        let scraper = MangaPillChaptersParser::new(Scraper::new(HtmlElement::new(html)));
+
+        let result = scraper.scrape_list_of_chapters().unwrap();
+
+        assert_eq!(234, result.chapters.len());
 
         let chap = result.chapters.iter().find(|chap| chap.id == expected.id).unwrap();
+        let chap2 = result.chapters.iter().find(|chap| chap.id == expected2.id).unwrap();
 
         assert_eq!(expected, *chap);
+        assert_eq!(expected2, *chap2);
 
         Ok(())
     }
 
     #[test]
-    fn chapter_pages_are_parsed_from_html() -> Result<(), Box<dyn Error>> {
-        let html = CHAPTER_PAGE_IMAGES_LIST;
+    fn chapter_page_is_parse_from_html() -> Result<(), Box<dyn Error>> {
+        let html = CHAPTER_PAGE;
 
-        let expected = WeebcentralPage {
-            url: "https://scans.lastation.us/manga/Tengoku-Daimakyou/0070-001.png".to_string(),
-            extension: "png".to_string(),
+        let expected_pages: Vec<Url> = [
+            "https://cdn.readdetectiveconan.com/file/mangap/9280/10011100/0199dd6e-24c5-7d07-97e8-6b57345542e3/1.jpeg",
+            "https://cdn.readdetectiveconan.com/file/mangap/9280/10011100/0199dd6e-24c5-7d07-97e8-6b57345542e3/2.jpeg",
+            "https://cdn.readdetectiveconan.com/file/mangap/9280/10011100/0199dd6e-24c5-7d07-97e8-6b57345542e3/3.jpeg",
+        ]
+        .iter()
+        .map(|url| url.parse().unwrap())
+        .collect();
+
+        let expected: ChapterPageData = ChapterPageData {
+            manga_title: "Tada no Murabito no Boku ga, Sanbyakunenmae no Boukun
+                Ouji ni Tensei shite Shimaimashita: Zensei no Chishiki de Ansatsu Flag wo Kaihi shite, Odayaka ni
+                Ikinokorimasu! Chapter 11.1"
+                .to_string(),
+            number: 11.1,
+            pages_url: expected_pages.clone(),
         };
 
-        let result = ChapterPagesLinks::parse_html(HtmlElement::new(html))?;
+        let scraper = ChapterPageDataParser::new(Scraper::new(HtmlElement::new(html)));
 
-        assert!(!result.pages.is_empty());
+        let result = scraper.scrape_page().unwrap();
 
-        let page = result.pages.iter().find(|page| page.url == expected.url).unwrap();
+        assert_eq!(expected.manga_title, result.manga_title);
+        assert_eq!(expected.number, result.number);
 
-        assert_eq!(expected, *page);
+        assert_eq!(expected_pages[0], result.pages_url[0]);
+        assert_eq!(expected_pages[1], result.pages_url[1]);
+        assert_eq!(expected_pages[2], result.pages_url[2]);
 
+        assert_eq!(18, result.pages_url.len());
         Ok(())
     }
 
     #[test]
     fn search_page_is_parsed_from_html() -> Result<(), Box<dyn Error>> {
         let html = SEARCH_PAGE_DOC;
-        let html2 = SEARCH_PAGE_DOC_NOT_PAGINATED;
-
-        let tags = vec![
-            MangaPillTag {
-                name: "Comedy".to_string(),
-            },
-            MangaPillTag {
-                name: "Drama".to_string(),
-            },
-            MangaPillTag {
-                name: "Fantasy".to_string(),
-            },
-            MangaPillTag {
-                name: "Romance".to_string(),
-            },
-        ];
+        let html_not_found = SEARCH_PAGE_DOC_NOT_FOUND;
 
         let expected: SearchPageItem = SearchPageItem {
-            id: "01J76XY7E2VCSR0ZCC21KGXS1K".to_string(),
-            cover_url: "https://temp.compsci88.com/cover/normal/01J76XY7E2VCSR0ZCC21KGXS1K.webp".to_string(),
-            title: "Kobato.".to_string(),
+            page_url: "3760/school-days".to_string(),
+            cover_url: "https://cdn.readdetectiveconan.com/file/mangapill/i/3760.jpg".to_string(),
+            title: "School Days".to_string(),
             status: MangaPillStatus {
-                name: "Complete".to_string(),
+                name: "finished".to_string(),
             },
-            authors: vec!["APAPA Mokona".to_string(), "CLAMP".to_string(), "OHKAWA Ageha".to_string()],
-            tags,
         };
 
-        let result = SearchPageMangas::parse_html(HtmlElement::new(html))?;
-        let result2 = SearchPageMangas::parse_html(HtmlElement::new(html2))?;
+        let expected2: SearchPageItem = SearchPageItem {
+            page_url: "3761/school-ningyo".to_string(),
+            cover_url: "https://cdn.readdetectiveconan.com/file/mangapill/i/3761.jpg".to_string(),
+            title: "School Ningyo".to_string(),
+            status: MangaPillStatus {
+                name: "finished".to_string(),
+            },
+        };
 
-        assert!(result.more_result);
-        assert!(!result.mangas.is_empty());
+        let scraper = SearchPageMangasParser::new(Scraper::new(HtmlElement::new(html)));
 
-        let page = result.mangas.iter().find(|page| page.id == expected.id).unwrap();
+        let result = scraper.scrape_search_page()?;
 
-        assert_eq!(expected, *page);
+        let res1 = result.mangas.iter().find(|ma| ma.page_url == expected.page_url).unwrap();
+        let res2 = result.mangas.iter().find(|ma| ma.page_url == expected2.page_url).unwrap();
 
-        assert!(!result2.more_result);
+        assert_eq!(expected, *res1);
+        assert_eq!(expected2, *res2);
+
+        let scraper = SearchPageMangasParser::new(Scraper::new(HtmlElement::new(html_not_found)));
+
+        let result = scraper.scrape_search_page()?;
+
+        assert_eq!(0, result.mangas.len());
 
         Ok(())
     }

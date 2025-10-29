@@ -8,9 +8,7 @@ use http::header::{ACCEPT, ACCEPT_ENCODING, ACCEPT_LANGUAGE, CACHE_CONTROL, CONN
 use http::{HeaderMap, HeaderValue, StatusCode};
 use manga_tui::SearchTerm;
 use reqwest::{Client, Url};
-use response::{
-    ChapterPageData, ChapterPagesLinks, LatestMangas, MangaPageData, PopularMangasMangaPill, SearchPageMangas, WeebcentralChapters,
-};
+use response::{ChapterPageData, LatestMangas, MangaPageData, PopularMangasMangaPill, SearchPageMangas};
 
 use super::{
     Chapter, ChapterFilters, ChapterOrderBy, ChapterPageUrl, DecodeBytesToImage, FeedPageProvider, FetchChapterBookmarked,

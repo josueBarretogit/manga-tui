@@ -1,0 +1,1920 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+
+<head>
+    <meta charset="utf-8">
+    <title>Search Manga - Mangapill</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="google-site-verification" content="QVRhMJqEYSENTghZaikYGvG74-CLyoEn6-R_wQJMrZY" />
+
+    <meta property="og:title" content="Search Manga - Mangapill">
+    <meta property="twitter:title" content="Search Manga - Mangapill">
+
+
+    <meta name="description" content="search manga at mangapill.com">
+
+
+
+    <meta name="keywords" content="search manga">
+
+
+
+    <meta property="twitter:image" content="/static/favicon/android-chrome-512x512.png">
+    <meta property="og:image" content="/static/favicon/android-chrome-512x512.png">
+
+
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/favicon/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon/favicon-16x16.png">
+    <link rel="manifest" href="/static/favicon/site.webmanifest">
+    <link rel="shortcut icon" href="/static/favicon/favicon.ico">
+
+    <script type="text/javascript">
+        if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.remove('light')
+            document.documentElement.classList.add('dark')
+        }
+    </script>
+
+
+    <link rel="stylesheet" href="/static/site/build/assets/site-P7PJvPVR.css" />
+
+</head>
+
+<body class="antialiased h-screen bg-background text-primary">
+
+
+    <header class="py-2 border-border border-b">
+        <div class="container">
+            <div class="flex items-start lg:items-center justify-between">
+                <div class="flex flex-col lg:flex-row lg:items-center">
+                    <div class="flex items-center">
+                        <button id="js-nav-menu-btn"
+                            class="lg:hidden flex items-center justify-center relative p-2 hover:bg-card mr-2 rounded"
+                            type="button" aria-label="Toggle navigation" aria-expanded="false">
+                            <svg class="fill-current text-color-header-text h-6 w-6" height="24" width="24"
+                                xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M4 6h16M4 12h16M4 18h16" />
+                            </svg>
+                        </button>
+
+                        <a href="/">
+                            <svg width="140" viewBox="0 0 86 19" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path class="text-primary fill-current"
+                                    d="M2.582 7.134L2.762 8.376C3.062 7.86 3.446 7.458 3.914 7.17C4.394 6.882 4.958 6.738 5.606 6.738C6.242 6.738 6.77 6.87 7.19 7.134C7.622 7.386 7.904 7.77 8.036 8.286C8.36 7.818 8.75 7.446 9.206 7.17C9.674 6.882 10.16 6.738 10.664 6.738C11.444 6.738 12.062 6.96 12.518 7.404C12.986 7.836 13.226 8.4 13.238 9.096V15H10.736V10.14C10.724 9.792 10.67 9.51 10.574 9.294C10.478 9.066 10.256 8.94 9.908 8.916C9.5 8.916 9.152 9.06 8.864 9.348C8.588 9.624 8.378 9.984 8.234 10.428C8.102 10.86 8.036 11.31 8.036 11.778V15H5.516V10.14C5.504 9.792 5.438 9.51 5.318 9.294C5.21 9.066 4.982 8.94 4.634 8.916C4.238 8.916 3.902 9.06 3.626 9.348C3.362 9.624 3.158 9.978 3.014 10.41C2.882 10.842 2.816 11.286 2.816 11.742V15H0.296V7.134H2.582ZM19.1471 15.216C18.4151 15.216 17.7491 15.072 17.1491 14.784C16.5611 14.484 16.0931 14.028 15.7451 13.416C15.3971 12.804 15.2231 12.024 15.2231 11.076C15.2231 10.188 15.4031 9.42 15.7631 8.772C16.1231 8.124 16.5971 7.626 17.1851 7.278C17.7731 6.918 18.3971 6.738 19.0571 6.738C19.8371 6.738 20.4251 6.864 20.8211 7.116C21.2291 7.368 21.5531 7.644 21.7931 7.944L21.9551 7.134H24.2951V15H21.7751V14.028C21.6551 14.148 21.4751 14.304 21.2351 14.496C21.0071 14.688 20.7191 14.856 20.3711 15C20.0231 15.144 19.6151 15.216 19.1471 15.216ZM19.8671 13.164C20.7431 13.164 21.3791 12.768 21.7751 11.976V10.05C21.6311 9.666 21.3791 9.36 21.0191 9.132C20.6711 8.904 20.2571 8.79 19.7771 8.79C19.2371 8.79 18.7691 8.994 18.3731 9.402C17.9771 9.798 17.7791 10.314 17.7791 10.95C17.7791 11.37 17.8751 11.748 18.0671 12.084C18.2591 12.42 18.5111 12.684 18.8231 12.876C19.1471 13.068 19.4951 13.164 19.8671 13.164ZM29.1777 7.134L29.3577 8.394C29.6337 7.902 30.0237 7.506 30.5277 7.206C31.0317 6.906 31.6437 6.756 32.3637 6.756C33.1077 6.756 33.7257 6.978 34.2177 7.422C34.7217 7.854 34.9797 8.418 34.9917 9.114V15H32.4717V10.05C32.4597 9.702 32.3637 9.426 32.1837 9.222C32.0157 9.006 31.7277 8.898 31.3197 8.898C30.7317 8.898 30.2637 9.174 29.9157 9.726C29.5797 10.266 29.4117 10.956 29.4117 11.796V15H26.8917V7.134H29.1777ZM41.6472 18.96C40.9392 18.96 40.3392 18.876 39.8472 18.708C39.3672 18.54 38.9592 18.336 38.6232 18.096C38.2872 17.856 37.9872 17.628 37.7232 17.412L39.1992 15.684C39.4752 15.936 39.7932 16.176 40.1532 16.404C40.5252 16.644 41.0112 16.764 41.6112 16.764C42.2112 16.764 42.7332 16.608 43.1772 16.296C43.6332 15.996 43.8612 15.552 43.8612 14.964V13.848C43.6332 14.22 43.2792 14.544 42.7992 14.82C42.3192 15.084 41.6952 15.216 40.9272 15.216C40.2192 15.216 39.5592 15.036 38.9472 14.676C38.3472 14.304 37.8672 13.806 37.5072 13.182C37.1472 12.546 36.9672 11.826 36.9672 11.022C36.9672 10.194 37.1592 9.462 37.5432 8.826C37.9272 8.178 38.4252 7.668 39.0372 7.296C39.6492 6.924 40.2972 6.738 40.9812 6.738C41.6652 6.738 42.2532 6.84 42.7452 7.044C43.2492 7.236 43.6212 7.47 43.8612 7.746L44.0592 7.134H46.3812V15C46.3812 15.768 46.1652 16.446 45.7332 17.034C45.3012 17.634 44.7252 18.102 44.0052 18.438C43.2972 18.786 42.5112 18.96 41.6472 18.96ZM39.5052 10.95C39.5052 11.574 39.7152 12.102 40.1352 12.534C40.5552 12.954 41.0712 13.164 41.6832 13.164C42.6912 13.164 43.4172 12.768 43.8612 11.976V10.05C43.6932 9.666 43.4172 9.36 43.0332 9.132C42.6492 8.904 42.1992 8.79 41.6832 8.79C41.0712 8.79 40.5552 8.994 40.1352 9.402C39.7152 9.798 39.5052 10.314 39.5052 10.95ZM52.2818 15.216C51.5498 15.216 50.8838 15.072 50.2838 14.784C49.6958 14.484 49.2278 14.028 48.8798 13.416C48.5318 12.804 48.3578 12.024 48.3578 11.076C48.3578 10.188 48.5378 9.42 48.8978 8.772C49.2578 8.124 49.7318 7.626 50.3198 7.278C50.9078 6.918 51.5318 6.738 52.1918 6.738C52.9718 6.738 53.5598 6.864 53.9558 7.116C54.3638 7.368 54.6878 7.644 54.9278 7.944L55.0898 7.134H57.4298V15H54.9098V14.028C54.7898 14.148 54.6098 14.304 54.3698 14.496C54.1418 14.688 53.8538 14.856 53.5058 15C53.1578 15.144 52.7498 15.216 52.2818 15.216ZM53.0018 13.164C53.8778 13.164 54.5138 12.768 54.9098 11.976V10.05C54.7658 9.666 54.5138 9.36 54.1538 9.132C53.8058 8.904 53.3918 8.79 52.9118 8.79C52.3718 8.79 51.9038 8.994 51.5078 9.402C51.1118 9.798 50.9138 10.314 50.9138 10.95C50.9138 11.37 51.0098 11.748 51.2018 12.084C51.3938 12.42 51.6458 12.684 51.9578 12.876C52.2818 13.068 52.6298 13.164 53.0018 13.164Z" />
+                                <path class="text-brand fill-current"
+                                    d="M64.9585 15.216C64.5145 15.216 64.0705 15.138 63.6265 14.982C63.1945 14.814 62.8285 14.58 62.5285 14.28V18.78H60.0265V6.954H62.1865L62.4025 7.89C62.8105 7.566 63.2605 7.296 63.7525 7.08C64.2565 6.852 64.8265 6.738 65.4625 6.738C66.1945 6.738 66.8485 6.912 67.4245 7.26C68.0005 7.596 68.4505 8.088 68.7745 8.736C69.1105 9.372 69.2785 10.14 69.2785 11.04C69.2785 11.928 69.0925 12.684 68.7205 13.308C68.3485 13.932 67.8385 14.406 67.1905 14.73C66.5425 15.054 65.7985 15.216 64.9585 15.216ZM64.4545 13.236C64.8625 13.236 65.2345 13.146 65.5705 12.966C65.9185 12.786 66.1945 12.534 66.3985 12.21C66.6145 11.874 66.7225 11.496 66.7225 11.076C66.7225 10.404 66.5185 9.87 66.1105 9.474C65.7025 9.066 65.2105 8.862 64.6345 8.862C64.1305 8.862 63.7105 8.964 63.3745 9.168C63.0385 9.36 62.7625 9.654 62.5465 10.05V11.976C62.6785 12.36 62.9125 12.666 63.2485 12.894C63.5965 13.122 63.9985 13.236 64.4545 13.236ZM71.2589 7.134H73.7789V15H71.2589V7.134ZM71.2049 4.344C71.2049 3.972 71.3489 3.666 71.6369 3.426C71.9369 3.186 72.2549 3.066 72.5909 3.066C72.9269 3.066 73.2329 3.186 73.5089 3.426C73.7969 3.666 73.9409 3.972 73.9409 4.344C73.9409 4.716 73.7969 5.022 73.5089 5.262C73.2329 5.49 72.9269 5.604 72.5909 5.604C72.2549 5.604 71.9369 5.49 71.6369 5.262C71.3489 5.022 71.2049 4.716 71.2049 4.344ZM76.3741 0.797999H78.8941V15H76.3741V0.797999ZM81.4894 0.797999H84.0094V15H81.4894V0.797999Z" />
+                            </svg>
+                        </a>
+
+                    </div>
+                    <div class="flex flex-col lg:flex-row lg:items-center">
+                        <nav id="js-nav-menu"
+                            class="lg:text-sm xl:text-base flex flex-col lg:items-center lg:flex-row font-bold mt-3 md:ml-3 md:mt-0 gap-4 hidden lg:flex">
+                            <a class="hover:text-secondary" href="/search">Search</a>
+                            <a class="hover:text-secondary" href="/mangas/new">New Mangas</a>
+                            <a class="hover:text-secondary" href="/chapters">Recent Chapters</a>
+                            <a class="hover:text-secondary" href="/mangas/missing">Missing Manga</a>
+                            <a class="hover:text-secondary" href="/contact">Contact</a>
+                            <a class="hover:text-secondary" href="/privacy">Privacy Policy</a>
+                        </nav>
+                    </div>
+                </div>
+                <div class="flex items-center">
+                    <a href="/mangas/random" class="p-2 rounded hover:bg-card" title="manga surprise">
+                        <svg class="h-6 w-6 fill-current overflow-visible" xmlns="http://www.w3.org/2000/svg"
+                            stroke="currentColor" viewBox="0 0 24 24" width="24" height="24">
+                            <path fill-rule="evenodd"
+                                d="M5.25 8.5c-2.032 0-3.75 1.895-3.75 3.75S3.218 16 5.25 16c1.017 0 2.014-.457 3.062-1.253.89-.678 1.758-1.554 2.655-2.497-.897-.943-1.765-1.82-2.655-2.497C7.264 8.957 6.267 8.5 5.25 8.5zM12 11.16c-.887-.933-1.813-1.865-2.78-2.6C8.048 7.667 6.733 7 5.25 7 2.343 7 0 9.615 0 12.25s2.343 5.25 5.25 5.25c1.483 0 2.798-.668 3.97-1.56.967-.735 1.893-1.667 2.78-2.6.887.933 1.813 1.865 2.78 2.6 1.172.892 2.487 1.56 3.97 1.56 2.907 0 5.25-2.615 5.25-5.25S21.657 7 18.75 7c-1.483 0-2.798.668-3.97 1.56-.967.735-1.893 1.667-2.78 2.6zm1.033 1.09c.897.943 1.765 1.82 2.655 2.497C16.736 15.543 17.733 16 18.75 16c2.032 0 3.75-1.895 3.75-3.75S20.782 8.5 18.75 8.5c-1.017 0-2.014.457-3.062 1.253-.89.678-1.758 1.554-2.655 2.497z">
+                            </path>
+                        </svg>
+                    </a>
+
+                    <div>
+                        <button data-micromodal-trigger="js-search-modal"
+                            class="flex items-center justify-center relative p-2 rounded hover:bg-card">
+                            <svg class="h-6 w-6 fill-current" xmlns="http://www.w3.org/2000/svg" stroke="currentColor"
+                                viewBox="0 0 24 24">
+                                <path fill-rule="evenodd"
+                                    d="M14.53 15.59a8.25 8.25 0 111.06-1.06l5.69 5.69a.75.75 0 11-1.06 1.06l-5.69-5.69zM2.5 9.25a6.75 6.75 0 1111.74 4.547.746.746 0 00-.443.442A6.75 6.75 0 012.5 9.25z">
+                                </path>
+                            </svg>
+                            </svg>
+                        </button>
+
+                        <div class="modal" id="js-search-modal" aria-hidden="true">
+                            <div class="modal__overlay" tabindex="-1" data-micromodal-close>
+                                <div class="modal__container bg-background" role="dialog" aria-modal="true"
+                                    aria-labelledby="search-modal-title">
+                                    <div class="p-3 bg-card flex items-center justify-between">
+                                        <div id="search-modal-title" class="text-primary font-black">Quick Search</div>
+                                        <button class="p-2 hover:bg-background rounded" type="button"
+                                            aria-label="Close modal" data-micromodal-close>
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none"
+                                                viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M6 18L18 6M6 6l12 12"></path>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                    <div class="form p-3">
+                                        <div class="form-group">
+                                            <label>Search MangaPill</label>
+                                            <remote-input src="/quick-search" aria-owns="quick-search-results">
+                                                <input autofocus id="js-search-input" type="text" name="title"
+                                                    placeholder="Search manga"
+                                                    class="w-full font-normal border border-border bg-card rounded">
+                                            </remote-input>
+                                        </div>
+                                        <div class="my-3" id="quick-search-results"></div>
+                                    </div>
+                                    <div
+                                        class="border-t border-border p-3 flex flex-col md:flex-row md:items-center md:justify-center gap-3">
+                                        <a href="/search" class="btn-sm">Visit Advanced Search</a>
+                                        <a href="/mangas/missing" class="btn-sm">Missing Manga</a>
+                                        <button class="btn-outline" type="button" aria-label="Close modal"
+                                            data-micromodal-close>Close</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                    <button id="js-theme-switch" class="theme-mode"></button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+
+    <div class="container py-3">
+        <p class="text-yellow-600">Update! Share your thoughts with our new commenting system!</p>
+    </div>
+
+
+
+
+
+    <div class="container py-3">
+        <div class="border border-border rounded">
+            <div class="p-3 border-b border-border">
+                <h2 class="font-bold md:text-lg mb-1">Search Manga</h2>
+                <p class="text-secondary">Use the filters to make your search more precise.</p>
+            </div>
+            <div class="p-3">
+
+                <form action="/search" class="form">
+                    <div class="grid gap-6">
+                        <div class="form-group">
+                            <label for="title">Title</label>
+                            <input id="title" type="text" name="q" class="form-select" value="school" />
+                        </div>
+
+                        <div class="flex flex-wrap md:gap-3">
+                            <div class="form-group">
+                                <label for="type">Type</label>
+                                <select id="type" class="form-select" name="type" onchange="this.form.submit()">
+                                    <option value="">All</option>
+
+                                    <option value="manga">manga</option>
+
+                                    <option value="novel">novel</option>
+
+                                    <option value="one-shot">one-shot</option>
+
+                                    <option value="doujinshi">doujinshi</option>
+
+                                    <option value="manhwa">manhwa</option>
+
+                                    <option value="manhua">manhua</option>
+
+                                    <option value="oel">oel</option>
+
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="status">Status</label>
+                                <select id="status" class="form-select" name="status" onchange="this.form.submit()">
+                                    <option value="">All</option>
+
+                                    <option value="publishing">publishing</option>
+
+                                    <option value="finished">finished</option>
+
+                                    <option value="on hiatus">on hiatus</option>
+
+                                    <option value="discontinued">discontinued</option>
+
+                                    <option value="not yet published">not yet published</option>
+
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Choose Genres</label>
+                            <div class="grid gap-1 grid-cols-2 md:grid-cols-5 lg:grid-cols-8">
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Action" />
+                                        Action
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Adventure" />
+                                        Adventure
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Cars" />
+                                        Cars
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Comedy" />
+                                        Comedy
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Dementia" />
+                                        Dementia
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Demons" />
+                                        Demons
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Doujinshi" />
+                                        Doujinshi
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Drama" />
+                                        Drama
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Ecchi" />
+                                        Ecchi
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Fantasy" />
+                                        Fantasy
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Game" />
+                                        Game
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Gender Bender" />
+                                        Gender Bender
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Harem" />
+                                        Harem
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Historical" />
+                                        Historical
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Horror" />
+                                        Horror
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Isekai" />
+                                        Isekai
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Josei" />
+                                        Josei
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Kids" />
+                                        Kids
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Magic" />
+                                        Magic
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Martial Arts" />
+                                        Martial Arts
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Mecha" />
+                                        Mecha
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Military" />
+                                        Military
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Music" />
+                                        Music
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Mystery" />
+                                        Mystery
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Parody" />
+                                        Parody
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Police" />
+                                        Police
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Psychological" />
+                                        Psychological
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Romance" />
+                                        Romance
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Samurai" />
+                                        Samurai
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="School" />
+                                        School
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Sci-Fi" />
+                                        Sci-Fi
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Seinen" />
+                                        Seinen
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Shoujo" />
+                                        Shoujo
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Shoujo Ai" />
+                                        Shoujo Ai
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Shounen" />
+                                        Shounen
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Shounen Ai" />
+                                        Shounen Ai
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Slice of Life" />
+                                        Slice of Life
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Space" />
+                                        Space
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Sports" />
+                                        Sports
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Super Power" />
+                                        Super Power
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Supernatural" />
+                                        Supernatural
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Thriller" />
+                                        Thriller
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Tragedy" />
+                                        Tragedy
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Vampire" />
+                                        Vampire
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Yaoi" />
+                                        Yaoi
+                                    </label>
+                                </div>
+
+                                <div class="m-1">
+                                    <label class="text-sm">
+                                        <input type="checkbox" onchange="this.form.submit()" name="genre"
+                                            value="Yuri" />
+                                        Yuri
+                                    </label>
+                                </div>
+
+                            </div>
+                        </div>
+                        <div class="flex gap-3">
+                            <button type="submit" class="btn btn-primary">Search</button>
+                            <a href="/search" class="btn-outline">Clear</a>
+                        </div>
+                    </div>
+                </form>
+
+            </div>
+        </div>
+
+
+        <div class="my-3 p-3 flex flex-wrap items-center gap-2 border border-border rounded">
+
+
+            <a href="/search?missing_genre=on&amp;status=&amp;type="
+                class="flex items-center gap-1 rounded-full border text-brand border-brand px-1.5 py-1">
+                <svg xmlns="http://www.w3.org/2000/svg" class="inlinie octicon h-3 w-3" viewBox="0 0 20 20"
+                    fill="currentColor">
+                    <path fill-rule="evenodd"
+                        d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                        clip-rule="evenodd" />
+                </svg>
+                <span class="text-xs">school</span>
+            </a>
+
+
+
+
+
+
+
+
+
+
+
+            <a href="/search" class="flex items-center gap-1 rounded-full border text-brand border-brand px-1.5 py-1">
+                <svg xmlns="http://www.w3.org/2000/svg" class="inlinie octicon h-3 w-3" viewBox="0 0 20 20"
+                    fill="currentColor">
+                    <path fill-rule="evenodd"
+                        d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                        clip-rule="evenodd" />
+                </svg>
+                <span class="text-xs">Remove all filters</span>
+            </a>
+
+        </div>
+
+
+
+        <div class="my-3 grid justify-end gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+
+
+            <div>
+                <a href="/manga/3760/school-days" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/3760.jpg"
+                            alt="School Days School Days" class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/3760/school-days" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">School Days</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manga</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2006</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">finished</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/3761/school-ningyo" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/3761.jpg"
+                            alt="School Ningyo School Ningyo"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/3761/school-ningyo" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">School Ningyo</div>
+
+                        <div class="line-clamp-2 text-xs text-secondary mt-1">School Mermaid</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manga</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2011</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">finished</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/3762/school-rumble" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/3762.jpg"
+                            alt="School Rumble School Rumble"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/3762/school-rumble" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">School Rumble</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manga</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2002</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">finished</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/3763/school-rumble-z" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/3763.jpg"
+                            alt="School Rumble Z School Rumble Z"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/3763/school-rumble-z" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">School Rumble Z</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manga</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2008</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">finished</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/3764/school-shock" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/3764.jpg"
+                            alt="School Shock School Shock" class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/3764/school-shock" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">School Shock</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manhua</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2009</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">publishing</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/5918/school-zone" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/5918.jpeg"
+                            alt="School Zone School Zone" class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/5918/school-zone" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">School Zone</div>
+
+                        <div class="line-clamp-2 text-xs text-secondary mt-1">School Zone Girls</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manga</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2018</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">publishing</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/121/after-school-nightmare" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/121.jpg"
+                            alt="After School Nightmare After School Nightmare"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/121/after-school-nightmare" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">After School Nightmare</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manga</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2004</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">finished</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/1699/high-school" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/1699.jpg"
+                            alt="High School High School" class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/1699/high-school" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">High School</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manhwa</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2000</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">finished</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/1700/high-school-of-the-dead" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/1700.jpg"
+                            alt="High School of the Dead High School of the Dead"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/1700/high-school-of-the-dead" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">High School of the Dead</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manga</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2006</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">finished</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/1701/high-school-of-the-dead-full-color-edition" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/1701.jpg"
+                            alt="High School of the Dead - Full Color Edition High School of the Dead - Full Color Edition"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/1701/high-school-of-the-dead-full-color-edition" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">High School of the Dead - Full Color
+                            Edition</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manga</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2006</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">finished</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/1703/high-school-dxd" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/1703.jpg"
+                            alt="High School DxD High School DxD"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/1703/high-school-dxd" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">High School DxD</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manga</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2010</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">finished</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/2182/prison-school" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/2182.jpg"
+                            alt="Prison School Prison School"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/2182/prison-school" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">Prison School</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manga</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2011</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">finished</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/5547/get-schooled" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/5547.jpeg"
+                            alt=" Get Schooled  Get Schooled"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/5547/get-schooled" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2"> Get Schooled</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manhwa</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2020</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">publishing</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/5930/after-school-lessons-for-unripe-apples" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/5930.jpeg"
+                            alt="After School Lessons for Unripe Apples After School Lessons for Unripe Apples"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/5930/after-school-lessons-for-unripe-apples" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">After School Lessons for Unripe Apples
+                        </div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manhwa</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2020</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">publishing</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/8576/magic-school-girl-spare-no-villains" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/8576.jpeg"
+                            alt="Magic School Girl: Spare No Villains Magic School Girl: Spare No Villains"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/8576/magic-school-girl-spare-no-villains" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">Magic School Girl: Spare No Villains
+                        </div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manhwa</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2022</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">finished</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/8582/high-school-queen" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/8582.jpeg"
+                            alt="High School Queen High School Queen"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/8582/high-school-queen" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">High School Queen</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manhwa</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2024</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">publishing</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/474/be-bop-high-school" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/474.jpg"
+                            alt="Be-Bop High School Be-Bop High School"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/474/be-bop-high-school" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">Be-Bop High School</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manga</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">1983</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">publishing</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/854/cromartie-high-school" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/854.jpg"
+                            alt="Cromartie High School Cromartie High School"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/854/cromartie-high-school" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">Cromartie High School</div>
+
+                        <div class="line-clamp-2 text-xs text-secondary mt-1">Sakigake!! Cromartie Koukou</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manga</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2000</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">finished</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/1644/he-is-a-high-school-girl" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/1644.jpg"
+                            alt="He is a High School Girl He is a High School Girl"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/1644/he-is-a-high-school-girl" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">He is a High School Girl</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manhwa</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2014</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">finished</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/3541/real-bout-high-school" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/3541.jpg"
+                            alt="Real Bout High School Real Bout High School"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/3541/real-bout-high-school" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">Real Bout High School</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manga</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">1999</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">finished</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/3560/refund-high-school" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/3560.jpg"
+                            alt="Refund High School Refund High School"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/3560/refund-high-school" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">Refund High School</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manhwa</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2018</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">finished</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/3725/samurai-high-school" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/3725.jpg"
+                            alt="Samurai High School Samurai High School"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/3725/samurai-high-school" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">Samurai High School</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manga</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2009</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">finished</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/4389/the-god-of-high-school" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/4389.jpeg"
+                            alt="The God of High School The God of High School"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/4389/the-god-of-high-school" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">The God of High School</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manhwa</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2011</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">publishing</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/4556/tora-kiss-a-school-odyssey" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/4556.jpg"
+                            alt="Tora Kiss - A School Odyssey Tora Kiss - A School Odyssey"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/4556/tora-kiss-a-school-odyssey" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">Tora Kiss - A School Odyssey</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manga</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2012</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">finished</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/5751/my-hero-academia-school-briefs" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/5751.png"
+                            alt="My Hero Academia: School Briefs My Hero Academia: School Briefs"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/5751/my-hero-academia-school-briefs" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">My Hero Academia: School Briefs</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">novel</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2016</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">publishing</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/8121/the-high-school-survival-guide-for-a-wizard" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/8121.jpeg"
+                            alt="The High School Survival Guide for a Wizard The High School Survival Guide for a Wizard"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/8121/the-high-school-survival-guide-for-a-wizard" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">The High School Survival Guide for a
+                            Wizard</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manhwa</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2022</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">finished</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/8329/86-operation-high-school" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/8329.jpeg"
+                            alt="86: Operation High School 86: Operation High School"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/8329/86-operation-high-school" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">86: Operation High School</div>
+
+                        <div class="line-clamp-2 text-xs text-secondary mt-1">86: Eighty Six - Operation High School
+                        </div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manga</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2020</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">finished</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/8885/my-f-rank-high-school-life" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/8885.jpeg"
+                            alt="My F-Rank High School Life My F-Rank High School Life"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/8885/my-f-rank-high-school-life" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">My F-Rank High School Life</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manhwa</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2022</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">publishing</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/8916/becoming-a-magic-school-mage" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/8916.jpeg?h=01975ba9-a67d-7cbe-9cfe-6954988e2c5b"
+                            alt="Becoming a Magic School Mage Becoming a Magic School Mage"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/8916/becoming-a-magic-school-mage" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">Becoming a Magic School Mage</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manhwa</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2022</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">publishing</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/9030/earthbound-god-s-school-life" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/9030.jpeg?h=01980dff-f62a-7a4d-b374-870caa4db5eb"
+                            alt="Earthbound God&#39;s School Life Earthbound God&#39;s School Life"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/9030/earthbound-god-s-school-life" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">Earthbound God&#39;s School Life</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manhwa</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2025</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">publishing</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/2731/mahouka-koukou-no-rettousei-nine-schools-competition-arc" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/2731.jpg"
+                            alt="Mahouka Koukou no Rettousei - Nine Schools Competition Arc Mahouka Koukou no Rettousei - Nine Schools Competition Arc"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/2731/mahouka-koukou-no-rettousei-nine-schools-competition-arc" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">Mahouka Koukou no Rettousei - Nine
+                            Schools Competition Arc</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manga</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2013</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">finished</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/4127/special-martial-arts-extreme-hell-private-high-school" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/4127.jpg"
+                            alt="Special Martial Arts Extreme Hell Private High School Special Martial Arts Extreme Hell Private High School"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/4127/special-martial-arts-extreme-hell-private-high-school" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">Special Martial Arts Extreme Hell
+                            Private High School</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manhwa</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2011</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">publishing</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/5250/the-boy-in-the-all-girls-school" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/5250.png"
+                            alt="The Boy in the All-Girls School The Boy in the All-Girls School"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/5250/the-boy-in-the-all-girls-school" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">The Boy in the All-Girls School</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manhua</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2016</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">publishing</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/1622/hataraku-maou-sama-high-school" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/1622.jpg"
+                            alt="Hataraku Maou-sama! High School! Hataraku Maou-sama! High School!"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/1622/hataraku-maou-sama-high-school" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">Hataraku Maou-sama! High School!</div>
+
+                        <div class="line-clamp-2 text-xs text-secondary mt-1">The Devil is a Part-Timer! - High School
+                        </div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manga</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2012</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">finished</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/2104/k-on-high-school" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/2104.jpg"
+                            alt="K-ON! High School K-ON! High School"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/2104/k-on-high-school" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">K-ON! High School</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manga</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2011</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">finished</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/2642/love-live-school-idol-project" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/2642.jpg"
+                            alt="Love Live! - School Idol Project Love Live! - School Idol Project"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/2642/love-live-school-idol-project" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">Love Live! - School Idol Project</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manga</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2011</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">publishing</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/2907/mission-school" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/2907.jpg"
+                            alt="Mission! School Mission! School"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/2907/mission-school" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">Mission! School</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manga</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2009</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">finished</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/2232/kazuki-makes-love-happen-at-all-boys-high-school" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/2232.jpg"
+                            alt="Kazuki Makes Love Happen?! at ALL-BOYS High School Kazuki Makes Love Happen?! at ALL-BOYS High School"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/2232/kazuki-makes-love-happen-at-all-boys-high-school" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">Kazuki Makes Love Happen?! at ALL-BOYS
+                            High School</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manga</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2014</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">finished</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/1312/gakkougurashi" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/1312.jpg"
+                            alt="Gakkougurashi! Gakkougurashi!"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/1312/gakkougurashi" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">Gakkougurashi!</div>
+
+                        <div class="line-clamp-2 text-xs text-secondary mt-1">School-Live!</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manga</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2012</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">finished</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/1318/gakuen-babysitters" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/1318.jpeg"
+                            alt="Gakuen Babysitters Gakuen Babysitters"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/1318/gakuen-babysitters" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">Gakuen Babysitters</div>
+
+                        <div class="line-clamp-2 text-xs text-secondary mt-1">School Babysitters</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manga</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2009</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">publishing</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/6708/gakkyuu-houtei" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/6708.jpeg"
+                            alt="Gakkyuu Houtei Gakkyuu Houtei"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/6708/gakkyuu-houtei" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">Gakkyuu Houtei</div>
+
+                        <div class="line-clamp-2 text-xs text-secondary mt-1">School Judgment: Gakkyu Hotei,School
+                            Judgment Gakkyu Hotei</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manga</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2014</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">finished</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/7091/gakkougurashi-otayori" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/7091.jpeg"
+                            alt="Gakkougurashi! Otayori Gakkougurashi! Otayori"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/7091/gakkougurashi-otayori" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">Gakkougurashi! Otayori</div>
+
+                        <div class="line-clamp-2 text-xs text-secondary mt-1">School-Live! Letters</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manga</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2020</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">finished</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/765/choujin-koukousei-tachi-wa-isekai-demo-yoyuu-de-ikinuku-you-desu"
+                    class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/765.jpeg"
+                            alt="Choujin Koukousei-tachi wa Isekai demo Yoyuu de Ikinuku you desu! Choujin Koukousei-tachi wa Isekai demo Yoyuu de Ikinuku you desu!"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/765/choujin-koukousei-tachi-wa-isekai-demo-yoyuu-de-ikinuku-you-desu" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">Choujin Koukousei-tachi wa Isekai demo
+                            Yoyuu de Ikinuku you desu!</div>
+
+                        <div class="line-clamp-2 text-xs text-secondary mt-1">High School Prodigies Have It Easy Even in
+                            Another World!</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manga</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2016</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">publishing</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/5141/clamp-gakuen-tanteidan" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/5141.jpeg"
+                            alt="Clamp Gakuen Tanteidan Clamp Gakuen Tanteidan"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/5141/clamp-gakuen-tanteidan" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">Clamp Gakuen Tanteidan</div>
+
+                        <div class="line-clamp-2 text-xs text-secondary mt-1">Clamp School Detectives</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manga</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">1992</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">finished</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/5396/houkago-shounen-hanako-kun" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/5396.jpeg"
+                            alt="Houkago Shounen Hanako-kun Houkago Shounen Hanako-kun"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/5396/houkago-shounen-hanako-kun" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">Houkago Shounen Hanako-kun</div>
+
+                        <div class="line-clamp-2 text-xs text-secondary mt-1">After-School Boy Hanako-kun</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manga</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2018</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">publishing</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/5756/tsumetai-kousha-no-toki-wa-tomaru" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/5756.jpeg"
+                            alt="Tsumetai Kousha no Toki wa Tomaru Tsumetai Kousha no Toki wa Tomaru"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/5756/tsumetai-kousha-no-toki-wa-tomaru" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">Tsumetai Kousha no Toki wa Tomaru</div>
+
+                        <div class="line-clamp-2 text-xs text-secondary mt-1">A School Frozen in Time</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manga</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2007</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">finished</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/6002/koukousei-kazoku" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/6002.jpeg"
+                            alt="Koukousei Kazoku Koukousei Kazoku"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/6002/koukousei-kazoku" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">Koukousei Kazoku</div>
+
+                        <div class="line-clamp-2 text-xs text-secondary mt-1">High School Family: Kokosei Kazoku</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manga</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2020</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">publishing</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/6227/kiben-gakuha-yotsuya-senpai-no-kaidan" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/6227.jpeg"
+                            alt="Kiben Gakuha, Yotsuya-senpai no Kaidan. Kiben Gakuha, Yotsuya-senpai no Kaidan."
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/6227/kiben-gakuha-yotsuya-senpai-no-kaidan" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">Kiben Gakuha, Yotsuya-senpai no Kaidan.
+                        </div>
+
+                        <div class="line-clamp-2 text-xs text-secondary mt-1">Sophistry School, the Ghost Story of
+                            Yotsuya</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manga</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2010</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">finished</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/6778/phantom-high" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/6778.jpeg"
+                            alt="Phantom High Phantom High" class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/6778/phantom-high" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">Phantom High</div>
+
+                        <div class="line-clamp-2 text-xs text-secondary mt-1">Phantom School, Jeoseung Go</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manhwa</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2014</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">finished</div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div>
+                <a href="/manga/8890/houkago-bokura-wa-uchuu-ni-madou" class="relative block">
+                    <figure class="w-full h-52 overflow-hidden bg-card rounded-md">
+                        <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/8890.jpeg"
+                            alt="Houkago, Bokura wa Uchuu ni Madou Houkago, Bokura wa Uchuu ni Madou"
+                            class="text-transparent lazy object-cover w-full h-full" />
+                    </figure>
+                </a>
+                <div class="flex flex-col justify-end">
+                    <a href="/manga/8890/houkago-bokura-wa-uchuu-ni-madou" class="mb-2">
+                        <div class="mt-3 font-black leading-tight line-clamp-2">Houkago, Bokura wa Uchuu ni Madou</div>
+
+                        <div class="line-clamp-2 text-xs text-secondary mt-1">After School, We Wander in Space.</div>
+
+                    </a>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">manga</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">2025</div>
+                        <div class="text-xs leading-5 font-semibold bg-card rounded p-1">publishing</div>
+                    </div>
+                </div>
+            </div>
+
+
+        </div>
+
+        <div class="flex items-center justify-center my-3 gap-3">
+
+
+
+
+
+            <a href="/search?q=school&amp;status=&amp;type=&amp;page=2" class="btn btn-sm">Next</a>
+
+        </div>
+
+    </div>
+
+
+    <div class="container">
+        <div class="flex items-center justify-between mt-3 py-3 border-t border-border">
+            <div class="text-sm text-center text-secondary"></div>
+            <div class="text-sm text-center text-secondary">mangapill.com</div>
+            <div class="mr-0">
+                <a href="/content-report" class="text-blue-500 text-sm text-center text-brand">Report Content</a>
+            </div>
+        </div>
+    </div>
+    <script type="module" src="/static/site/build/assets/site-BzmGX1Ls.js"></script>
+
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-XYMZVR9YML"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag() {dataLayer.push(arguments);}
+        gtag('js', new Date()); gtag('config', 'G-XYMZVR9YML');
+    </script>
+
+
+
+
+    <div class="modal" id="js-settings-modal" aria-hidden="true">
+        <div class="modal__overlay" tabindex="-1" data-micromodal-close>
+            <div class="modal__container bg-background w-full md:w-2/6" role="dialog" aria-modal="true"
+                aria-labelledby="shortcuts">
+                <div class="p-3 bg-card flex items-center justify-between">
+                    <div>
+                        <div class="text-primary font-black">Shortcuts / Keybinds</div>
+                        <div class="text-secondary small">These shortcuts only works on chapter pages</div>
+                    </div>
+                    <button class="p-2 hover:bg-background rounded" type="button" aria-label="Close modal"
+                        data-micromodal-close>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div class="p-3">
+                    <div class="flex flex-col gap-5">
+                        <div class="flex items-center justify-between">
+                            <div>Visit Manga Page</div>
+                            <div class="font-bold">m</div>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <div>Open Chapter Selector</div>
+                            <div class="font-bold">o</div>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <div>Previous Chapter</div>
+                            <div class="font-bold">Left Arrow</div>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <div>Next Chapter</div>
+                            <div class="font-bold">Right Arrow</div>
+                        </div>
+                    </div>
+                </div>
+                <div
+                    class="border-t border-border p-3 flex flex-col md:flex-row md:items-center md:justify-center gap-3">
+                    <button class="btn btn btn-sm btn-primary" type="button" aria-label="Close modal"
+                        data-micromodal-close>Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</body>
+
+</html>
