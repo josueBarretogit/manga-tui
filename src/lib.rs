@@ -12,6 +12,31 @@ macro_rules! exists {
     };
 }
 
+#[macro_export]
+macro_rules! make_error_ty {
+    ($struct_name:ident, $error_message:expr) => {
+        #[derive(Debug)]
+        pub(super) struct $struct_name {
+            reason: String,
+        }
+
+        impl Display for $struct_name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, $error_message, self.reason)
+            }
+        }
+
+        impl<T: Into<String>> From<T> for $struct_name {
+            fn from(value: T) -> Self {
+                let reason: String = value.into();
+                Self { reason }
+            }
+        }
+
+        impl Error for $struct_name {}
+    };
+}
+
 /// This type ensures that the inner `String` is never an empty string, it is also lowercased and
 /// trimmed to be used in searches
 #[derive(Debug, Default)]

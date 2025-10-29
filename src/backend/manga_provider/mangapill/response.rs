@@ -3,6 +3,7 @@ use std::fmt::{Display, Write};
 use std::path::Path;
 
 use chrono::NaiveDate;
+use manga_tui::make_error_ty;
 use regex::Regex;
 use reqwest::Url;
 use scraper::{ElementRef, html};
@@ -14,25 +15,13 @@ use crate::backend::manga_provider::{
     Rating, RecentlyAddedManga, SearchManga, SortedChapters, SortedVolumes, Volumes,
 };
 
-#[derive(Debug)]
-pub(super) struct PopularMangaParseError {
-    reason: String,
-}
-
-impl Display for PopularMangaParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Failed to parse popular manga from weebcentral, more details about the error: {}", self.reason)
-    }
-}
-
-impl<T: Into<String>> From<T> for PopularMangaParseError {
-    fn from(value: T) -> Self {
-        let reason: String = value.into();
-        Self { reason }
-    }
-}
-
-impl Error for PopularMangaParseError {}
+make_error_ty!(PopularMangaParseError, "Failed to parse popular manga from MangaPill, more details about the error: {}");
+make_error_ty!(LatestMangaError, "Failed to parse latest manga from MangaPill, more details about the error: {}");
+make_error_ty!(MangaPageError, "Failed to parse manga page from MangaPill, more details about the error: {}");
+make_error_ty!(ChaptersError, "Failed to parse chapter list from MangaPill, more details about the error: {}");
+make_error_ty!(ChapterPagesError, "Failed to parse chapter list from MangaPill, more details about the error: {}");
+make_error_ty!(ChapterPageDataError, "Failed to parse chapter page from MangaPill, more details about the error: {}");
+make_error_ty!(SearchPageError, "Failed to parse search page from MangaPill, more details about the error: {}");
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(super) struct PopularMangaItem {
@@ -56,8 +45,7 @@ pub(super) struct PopularMangaItem {
 //    }
 //}
 
-/// How to scrape the popoular mangas from weebcentral:
-/// - The `section` which contains the mangas is the first one
+/// How to scrape the popoular mangas from MangaPill:
 #[derive(Debug)]
 pub(super) struct PopularMangasMangaPill<T: HtmlParser> {
     parser: T,
@@ -120,26 +108,6 @@ impl<T: HtmlParser> PopularMangasMangaPill<T> {
     }
 }
 
-#[derive(Debug)]
-pub(super) struct LatestMangaError {
-    reason: String,
-}
-
-impl Display for LatestMangaError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Failed to parse latest manga from weebcentral, more details about the error: {}", self.reason)
-    }
-}
-
-impl<T: Into<String>> From<T> for LatestMangaError {
-    fn from(value: T) -> Self {
-        let reason: String = value.into();
-        Self { reason }
-    }
-}
-
-impl Error for LatestMangaError {}
-
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(super) struct LatestMangItem {
     pub(super) id: String,
@@ -160,8 +128,7 @@ pub(super) struct LatestMangItem {
 //    }
 //}
 
-/// How to scrape the latest mangas from weebcentral:
-/// - The `section` which contains the mangas is the second one
+/// How to scrape the latest mangas from MangaPill:
 #[derive(Debug, Default)]
 pub(super) struct LatestMangas<T: HtmlParser> {
     parser: T,
@@ -294,26 +261,6 @@ pub(super) struct MangaPageData {
 //    }
 //}
 
-#[derive(Debug)]
-pub(super) struct MangaPageError {
-    reason: String,
-}
-
-impl Display for MangaPageError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Failed to parse manga page from weebcentral, more details about the error: {}", self.reason)
-    }
-}
-
-impl<T: Into<String>> From<T> for MangaPageError {
-    fn from(value: T) -> Self {
-        let reason: String = value.into();
-        Self { reason }
-    }
-}
-
-impl Error for MangaPageError {}
-
 pub(super) struct MangaPageDataParser<T: HtmlParser> {
     scraper: T,
 }
@@ -369,26 +316,6 @@ impl<T: HtmlParser> MangaPageDataParser<T> {
     }
 }
 
-#[derive(Debug)]
-pub(super) struct ChaptersError {
-    reason: String,
-}
-
-impl Display for ChaptersError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Failed to parse chapter list from weebcentral, more details about the error: {}", self.reason)
-    }
-}
-
-impl<T: Into<String>> From<T> for ChaptersError {
-    fn from(value: T) -> Self {
-        let reason: String = value.into();
-        Self { reason }
-    }
-}
-
-impl Error for ChaptersError {}
-
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(super) struct MangaPillChapterListItem {
     pub(super) id: String,
@@ -436,26 +363,6 @@ impl<T: HtmlParser> MangaPillChaptersParser<T> {
     }
 }
 
-#[derive(Debug)]
-pub(super) struct ChapterPagesError {
-    reason: String,
-}
-
-impl Display for ChapterPagesError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Failed to parse chapter list from weebcentral, more details about the error: {}", self.reason)
-    }
-}
-
-impl<T: Into<String>> From<T> for ChapterPagesError {
-    fn from(value: T) -> Self {
-        let reason: String = value.into();
-        Self { reason }
-    }
-}
-
-impl Error for ChapterPagesError {}
-
 /// Manga pill central does not provide volume of mangas so they are all grouped in the `none` volume
 impl From<MangaPillChapters> for ListOfChapters {
     fn from(value: MangaPillChapters) -> Self {
@@ -477,26 +384,6 @@ impl From<MangaPillChapters> for ListOfChapters {
         }
     }
 }
-
-#[derive(Debug)]
-pub(super) struct ChapterPageDataError {
-    reason: String,
-}
-
-impl Display for ChapterPageDataError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Failed to parse chapter page from weebcentral, more details about the error: {}", self.reason)
-    }
-}
-
-impl<T: Into<String>> From<T> for ChapterPageDataError {
-    fn from(value: T) -> Self {
-        let reason: String = value.into();
-        Self { reason }
-    }
-}
-
-impl Error for ChapterPageDataError {}
 
 #[derive(Debug, Default, PartialEq)]
 pub(super) struct ChapterPageData {
@@ -557,13 +444,18 @@ pub(super) struct SearchPageItem {
 pub(super) struct SearchPageMangas {
     pub(super) mangas: Vec<SearchPageItem>,
     /// Indicated wether or not more mangas can be fetched
-    pub(super) next_page: Option<String>,
-    pub(super) previous_page: Option<String>,
+    pub(super) next_page: Option<ButtonSearchPagination>,
+    pub(super) previous_page: Option<ButtonSearchPagination>,
 }
 
 #[derive(Debug)]
 pub(super) struct SearchPageMangasParser<T: HtmlParser> {
     scraper: T,
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(super) struct ButtonSearchPagination {
+    url: String,
 }
 
 impl<T: HtmlParser> SearchPageMangasParser<T> {
@@ -610,7 +502,7 @@ impl<T: HtmlParser> SearchPageMangasParser<T> {
 
     pub(super) fn scrape_search_page(self) -> Result<SearchPageMangas, SearchPageError> {
         let divs_selector = "div.my-3:nth-child(3) > div";
-        let selector_not_found = ".text-lg > div:nth-child(1)";
+        let selector_button_next_previous_page = "a.btn";
 
         let div_containing_search_items = self.scraper.get_matching_elements(divs_selector);
         let mut mangas: Vec<_> = vec![];
@@ -621,34 +513,29 @@ impl<T: HtmlParser> SearchPageMangasParser<T> {
             }
         }
 
+        let mut next_page = None;
+        let mut previous = None;
+
+        let button = self.scraper.get_element(selector_button_next_previous_page);
+
+        if let Some(btn) = button {
+            let url = self.scraper.get_element_attr(&btn, "href").unwrap_or_default();
+            if self.scraper.get_inner_text(&btn).to_lowercase() == "next" {
+                next_page = Some(ButtonSearchPagination { url })
+            } else {
+                previous = Some(ButtonSearchPagination { url });
+            }
+        }
+
         Ok(SearchPageMangas {
             mangas,
-            ..Default::default()
+            next_page,
+            previous_page: previous,
         })
     }
 }
 
-#[derive(Debug)]
-pub(super) struct SearchPageError {
-    reason: String,
-}
-
-impl Display for SearchPageError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Failed to parse search page from weebcentral, more details about the error: {}", self.reason)
-    }
-}
-
-impl<T: Into<String>> From<T> for SearchPageError {
-    fn from(value: T) -> Self {
-        let reason: String = value.into();
-        Self { reason }
-    }
-}
-
-impl Error for SearchPageError {}
-
-///// Weebcentral does not provide the description of the manga and the artist
+///// MangaPill does not provide the description of the manga and the artist
 //impl From<SearchPageItem> for SearchManga {
 //    fn from(manga: SearchPageItem) -> Self {
 //        Self {
@@ -665,20 +552,6 @@ impl Error for SearchPageError {}
 //    }
 //}
 
-///// There is no way of knowing the total mangas of the search
-//impl From<SearchPageMangas> for GetMangasResponse {
-//    fn from(value: SearchPageMangas) -> Self {
-//        let amount_mangas = value.mangas.len();
-//        Self {
-//            mangas: value.mangas.into_iter().map(SearchManga::from).collect(),
-//            /// Since v0.7.0 weebcentral does not provide the total mangas and the pagination
-//            /// implementation requires it so that it knows it can query more mangas, so for now we
-//            /// put a ver large number as total mangas
-//            total_mangas: if value.more_result { 1000000 } else { amount_mangas as u32 },
-//        }
-//    }
-//}
-//
 #[cfg(test)]
 mod tests {
     use std::error::Error;
@@ -903,6 +776,14 @@ mod tests {
         let scraper = SearchPageMangasParser::new(Scraper::new(HtmlElement::new(html)));
 
         let result = scraper.scrape_search_page()?;
+
+        assert_eq!(
+            Some(ButtonSearchPagination {
+                url: "/search?q=school&status=&type=&page=2".to_string()
+            }),
+            result.next_page
+        );
+        assert!(result.previous_page.is_none());
 
         let res1 = result.mangas.iter().find(|ma| ma.page_url == expected.page_url).unwrap();
         let res2 = result.mangas.iter().find(|ma| ma.page_url == expected2.page_url).unwrap();
