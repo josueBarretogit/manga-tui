@@ -1,3 +1,24 @@
+//! HTML scraping and response models for the MangaPill provider.
+//!
+//! This module contains small data structures representing pieces of
+//! information scraped from MangaPill (popular items, latest items,
+//! manga detail pages, chapter lists, chapter pages and search results)
+//! and a set of focused parsers that extract those structures from
+//! previously-fetched HTML using the generic `HtmlParser` trait.
+//!
+//! The parsers here do not perform any network I/O; they only traverse
+//! the provided DOM and normalize it into strongly-typed, testable
+//! Rust structures that can later be converted into the app's public
+//! types (e.g., `Manga`, `ListOfChapters`, etc.).
+//!
+//! Each parser:
+//! - Targets one page/section
+//! - Uses CSS selectors tailored to MangaPill's markup
+//! - Returns a small DTO-like struct with exactly the data needed
+//! - Fails gracefully by skipping invalid entries and returning errors with helpful messages when required fields are missing
+//!
+//! See the tests at the bottom of the file for examples of expected
+//! HTML inputs and parsed outputs.
 use std::error::Error;
 use std::fmt::{Display, Write};
 use std::path::Path;
@@ -52,10 +73,13 @@ pub(super) struct PopularMangasMangaPill<T: HtmlParser> {
 }
 
 impl<T: HtmlParser> PopularMangasMangaPill<T> {
+    /// Creates a new parser instance to scrape the "Popular" section from
+    /// MangaPill's home page.
     pub(super) fn new(parser: T) -> Self {
         Self { parser }
     }
 
+    /// Extracts one `PopularMangaItem` from the given container `div`.
     fn parse_popular_manga(&self, div: &HtmlElement) -> Result<PopularMangaItem, PopularMangaParseError> {
         let a_tags = self.parser.get_matching_elements_from(div, "a");
 
@@ -91,6 +115,7 @@ impl<T: HtmlParser> PopularMangasMangaPill<T> {
         })
     }
 
+    /// Scrapes the list of popular mangas found on the home page.
     pub fn scrape_popular_mangas(self) -> Result<Vec<PopularMangaItem>, PopularMangaParseError> {
         let selector_popular_mangas = ".featured-grid > div";
 
@@ -135,10 +160,13 @@ pub(super) struct LatestMangas<T: HtmlParser> {
 }
 
 impl<T: HtmlParser> LatestMangas<T> {
+    /// Creates a new parser instance to scrape the "Latest" section from
+    /// MangaPill's home page.
     pub(super) fn new(parser: T) -> Self {
         Self { parser }
     }
 
+    /// Extracts one `LatestMangItem` from the given container `div`.
     fn parse_latest_manga(&self, div: &HtmlElement) -> Result<LatestMangItem, LatestMangaError> {
         let a_containing_latest_chapter = self
             .parser
@@ -176,6 +204,7 @@ impl<T: HtmlParser> LatestMangas<T> {
         })
     }
 
+    /// Scrapes at most the first five items from the latest updates list.
     pub(super) fn scrape_latest_mangas(self) -> Result<Vec<LatestMangItem>, LatestMangaError> {
         let selector_popular_mangas = "div.col-span-4:nth-child(1) > div:nth-child(2) > div";
 
@@ -207,6 +236,7 @@ impl Default for MangaPillStatus {
 }
 
 impl From<MangaPillStatus> for MangaStatus {
+    /// Maps MangaPill status names to the app-wide `MangaStatus` enum.
     fn from(value: MangaPillStatus) -> Self {
         match value.name.to_lowercase().as_str() {
             "ongoing" | "publishing" => MangaStatus::Ongoing,
@@ -223,6 +253,8 @@ pub(super) struct MangaPillTag {
 }
 
 impl From<MangaPillTag> for Genres {
+    /// Converts a MangaPill tag into a `Genres` value and infers a content
+    /// rating for specific tags where applicable.
     fn from(value: MangaPillTag) -> Self {
         let rating = match value.name.to_lowercase().as_str() {
             "ecchi" => Rating::Moderate,
@@ -266,10 +298,13 @@ pub(super) struct MangaPageDataParser<T: HtmlParser> {
 }
 
 impl<T: HtmlParser> MangaPageDataParser<T> {
+    /// Creates a new parser for a MangaPill manga detail page.
     pub(super) fn new(scraper: T) -> Self {
         Self { scraper }
     }
 
+    /// Scrapes the manga detail page for basic metadata: cover, title,
+    /// optional description, tags and status.
     pub(super) fn scrape_manga_page(self) -> Result<MangaPageData, MangaPageError> {
         let main_page_selector = ".sm\\:flex-row";
 
@@ -334,10 +369,13 @@ pub(super) struct MangaPillChaptersParser<T: HtmlParser> {
 }
 
 impl<T: HtmlParser> MangaPillChaptersParser<T> {
+    /// Creates a new parser for the list of chapter links on a manga page.
     pub(super) fn new(scraper: T) -> Self {
         Self { scraper }
     }
 
+    /// Scrapes the chapter list section, extracting id, full URL and number
+    /// for each chapter.
     pub(super) fn scrape_list_of_chapters(self) -> Result<MangaPillChapters, ChaptersError> {
         let chapters_selector = "a.border";
 
@@ -365,6 +403,8 @@ impl<T: HtmlParser> MangaPillChaptersParser<T> {
 
 /// Manga pill central does not provide volume of mangas so they are all grouped in the `none` volume
 impl From<MangaPillChapters> for ListOfChapters {
+    /// Groups all chapters into a synthetic single volume named "none" and
+    /// converts them to the app's `ListOfChapters` representation.
     fn from(value: MangaPillChapters) -> Self {
         let chapters: Vec<ChapterReader> = value
             .chapters
@@ -398,10 +438,13 @@ pub(super) struct ChapterPageDataParser<T: HtmlParser> {
 }
 
 impl<T: HtmlParser> ChapterPageDataParser<T> {
+    /// Creates a new parser for a MangaPill chapter reader page.
     pub(super) fn new(scraper: T) -> Self {
         Self { scraper }
     }
 
+    /// Scrapes one chapter reader page: extracts the full displayed title,
+    /// the parsed numeric chapter number and the list of image page URLs.
     pub(super) fn scrape_page(self) -> Result<ChapterPageData, ChapterPageDataError> {
         let pages_selector = ".js-page";
 
@@ -459,10 +502,13 @@ pub(super) struct ButtonSearchPagination {
 }
 
 impl<T: HtmlParser> SearchPageMangasParser<T> {
+    /// Creates a new parser for MangaPill search result pages.
     pub(super) fn new(scraper: T) -> Self {
         Self { scraper }
     }
 
+    /// Extracts a single `SearchPageItem` (cover, page URL, title, status)
+    /// from the grid item `div`.
     fn scrape_search_item(&self, div: &HtmlElement) -> Result<SearchPageItem, SearchPageError> {
         let cover_url = self
             .scraper
@@ -500,6 +546,8 @@ impl<T: HtmlParser> SearchPageMangasParser<T> {
         })
     }
 
+    /// Scrapes the entire search results page including next/previous
+    /// pagination button (if present).
     pub(super) fn scrape_search_page(self) -> Result<SearchPageMangas, SearchPageError> {
         let divs_selector = "div.my-3:nth-child(3) > div";
         let selector_button_next_previous_page = "a.btn";
