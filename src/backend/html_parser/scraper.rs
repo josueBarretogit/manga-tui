@@ -1,3 +1,16 @@
+//! Minimal HTML scraping adapter built on top of the `scraper` crate.
+//!
+//! This module provides a concrete `HtmlParser` implementation (`Scraper`)
+//! used by providers to extract content from HTML strings via CSS selectors.
+//! It converts `HtmlElement` inputs into a parsed document/fragment and
+//! exposes small helper methods to query elements, attributes and text.
+//!
+//! Notes and caveats:
+//! - Fragment parsing: most methods parse a small `HtmlElement` fragment and then select using `*` to reach the first real node via
+//!   `nth(1)`. This aligns with how `scraper` represents fragment roots.
+//! - Selector parsing: `AsSelector` unwraps on parse errors; only valid CSS selectors should be passed.
+//! - Text extraction: `get_inner_text` returns the first text node trimmed. For complex nodes with multiple text parts, call it on
+//!   the most specific element.
 use scraper::{Element, ElementRef, Selector, html, node};
 
 use crate::backend::html_parser::{HtmlElement, HtmlParser};
@@ -8,6 +21,8 @@ pub struct Scraper {
 }
 
 impl Scraper {
+    /// Creates a new `Scraper` by parsing the provided HTML string as a full
+    /// document.
     #[inline]
     pub fn new(document: HtmlElement) -> Self {
         let document = html::Html::parse_document(&document);
@@ -17,6 +32,9 @@ impl Scraper {
 
 pub trait AsSelector {
     #![allow(clippy::wrong_self_convention)]
+    /// Converts a CSS selector string into a parsed `Selector`.
+    ///
+    /// Panics if the selector is invalid.
     fn as_selector(self) -> Selector;
 }
 
@@ -28,6 +46,9 @@ impl AsSelector for &str {
 }
 
 impl HtmlParser for Scraper {
+    /// Returns the first text node inside the provided `HtmlElement` fragment,
+    /// trimmed of surrounding whitespace. Returns an empty string if no text
+    /// node is present.
     fn get_inner_text(&self, document: &super::HtmlElement) -> String {
         let el = html::Html::parse_fragment(document);
 
@@ -41,6 +62,9 @@ impl HtmlParser for Scraper {
     }
 
     #[inline]
+    /// Returns the first element matching `class` within the `from` fragment.
+    /// The result is returned as a new `HtmlElement` containing the matched
+    /// element's HTML.
     fn get_element_from(&self, from: &HtmlElement, class: &str) -> Option<HtmlElement> {
         html::Html::parse_fragment(from)
             .select(&class.as_selector())
@@ -49,17 +73,23 @@ impl HtmlParser for Scraper {
     }
 
     #[inline]
+    /// Returns the inner HTML of the first child element within the provided
+    /// fragment. If no child is found, returns an empty string.
     fn get_inner_html(&self, document: &super::HtmlElement) -> String {
         let el = html::Html::parse_fragment(document);
         el.select(&"*".as_selector()).nth(1).map(|el| el.inner_html()).unwrap_or_default()
     }
 
     #[inline]
+    /// Selects the first element in the full document that matches `class` and
+    /// returns it as an `HtmlElement`.
     fn get_element(&self, class: &str) -> Option<super::HtmlElement> {
         self.document.select(&class.as_selector()).next().map(|el| HtmlElement::new(el.html()))
     }
 
     #[inline]
+    /// Returns the value of attribute `attr_to_find` on the first child element
+    /// within the provided fragment, if present.
     fn get_element_attr(&self, element: &super::HtmlElement, attr_to_find: &str) -> Option<String> {
         let el = html::Html::parse_fragment(element);
 
@@ -71,6 +101,8 @@ impl HtmlParser for Scraper {
     }
 
     #[inline]
+    /// Returns the children of the provided element fragment as individual
+    /// `HtmlElement` nodes.
     fn get_element_children(&self, element: &super::HtmlElement) -> Vec<super::HtmlElement> {
         let doc = html::Html::parse_fragment(element);
 
@@ -78,6 +110,7 @@ impl HtmlParser for Scraper {
     }
 
     #[inline]
+    /// Returns all elements in the full document matching the CSS selector.
     fn get_matching_elements(&self, selector: &str) -> Vec<HtmlElement> {
         self.document
             .select(&selector.as_selector())
@@ -85,6 +118,8 @@ impl HtmlParser for Scraper {
             .collect()
     }
 
+    /// Returns all elements matching the CSS selector inside the provided
+    /// fragment.
     fn get_matching_elements_from(&self, from: &HtmlElement, class: &str) -> Vec<HtmlElement> {
         html::Html::parse_fragment(from)
             .select(&class.as_selector())
