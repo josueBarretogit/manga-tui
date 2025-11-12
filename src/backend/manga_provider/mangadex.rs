@@ -1004,6 +1004,7 @@ impl SearchPageProvider for MangadexClient {
         self.save_filters_on_close(filters_to_save);
 
         Ok(GetMangasResponse {
+            next_page: mangas.len() != 0,
             mangas,
             total_mangas,
         })
@@ -1108,6 +1109,7 @@ mod test {
                 ..Default::default()
             }],
             total_mangas: 5,
+            next_page: true,
         };
 
         let response = SearchMangaResponse {

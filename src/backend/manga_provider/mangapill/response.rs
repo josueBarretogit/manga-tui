@@ -20,20 +20,16 @@
 //! See the tests at the bottom of the file for examples of expected
 //! HTML inputs and parsed outputs.
 use std::error::Error;
-use std::fmt::{Display, Write};
+use std::fmt::Display;
 use std::path::Path;
 
-use chrono::NaiveDate;
 use manga_tui::make_error_ty;
 use regex::Regex;
 use reqwest::Url;
-use scraper::{ElementRef, html};
 
-use crate::backend::html_parser::scraper::AsSelector;
 use crate::backend::html_parser::{HtmlElement, HtmlParser};
 use crate::backend::manga_provider::{
-    Author, ChapterPageUrl, ChapterReader, Genres, GetMangasResponse, Languages, ListOfChapters, Manga, MangaStatus, PopularManga,
-    Rating, RecentlyAddedManga, SearchManga, SortedChapters, SortedVolumes, Volumes,
+    ChapterPageUrl, ChapterReader, Genres, ListOfChapters, MangaStatus, Rating, SortedChapters, SortedVolumes, Volumes,
 };
 
 make_error_ty!(PopularMangaParseError, "Failed to parse popular manga from MangaPill, more details about the error: {}");
@@ -556,24 +552,28 @@ impl<T: HtmlParser> SearchPageMangasParser<T> {
             }
         }
 
-        let mut next_page = None;
-        let mut previous = None;
+        let next_and_previous_buttons = self.scraper.get_matching_elements(selector_button_next_previous_page);
 
-        let button = self.scraper.get_element(selector_button_next_previous_page);
+        let next_page = next_and_previous_buttons
+            .iter()
+            .find(|el| self.scraper.get_inner_text(&el).to_lowercase() == "next")
+            .and_then(|btn| {
+                let url = self.scraper.get_element_attr(&btn, "href")?;
+                Some(ButtonSearchPagination { url })
+            });
 
-        if let Some(btn) = button {
-            let url = self.scraper.get_element_attr(&btn, "href").unwrap_or_default();
-            if self.scraper.get_inner_text(&btn).to_lowercase() == "next" {
-                next_page = Some(ButtonSearchPagination { url })
-            } else {
-                previous = Some(ButtonSearchPagination { url });
-            }
-        }
+        let previous_page = next_and_previous_buttons
+            .iter()
+            .find(|el| self.scraper.get_inner_text(&el).to_lowercase() == "previous")
+            .and_then(|btn| {
+                let url = self.scraper.get_element_attr(&btn, "href")?;
+                Some(ButtonSearchPagination { url })
+            });
 
         Ok(SearchPageMangas {
             mangas,
             next_page,
-            previous_page: previous,
+            previous_page,
         })
     }
 }

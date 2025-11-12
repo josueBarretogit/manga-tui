@@ -1,8 +1,3 @@
-#![allow(unused)]
-#![allow(dead_code)]
-#![allow(deprecated)]
-#![allow(clippy::single_match)]
-
 use std::io::stdout;
 use std::process::exit;
 use std::sync::Arc;
@@ -36,7 +31,7 @@ use self::cli::CliArgs;
 use self::config::MangaTuiConfig;
 use crate::backend::manga_provider::mangadex::get_cached_filters;
 use crate::backend::manga_provider::mangapill::MangaPillProvider;
-use crate::backend::manga_provider::mangapill::filter_state::{MangaPillFilterState, MangaPillFiltersProvider};
+use crate::backend::manga_provider::mangapill::filter_state::MangaPillFiltersProvider;
 use crate::backend::manga_provider::mangapill::filter_widget::MangaPillFilterWidget;
 
 mod backend;

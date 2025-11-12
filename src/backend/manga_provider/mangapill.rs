@@ -2,13 +2,11 @@ use std::error::Error;
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::NaiveDate;
 use http::header::{ACCEPT, ACCEPT_ENCODING, ACCEPT_LANGUAGE, CACHE_CONTROL, CONNECTION, HOST, REFERER};
 use http::{HeaderMap, HeaderValue, StatusCode};
 use manga_tui::SearchTerm;
 use reqwest::{Client, Url};
-use response::{ChapterPageData, LatestMangas, MangaPageData, PopularMangasMangaPill, SearchPageMangas};
-use serde::Serialize;
+use response::{LatestMangas, PopularMangasMangaPill};
 
 use super::{
     Chapter, ChapterFilters, ChapterOrderBy, ChapterPageUrl, DecodeBytesToImage, FeedPageProvider, FetchChapterBookmarked,
@@ -18,16 +16,16 @@ use super::{
     SearchPageProvider,
 };
 use crate::backend::cache::{CacheDuration, Cacher, InsertEntry};
+use crate::backend::html_parser::HtmlElement;
 use crate::backend::html_parser::scraper::Scraper;
-use crate::backend::html_parser::{HtmlElement, ParseHtml};
 use crate::backend::manga_provider::mangapill::filter_state::{MangaPillFilterState, MangaPillFiltersProvider};
 use crate::backend::manga_provider::mangapill::filter_widget::MangaPillFilterWidget;
 use crate::backend::manga_provider::mangapill::response::{
     ChapterPageDataError, ChapterPageDataParser, ChapterPagesScraper, ChaptersError, LatestMangaError, MangaPageDataParser,
-    MangaPageError, MangaPillChaptersParser, MangaPillStatus, PopularMangaParseError, SearchPageError, SearchPageMangasParser,
+    MangaPageError, MangaPillChaptersParser, PopularMangaParseError, SearchPageError, SearchPageMangasParser,
 };
 use crate::backend::manga_provider::{ChapterToRead, Genres, SearchManga};
-use crate::config::ImageQuality;
+use crate::global::get_random_user_agent;
 
 pub mod filter_state;
 pub mod filter_widget;
@@ -50,7 +48,6 @@ static MANGA_PILL_URL: &str = "https://mangapill.com";
 pub struct MangaPillProvider {
     client: Client,
     base_url: Url,
-    chapter_pages_header: HeaderMap,
     cache_provider: Arc<dyn Cacher>,
 }
 
@@ -84,21 +81,11 @@ impl MangaPillProvider {
         default_headers.insert("sec-fetch-user", HeaderValue::from_static("?1"));
         default_headers.insert("sec-fetch-dest", HeaderValue::from_static("document"));
 
-        let mut chapter_pages_header = HeaderMap::new();
-
-        chapter_pages_header.insert(CACHE_CONTROL, HeaderValue::from_static("max-age=604800"));
-        chapter_pages_header.insert(REFERER, HeaderValue::from_static(MANGA_PILL_URL));
-        chapter_pages_header.insert(CONNECTION, HeaderValue::from_static("keep-alive"));
-        chapter_pages_header.insert(ACCEPT_ENCODING, HeaderValue::from_static("gzip, deflate"));
-
-        chapter_pages_header
-            .insert(ACCEPT, HeaderValue::from_static("image/avif,image/webp,image/png,image/svg+xml,image/*;q=0.8,*/*;q=0.5"));
-
         let client = Client::builder()
             .cookie_store(true)
             .timeout(Duration::from_secs(30))
             .default_headers(default_headers)
-            .user_agent("Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0")
+            .user_agent(get_random_user_agent())
             .build()
             .unwrap();
 
@@ -106,7 +93,6 @@ impl MangaPillProvider {
             client,
             base_url,
             cache_provider,
-            chapter_pages_header,
         }
     }
 
@@ -243,16 +229,16 @@ impl MangaPillProvider {
     fn map_search_result(
         &self,
         doc: String,
-        filters: <Self as SearchPageProvider>::InnerState,
-        pagination: Pagination,
+        _filters: <Self as SearchPageProvider>::InnerState,
+        _pagination: Pagination,
     ) -> Result<GetMangasResponse, SearchPageError> {
         let html_parser = Scraper::new(HtmlElement::new(doc));
         let parser = SearchPageMangasParser::new(html_parser);
 
         let search_result = parser.scrape_search_page()?;
-        let total = search_result.mangas.len();
+        let mut total = search_result.mangas.len();
 
-        let mut mangas: Vec<SearchManga> = search_result
+        let mangas: Vec<SearchManga> = search_result
             .mangas
             .into_iter()
             .map(|ma| SearchManga {
@@ -265,9 +251,14 @@ impl MangaPillProvider {
             })
             .collect();
 
+        if search_result.next_page.is_some() || search_result.previous_page.is_some() {
+            total = 10000;
+        }
+
         Ok(GetMangasResponse {
             mangas,
             total_mangas: total as u32,
+            next_page: search_result.next_page.is_some(),
         })
     }
 
@@ -511,7 +502,7 @@ impl HomePageMangaProvider for MangaPillProvider {
 }
 
 impl SearchChapterById for MangaPillProvider {
-    async fn search_chapter(&self, chapter_id: &str, manga_id: &str) -> Result<ChapterToRead, Box<dyn Error>> {
+    async fn search_chapter(&self, chapter_id: &str, _manga_id: &str) -> Result<ChapterToRead, Box<dyn Error>> {
         let chapter = self.get_chapter(chapter_id).await?;
         Ok(chapter)
     }
@@ -529,7 +520,7 @@ impl GetChapterPages for MangaPillProvider {
     async fn get_chapter_pages_url_with_extension(
         &self,
         chapter_id: &str,
-        manga_id: &str,
+        _manga_id: &str,
         _image_quality: crate::config::ImageQuality,
     ) -> Result<Vec<ChapterPageUrl>, Box<dyn Error>> {
         let url = format!("{}{}", self.base_url, chapter_id);
@@ -562,7 +553,7 @@ impl GetChapterPages for MangaPillProvider {
                     .cache(InsertEntry {
                         id: &url,
                         data: doc.as_bytes(),
-                        duration: Self::MANGA_PAGE_CACHE_DURATION,
+                        duration: Self::CHAPTER_PAGE_CACHE_DURATION,
                     })
                     .ok();
 
@@ -627,7 +618,7 @@ impl MangaPageProvider for MangaPillProvider {
         }
     }
 
-    async fn get_all_chapters(&self, manga_id: &str, language: Languages) -> Result<Vec<Chapter>, Box<dyn Error>> {
+    async fn get_all_chapters(&self, manga_id: &str, _language: Languages) -> Result<Vec<Chapter>, Box<dyn Error>> {
         let res = self
             .get_chapters(manga_id, ChapterFilters::default(), Pagination::new(1, 10000000, 10000000))
             .await?;
@@ -649,9 +640,10 @@ impl SearchPageProvider for MangaPillProvider {
         filters: Self::InnerState,
         pagination: super::Pagination,
     ) -> Result<GetMangasResponse, Box<dyn Error>> {
+        let current_page = pagination.current_page;
         let search = search_term.map(|se| format!("q={se}")).unwrap_or_default();
 
-        let endpoint = format!("{}search?{}", self.base_url, search);
+        let endpoint = format!("{}search?{}&page={current_page}", self.base_url, search);
 
         let cache = self.cache_provider.get(&endpoint)?;
 
@@ -669,6 +661,14 @@ impl SearchPageProvider for MangaPillProvider {
                 }
 
                 let doc = response.text().await?;
+
+                self.cache_provider
+                    .cache(InsertEntry {
+                        id: &endpoint,
+                        data: doc.as_bytes(),
+                        duration: Self::SEARCH_PAGE_CACHE_DURATION,
+                    })
+                    .ok();
 
                 Ok(self.map_search_result(doc, filters, pagination)?)
             },

@@ -5,7 +5,7 @@ use super::filter_state::MangaPillFiltersProvider;
 use crate::backend::manga_provider::FiltersWidget;
 use crate::view::widgets::StatefulWidgetFrame;
 
-/// TODO: implement Weebcentral filters in future release
+/// TODO: implement MangaPill filters in future release
 #[derive(Debug, Clone)]
 pub struct MangaPillFilterWidget {}
 
@@ -24,7 +24,7 @@ impl StatefulWidgetFrame for MangaPillFilterWidget {
 
     fn render(&mut self, area: ratatui::prelude::Rect, frame: &mut ratatui::Frame<'_>, _state: &mut Self::State) {
         let buf = frame.buffer_mut();
-        "no filters available on Weebcentral".render(
+        "no filters available on MangaPill".render(
             area.inner(Margin {
                 horizontal: 2,
                 vertical: 2,

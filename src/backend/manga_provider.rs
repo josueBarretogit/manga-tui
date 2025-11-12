@@ -813,6 +813,8 @@ pub trait FiltersWidget: StatefulWidgetFrame<State = Self::FilterState> {
 pub struct GetMangasResponse {
     pub mangas: Vec<SearchManga>,
     pub total_mangas: u32,
+    // wheter or not there is a next page available in the search
+    pub next_page: bool,
 }
 
 pub trait SearchPageProvider: DecodeBytesToImage + SearchMangaById + ProviderIdentity + Clone + Send + Sync + 'static {

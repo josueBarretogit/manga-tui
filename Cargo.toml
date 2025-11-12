@@ -52,6 +52,7 @@ scraper = "0.24.0"
 regex = "1.12.2"
 lopdf = "0.38.0"
 flate2 = "1.1.4"
+rand = "0.9.2"
 
 [dev-dependencies]
 httpmock = "0.7.0-rc.1"
