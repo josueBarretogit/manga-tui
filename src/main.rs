@@ -1,3 +1,8 @@
+#![allow(unused)]
+#![allow(dead_code)]
+#![allow(deprecated)]
+#![allow(clippy::single_match)]
+
 use std::io::stdout;
 use std::process::exit;
 use std::sync::Arc;

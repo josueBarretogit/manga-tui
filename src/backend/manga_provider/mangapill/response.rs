@@ -556,17 +556,17 @@ impl<T: HtmlParser> SearchPageMangasParser<T> {
 
         let next_page = next_and_previous_buttons
             .iter()
-            .find(|el| self.scraper.get_inner_text(&el).to_lowercase() == "next")
+            .find(|el| self.scraper.get_inner_text(el).to_lowercase() == "next")
             .and_then(|btn| {
-                let url = self.scraper.get_element_attr(&btn, "href")?;
+                let url = self.scraper.get_element_attr(btn, "href")?;
                 Some(ButtonSearchPagination { url })
             });
 
         let previous_page = next_and_previous_buttons
             .iter()
-            .find(|el| self.scraper.get_inner_text(&el).to_lowercase() == "previous")
+            .find(|el| self.scraper.get_inner_text(el).to_lowercase() == "previous")
             .and_then(|btn| {
-                let url = self.scraper.get_element_attr(&btn, "href")?;
+                let url = self.scraper.get_element_attr(btn, "href")?;
                 Some(ButtonSearchPagination { url })
             });
 

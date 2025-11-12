@@ -24,7 +24,7 @@ pub static APP_USER_AGENT: LazyLock<String> = LazyLock::new(|| {
     )
 });
 
-const USER_AGENTS: &[&'static str] = &[
+const USER_AGENTS: &[&str] = &[
     "Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 11_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.5412.99 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.5361.172 Safari/537.36",
@@ -32,11 +32,13 @@ const USER_AGENTS: &[&'static str] = &[
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 11_14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.5397.215 Safari/537.36",
 ];
 
+#[inline]
 fn random_between_1_and_5() -> u8 {
     let mut rng = rand::rng();
     rng.random_range(1..=5)
 }
 
+#[inline]
 pub fn get_random_user_agent() -> &'static str {
     USER_AGENTS[random_between_1_and_5() as usize]
 }

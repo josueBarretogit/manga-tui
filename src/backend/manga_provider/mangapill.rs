@@ -778,7 +778,7 @@ impl HomePageMangaProvider for MangaPillProvider {
     }
 
     async fn get_recently_added_mangas(&self) -> Result<Vec<super::RecentlyAddedManga>, Box<dyn Error>> {
-        let cache = self.cache_provider.get(&self.base_url.as_str())?;
+        let cache = self.cache_provider.get(self.base_url.as_str())?;
 
         match cache {
             Some(cached) => {

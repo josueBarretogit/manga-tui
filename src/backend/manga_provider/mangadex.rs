@@ -167,12 +167,9 @@ impl MangadexClient {
 
             for rel in &manga.relationships {
                 if let Some(attributes) = &rel.attributes {
-                    match rel.type_field.as_str() {
-                        "cover_art" => {
-                            let file_name = attributes.file_name.as_ref().unwrap().to_string();
-                            cover_img_url = self.make_cover_img_url(&manga.id, &file_name);
-                        },
-                        _ => {},
+                    if rel.type_field.as_str() == "cover_art" {
+                        let file_name = attributes.file_name.as_ref().unwrap().to_string();
+                        cover_img_url = self.make_cover_img_url(&manga.id, &file_name);
                     }
                 }
             }
@@ -468,12 +465,9 @@ impl HomePageMangaProvider for MangadexClient {
 
                 for rel in &manga.relationships {
                     if let Some(attributes) = &rel.attributes {
-                        match rel.type_field.as_str() {
-                            "cover_art" => {
-                                let file_name = attributes.file_name.as_ref().unwrap().to_string();
-                                cover_img_url = self.make_cover_img_url_lower_quality(&manga.id, &file_name);
-                            },
-                            _ => {},
+                        if rel.type_field.as_str() == "cover_art" {
+                            let file_name = attributes.file_name.as_ref().unwrap().to_string();
+                            cover_img_url = self.make_cover_img_url_lower_quality(&manga.id, &file_name);
                         }
                     }
                 }
@@ -1004,7 +998,7 @@ impl SearchPageProvider for MangadexClient {
         self.save_filters_on_close(filters_to_save);
 
         Ok(GetMangasResponse {
-            next_page: mangas.len() != 0,
+            next_page: !mangas.is_empty(),
             mangas,
             total_mangas,
         })

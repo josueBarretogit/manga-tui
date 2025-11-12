@@ -321,7 +321,7 @@ pub(super) fn extract_manga_id_from_url(url: &str) -> String {
 /// https://weebcentral.com/series/01J76XYCT4JVR13RN6NT1480MD/Tengoku-Daimakyou
 /// returns : https://weebcentral.com/series/01J76XYCT4JVR13RN6NT1480MD/full-chapter-list
 pub(super) fn replace_last_segment_url(url: &str) -> String {
-    let mut parts: Vec<&str> = url.rsplitn(2, '/').collect();
+    let parts: Vec<&str> = url.rsplitn(2, '/').collect();
     if parts.len() > 1 {
         format!("{}/full-chapter-list", parts[1])
     } else {
