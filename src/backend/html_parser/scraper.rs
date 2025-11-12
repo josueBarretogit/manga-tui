@@ -11,7 +11,7 @@
 //! - Selector parsing: `AsSelector` unwraps on parse errors; only valid CSS selectors should be passed.
 //! - Text extraction: `get_inner_text` returns the first text node trimmed. For complex nodes with multiple text parts, call it on
 //!   the most specific element.
-use scraper::{Element, ElementRef, Selector, html, node};
+use scraper::{Selector, html, node};
 
 use crate::backend::html_parser::{HtmlElement, HtmlParser};
 
