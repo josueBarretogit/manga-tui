@@ -355,7 +355,7 @@ impl MangadexClient {
                 chapter_number,
                 volume_number,
                 scanlator,
-                publication_date: chrono::DateTime::parse_from_rfc3339(&publication_date).unwrap_or_default().date_naive(),
+                publication_date: chrono::DateTime::parse_from_rfc3339(&publication_date).ok().map(|da| da.date_naive()),
             }
         }
     }
@@ -377,7 +377,7 @@ impl MangadexClient {
                 manga_id: manga_id.clone(),
                 language,
                 chapter_number,
-                publication_date: chrono::DateTime::parse_from_rfc3339(&publication_date).unwrap_or_default().date_naive(),
+                publication_date: chrono::DateTime::parse_from_rfc3339(&publication_date).ok().map(|da| da.date_naive()),
                 volume_number,
             }
         }

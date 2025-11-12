@@ -311,7 +311,7 @@ pub struct SearchManga {
     pub author: Option<Author>,
 }
 
-#[derive(Debug, Default, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Chapter {
     pub id: String,
     /// This is necessary because on mangadex ids are Uuids which are safe to be used in file
@@ -324,7 +324,7 @@ pub struct Chapter {
     pub chapter_number: String,
     pub volume_number: Option<String>,
     pub scanlator: Option<String>,
-    pub publication_date: NaiveDate,
+    pub publication_date: Option<NaiveDate>,
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
@@ -335,7 +335,7 @@ pub struct LatestChapter {
     pub language: Languages,
     pub chapter_number: String,
     pub volume_number: Option<String>,
-    pub publication_date: NaiveDate,
+    pub publication_date: Option<NaiveDate>,
 }
 
 #[derive(Debug, Default, PartialEq, Clone, Copy)]
@@ -439,7 +439,7 @@ impl Pagination {
     }
 }
 
-#[derive(Debug, Default, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone, Serialize, Deserialize)]
 pub struct GetChaptersResponse {
     pub chapters: Vec<Chapter>,
     pub total_chapters: u32,
@@ -451,7 +451,7 @@ pub struct ChapterFilters {
     pub language: Languages,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct ChapterToRead {
     pub id: String,
     pub title: String,
@@ -463,12 +463,12 @@ pub struct ChapterToRead {
     pub pages_url: Vec<Url>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct SortedChapters(SortedVec<ChapterReader>);
 
 /// Volumes will have this order : "0", "1", "2" ... up until "none" which is chapter with no
 /// volume
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct SortedVolumes(SortedVec<Volumes>);
 
 impl ListOfChapters {
@@ -578,20 +578,20 @@ impl SortedChapters {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct ChapterReader {
     pub id: String,
     pub number: String,
     pub volume: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Volumes {
     pub volume: String,
     pub chapters: SortedChapters,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct ListOfChapters {
     pub volumes: SortedVolumes,
 }
@@ -646,7 +646,7 @@ pub struct ChapterPage {
 }
 
 /// Struct mainly used to download a chapter, thats why extension is needed
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct ChapterPageUrl {
     pub url: Url,
     pub extension: String,
@@ -664,6 +664,8 @@ pub enum MangaProviders {
     Mangadex,
     #[strum(to_string = "weebcentral")]
     Weebcentral,
+    #[strum(to_string = "mangapill")]
+    Mangapill,
 }
 
 pub trait GetRawImage {

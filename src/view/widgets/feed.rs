@@ -45,21 +45,26 @@ pub struct RecentChapters {
     pub title: String,
     pub number: String,
     pub translated_language: Languages,
-    pub readeable_at: NaiveDate,
+    pub readeable_at: Option<NaiveDate>,
 }
 
 impl From<RecentChapters> for ListItem<'_> {
     fn from(value: RecentChapters) -> Self {
-        let line = Line::from(vec![
+        let mut lines = vec![
             format!("Ch. {} ", value.number).into(),
             value.title.bold(),
             " | ".into(),
             value.translated_language.as_emoji().into(),
             " ".into(),
             value.translated_language.as_human_readable().into(),
-            " | ".into(),
-            display_dates_since_publication(value.readeable_at).into(),
-        ]);
+        ];
+
+        if let Some(date) = value.readeable_at {
+            lines.push(" ".into());
+            lines.push(display_dates_since_publication(date).into());
+        }
+
+        let line = Line::from(lines);
 
         ListItem::new(line)
     }

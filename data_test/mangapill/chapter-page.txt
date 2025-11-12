@@ -20,7 +20,6 @@
 
 
 
-
     <meta property="twitter:image"
         content="https://cdn.readdetectiveconan.com/file/mangapill/i/9280.jpeg?h=0199dd6d-9cd3-7208-9727-4093285c7fc9">
     <meta property="og:image"
@@ -395,7 +394,7 @@
 
                     <picture>
                         <img class="js-page"
-                            data-src="https://cdn.readdetectiveconan.com/file/mangap/9280/10011100/0199dd6e-24c5-7d07-97e8-6b57345542e3/4.jpeg"
+                            data-src="https://cdn.readdetectiveconan.com/file/mangap/9280/10011100/0199dd6e-24c5-7d07-97e8-6b57345542e3/4.jpeg?t=1725134176"
                             alt="Tada no Murabito no Boku ga, Sanbyakunenmae no Boukun Ouji ni Tensei shite Shimaimashita: Zensei no Chishiki de Ansatsu Flag wo Kaihi shite, Odayaka ni Ikinokorimasu! Chapter 11.1 Page 4"
                             loading="lazy" width="1150" height="1620" />
                     </picture>

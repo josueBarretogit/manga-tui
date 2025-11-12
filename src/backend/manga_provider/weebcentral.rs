@@ -162,7 +162,7 @@ impl WeebcentralProvider {
                 chapter_number: chap.number,
                 volume_number: None,
                 scanlator: Some("Weeb central".to_string()),
-                publication_date: chap.datetime,
+                publication_date: Some(chap.datetime),
             })
             .collect()
     }
@@ -208,7 +208,7 @@ impl WeebcentralProvider {
                 language: Languages::English,
                 chapter_number: chap.number,
                 volume_number: None,
-                publication_date: chap.datetime,
+                publication_date: Some(chap.datetime),
             })
             .collect()
     }

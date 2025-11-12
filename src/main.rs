@@ -35,6 +35,9 @@ use self::backend::tui::run_app;
 use self::cli::CliArgs;
 use self::config::MangaTuiConfig;
 use crate::backend::manga_provider::mangadex::get_cached_filters;
+use crate::backend::manga_provider::mangapill::MangaPillProvider;
+use crate::backend::manga_provider::mangapill::filter_state::{MangaPillFilterState, MangaPillFiltersProvider};
+use crate::backend::manga_provider::mangapill::filter_widget::MangaPillFilterWidget;
 
 mod backend;
 mod cli;
@@ -168,6 +171,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 anilist_client,
                 WeebcentralFiltersProvider::new(WeebcentralFilterState::default()),
                 WeebcentralFilterWidget::new(),
+            )
+            .await?;
+        },
+        MangaProviders::Mangapill => {
+            logger.inform("Using MangaPill as manga provider");
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            run_app(
+                ratatui::init(),
+                MangaPillProvider::init(cache_provider),
+                anilist_client,
+                MangaPillFiltersProvider::new(backend::manga_provider::mangapill::filter_state::MangaPillFilterState::default()),
+                MangaPillFilterWidget::new(),
             )
             .await?;
         },

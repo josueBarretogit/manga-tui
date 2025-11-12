@@ -4,6 +4,8 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+use serde::{Deserialize, Serialize};
+
 /// Shortcut for: Path::new($path).try_exists().is_ok_and(|is_true| is_true)
 #[macro_export]
 macro_rules! exists {
@@ -104,7 +106,7 @@ impl<T: AsRef<str>> From<T> for SanitizedFilename {
 
 /// A `Vec` that is guaranteed to be sorted
 /// and with no duplicates
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct SortedVec<T: Debug>(Vec<T>);
 
 impl<T: Debug> SortedVec<T> {

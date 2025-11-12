@@ -53,19 +53,6 @@ pub(super) struct PopularMangaItem {
     pub(super) latest_chapter: Option<String>,
 }
 
-//impl From<PopularMangaItem> for PopularManga {
-//    fn from(manga: PopularMangaItem) -> Self {
-//        Self {
-//            id: manga.id,
-//            title: manga.title,
-//            genres: vec![],
-//            description: format!("Latest chapter: {}", manga.latest_chapter.unwrap_or_default()),
-//            status: None,
-//            cover_img_url: manga.cover_url,
-//        }
-//    }
-//}
-
 /// How to scrape the popoular mangas from MangaPill:
 #[derive(Debug)]
 pub(super) struct PopularMangasMangaPill<T: HtmlParser> {
@@ -108,7 +95,7 @@ impl<T: HtmlParser> PopularMangasMangaPill<T> {
 
         Ok(PopularMangaItem {
             id: id.to_string(),
-            page_url,
+            page_url: page_url.replacen("/", "", 1),
             title,
             cover_url: img,
             latest_chapter: Some(chapter_number),
@@ -141,17 +128,6 @@ pub(super) struct LatestMangItem {
     pub(super) title: String,
     pub(super) latest_chapter: Option<String>,
 }
-
-//impl From<LatestMangItem> for RecentlyAddedManga {
-//    fn from(manga: LatestMangItem) -> Self {
-//        Self {
-//            id: manga.id,
-//            title: manga.title,
-//            description: manga.latest_chapter.unwrap_or_default(),
-//            cover_img_url: manga.cover_url,
-//        }
-//    }
-//}
 
 /// How to scrape the latest mangas from MangaPill:
 #[derive(Debug, Default)]
@@ -197,7 +173,7 @@ impl<T: HtmlParser> LatestMangas<T> {
 
         Ok(LatestMangItem {
             id: id.to_string(),
-            page_url,
+            page_url: page_url.replacen("/", "", 1),
             title,
             cover_url: img,
             latest_chapter: a_containing_latest_chapter,
@@ -274,24 +250,6 @@ pub(super) struct MangaPageData {
     pub(super) tags: Vec<MangaPillTag>,
     pub(super) status: MangaPillStatus,
 }
-
-//impl From<MangaPageData> for Manga {
-//    fn from(manga: MangaPageData) -> Self {
-//        Self {
-//            id: manga.id.clone(),
-//            id_safe_for_download: manga.id,
-//            title: manga.title,
-//            genres: manga.tags.into_iter().map(Genres::from).collect(),
-//            description: manga.description.unwrap_or("No description".to_string()),
-//            status: manga.status.into(),
-//            cover_img_url: manga.cover_url,
-//            languages: vec![Languages::English],
-//            rating: "".to_string(),
-//            artist: None,
-//            author: None,
-//        }
-//    }
-//}
 
 pub(super) struct MangaPageDataParser<T: HtmlParser> {
     scraper: T,
@@ -385,7 +343,7 @@ impl<T: HtmlParser> MangaPillChaptersParser<T> {
 
             Some(MangaPillChapterListItem {
                 id: id.to_string(),
-                full_url: url,
+                full_url: url.replacen("/", "", 1),
                 number: self.scraper.get_inner_text(a).split(" ").nth(1)?.to_string(),
             })
         };
@@ -475,6 +433,43 @@ impl<T: HtmlParser> ChapterPageDataParser<T> {
     }
 }
 
+#[derive(Debug)]
+pub(super) struct ChapterPagesScraper<T: HtmlParser> {
+    scraper: T,
+}
+
+impl<T: HtmlParser> ChapterPagesScraper<T> {
+    /// Creates a new parser for a MangaPill chapter reader page.
+    pub(super) fn new(scraper: T) -> Self {
+        Self { scraper }
+    }
+
+    /// Scrapes one chapter reader page: extracts the full displayed title,
+    /// the parsed numeric chapter number and the list of image page URLs.
+    pub(super) fn scrape_pages_from_chapter(self) -> Result<Vec<ChapterPageUrl>, ChapterPageDataError> {
+        let pages_selector = ".js-page";
+
+        let pages_url: Vec<ChapterPageUrl> = self
+            .scraper
+            .get_matching_elements(pages_selector)
+            .iter()
+            .filter_map(|img| {
+                let url = self
+                    .scraper
+                    .get_element_attr(img, "data-src")
+                    .and_then(|url| Url::parse(&url).ok())
+                    .and_then(|url| {
+                        let extension = Path::new(url.path()).extension().and_then(|ex| ex.to_str()).map(|ex| ex.to_string())?;
+                        Some(ChapterPageUrl { extension, url })
+                    });
+                url
+            })
+            .collect();
+
+        Ok(pages_url)
+    }
+}
+
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(super) struct SearchPageItem {
     pub(super) page_url: String,
@@ -521,7 +516,7 @@ impl<T: HtmlParser> SearchPageMangasParser<T> {
         let page_url = self
             .scraper
             .get_element_attr(&a_containing_url_and_title, "href")
-            .map(|attr| attr.replace("/manga/", ""))
+            .map(|attr| attr.replacen("/", "", 1))
             .ok_or("Page url not found")?;
 
         let title = self
@@ -583,23 +578,6 @@ impl<T: HtmlParser> SearchPageMangasParser<T> {
     }
 }
 
-///// MangaPill does not provide the description of the manga and the artist
-//impl From<SearchPageItem> for SearchManga {
-//    fn from(manga: SearchPageItem) -> Self {
-//        Self {
-//            id: manga.id,
-//            title: manga.title,
-//            genres: manga.tags.into_iter().map(Genres::from).collect(),
-//            description: None,
-//            status: Some(manga.status.into()),
-//            cover_img_url: manga.cover_url,
-//            languages: vec![Languages::English],
-//            artist: None,
-//            author: None,
-//        }
-//    }
-//}
-
 #[cfg(test)]
 mod tests {
     use std::error::Error;
@@ -625,7 +603,7 @@ mod tests {
 
         let expected: PopularMangaItem = PopularMangaItem {
             id: "5281".to_string(),
-            page_url: "/manga/5281/sakamoto-days".to_string(),
+            page_url: "manga/5281/sakamoto-days".to_string(),
             cover_url: "https://cdn.readdetectiveconan.com/file/mangapill/i/5281.jpeg".to_string(),
             title: "Sakamoto Days".to_string(),
             latest_chapter: Some("#234".to_string()),
@@ -633,7 +611,7 @@ mod tests {
 
         let expected2: PopularMangaItem = PopularMangaItem {
             id: "2".to_string(),
-            page_url: "/manga/2/one-piece".to_string(),
+            page_url: "manga/2/one-piece".to_string(),
             cover_url: "https://cdn.readdetectiveconan.com/file/mangapill/i/2.webp?h=01971742-5d7f-7f32-8d2b-d038279f8a73"
                 .to_string(),
             title: "One Piece".to_string(),
@@ -661,7 +639,7 @@ mod tests {
 
         let expected: LatestMangItem = LatestMangItem {
             id: "8834".to_string(),
-            page_url: "/manga/8834/haikyo-no-meshi".to_string(),
+            page_url: "manga/8834/haikyo-no-meshi".to_string(),
             cover_url: "https://cdn.readdetectiveconan.com/file/mangapill/i/8834.jpeg".to_string(),
             title: "Haikyo no Meshi".to_string(),
             latest_chapter: Some("#7".to_string()),
@@ -669,7 +647,7 @@ mod tests {
 
         let expected2: LatestMangItem = LatestMangItem {
             id: "2140".to_string(),
-            page_url: "/manga/2140/kakegurui".to_string(),
+            page_url: "manga/2140/kakegurui".to_string(),
             cover_url: "https://cdn.readdetectiveconan.com/file/mangapill/i/2140.jpg".to_string(),
             title: "Kakegurui".to_string(),
             latest_chapter: Some("#121".to_string()),
@@ -736,13 +714,13 @@ mod tests {
 
         let expected: MangaPillChapterListItem = MangaPillChapterListItem {
             id: "10234000".to_string(),
-            full_url: "/chapters/5281-10234000/sakamoto-days-chapter-234".to_string(),
+            full_url: "chapters/5281-10234000/sakamoto-days-chapter-234".to_string(),
             number: "234".to_string(),
         };
 
         let expected2: MangaPillChapterListItem = MangaPillChapterListItem {
             id: "10233000".to_string(),
-            full_url: "/chapters/5281-10233000/sakamoto-days-chapter-233".to_string(),
+            full_url: "chapters/5281-10233000/sakamoto-days-chapter-233".to_string(),
             number: "233".to_string(),
         };
 
@@ -799,12 +777,41 @@ mod tests {
     }
 
     #[test]
+    fn pages_are_scraped_from_chapter_document() -> Result<(), Box<dyn Error>> {
+        let html = include_str!("../../../../data_test/mangapill/chapter_page_special.txt");
+
+        let expected_pages: Vec<ChapterPageUrl> = [
+            "https://cdn.readdetectiveconan.com/file/mangap/5281/10001000/1.jpeg?t=1725134176",
+            "https://cdn.readdetectiveconan.com/file/mangap/5281/10001000/2.jpeg?t=1725134176",
+            "https://cdn.readdetectiveconan.com/file/mangap/5281/10001000/3.jpeg?t=1725134176",
+            "https://cdn.readdetectiveconan.com/file/mangap/5281/10001000/4.jpeg?t=1725134176",
+        ]
+        .iter()
+        .map(|url| ChapterPageUrl {
+            url: url.parse().unwrap(),
+            extension: "jpeg".to_string(),
+        })
+        .collect();
+
+        let scraper = ChapterPagesScraper::new(Scraper::new(HtmlElement::new(html)));
+
+        let result = scraper.scrape_pages_from_chapter().unwrap();
+
+        for (index, expected) in expected_pages.iter().enumerate() {
+            assert_eq!(*expected, result[index]);
+        }
+
+        assert_eq!(58, result.len());
+        Ok(())
+    }
+
+    #[test]
     fn search_page_is_parsed_from_html() -> Result<(), Box<dyn Error>> {
         let html = SEARCH_PAGE_DOC;
         let html_not_found = SEARCH_PAGE_DOC_NOT_FOUND;
 
         let expected: SearchPageItem = SearchPageItem {
-            page_url: "3760/school-days".to_string(),
+            page_url: "manga/3760/school-days".to_string(),
             cover_url: "https://cdn.readdetectiveconan.com/file/mangapill/i/3760.jpg".to_string(),
             title: "School Days".to_string(),
             status: MangaPillStatus {
@@ -813,7 +820,7 @@ mod tests {
         };
 
         let expected2: SearchPageItem = SearchPageItem {
-            page_url: "3761/school-ningyo".to_string(),
+            page_url: "manga/3761/school-ningyo".to_string(),
             cover_url: "https://cdn.readdetectiveconan.com/file/mangapill/i/3761.jpg".to_string(),
             title: "School Ningyo".to_string(),
             status: MangaPillStatus {
