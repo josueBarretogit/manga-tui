@@ -922,7 +922,7 @@ impl SearchPageProvider for MangadexClient {
             .map(|manga| {
                 let id = manga.id;
 
-                let title = manga.attributes.title.en.unwrap_or("No title".to_string());
+                let title: String = manga.attributes.title.into();
 
                 let mut genres: Vec<Genres> = manga.attributes.tags.into_iter().map(Genres::from).collect();
 
