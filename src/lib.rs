@@ -4,11 +4,38 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+use serde::{Deserialize, Serialize};
+
 /// Shortcut for: Path::new($path).try_exists().is_ok_and(|is_true| is_true)
 #[macro_export]
 macro_rules! exists {
     ($path:expr) => {
         Path::new($path).try_exists().is_ok_and(|is_true| is_true)
+    };
+}
+
+#[macro_export]
+macro_rules! make_error_ty {
+    ($struct_name:ident, $error_message:expr) => {
+        #[derive(Debug)]
+        pub(super) struct $struct_name {
+            reason: String,
+        }
+
+        impl Display for $struct_name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, $error_message, self.reason)
+            }
+        }
+
+        impl<T: Into<String>> From<T> for $struct_name {
+            fn from(value: T) -> Self {
+                let reason: String = value.into();
+                Self { reason }
+            }
+        }
+
+        impl Error for $struct_name {}
     };
 }
 
@@ -79,7 +106,7 @@ impl<T: AsRef<str>> From<T> for SanitizedFilename {
 
 /// A `Vec` that is guaranteed to be sorted
 /// and with no duplicates
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct SortedVec<T: Debug>(Vec<T>);
 
 impl<T: Debug> SortedVec<T> {

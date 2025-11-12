@@ -321,7 +321,7 @@ pub(super) fn extract_manga_id_from_url(url: &str) -> String {
 /// https://weebcentral.com/series/01J76XYCT4JVR13RN6NT1480MD/Tengoku-Daimakyou
 /// returns : https://weebcentral.com/series/01J76XYCT4JVR13RN6NT1480MD/full-chapter-list
 pub(super) fn replace_last_segment_url(url: &str) -> String {
-    let mut parts: Vec<&str> = url.rsplitn(2, '/').collect();
+    let parts: Vec<&str> = url.rsplitn(2, '/').collect();
     if parts.len() > 1 {
         format!("{}/full-chapter-list", parts[1])
     } else {
@@ -784,6 +784,7 @@ impl From<SearchPageMangas> for GetMangasResponse {
             /// implementation requires it so that it knows it can query more mangas, so for now we
             /// put a ver large number as total mangas
             total_mangas: if value.more_result { 1000000 } else { amount_mangas as u32 },
+            next_page: value.more_result,
         }
     }
 }

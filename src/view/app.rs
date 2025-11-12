@@ -158,6 +158,7 @@ where
                 Pagination::from_first_page(match which_provider {
                     MangaProviders::Mangadex => 10,
                     MangaProviders::Weebcentral => 24,
+                    MangaProviders::Mangapill => 50,
                 }),
             )
             .with_global_sender(global_event_tx.clone()),

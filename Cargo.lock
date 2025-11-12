@@ -635,6 +635,7 @@ dependencies = [
  "iana-time-zone",
  "js-sys",
  "num-traits",
+ "serde",
  "wasm-bindgen",
  "windows-link 0.2.1",
 ]
@@ -2710,6 +2711,7 @@ dependencies = [
  "open",
  "pretty_assertions",
  "pretty_env_logger",
+ "rand 0.9.2",
  "ratatui",
  "ratatui-image",
  "regex",
