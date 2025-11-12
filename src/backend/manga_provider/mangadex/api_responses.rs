@@ -46,7 +46,13 @@ pub struct Title {
     #[serde(rename = "ja-ro")]
     pub ja_ro: Option<String>,
     pub jp: Option<String>,
+    pub es: Option<String>,
+    #[serde(rename = "es-la")]
+    pub es_la: Option<String>,
     pub zh: Option<String>,
+    pub pt: Option<String>,
+    #[serde(rename = "pt-br")]
+    pub pt_br: Option<String>,
     pub ko: Option<String>,
     #[serde(rename = "zh-ro")]
     pub zh_ro: Option<String>,
@@ -55,16 +61,21 @@ pub struct Title {
 }
 
 impl From<Title> for String {
+    #[inline]
     fn from(value: Title) -> Self {
         value
             .en
-            .or(value.ja)
             .or(value.ja_ro)
+            .or(value.ja)
             .or(value.jp)
-            .or(value.zh)
-            .or(value.zh_ro)
-            .or(value.ko)
             .or(value.ko_ro)
+            .or(value.ko)
+            .or(value.zh_ro)
+            .or(value.zh)
+            .or(value.pt_br)
+            .or(value.pt)
+            .or(value.es)
+            .or(value.es_la)
             .unwrap_or("No title".to_string())
     }
 }
