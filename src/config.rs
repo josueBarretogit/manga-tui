@@ -249,7 +249,7 @@ impl ConfigParam for DefaultMangaProvider {
     }
 
     fn values(&self) -> &'static str {
-        "mangadex, weebcentral"
+        "mangadex, weebcentral, mangapill"
     }
 
     fn defaults(&self) -> &'static str {

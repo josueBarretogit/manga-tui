@@ -10,7 +10,7 @@
         <img alt="test passing" src="https://img.shields.io/github/actions/workflow/status/josueBarretogit/manga-tui/test.yml?label=tests">
     </a>
     <a href="https://crates.io/crates/manga-tui">
-        <img alt="crates io downloads" src="https://img.shields.io/crates/d/manga-tui?logo=rust&label=crates.io downloads">
+        <img alt="Crates.io downloads" src="https://img.shields.io/crates/d/manga-tui">
     </a>
     <a href="https://github.com/josueBarretogit/manga-tui/releases/latest">
         <img alt="downloads" src="https://img.shields.io/github/downloads/josuebarretogit/manga-tui/total">
@@ -40,7 +40,8 @@
 
 ## Features
 
-- [Mangadex](https://mangadex.org/) and [Weebcentral](https://weebcentral.com/) are available as manga providers
+- [Mangadex](https://mangadex.org/), [Weebcentral](https://weebcentral.com/) and [MangaPill](https://mangapill.com) are available as manga providers (many more willl be added!)
+so if any one goes down you can still use manga-tui
 
 - Track your reading history with [anilist integration](./docs/anilist.md)
 
@@ -64,7 +65,7 @@
 
 <https://github.com/user-attachments/assets/26ad493f-633c-41fc-9d09-49b316118923>
 
-### Join the [discord](https://discord.gg/jNzuDCH3) server for further help, feature requests or to chat with contributors
+### Join the [discord](https://discord.gg/SeqsWUCpVx) server for further help, feature requests or to chat with contributors
 
 ## Dependencies
 
@@ -206,7 +207,7 @@ check_new_updates = true
 
 # Sets which manga provider will be used when running manga-tui, 
 # you can override it by running manga-tui with the -p flag like this: manga-tui -p weebcentral
-# values: mangadex, weebcentral
+# values: mangadex, weebcentral, mangapill
 # default: "mangadex"
 default_manga_provider = "mangadex"
 
