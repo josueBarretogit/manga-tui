@@ -646,12 +646,11 @@ where
     }
 
     fn load_cover(&mut self, maybe_cover: Option<DynamicImage>, manga_id: String) {
-        if let Some(cover) = maybe_cover {
-            if let Some(picker) = self.picker.as_mut() {
-                if let Ok(protocol) = picker.new_protocol(cover, self.manga_cover_state.get_img_area(), Resize::Fit(None)) {
-                    self.manga_cover_state.insert_manga(protocol, manga_id);
-                }
-            }
+        if let Some(cover) = maybe_cover
+            && let Some(picker) = self.picker.as_mut()
+            && let Ok(protocol) = picker.new_protocol(cover, self.manga_cover_state.get_img_area(), Resize::Fit(None))
+        {
+            self.manga_cover_state.insert_manga(protocol, manga_id);
         }
     }
 

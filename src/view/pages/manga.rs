@@ -605,20 +605,20 @@ where
     }
 
     fn search_next_chapters(&mut self) {
-        if let Some(chapters) = self.chapters.as_mut() {
-            if chapters.pagination.can_go_next_page() {
-                chapters.pagination.go_next_page();
-                self.search_chapters();
-            }
+        if let Some(chapters) = self.chapters.as_mut()
+            && chapters.pagination.can_go_next_page()
+        {
+            chapters.pagination.go_next_page();
+            self.search_chapters();
         }
     }
 
     fn search_previous_chapters(&mut self) {
-        if let Some(chapters) = self.chapters.as_mut() {
-            if chapters.pagination.can_go_previous_page() {
-                chapters.pagination.go_previous_page();
-                self.search_chapters();
-            }
+        if let Some(chapters) = self.chapters.as_mut()
+            && chapters.pagination.can_go_previous_page()
+        {
+            chapters.pagination.go_previous_page();
+            self.search_chapters();
         }
     }
 
@@ -768,11 +768,11 @@ where
     }
 
     fn set_chapter_finished_downloading(&mut self, chapter_id: String) {
-        if let Some(chapters) = self.chapters.as_mut() {
-            if let Some(chap) = chapters.widget.chapters.iter_mut().find(|chap| chap.chapter.id == chapter_id) {
-                chap.download_loading_state = None;
-                self.local_event_tx.send(MangaPageEvents::CheckChapterStatus).ok();
-            }
+        if let Some(chapters) = self.chapters.as_mut()
+            && let Some(chap) = chapters.widget.chapters.iter_mut().find(|chap| chap.chapter.id == chapter_id)
+        {
+            chap.download_loading_state = None;
+            self.local_event_tx.send(MangaPageEvents::CheckChapterStatus).ok();
         }
     }
 
@@ -795,27 +795,27 @@ where
     }
 
     fn set_download_progress_for_chapter(&mut self, progress: f64, id_chapter: String) {
-        if let Some(chapters) = self.chapters.as_mut() {
-            if let Some(chap) = chapters.widget.chapters.iter_mut().find(|chap| chap.chapter.id == id_chapter) {
-                chap.download_loading_state = Some(progress);
-            }
+        if let Some(chapters) = self.chapters.as_mut()
+            && let Some(chap) = chapters.widget.chapters.iter_mut().find(|chap| chap.chapter.id == id_chapter)
+        {
+            chap.download_loading_state = Some(progress);
         }
     }
 
     fn set_chapter_download_error(&mut self, chapter_id: String) {
-        if let Some(chapters) = self.chapters.as_mut() {
-            if let Some(chapter) = chapters.widget.chapters.iter_mut().find(|chap| chap.chapter.id == chapter_id) {
-                chapter.set_download_error();
-            }
+        if let Some(chapters) = self.chapters.as_mut()
+            && let Some(chapter) = chapters.widget.chapters.iter_mut().find(|chap| chap.chapter.id == chapter_id)
+        {
+            chapter.set_download_error();
         }
     }
 
     fn set_chapter_read_error(&mut self, chapter_id: String) {
         self.state = PageState::DisplayingChapters;
-        if let Some(chapters) = self.chapters.as_mut() {
-            if let Some(chapter) = chapters.widget.chapters.iter_mut().find(|chap| chap.chapter.id == chapter_id) {
-                chapter.set_read_error();
-            }
+        if let Some(chapters) = self.chapters.as_mut()
+            && let Some(chapter) = chapters.widget.chapters.iter_mut().find(|chap| chap.chapter.id == chapter_id)
+        {
+            chapter.set_read_error();
         }
     }
 

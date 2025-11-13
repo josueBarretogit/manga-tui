@@ -275,13 +275,12 @@ where
     }
 
     fn load_popular_manga_cover(&mut self, maybe_cover: Option<DynamicImage>, id: String) {
-        if let Some(cover) = maybe_cover {
-            if let Some(picker) = self.picker.as_mut() {
-                let fixed_protocol =
-                    picker.new_protocol(cover, self.popular_manga_carrousel_state.get_img_area(), Resize::Fit(None));
-                if let Ok(protocol) = fixed_protocol {
-                    self.popular_manga_carrousel_state.insert_manga(protocol, id);
-                }
+        if let Some(cover) = maybe_cover
+            && let Some(picker) = self.picker.as_mut()
+        {
+            let fixed_protocol = picker.new_protocol(cover, self.popular_manga_carrousel_state.get_img_area(), Resize::Fit(None));
+            if let Ok(protocol) = fixed_protocol {
+                self.popular_manga_carrousel_state.insert_manga(protocol, id);
             }
         }
     }
@@ -373,13 +372,13 @@ where
     }
 
     fn load_recently_added_mangas_cover(&mut self, maybe_cover: Option<DynamicImage>, id: String) {
-        if let Some(cover) = maybe_cover {
-            if let Some(picker) = self.picker.as_mut() {
-                let fixed_protocol = picker.new_protocol(cover, self.recently_added_manga_state.get_img_area(), Resize::Fit(None));
+        if let Some(cover) = maybe_cover
+            && let Some(picker) = self.picker.as_mut()
+        {
+            let fixed_protocol = picker.new_protocol(cover, self.recently_added_manga_state.get_img_area(), Resize::Fit(None));
 
-                if let Ok(protocol) = fixed_protocol {
-                    self.recently_added_manga_state.insert_manga(protocol, id);
-                }
+            if let Ok(protocol) = fixed_protocol {
+                self.recently_added_manga_state.insert_manga(protocol, id);
             }
         }
     }

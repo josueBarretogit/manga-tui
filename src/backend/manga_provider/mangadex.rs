@@ -38,10 +38,9 @@ pub static COVER_IMG_URL_BASE: &str = "https://uploads.mangadex.org/covers";
 pub static MANGADEX_CACHE_FILENAME: &str = "filters.toml";
 
 pub static MANGADEX_CACHE_BASE_DIRECTORY: LazyLock<PathBuf> = LazyLock::new(|| {
-    let cache_path = directories::ProjectDirs::from("", "", "manga-tui")
+    directories::ProjectDirs::from("", "", "manga-tui")
         .map(|project_dirs| project_dirs.cache_dir().join("mangadex").to_path_buf())
-        .unwrap_or_default();
-    cache_path
+        .unwrap_or_default()
 });
 
 /// Mangadex: `https://mangadex.org`
@@ -166,11 +165,11 @@ impl MangadexClient {
             let mut cover_img_url = String::new();
 
             for rel in &manga.relationships {
-                if let Some(attributes) = &rel.attributes {
-                    if rel.type_field.as_str() == "cover_art" {
-                        let file_name = attributes.file_name.as_ref().unwrap().to_string();
-                        cover_img_url = self.make_cover_img_url(&manga.id, &file_name);
-                    }
+                if let Some(attributes) = &rel.attributes
+                    && rel.type_field.as_str() == "cover_art"
+                {
+                    let file_name = attributes.file_name.as_ref().unwrap().to_string();
+                    cover_img_url = self.make_cover_img_url(&manga.id, &file_name);
                 }
             }
 
@@ -464,11 +463,11 @@ impl HomePageMangaProvider for MangadexClient {
                 let mut cover_img_url = String::new();
 
                 for rel in &manga.relationships {
-                    if let Some(attributes) = &rel.attributes {
-                        if rel.type_field.as_str() == "cover_art" {
-                            let file_name = attributes.file_name.as_ref().unwrap().to_string();
-                            cover_img_url = self.make_cover_img_url_lower_quality(&manga.id, &file_name);
-                        }
+                    if let Some(attributes) = &rel.attributes
+                        && rel.type_field.as_str() == "cover_art"
+                    {
+                        let file_name = attributes.file_name.as_ref().unwrap().to_string();
+                        cover_img_url = self.make_cover_img_url_lower_quality(&manga.id, &file_name);
                     }
                 }
                 RecentlyAddedManga {

@@ -450,15 +450,13 @@ impl<T: HtmlParser> ChapterPagesScraper<T> {
             .get_matching_elements(pages_selector)
             .iter()
             .filter_map(|img| {
-                let url = self
-                    .scraper
+                self.scraper
                     .get_element_attr(img, "data-src")
                     .and_then(|url| Url::parse(&url).ok())
                     .and_then(|url| {
                         let extension = Path::new(url.path()).extension().and_then(|ex| ex.to_str()).map(|ex| ex.to_string())?;
                         Some(ChapterPageUrl { extension, url })
-                    });
-                url
+                    })
             })
             .collect();
 
