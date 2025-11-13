@@ -158,6 +158,7 @@ where
                 Pagination::from_first_page(match which_provider {
                     MangaProviders::Mangadex => 10,
                     MangaProviders::Weebcentral => 24,
+                    MangaProviders::Mangapill => 50,
                 }),
             )
             .with_global_sender(global_event_tx.clone()),
@@ -251,10 +252,10 @@ where
     /// This method ensures a chapter is bookmarked on quit as well
     /// only if auto_bookmark = true
     fn auto_bookmark_on_quit(&mut self) {
-        if let Some(reader_page) = self.manga_reader_page.as_mut() {
-            if reader_page.auto_bookmark {
-                reader_page.bookmark_current_chapter();
-            }
+        if let Some(reader_page) = self.manga_reader_page.as_mut()
+            && reader_page.auto_bookmark
+        {
+            reader_page.bookmark_current_chapter();
         }
     }
 
@@ -386,11 +387,11 @@ where
 
             // If the app is displaying an error message then the user can only close the app or
             // the error message popup
-            if self.is_displaying_error_message() {
-                if let Events::Key(key_event) = event {
-                    self.key_events_error_message(key_event);
-                    return;
-                }
+            if self.is_displaying_error_message()
+                && let Events::Key(key_event) = event
+            {
+                self.key_events_error_message(key_event);
+                return;
             }
 
             match self.current_tab {
@@ -425,17 +426,17 @@ where
                 }
             },
             SelectedPage::MangaTab => {
-                if let Some(manga_page) = self.manga_page.as_mut() {
-                    if let Ok(action) = manga_page.local_action_rx.try_recv() {
-                        manga_page.update(action);
-                    }
+                if let Some(manga_page) = self.manga_page.as_mut()
+                    && let Ok(action) = manga_page.local_action_rx.try_recv()
+                {
+                    manga_page.update(action);
                 }
             },
             SelectedPage::ReaderTab => {
-                if let Some(reader_page) = self.manga_reader_page.as_mut() {
-                    if let Ok(reader_action) = reader_page.local_action_rx.try_recv() {
-                        reader_page.update(reader_action);
-                    }
+                if let Some(reader_page) = self.manga_reader_page.as_mut()
+                    && let Ok(reader_action) = reader_page.local_action_rx.try_recv()
+                {
+                    reader_page.update(reader_action);
                 }
             },
             SelectedPage::Home => {

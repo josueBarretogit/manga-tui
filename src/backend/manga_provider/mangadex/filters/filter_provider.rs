@@ -6,7 +6,8 @@ use manga_tui::SearchTerm;
 use ratatui::style::Stylize;
 use ratatui::text::Span;
 use ratatui::widgets::*;
-use strum::{Display, IntoEnumIterator};
+use strum::IntoEnumIterator;
+use strum_macros::Display;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tui_input::Input;
 use tui_input::backend::crossterm::EventHandler;
@@ -121,10 +122,10 @@ impl<T> FilterList<T> {
     }
 
     pub fn toggle(&mut self) {
-        if let Some(index) = self.state.selected() {
-            if let Some(content_rating) = self.items.get_mut(index) {
-                content_rating.toggle();
-            }
+        if let Some(index) = self.state.selected()
+            && let Some(content_rating) = self.items.get_mut(index)
+        {
+            content_rating.toggle();
         }
     }
 
@@ -271,10 +272,10 @@ impl FilterList<SortByState> {
             item.is_selected = false;
         }
 
-        if let Some(index) = self.state.selected() {
-            if let Some(sort_by) = self.items.get_mut(index) {
-                sort_by.toggle();
-            }
+        if let Some(index) = self.state.selected()
+            && let Some(sort_by) = self.items.get_mut(index)
+        {
+            sort_by.toggle();
         }
     }
 }
@@ -430,12 +431,11 @@ impl<T: SendEventOnSuccess> FilterListDynamic<T> {
     }
 
     fn toggle(&mut self) {
-        if let Some(items) = self.items.as_mut() {
-            if let Some(index) = self.state.selected() {
-                if let Some(user_selected) = items.get_mut(index) {
-                    user_selected.is_selected = !user_selected.is_selected;
-                }
-            }
+        if let Some(items) = self.items.as_mut()
+            && let Some(index) = self.state.selected()
+            && let Some(user_selected) = items.get_mut(index)
+        {
+            user_selected.is_selected = !user_selected.is_selected;
         }
     }
 
@@ -599,12 +599,11 @@ impl TagsState {
             if let Some(tag) = self.get_selected_tag() {
                 tag.toggle_include();
             }
-        } else if self.tags.is_some() {
-            if let Some(index) = self.state.selected() {
-                if let Some(tag) = self.get_filtered_tags().get_mut(index) {
-                    tag.toggle_include();
-                }
-            }
+        } else if self.tags.is_some()
+            && let Some(index) = self.state.selected()
+            && let Some(tag) = self.get_filtered_tags().get_mut(index)
+        {
+            tag.toggle_include();
         }
     }
 
@@ -613,12 +612,11 @@ impl TagsState {
             if let Some(tag) = self.get_selected_tag() {
                 tag.toggle_exclude();
             }
-        } else if self.tags.is_some() {
-            if let Some(index) = self.state.selected() {
-                if let Some(tag) = self.get_filtered_tags().get_mut(index) {
-                    tag.toggle_exclude();
-                }
-            }
+        } else if self.tags.is_some()
+            && let Some(index) = self.state.selected()
+            && let Some(tag) = self.get_filtered_tags().get_mut(index)
+        {
+            tag.toggle_exclude();
         }
     }
 }
@@ -747,10 +745,10 @@ impl MangadexFilterProvider {
         let client = self.api_client.clone();
         tokio::spawn(async move {
             let response = client.get_tags().await;
-            if let Ok(res) = response {
-                if let Ok(tags) = res.json().await {
-                    tx.send(FilterEvents::LoadTags(tags)).ok();
-                }
+            if let Ok(res) = response
+                && let Ok(tags) = res.json().await
+            {
+                tx.send(FilterEvents::LoadTags(tags)).ok();
             }
         });
     }

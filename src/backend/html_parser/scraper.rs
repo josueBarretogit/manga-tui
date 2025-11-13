@@ -1,33 +1,316 @@
-use scraper::Selector;
+//! Minimal HTML scraping adapter built on top of the `scraper` crate.
+//!
+//! This module provides a concrete `HtmlParser` implementation (`Scraper`)
+//! used by providers to extract content from HTML strings via CSS selectors.
+//! It converts `HtmlElement` inputs into a parsed document/fragment and
+//! exposes small helper methods to query elements, attributes and text.
+//!
+//! Notes and caveats:
+//! - Fragment parsing: most methods parse a small `HtmlElement` fragment and then select using `*` to reach the first real node via
+//!   `nth(1)`. This aligns with how `scraper` represents fragment roots.
+//! - Selector parsing: `AsSelector` unwraps on parse errors; only valid CSS selectors should be passed.
+//! - Text extraction: `get_inner_text` returns the first text node trimmed. For complex nodes with multiple text parts, call it on
+//!   the most specific element.
+use scraper::{Selector, html, node};
 
-//pub struct Parser;
+use crate::backend::html_parser::{HtmlElement, HtmlParser};
+
+#[derive(Debug)]
+pub struct Scraper {
+    document: html::Html,
+}
+
+impl Scraper {
+    /// Creates a new `Scraper` by parsing the provided HTML string as a full
+    /// document.
+    #[inline]
+    pub fn new(document: HtmlElement) -> Self {
+        let document = html::Html::parse_document(&document);
+        Self { document }
+    }
+}
 
 pub trait AsSelector {
     #![allow(clippy::wrong_self_convention)]
+    /// Converts a CSS selector string into a parsed `Selector`.
+    ///
+    /// Panics if the selector is invalid.
     fn as_selector(self) -> Selector;
 }
 
 impl AsSelector for &str {
+    #[inline]
     fn as_selector(self) -> Selector {
         Selector::parse(self).unwrap()
     }
 }
 
-//impl HtmlParser for Parser {
-//    fn get_element_by_id(&self, document: &HtmlElement, class: &str) -> HtmlElement {
-//        let document = html::Html::parse_document(document.as_str());
-//        let selector = selector::Selector::parse(class).unwrap();
-//
-//        let element = document.select(&selector).next().unwrap();
-//
-//        HtmlElement::new(element.html())
-//    }
-//
-//    fn get_element_children(&self, element: HtmlElement) -> Vec<HtmlElement> {
-//        vec![]
-//    }
-//
-//    fn get_element_by_class(&self, document: &HtmlElement, class: &str) -> HtmlElement {}
-//
-//    fn get_attr(&self, element: HtmlElement, attr: &str) -> Option<&str> {}
-//}
+impl HtmlParser for Scraper {
+    /// Returns the first text node inside the provided `HtmlElement` fragment,
+    /// trimmed of surrounding whitespace. Returns an empty string if no text
+    /// node is present.
+    fn get_inner_text(&self, document: &super::HtmlElement) -> String {
+        let el = html::Html::parse_fragment(document);
+
+        for e in el.tree {
+            if let node::Node::Text(element_re) = e {
+                return element_re.trim().to_string();
+            }
+        }
+
+        "".to_string()
+    }
+
+    #[inline]
+    /// Returns the first element matching `class` within the `from` fragment.
+    /// The result is returned as a new `HtmlElement` containing the matched
+    /// element's HTML.
+    fn get_element_from(&self, from: &HtmlElement, class: &str) -> Option<HtmlElement> {
+        html::Html::parse_fragment(from)
+            .select(&class.as_selector())
+            .next()
+            .map(|el| HtmlElement::new(el.html()))
+    }
+
+    #[inline]
+    /// Returns the inner HTML of the first child element within the provided
+    /// fragment. If no child is found, returns an empty string.
+    fn get_inner_html(&self, document: &super::HtmlElement) -> String {
+        let el = html::Html::parse_fragment(document);
+        el.select(&"*".as_selector()).nth(1).map(|el| el.inner_html()).unwrap_or_default()
+    }
+
+    #[inline]
+    /// Selects the first element in the full document that matches `class` and
+    /// returns it as an `HtmlElement`.
+    fn get_element(&self, class: &str) -> Option<super::HtmlElement> {
+        self.document.select(&class.as_selector()).next().map(|el| HtmlElement::new(el.html()))
+    }
+
+    #[inline]
+    /// Returns the value of attribute `attr_to_find` on the first child element
+    /// within the provided fragment, if present.
+    fn get_element_attr(&self, element: &super::HtmlElement, attr_to_find: &str) -> Option<String> {
+        let el = html::Html::parse_fragment(element);
+
+        if let Some(e) = el.select(&"*".as_selector()).nth(1) {
+            return e.attr(attr_to_find).map(|atr| atr.to_string());
+        }
+
+        None
+    }
+
+    #[inline]
+    /// Returns the children of the provided element fragment as individual
+    /// `HtmlElement` nodes.
+    fn get_element_children(&self, element: &super::HtmlElement) -> Vec<super::HtmlElement> {
+        let doc = html::Html::parse_fragment(element);
+
+        doc.select(&"*".as_selector()).skip(2).map(|el| HtmlElement::new(el.html())).collect()
+    }
+
+    #[inline]
+    /// Returns all elements in the full document matching the CSS selector.
+    fn get_matching_elements(&self, selector: &str) -> Vec<HtmlElement> {
+        self.document
+            .select(&selector.as_selector())
+            .map(|el| HtmlElement::new(el.html()))
+            .collect()
+    }
+
+    /// Returns all elements matching the CSS selector inside the provided
+    /// fragment.
+    fn get_matching_elements_from(&self, from: &HtmlElement, class: &str) -> Vec<HtmlElement> {
+        html::Html::parse_fragment(from)
+            .select(&class.as_selector())
+            .map(|el| HtmlElement::new(el.html()))
+            .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use pretty_assertions::assert_eq;
+
+    use super::*;
+    use crate::backend::html_parser::HtmlElement;
+
+    #[test]
+    fn it_get_html_element() {
+        let example = r#"
+        <div>
+            <h1> title </h1>
+            <ul>
+                <li>
+                    <div class="container"> a text </div>
+                </li>
+            </ul>
+        <div>
+        "#;
+
+        let expected = HtmlElement::new("<h1> title </h1>");
+        let expected2 = HtmlElement::new(
+            r#"<ul>
+                <li>
+                    <div class="container"> a text </div>
+                </li>
+            </ul>"#,
+        );
+
+        let expected_class = HtmlElement::new(r#"<div class="container"> a text </div>"#);
+
+        let scraper = Scraper::new(HtmlElement::new(example));
+
+        assert_eq!(expected, scraper.get_element("h1").unwrap());
+        assert_eq!(expected2, scraper.get_element("ul").unwrap());
+        assert_eq!(expected_class, scraper.get_element(".container").unwrap());
+        assert_eq!(None, scraper.get_element("h2"));
+    }
+
+    #[test]
+    fn it_gets_inner_text() {
+        let example = r#"
+        <div>
+            <h1 id="to_match"> title </h1>
+            <h1> some </h1>
+            <h1> other </h1>
+            <h1> title </h1>
+            <h1> title </h1>
+        <div>
+        "#;
+
+        let expected = "title";
+
+        let scraper = Scraper::new(HtmlElement::new(example));
+
+        assert_eq!(expected, scraper.get_inner_text(&scraper.get_element("#to_match").unwrap()));
+    }
+
+    #[test]
+    fn it_gets_attribute_of_element() {
+        let example = r#"
+        <div>
+            <article>
+                <div>
+                    <img src="https://cdn.readdetectiveconan.com/file/mangap/7710/10001000/10.jpeg" />
+                <div>
+            </article>
+        </div>
+        "#;
+
+        let expected = "https://cdn.readdetectiveconan.com/file/mangap/7710/10001000/10.jpeg";
+
+        let img = r#"<img src="https://cdn.readdetectiveconan.com/file/mangap/7710/10001000/10.jpeg" alt="some_alt"/>"#;
+
+        let scraper = Scraper::new(HtmlElement::new(example));
+
+        assert_eq!(expected, scraper.get_element_attr(&scraper.get_element("img").unwrap(), "src").unwrap())
+    }
+
+    #[test]
+    fn it_gets_elements_children() {
+        let example = r#"
+        <div>
+            <ul>
+                <li> 1 </li>
+                <li> 2 </li>
+                <li> 3 </li>
+                <li> 4 </li>
+            </ul>
+        </div>
+        "#;
+
+        let expected = vec![
+            HtmlElement::new("<li> 1 </li>"),
+            HtmlElement::new("<li> 2 </li>"),
+            HtmlElement::new("<li> 3 </li>"),
+            HtmlElement::new("<li> 4 </li>"),
+        ];
+
+        let scraper = Scraper::new(HtmlElement::new(example));
+
+        assert_eq!(expected, scraper.get_element_children(&scraper.get_element("ul").unwrap()))
+    }
+
+    #[test]
+    fn it_gets_inner_html() {
+        let example = r#"
+        <div><ul>
+                <li> 1 </li>
+                <li> 2 </li>
+                <li> 3 </li>
+                <li> 4 </li></ul>
+        </div>
+        "#;
+
+        let expected = r#"<ul>
+                <li> 1 </li>
+                <li> 2 </li>
+                <li> 3 </li>
+                <li> 4 </li></ul>"#;
+
+        let scraper = Scraper::new(HtmlElement::new(example));
+
+        let result = dbg!(scraper.get_inner_html(&scraper.get_element("div").unwrap()));
+
+        assert_eq!(expected, result.trim())
+    }
+
+    #[test]
+    fn it_gets_elements_from_element() {
+        let example = r#"
+        <div><ul>
+                <li> 
+
+                    <div>
+                        <h1> title </h1>
+                        <h2> subtitle </h2>
+                    </div>
+
+                </li>
+                <li> 2 </li>
+                <li> 3 </li>
+                <li> 4 </li></ul>
+        </div>
+
+        "#;
+
+        let example2 = r#"
+                    <div>
+                        <a href="/chapters/8834-10007000/haikyo-no-meshi-chapter-7" class="relative block">
+                            <figure class="w-full h-40 overflow-hidden bg-card rounded-md">
+                                <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/8834.jpeg"
+                                    alt="Haikyo no Meshi Chapter 7"
+                                    class="text-transparent lazy object-cover w-full h-full" />
+                            </figure>
+                        </a>
+                        <div class="px-1">
+                            <a href="/chapters/8834-10007000/haikyo-no-meshi-chapter-7">
+                                <div class="mt-3 text-lg font-black leading-tight">#7</div>
+                            </a>
+                            <a href="/manga/8834/haikyo-no-meshi" class="mt-1.5 leading-tight text-secondary">
+                                <div class="line-clamp-2 text-sm font-bold">Haikyo no Meshi</div>
+                                <div class="line-clamp-2 text-xs mt-1">The Common Bread,Meals in the Ruins</div>
+                            </a>
+                            <div class="mt-1.5 text-xs text-secondary">
+                                <time-ago datetime="2025-10-26T21:43:16Z">2025-10-26</time-ago>
+                            </div>
+                        </div>
+                    </div>
+
+        "#;
+
+        let expected = HtmlElement::new(
+            r#"<a class="mt-1.5 leading-tight text-secondary" href="/manga/8834/haikyo-no-meshi">
+                                <div class="line-clamp-2 text-sm font-bold">Haikyo no Meshi</div>
+                                <div class="line-clamp-2 text-xs mt-1">The Common Bread,Meals in the Ruins</div>
+                            </a>"#,
+        );
+
+        let scraper = Scraper::new(HtmlElement::new(example2));
+
+        let li = dbg!(scraper.get_element("div").unwrap());
+
+        assert_eq!(expected, scraper.get_element_from(&li, ".px-1 > a:nth-of-type(2)").unwrap());
+    }
+}

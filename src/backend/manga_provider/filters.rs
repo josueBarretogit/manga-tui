@@ -106,7 +106,7 @@ impl FiltersCache {
     pub fn get_cached_filters<I: DeserializeOwned>(&self) -> Option<I> {
         let file_path = self.get_cache_file_path();
 
-        let maybe_filters = File::open(file_path)
+        File::open(file_path)
             .inspect_err(|e| match e.kind() {
                 std::io::ErrorKind::NotFound => {},
                 _ => {
@@ -119,9 +119,7 @@ impl FiltersCache {
                 },
             })
             .and_then(|mut file| self.parse_cache(&mut file).map_err(|e| std::io::Error::other(e.to_string())))
-            .ok();
-
-        maybe_filters
+            .ok()
     }
 
     /// Writes the "Filters" to the cache file which is created if it

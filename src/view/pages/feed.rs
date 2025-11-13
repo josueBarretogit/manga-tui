@@ -565,10 +565,10 @@ where
     }
 
     fn load_recent_chapters(&mut self, manga_id: String, maybe_history: Option<Vec<LatestChapter>>) {
-        if let Some(chapters_response) = maybe_history {
-            if let Some(history) = self.history.as_mut() {
-                history.set_chapter(manga_id, chapters_response);
-            }
+        if let Some(chapters_response) = maybe_history
+            && let Some(history) = self.history.as_mut()
+        {
+            history.set_chapter(manga_id, chapters_response);
         }
     }
 
@@ -663,11 +663,11 @@ where
     /// Checks if there are more pages available and, if so, increments the page
     /// number and triggers a new search to load the next page of manga.
     fn search_next_page(&mut self) {
-        if let Some(history) = self.history.as_mut() {
-            if history.can_search_next_page(self.items_per_page as f64) {
-                history.next_page();
-                self.search_history();
-            }
+        if let Some(history) = self.history.as_mut()
+            && history.can_search_next_page(self.items_per_page as f64)
+        {
+            history.next_page();
+            self.search_history();
         }
     }
 
@@ -676,11 +676,11 @@ where
     /// Checks if there's a previous page and, if so, decrements the page number
     /// and triggers a new search to load the previous page of manga.
     fn search_previous_page(&mut self) {
-        if let Some(history) = self.history.as_mut() {
-            if history.can_search_previous_page() {
-                history.previous_page();
-                self.search_history();
-            }
+        if let Some(history) = self.history.as_mut()
+            && history.can_search_previous_page()
+        {
+            history.previous_page();
+            self.search_history();
         }
     }
 

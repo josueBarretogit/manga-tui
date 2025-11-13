@@ -109,6 +109,7 @@ struct MangasFoundList {
     widget: ListMangasFoundWidget,
     state: tui_widget_list::ListState,
     pagination: Pagination,
+    next_page: bool,
 }
 
 impl MangasFoundList {
@@ -117,6 +118,7 @@ impl MangasFoundList {
             widget: ListMangasFoundWidget::default(),
             state: tui_widget_list::ListState::default(),
             pagination,
+            next_page: false,
         }
     }
 }
@@ -146,7 +148,7 @@ where
             SearchPageActions::StartTyping => self.focus_search_bar(),
             SearchPageActions::StopTyping => self.input_mode = InputMode::Idle,
             SearchPageActions::Search => {
-                self.mangas_found_list.pagination.reset();
+                self.reset_search();
                 self.search_mangas();
             },
             SearchPageActions::ScrollUp => self.scroll_up(),
@@ -394,6 +396,12 @@ where
         self.filter_state.toggle();
     }
 
+    #[inline]
+    fn reset_search(&mut self) {
+        self.mangas_found_list.pagination.reset();
+        self.mangas_found_list.next_page = false;
+    }
+
     fn get_current_manga_selected_mut(&mut self) -> Option<&mut MangaItem> {
         if let Some(index) = self.mangas_found_list.state.selected {
             return self.mangas_found_list.widget.mangas.get_mut(index);
@@ -562,6 +570,7 @@ where
         if self.state == PageState::DisplayingMangasFound
             && self.state != PageState::SearchingMangas
             && self.mangas_found_list.pagination.can_go_next_page()
+            && self.mangas_found_list.next_page
         {
             self.mangas_found_list.pagination.go_next_page();
             self.search_mangas();
@@ -593,6 +602,7 @@ where
                 self.mangas_found_list.pagination.total_items = response.total_mangas;
                 self.mangas_found_list.state.select(Some(0));
                 self.mangas_found_list.widget = ListMangasFoundWidget::from_response(response.mangas);
+                self.mangas_found_list.next_page = response.next_page;
                 self.state = PageState::DisplayingMangasFound;
                 self.init_search_manga_covers();
             },
@@ -636,12 +646,11 @@ where
     }
 
     fn load_cover(&mut self, maybe_cover: Option<DynamicImage>, manga_id: String) {
-        if let Some(cover) = maybe_cover {
-            if let Some(picker) = self.picker.as_mut() {
-                if let Ok(protocol) = picker.new_protocol(cover, self.manga_cover_state.get_img_area(), Resize::Fit(None)) {
-                    self.manga_cover_state.insert_manga(protocol, manga_id);
-                }
-            }
+        if let Some(cover) = maybe_cover
+            && let Some(picker) = self.picker.as_mut()
+            && let Ok(protocol) = picker.new_protocol(cover, self.manga_cover_state.get_img_area(), Resize::Fit(None))
+        {
+            self.manga_cover_state.insert_manga(protocol, manga_id);
         }
     }
 
