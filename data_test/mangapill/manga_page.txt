@@ -1,0 +1,1013 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+
+<head>
+    <meta charset="utf-8">
+    <title>Sakamoto Days Manga - Mangapill</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="google-site-verification" content="QVRhMJqEYSENTghZaikYGvG74-CLyoEn6-R_wQJMrZY" />
+
+    <meta property="og:title" content="Sakamoto Days Manga - Mangapill">
+    <meta property="twitter:title" content="Sakamoto Days Manga - Mangapill">
+
+
+    <meta name="description" content="Tarou Sakamoto was the ultimate assassin, feared by villains and admired by hitmen. But one day...he fell in love! Retirement, marriage, fatherhood and then... Sakamoto gained weight! The chubby guy who runs the neighborhood store is actually a former legendary hitman! Can he protect his family from danger? Get ready to experience a new kind of action comedy series!&lt;br/&gt;
+&lt;br/&gt;
+(Source: MANGA Plus)">
+
+
+
+
+
+    <meta property="twitter:image" content="https://cdn.readdetectiveconan.com/file/mangapill/i/5281.jpeg">
+    <meta property="og:image" content="https://cdn.readdetectiveconan.com/file/mangapill/i/5281.jpeg">
+
+
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/favicon/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon/favicon-16x16.png">
+    <link rel="manifest" href="/static/favicon/site.webmanifest">
+    <link rel="shortcut icon" href="/static/favicon/favicon.ico">
+
+    <script type="text/javascript">
+        if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.remove('light')
+            document.documentElement.classList.add('dark')
+        }
+    </script>
+
+
+    <link rel="stylesheet" href="/static/site/build/assets/site-P7PJvPVR.css" />
+
+</head>
+
+<body class="antialiased h-screen bg-background text-primary">
+
+
+    <header class="py-2 border-border border-b">
+        <div class="container">
+            <div class="flex items-start lg:items-center justify-between">
+                <div class="flex flex-col lg:flex-row lg:items-center">
+                    <div class="flex items-center">
+                        <button id="js-nav-menu-btn"
+                            class="lg:hidden flex items-center justify-center relative p-2 hover:bg-card mr-2 rounded"
+                            type="button" aria-label="Toggle navigation" aria-expanded="false">
+                            <svg class="fill-current text-color-header-text h-6 w-6" height="24" width="24"
+                                xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M4 6h16M4 12h16M4 18h16" />
+                            </svg>
+                        </button>
+
+                        <a href="/">
+                            <svg width="140" viewBox="0 0 86 19" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path class="text-primary fill-current"
+                                    d="M2.582 7.134L2.762 8.376C3.062 7.86 3.446 7.458 3.914 7.17C4.394 6.882 4.958 6.738 5.606 6.738C6.242 6.738 6.77 6.87 7.19 7.134C7.622 7.386 7.904 7.77 8.036 8.286C8.36 7.818 8.75 7.446 9.206 7.17C9.674 6.882 10.16 6.738 10.664 6.738C11.444 6.738 12.062 6.96 12.518 7.404C12.986 7.836 13.226 8.4 13.238 9.096V15H10.736V10.14C10.724 9.792 10.67 9.51 10.574 9.294C10.478 9.066 10.256 8.94 9.908 8.916C9.5 8.916 9.152 9.06 8.864 9.348C8.588 9.624 8.378 9.984 8.234 10.428C8.102 10.86 8.036 11.31 8.036 11.778V15H5.516V10.14C5.504 9.792 5.438 9.51 5.318 9.294C5.21 9.066 4.982 8.94 4.634 8.916C4.238 8.916 3.902 9.06 3.626 9.348C3.362 9.624 3.158 9.978 3.014 10.41C2.882 10.842 2.816 11.286 2.816 11.742V15H0.296V7.134H2.582ZM19.1471 15.216C18.4151 15.216 17.7491 15.072 17.1491 14.784C16.5611 14.484 16.0931 14.028 15.7451 13.416C15.3971 12.804 15.2231 12.024 15.2231 11.076C15.2231 10.188 15.4031 9.42 15.7631 8.772C16.1231 8.124 16.5971 7.626 17.1851 7.278C17.7731 6.918 18.3971 6.738 19.0571 6.738C19.8371 6.738 20.4251 6.864 20.8211 7.116C21.2291 7.368 21.5531 7.644 21.7931 7.944L21.9551 7.134H24.2951V15H21.7751V14.028C21.6551 14.148 21.4751 14.304 21.2351 14.496C21.0071 14.688 20.7191 14.856 20.3711 15C20.0231 15.144 19.6151 15.216 19.1471 15.216ZM19.8671 13.164C20.7431 13.164 21.3791 12.768 21.7751 11.976V10.05C21.6311 9.666 21.3791 9.36 21.0191 9.132C20.6711 8.904 20.2571 8.79 19.7771 8.79C19.2371 8.79 18.7691 8.994 18.3731 9.402C17.9771 9.798 17.7791 10.314 17.7791 10.95C17.7791 11.37 17.8751 11.748 18.0671 12.084C18.2591 12.42 18.5111 12.684 18.8231 12.876C19.1471 13.068 19.4951 13.164 19.8671 13.164ZM29.1777 7.134L29.3577 8.394C29.6337 7.902 30.0237 7.506 30.5277 7.206C31.0317 6.906 31.6437 6.756 32.3637 6.756C33.1077 6.756 33.7257 6.978 34.2177 7.422C34.7217 7.854 34.9797 8.418 34.9917 9.114V15H32.4717V10.05C32.4597 9.702 32.3637 9.426 32.1837 9.222C32.0157 9.006 31.7277 8.898 31.3197 8.898C30.7317 8.898 30.2637 9.174 29.9157 9.726C29.5797 10.266 29.4117 10.956 29.4117 11.796V15H26.8917V7.134H29.1777ZM41.6472 18.96C40.9392 18.96 40.3392 18.876 39.8472 18.708C39.3672 18.54 38.9592 18.336 38.6232 18.096C38.2872 17.856 37.9872 17.628 37.7232 17.412L39.1992 15.684C39.4752 15.936 39.7932 16.176 40.1532 16.404C40.5252 16.644 41.0112 16.764 41.6112 16.764C42.2112 16.764 42.7332 16.608 43.1772 16.296C43.6332 15.996 43.8612 15.552 43.8612 14.964V13.848C43.6332 14.22 43.2792 14.544 42.7992 14.82C42.3192 15.084 41.6952 15.216 40.9272 15.216C40.2192 15.216 39.5592 15.036 38.9472 14.676C38.3472 14.304 37.8672 13.806 37.5072 13.182C37.1472 12.546 36.9672 11.826 36.9672 11.022C36.9672 10.194 37.1592 9.462 37.5432 8.826C37.9272 8.178 38.4252 7.668 39.0372 7.296C39.6492 6.924 40.2972 6.738 40.9812 6.738C41.6652 6.738 42.2532 6.84 42.7452 7.044C43.2492 7.236 43.6212 7.47 43.8612 7.746L44.0592 7.134H46.3812V15C46.3812 15.768 46.1652 16.446 45.7332 17.034C45.3012 17.634 44.7252 18.102 44.0052 18.438C43.2972 18.786 42.5112 18.96 41.6472 18.96ZM39.5052 10.95C39.5052 11.574 39.7152 12.102 40.1352 12.534C40.5552 12.954 41.0712 13.164 41.6832 13.164C42.6912 13.164 43.4172 12.768 43.8612 11.976V10.05C43.6932 9.666 43.4172 9.36 43.0332 9.132C42.6492 8.904 42.1992 8.79 41.6832 8.79C41.0712 8.79 40.5552 8.994 40.1352 9.402C39.7152 9.798 39.5052 10.314 39.5052 10.95ZM52.2818 15.216C51.5498 15.216 50.8838 15.072 50.2838 14.784C49.6958 14.484 49.2278 14.028 48.8798 13.416C48.5318 12.804 48.3578 12.024 48.3578 11.076C48.3578 10.188 48.5378 9.42 48.8978 8.772C49.2578 8.124 49.7318 7.626 50.3198 7.278C50.9078 6.918 51.5318 6.738 52.1918 6.738C52.9718 6.738 53.5598 6.864 53.9558 7.116C54.3638 7.368 54.6878 7.644 54.9278 7.944L55.0898 7.134H57.4298V15H54.9098V14.028C54.7898 14.148 54.6098 14.304 54.3698 14.496C54.1418 14.688 53.8538 14.856 53.5058 15C53.1578 15.144 52.7498 15.216 52.2818 15.216ZM53.0018 13.164C53.8778 13.164 54.5138 12.768 54.9098 11.976V10.05C54.7658 9.666 54.5138 9.36 54.1538 9.132C53.8058 8.904 53.3918 8.79 52.9118 8.79C52.3718 8.79 51.9038 8.994 51.5078 9.402C51.1118 9.798 50.9138 10.314 50.9138 10.95C50.9138 11.37 51.0098 11.748 51.2018 12.084C51.3938 12.42 51.6458 12.684 51.9578 12.876C52.2818 13.068 52.6298 13.164 53.0018 13.164Z" />
+                                <path class="text-brand fill-current"
+                                    d="M64.9585 15.216C64.5145 15.216 64.0705 15.138 63.6265 14.982C63.1945 14.814 62.8285 14.58 62.5285 14.28V18.78H60.0265V6.954H62.1865L62.4025 7.89C62.8105 7.566 63.2605 7.296 63.7525 7.08C64.2565 6.852 64.8265 6.738 65.4625 6.738C66.1945 6.738 66.8485 6.912 67.4245 7.26C68.0005 7.596 68.4505 8.088 68.7745 8.736C69.1105 9.372 69.2785 10.14 69.2785 11.04C69.2785 11.928 69.0925 12.684 68.7205 13.308C68.3485 13.932 67.8385 14.406 67.1905 14.73C66.5425 15.054 65.7985 15.216 64.9585 15.216ZM64.4545 13.236C64.8625 13.236 65.2345 13.146 65.5705 12.966C65.9185 12.786 66.1945 12.534 66.3985 12.21C66.6145 11.874 66.7225 11.496 66.7225 11.076C66.7225 10.404 66.5185 9.87 66.1105 9.474C65.7025 9.066 65.2105 8.862 64.6345 8.862C64.1305 8.862 63.7105 8.964 63.3745 9.168C63.0385 9.36 62.7625 9.654 62.5465 10.05V11.976C62.6785 12.36 62.9125 12.666 63.2485 12.894C63.5965 13.122 63.9985 13.236 64.4545 13.236ZM71.2589 7.134H73.7789V15H71.2589V7.134ZM71.2049 4.344C71.2049 3.972 71.3489 3.666 71.6369 3.426C71.9369 3.186 72.2549 3.066 72.5909 3.066C72.9269 3.066 73.2329 3.186 73.5089 3.426C73.7969 3.666 73.9409 3.972 73.9409 4.344C73.9409 4.716 73.7969 5.022 73.5089 5.262C73.2329 5.49 72.9269 5.604 72.5909 5.604C72.2549 5.604 71.9369 5.49 71.6369 5.262C71.3489 5.022 71.2049 4.716 71.2049 4.344ZM76.3741 0.797999H78.8941V15H76.3741V0.797999ZM81.4894 0.797999H84.0094V15H81.4894V0.797999Z" />
+                            </svg>
+                        </a>
+
+                    </div>
+                    <div class="flex flex-col lg:flex-row lg:items-center">
+                        <nav id="js-nav-menu"
+                            class="lg:text-sm xl:text-base flex flex-col lg:items-center lg:flex-row font-bold mt-3 md:ml-3 md:mt-0 gap-4 hidden lg:flex">
+                            <a class="hover:text-secondary" href="/search">Search</a>
+                            <a class="hover:text-secondary" href="/mangas/new">New Mangas</a>
+                            <a class="hover:text-secondary" href="/chapters">Recent Chapters</a>
+                            <a class="hover:text-secondary" href="/mangas/missing">Missing Manga</a>
+                            <a class="hover:text-secondary" href="/contact">Contact</a>
+                            <a class="hover:text-secondary" href="/privacy">Privacy Policy</a>
+                        </nav>
+                    </div>
+                </div>
+                <div class="flex items-center">
+                    <a href="/mangas/random" class="p-2 rounded hover:bg-card" title="manga surprise">
+                        <svg class="h-6 w-6 fill-current overflow-visible" xmlns="http://www.w3.org/2000/svg"
+                            stroke="currentColor" viewBox="0 0 24 24" width="24" height="24">
+                            <path fill-rule="evenodd"
+                                d="M5.25 8.5c-2.032 0-3.75 1.895-3.75 3.75S3.218 16 5.25 16c1.017 0 2.014-.457 3.062-1.253.89-.678 1.758-1.554 2.655-2.497-.897-.943-1.765-1.82-2.655-2.497C7.264 8.957 6.267 8.5 5.25 8.5zM12 11.16c-.887-.933-1.813-1.865-2.78-2.6C8.048 7.667 6.733 7 5.25 7 2.343 7 0 9.615 0 12.25s2.343 5.25 5.25 5.25c1.483 0 2.798-.668 3.97-1.56.967-.735 1.893-1.667 2.78-2.6.887.933 1.813 1.865 2.78 2.6 1.172.892 2.487 1.56 3.97 1.56 2.907 0 5.25-2.615 5.25-5.25S21.657 7 18.75 7c-1.483 0-2.798.668-3.97 1.56-.967.735-1.893 1.667-2.78 2.6zm1.033 1.09c.897.943 1.765 1.82 2.655 2.497C16.736 15.543 17.733 16 18.75 16c2.032 0 3.75-1.895 3.75-3.75S20.782 8.5 18.75 8.5c-1.017 0-2.014.457-3.062 1.253-.89.678-1.758 1.554-2.655 2.497z">
+                            </path>
+                        </svg>
+                    </a>
+
+                    <div>
+                        <button data-micromodal-trigger="js-search-modal"
+                            class="flex items-center justify-center relative p-2 rounded hover:bg-card">
+                            <svg class="h-6 w-6 fill-current" xmlns="http://www.w3.org/2000/svg" stroke="currentColor"
+                                viewBox="0 0 24 24">
+                                <path fill-rule="evenodd"
+                                    d="M14.53 15.59a8.25 8.25 0 111.06-1.06l5.69 5.69a.75.75 0 11-1.06 1.06l-5.69-5.69zM2.5 9.25a6.75 6.75 0 1111.74 4.547.746.746 0 00-.443.442A6.75 6.75 0 012.5 9.25z">
+                                </path>
+                            </svg>
+                            </svg>
+                        </button>
+
+                        <div class="modal" id="js-search-modal" aria-hidden="true">
+                            <div class="modal__overlay" tabindex="-1" data-micromodal-close>
+                                <div class="modal__container bg-background" role="dialog" aria-modal="true"
+                                    aria-labelledby="search-modal-title">
+                                    <div class="p-3 bg-card flex items-center justify-between">
+                                        <div id="search-modal-title" class="text-primary font-black">Quick Search</div>
+                                        <button class="p-2 hover:bg-background rounded" type="button"
+                                            aria-label="Close modal" data-micromodal-close>
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none"
+                                                viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M6 18L18 6M6 6l12 12"></path>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                    <div class="form p-3">
+                                        <div class="form-group">
+                                            <label>Search MangaPill</label>
+                                            <remote-input src="/quick-search" aria-owns="quick-search-results">
+                                                <input autofocus id="js-search-input" type="text" name="title"
+                                                    placeholder="Search manga"
+                                                    class="w-full font-normal border border-border bg-card rounded">
+                                            </remote-input>
+                                        </div>
+                                        <div class="my-3" id="quick-search-results"></div>
+                                    </div>
+                                    <div
+                                        class="border-t border-border p-3 flex flex-col md:flex-row md:items-center md:justify-center gap-3">
+                                        <a href="/search" class="btn-sm">Visit Advanced Search</a>
+                                        <a href="/mangas/missing" class="btn-sm">Missing Manga</a>
+                                        <button class="btn-outline" type="button" aria-label="Close modal"
+                                            data-micromodal-close>Close</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                    <button id="js-theme-switch" class="theme-mode"></button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+
+    <div class="container py-3">
+        <p class="text-yellow-600">Update! Share your thoughts with our new commenting system!</p>
+    </div>
+
+
+    <div class="container">
+        <div class="flex flex-col sm:flex-row my-3">
+
+            <div class="text-transparent flex-shrink-0 w-60 h-80 relative rounded bg-card mr-3 mb-3 md:mb-0">
+                <img data-src="https://cdn.readdetectiveconan.com/file/mangapill/i/5281.jpeg" alt="Sakamoto Days"
+                    loading="lazy"
+                    class="lazy absolute inset-0 w-full h-full object-cover rounded bg-color-bg-secondary" />
+            </div>
+
+
+            <div class="flex flex-col">
+                <div class="mb-3">
+
+                    <h1 class="font-bold text-lg md:text-2xl">Sakamoto Days</h1>
+
+                </div>
+
+
+                <div class="mb-3">
+                    <p class="text-sm text--secondary">Tarou Sakamoto was the ultimate assassin, feared by villains and admired by hitmen. But one day...he fell in love! Retirement, marriage, fatherhood and then... Sakamoto gained weight! The chubby guy who runs the neighborhood store is actually a former legendary hitman! Can he protect his family from danger? Get ready to experience a new kind of action comedy series!<br />
+                        <br />
+                        (Source: MANGA Plus)
+                    </p>
+                </div>
+
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+                    <div>
+                        <label class="text-secondary">Type</label>
+                        <div>manga</div>
+                    </div>
+
+                    <div>
+                        <label class="text-secondary">Status</label>
+                        <div>publishing</div>
+                    </div>
+
+                    <div>
+                        <label class="text-secondary">Year</label>
+                        <div>2020</div>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="text-secondary">Genres</label>
+
+                    <a class="text-sm mr-1 text-brand" href="/search?genre=Action">Action</a>
+
+                    <a class="text-sm mr-1 text-brand" href="/search?genre=Comedy">Comedy</a>
+
+                    <a class="text-sm mr-1 text-brand" href="/search?genre=Shounen">Shounen</a>
+
+                    <a class="text-sm mr-1 text-brand" href="/search?genre=Supernatural">Supernatural</a>
+
+                </div>
+            </div>
+        </div>
+
+
+        <div class="border border-border rounded">
+            <div class="p-3 border-b border-border">
+                <div class="form flex flex-col md:flex-row md:items-center md:justify-between">
+                    <h2 class="font-bold md:text-lg mb-1">Chapters</h2>
+                    <filter-input aria-owns="chapters">
+                        <div class="form-group">
+                            <label>Search chapter</label>
+                            <input class="form-control input-sm" type="number" autocomplete="off">
+                        </div>
+                    </filter-input>
+                </div>
+            </div>
+
+            <div id="chapters" class="p-3">
+                <div data-filter-list class="my-3 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6">
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10234000/sakamoto-days-chapter-234" title=" Chapter 234">Chapter 234</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10233000/sakamoto-days-chapter-233" title=" Chapter 233">Chapter 233</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10232000/sakamoto-days-chapter-232" title=" Chapter 232">Chapter 232</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10231000/sakamoto-days-chapter-231" title=" Chapter 231">Chapter 231</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10230000/sakamoto-days-chapter-230" title=" Chapter 230">Chapter 230</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10229000/sakamoto-days-chapter-229" title=" Chapter 229">Chapter 229</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10228000/sakamoto-days-chapter-228" title=" Chapter 228">Chapter 228</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10227000/sakamoto-days-chapter-227" title=" Chapter 227">Chapter 227</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10226000/sakamoto-days-chapter-226" title=" Chapter 226">Chapter 226</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10225000/sakamoto-days-chapter-225" title=" Chapter 225">Chapter 225</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10224000/sakamoto-days-chapter-224" title=" Chapter 224">Chapter 224</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10223000/sakamoto-days-chapter-223" title=" Chapter 223">Chapter 223</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10222000/sakamoto-days-chapter-222" title=" Chapter 222">Chapter 222</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10221000/sakamoto-days-chapter-221" title=" Chapter 221">Chapter 221</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10220000/sakamoto-days-chapter-220" title=" Chapter 220">Chapter 220</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10219000/sakamoto-days-chapter-219" title=" Chapter 219">Chapter 219</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10218000/sakamoto-days-chapter-218" title=" Chapter 218">Chapter 218</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10217000/sakamoto-days-chapter-217" title=" Chapter 217">Chapter 217</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10216000/sakamoto-days-chapter-216" title=" Chapter 216">Chapter 216</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10215000/sakamoto-days-chapter-215" title=" Chapter 215">Chapter 215</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10214000/sakamoto-days-chapter-214" title=" Chapter 214">Chapter 214</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10213000/sakamoto-days-chapter-213" title=" Chapter 213">Chapter 213</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10212000/sakamoto-days-chapter-212" title=" Chapter 212">Chapter 212</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10211000/sakamoto-days-chapter-211" title=" Chapter 211">Chapter 211</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10210000/sakamoto-days-chapter-210" title=" Chapter 210">Chapter 210</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10209000/sakamoto-days-chapter-209" title=" Chapter 209">Chapter 209</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10208000/sakamoto-days-chapter-208" title=" Chapter 208">Chapter 208</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10207000/sakamoto-days-chapter-207" title=" Chapter 207">Chapter 207</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10206000/sakamoto-days-chapter-206" title=" Chapter 206">Chapter 206</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10205000/sakamoto-days-chapter-205" title=" Chapter 205">Chapter 205</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10204000/sakamoto-days-chapter-204" title=" Chapter 204">Chapter 204</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10203000/sakamoto-days-chapter-203" title=" Chapter 203">Chapter 203</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10202000/sakamoto-days-chapter-202" title=" Chapter 202">Chapter 202</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10201000/sakamoto-days-chapter-201" title=" Chapter 201">Chapter 201</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10200000/sakamoto-days-chapter-200" title=" Chapter 200">Chapter 200</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10199000/sakamoto-days-chapter-199" title=" Chapter 199">Chapter 199</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10198000/sakamoto-days-chapter-198" title=" Chapter 198">Chapter 198</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10197000/sakamoto-days-chapter-197" title=" Chapter 197">Chapter 197</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10196000/sakamoto-days-chapter-196" title=" Chapter 196">Chapter 196</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10195000/sakamoto-days-chapter-195" title=" Chapter 195">Chapter 195</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10194000/sakamoto-days-chapter-194" title=" Chapter 194">Chapter 194</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10193000/sakamoto-days-chapter-193" title=" Chapter 193">Chapter 193</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10192000/sakamoto-days-chapter-192" title=" Chapter 192">Chapter 192</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10191000/sakamoto-days-chapter-191" title=" Chapter 191">Chapter 191</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10190000/sakamoto-days-chapter-190" title=" Chapter 190">Chapter 190</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10189000/sakamoto-days-chapter-189" title=" Chapter 189">Chapter 189</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10188000/sakamoto-days-chapter-188" title=" Chapter 188">Chapter 188</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10187000/sakamoto-days-chapter-187" title=" Chapter 187">Chapter 187</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10186000/sakamoto-days-chapter-186" title=" Chapter 186">Chapter 186</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10185000/sakamoto-days-chapter-185" title=" Chapter 185">Chapter 185</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10184000/sakamoto-days-chapter-184" title=" Chapter 184">Chapter 184</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10183000/sakamoto-days-chapter-183" title=" Chapter 183">Chapter 183</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10182000/sakamoto-days-chapter-182" title=" Chapter 182">Chapter 182</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10181000/sakamoto-days-chapter-181" title=" Chapter 181">Chapter 181</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10180000/sakamoto-days-chapter-180" title=" Chapter 180">Chapter 180</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10179000/sakamoto-days-chapter-179" title=" Chapter 179">Chapter 179</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10178000/sakamoto-days-chapter-178" title=" Chapter 178">Chapter 178</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10177000/sakamoto-days-chapter-177" title=" Chapter 177">Chapter 177</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10176000/sakamoto-days-chapter-176" title=" Chapter 176">Chapter 176</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10175000/sakamoto-days-chapter-175" title=" Chapter 175">Chapter 175</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10174000/sakamoto-days-chapter-174" title=" Chapter 174">Chapter 174</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10173000/sakamoto-days-chapter-173" title=" Chapter 173">Chapter 173</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10172000/sakamoto-days-chapter-172" title=" Chapter 172">Chapter 172</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10171000/sakamoto-days-chapter-171" title=" Chapter 171">Chapter 171</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10170000/sakamoto-days-chapter-170" title=" Chapter 170">Chapter 170</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10169000/sakamoto-days-chapter-169" title=" Chapter 169">Chapter 169</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10168000/sakamoto-days-chapter-168" title=" Chapter 168">Chapter 168</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10167000/sakamoto-days-chapter-167" title=" Chapter 167">Chapter 167</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10166000/sakamoto-days-chapter-166" title=" Chapter 166">Chapter 166</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10165000/sakamoto-days-chapter-165" title=" Chapter 165">Chapter 165</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10164000/sakamoto-days-chapter-164" title=" Chapter 164">Chapter 164</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10163000/sakamoto-days-chapter-163" title=" Chapter 163">Chapter 163</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10162000/sakamoto-days-chapter-162" title=" Chapter 162">Chapter 162</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10161000/sakamoto-days-chapter-161" title=" Chapter 161">Chapter 161</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10160000/sakamoto-days-chapter-160" title=" Chapter 160">Chapter 160</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10159000/sakamoto-days-chapter-159" title=" Chapter 159">Chapter 159</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10158000/sakamoto-days-chapter-158" title=" Chapter 158">Chapter 158</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10157000/sakamoto-days-chapter-157" title=" Chapter 157">Chapter 157</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10156000/sakamoto-days-chapter-156" title=" Chapter 156">Chapter 156</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10155000/sakamoto-days-chapter-155" title=" Chapter 155">Chapter 155</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10154000/sakamoto-days-chapter-154" title=" Chapter 154">Chapter 154</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10153000/sakamoto-days-chapter-153" title=" Chapter 153">Chapter 153</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10152000/sakamoto-days-chapter-152" title=" Chapter 152">Chapter 152</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10151000/sakamoto-days-chapter-151" title=" Chapter 151">Chapter 151</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10150000/sakamoto-days-chapter-150" title=" Chapter 150">Chapter 150</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10149000/sakamoto-days-chapter-149" title=" Chapter 149">Chapter 149</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10148000/sakamoto-days-chapter-148" title=" Chapter 148">Chapter 148</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10147000/sakamoto-days-chapter-147" title=" Chapter 147">Chapter 147</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10146000/sakamoto-days-chapter-146" title=" Chapter 146">Chapter 146</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10145000/sakamoto-days-chapter-145" title=" Chapter 145">Chapter 145</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10144000/sakamoto-days-chapter-144" title=" Chapter 144">Chapter 144</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10143000/sakamoto-days-chapter-143" title=" Chapter 143">Chapter 143</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10142000/sakamoto-days-chapter-142" title=" Chapter 142">Chapter 142</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10141000/sakamoto-days-chapter-141" title=" Chapter 141">Chapter 141</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10140000/sakamoto-days-chapter-140" title=" Chapter 140">Chapter 140</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10139000/sakamoto-days-chapter-139" title=" Chapter 139">Chapter 139</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10138000/sakamoto-days-chapter-138" title=" Chapter 138">Chapter 138</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10137000/sakamoto-days-chapter-137" title=" Chapter 137">Chapter 137</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10136000/sakamoto-days-chapter-136" title=" Chapter 136">Chapter 136</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10135000/sakamoto-days-chapter-135" title=" Chapter 135">Chapter 135</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10134000/sakamoto-days-chapter-134" title=" Chapter 134">Chapter 134</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10133000/sakamoto-days-chapter-133" title=" Chapter 133">Chapter 133</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10132000/sakamoto-days-chapter-132" title=" Chapter 132">Chapter 132</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10131000/sakamoto-days-chapter-131" title=" Chapter 131">Chapter 131</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10130000/sakamoto-days-chapter-130" title=" Chapter 130">Chapter 130</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10129000/sakamoto-days-chapter-129" title=" Chapter 129">Chapter 129</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10128000/sakamoto-days-chapter-128" title=" Chapter 128">Chapter 128</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10127000/sakamoto-days-chapter-127" title=" Chapter 127">Chapter 127</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10126000/sakamoto-days-chapter-126" title=" Chapter 126">Chapter 126</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10125000/sakamoto-days-chapter-125" title=" Chapter 125">Chapter 125</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10124000/sakamoto-days-chapter-124" title=" Chapter 124">Chapter 124</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10123000/sakamoto-days-chapter-123" title=" Chapter 123">Chapter 123</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10122000/sakamoto-days-chapter-122" title=" Chapter 122">Chapter 122</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10121000/sakamoto-days-chapter-121" title=" Chapter 121">Chapter 121</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10120000/sakamoto-days-chapter-120" title=" Chapter 120">Chapter 120</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10119000/sakamoto-days-chapter-119" title=" Chapter 119">Chapter 119</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10118000/sakamoto-days-chapter-118" title=" Chapter 118">Chapter 118</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10117000/sakamoto-days-chapter-117" title=" Chapter 117">Chapter 117</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10116000/sakamoto-days-chapter-116" title=" Chapter 116">Chapter 116</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10115000/sakamoto-days-chapter-115" title=" Chapter 115">Chapter 115</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10114000/sakamoto-days-chapter-114" title=" Chapter 114">Chapter 114</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10113000/sakamoto-days-chapter-113" title=" Chapter 113">Chapter 113</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10112000/sakamoto-days-chapter-112" title=" Chapter 112">Chapter 112</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10111000/sakamoto-days-chapter-111" title=" Chapter 111">Chapter 111</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10110000/sakamoto-days-chapter-110" title=" Chapter 110">Chapter 110</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10109000/sakamoto-days-chapter-109" title=" Chapter 109">Chapter 109</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10108000/sakamoto-days-chapter-108" title=" Chapter 108">Chapter 108</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10107000/sakamoto-days-chapter-107" title=" Chapter 107">Chapter 107</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10106000/sakamoto-days-chapter-106" title=" Chapter 106">Chapter 106</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10105000/sakamoto-days-chapter-105" title=" Chapter 105">Chapter 105</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10104000/sakamoto-days-chapter-104" title=" Chapter 104">Chapter 104</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10103000/sakamoto-days-chapter-103" title=" Chapter 103">Chapter 103</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10102000/sakamoto-days-chapter-102" title=" Chapter 102">Chapter 102</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10101000/sakamoto-days-chapter-101" title=" Chapter 101">Chapter 101</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10100000/sakamoto-days-chapter-100" title=" Chapter 100">Chapter 100</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10099000/sakamoto-days-chapter-99" title=" Chapter 99">Chapter 99</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10098000/sakamoto-days-chapter-98" title=" Chapter 98">Chapter 98</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10097000/sakamoto-days-chapter-97" title=" Chapter 97">Chapter 97</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10096000/sakamoto-days-chapter-96" title=" Chapter 96">Chapter 96</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10095000/sakamoto-days-chapter-95" title=" Chapter 95">Chapter 95</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10094000/sakamoto-days-chapter-94" title=" Chapter 94">Chapter 94</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10093000/sakamoto-days-chapter-93" title=" Chapter 93">Chapter 93</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10092000/sakamoto-days-chapter-92" title=" Chapter 92">Chapter 92</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10091000/sakamoto-days-chapter-91" title=" Chapter 91">Chapter 91</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10090000/sakamoto-days-chapter-90" title=" Chapter 90">Chapter 90</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10089000/sakamoto-days-chapter-89" title=" Chapter 89">Chapter 89</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10088000/sakamoto-days-chapter-88" title=" Chapter 88">Chapter 88</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10087000/sakamoto-days-chapter-87" title=" Chapter 87">Chapter 87</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10086000/sakamoto-days-chapter-86" title=" Chapter 86">Chapter 86</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10085000/sakamoto-days-chapter-85" title=" Chapter 85">Chapter 85</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10084000/sakamoto-days-chapter-84" title=" Chapter 84">Chapter 84</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10083000/sakamoto-days-chapter-83" title=" Chapter 83">Chapter 83</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10082000/sakamoto-days-chapter-82" title=" Chapter 82">Chapter 82</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10081000/sakamoto-days-chapter-81" title=" Chapter 81">Chapter 81</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10080000/sakamoto-days-chapter-80" title=" Chapter 80">Chapter 80</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10079000/sakamoto-days-chapter-79" title=" Chapter 79">Chapter 79</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10078000/sakamoto-days-chapter-78" title=" Chapter 78">Chapter 78</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10077000/sakamoto-days-chapter-77" title=" Chapter 77">Chapter 77</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10076000/sakamoto-days-chapter-76" title=" Chapter 76">Chapter 76</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10075000/sakamoto-days-chapter-75" title=" Chapter 75">Chapter 75</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10074000/sakamoto-days-chapter-74" title=" Chapter 74">Chapter 74</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10073000/sakamoto-days-chapter-73" title=" Chapter 73">Chapter 73</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10072000/sakamoto-days-chapter-72" title=" Chapter 72">Chapter 72</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10071000/sakamoto-days-chapter-71" title=" Chapter 71">Chapter 71</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10070000/sakamoto-days-chapter-70" title=" Chapter 70">Chapter 70</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10069000/sakamoto-days-chapter-69" title=" Chapter 69">Chapter 69</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10068000/sakamoto-days-chapter-68" title=" Chapter 68">Chapter 68</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10067000/sakamoto-days-chapter-67" title=" Chapter 67">Chapter 67</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10066000/sakamoto-days-chapter-66" title=" Chapter 66">Chapter 66</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10065000/sakamoto-days-chapter-65" title=" Chapter 65">Chapter 65</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10064000/sakamoto-days-chapter-64" title=" Chapter 64">Chapter 64</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10063000/sakamoto-days-chapter-63" title=" Chapter 63">Chapter 63</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10062000/sakamoto-days-chapter-62" title=" Chapter 62">Chapter 62</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10061000/sakamoto-days-chapter-61" title=" Chapter 61">Chapter 61</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10060000/sakamoto-days-chapter-60" title=" Chapter 60">Chapter 60</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10059000/sakamoto-days-chapter-59" title=" Chapter 59">Chapter 59</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10058000/sakamoto-days-chapter-58" title=" Chapter 58">Chapter 58</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10057000/sakamoto-days-chapter-57" title=" Chapter 57">Chapter 57</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10056000/sakamoto-days-chapter-56" title=" Chapter 56">Chapter 56</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10055000/sakamoto-days-chapter-55" title=" Chapter 55">Chapter 55</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10054000/sakamoto-days-chapter-54" title=" Chapter 54">Chapter 54</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10053000/sakamoto-days-chapter-53" title=" Chapter 53">Chapter 53</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10052000/sakamoto-days-chapter-52" title=" Chapter 52">Chapter 52</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10051000/sakamoto-days-chapter-51" title=" Chapter 51">Chapter 51</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10050000/sakamoto-days-chapter-50" title=" Chapter 50">Chapter 50</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10049000/sakamoto-days-chapter-49" title=" Chapter 49">Chapter 49</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10048000/sakamoto-days-chapter-48" title=" Chapter 48">Chapter 48</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10047000/sakamoto-days-chapter-47" title=" Chapter 47">Chapter 47</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10046000/sakamoto-days-chapter-46" title=" Chapter 46">Chapter 46</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10045000/sakamoto-days-chapter-45" title=" Chapter 45">Chapter 45</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10044000/sakamoto-days-chapter-44" title=" Chapter 44">Chapter 44</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10043000/sakamoto-days-chapter-43" title=" Chapter 43">Chapter 43</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10042000/sakamoto-days-chapter-42" title=" Chapter 42">Chapter 42</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10041000/sakamoto-days-chapter-41" title=" Chapter 41">Chapter 41</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10040000/sakamoto-days-chapter-40" title=" Chapter 40">Chapter 40</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10039000/sakamoto-days-chapter-39" title=" Chapter 39">Chapter 39</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10038000/sakamoto-days-chapter-38" title=" Chapter 38">Chapter 38</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10037000/sakamoto-days-chapter-37" title=" Chapter 37">Chapter 37</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10036000/sakamoto-days-chapter-36" title=" Chapter 36">Chapter 36</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10035000/sakamoto-days-chapter-35" title=" Chapter 35">Chapter 35</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10034000/sakamoto-days-chapter-34" title=" Chapter 34">Chapter 34</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10033000/sakamoto-days-chapter-33" title=" Chapter 33">Chapter 33</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10032000/sakamoto-days-chapter-32" title=" Chapter 32">Chapter 32</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10031000/sakamoto-days-chapter-31" title=" Chapter 31">Chapter 31</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10030000/sakamoto-days-chapter-30" title=" Chapter 30">Chapter 30</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10029000/sakamoto-days-chapter-29" title=" Chapter 29">Chapter 29</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10028000/sakamoto-days-chapter-28" title=" Chapter 28">Chapter 28</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10027000/sakamoto-days-chapter-27" title=" Chapter 27">Chapter 27</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10026000/sakamoto-days-chapter-26" title=" Chapter 26">Chapter 26</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10025000/sakamoto-days-chapter-25" title=" Chapter 25">Chapter 25</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10024000/sakamoto-days-chapter-24" title=" Chapter 24">Chapter 24</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10023000/sakamoto-days-chapter-23" title=" Chapter 23">Chapter 23</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10022000/sakamoto-days-chapter-22" title=" Chapter 22">Chapter 22</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10021000/sakamoto-days-chapter-21" title=" Chapter 21">Chapter 21</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10020000/sakamoto-days-chapter-20" title=" Chapter 20">Chapter 20</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10019000/sakamoto-days-chapter-19" title=" Chapter 19">Chapter 19</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10018000/sakamoto-days-chapter-18" title=" Chapter 18">Chapter 18</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10017000/sakamoto-days-chapter-17" title=" Chapter 17">Chapter 17</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10016000/sakamoto-days-chapter-16" title=" Chapter 16">Chapter 16</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10015000/sakamoto-days-chapter-15" title=" Chapter 15">Chapter 15</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10014000/sakamoto-days-chapter-14" title=" Chapter 14">Chapter 14</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10013000/sakamoto-days-chapter-13" title=" Chapter 13">Chapter 13</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10012000/sakamoto-days-chapter-12" title=" Chapter 12">Chapter 12</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10011000/sakamoto-days-chapter-11" title=" Chapter 11">Chapter 11</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10010000/sakamoto-days-chapter-10" title=" Chapter 10">Chapter 10</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10009000/sakamoto-days-chapter-9" title=" Chapter 9">Chapter 9</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10008000/sakamoto-days-chapter-8" title=" Chapter 8">Chapter 8</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10007000/sakamoto-days-chapter-7" title=" Chapter 7">Chapter 7</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10006000/sakamoto-days-chapter-6" title=" Chapter 6">Chapter 6</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10005000/sakamoto-days-chapter-5" title=" Chapter 5">Chapter 5</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10004000/sakamoto-days-chapter-4" title=" Chapter 4">Chapter 4</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10003000/sakamoto-days-chapter-3" title=" Chapter 3">Chapter 3</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10002000/sakamoto-days-chapter-2" title=" Chapter 2">Chapter 2</a>
+
+                    <a class="border border-border p-1 hover:bg-brand hover:text-white"
+                        href="/chapters/5281-10001000/sakamoto-days-chapter-1" title=" Chapter 1">Chapter 1</a>
+
+                </div>
+                <p data-filter-empty-state hidden class="my-3 text-secondary">Chapter not found. Clear search to view
+                    all the available results.</p>
+            </div>
+        </div>
+
+    </div>
+
+
+    <div class="container">
+        <div class="flex items-center justify-between mt-3 py-3 border-t border-border">
+            <div class="text-sm text-center text-secondary"></div>
+            <div class="text-sm text-center text-secondary">mangapill.com</div>
+            <div class="mr-0">
+                <a href="/content-report" class="text-blue-500 text-sm text-center text-brand">Report Content</a>
+            </div>
+        </div>
+    </div>
+    <script type="module" src="/static/site/build/assets/site-BzmGX1Ls.js"></script>
+
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-XYMZVR9YML"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag() {dataLayer.push(arguments);}
+        gtag('js', new Date()); gtag('config', 'G-XYMZVR9YML');
+    </script>
+
+
+
+
+    <div class="modal" id="js-settings-modal" aria-hidden="true">
+        <div class="modal__overlay" tabindex="-1" data-micromodal-close>
+            <div class="modal__container bg-background w-full md:w-2/6" role="dialog" aria-modal="true"
+                aria-labelledby="shortcuts">
+                <div class="p-3 bg-card flex items-center justify-between">
+                    <div>
+                        <div class="text-primary font-black">Shortcuts / Keybinds</div>
+                        <div class="text-secondary small">These shortcuts only works on chapter pages</div>
+                    </div>
+                    <button class="p-2 hover:bg-background rounded" type="button" aria-label="Close modal"
+                        data-micromodal-close>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div class="p-3">
+                    <div class="flex flex-col gap-5">
+                        <div class="flex items-center justify-between">
+                            <div>Visit Manga Page</div>
+                            <div class="font-bold">m</div>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <div>Open Chapter Selector</div>
+                            <div class="font-bold">o</div>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <div>Previous Chapter</div>
+                            <div class="font-bold">Left Arrow</div>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <div>Next Chapter</div>
+                            <div class="font-bold">Right Arrow</div>
+                        </div>
+                    </div>
+                </div>
+                <div
+                    class="border-t border-border p-3 flex flex-col md:flex-row md:items-center md:justify-center gap-3">
+                    <button class="btn btn btn-sm btn-primary" type="button" aria-label="Close modal"
+                        data-micromodal-close>Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</body>
+
+</html>

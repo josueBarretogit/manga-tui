@@ -24,6 +24,7 @@ use crate::backend::cache::{CacheDuration, Cacher, InsertEntry};
 use crate::backend::html_parser::{HtmlElement, ParseHtml};
 use crate::backend::manga_provider::ChapterToRead;
 use crate::config::ImageQuality;
+use crate::global::get_random_user_agent;
 
 pub mod filter_state;
 pub mod filter_widget;
@@ -94,7 +95,7 @@ impl WeebcentralProvider {
             .cookie_store(true)
             .timeout(Duration::from_secs(30))
             .default_headers(default_headers)
-            .user_agent("Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0")
+            .user_agent(get_random_user_agent())
             .build()
             .unwrap();
 
@@ -162,7 +163,7 @@ impl WeebcentralProvider {
                 chapter_number: chap.number,
                 volume_number: None,
                 scanlator: Some("Weeb central".to_string()),
-                publication_date: chap.datetime,
+                publication_date: Some(chap.datetime),
             })
             .collect()
     }
@@ -208,7 +209,7 @@ impl WeebcentralProvider {
                 language: Languages::English,
                 chapter_number: chap.number,
                 volume_number: None,
-                publication_date: chap.datetime,
+                publication_date: Some(chap.datetime),
             })
             .collect()
     }
@@ -722,9 +723,7 @@ mod tests {
             .mock_async(|when, then| {
                 // The referer is important to be presented, if not when requesting a chapter page
                 // it will be blocked by cloudfare
-                when.method(GET)
-                    .header("user-agent", "Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0")
-                    .header("referer", "https://weebcentral.com/");
+                when.method(GET).header_exists("user-agent").header("referer", "https://weebcentral.com/");
 
                 then.status(200).body(*expected);
             })

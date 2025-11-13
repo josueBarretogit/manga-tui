@@ -3,7 +3,8 @@ use std::path::{Path, PathBuf};
 
 use manga_tui::exists;
 use once_cell::sync::Lazy;
-use strum::{Display, EnumIter, IntoEnumIterator};
+use strum::IntoEnumIterator;
+use strum_macros::{Display, EnumIter};
 
 use self::error_log::create_error_logs_files;
 use crate::config::build_config_file;

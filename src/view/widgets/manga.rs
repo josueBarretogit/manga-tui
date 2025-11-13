@@ -85,10 +85,12 @@ impl Widget for ChapterItem {
                         .wrap(Wrap { trim: true })
                         .render(scanlator_area, buf);
 
-                    Paragraph::new(display_dates_since_publication(self.chapter.publication_date))
-                        .style(self.style)
-                        .wrap(Wrap { trim: true })
-                        .render(readable_at_area, buf);
+                    if let Some(date) = self.chapter.publication_date {
+                        Paragraph::new(display_dates_since_publication(date))
+                            .style(self.style)
+                            .wrap(Wrap { trim: true })
+                            .render(readable_at_area, buf);
+                    }
                 },
                 ChapterItemState::DownloadError => {
                     Paragraph::new(
