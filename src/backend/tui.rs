@@ -45,40 +45,23 @@ fn get_picker() -> Option<Picker> {
 }
 
 #[cfg(target_os = "windows")]
+/// Default font width for Windows console on 96 DPI
+const DEFAULT_FONT_SIZE_WIDTH: u16 = 10;
+#[cfg(target_os = "windows")]
+/// Default font height for Windows console on 96 DPI
+const DEFAULT_FONT_SIZE_HEIGHT: u16 = 22;
+
+#[cfg(target_os = "windows")]
 fn get_picker() -> Option<Picker> {
     use windows_sys::Win32::System::Console::GetConsoleWindow;
     use windows_sys::Win32::UI::HiDpi::GetDpiForWindow;
 
-    struct FontSize {
-        pub width: u16,
-        pub height: u16,
-    }
-    impl Default for FontSize {
-        fn default() -> Self {
-            FontSize {
-                width: 17,
-                height: 38,
-            }
-        }
-    }
+    let dpi = unsafe { GetDpiForWindow(GetConsoleWindow()) };
+    let scale = dpi as f32 / 96.0;
+    let size: (u16, u16) =
+        ((DEFAULT_FONT_SIZE_WIDTH as f32 * scale).round() as u16, (DEFAULT_FONT_SIZE_HEIGHT as f32 * scale).round() as u16);
 
-    let size: FontSize = match unsafe { GetDpiForWindow(GetConsoleWindow()) } {
-        96 => FontSize {
-            width: 9,
-            height: 20,
-        },
-        120 => FontSize {
-            width: 12,
-            height: 25,
-        },
-        144 => FontSize {
-            width: 14,
-            height: 32,
-        },
-        _ => FontSize::default(),
-    };
-
-    let mut picker = Picker::new((size.width, size.height));
+    let mut picker = Picker::new((size.0, size.1));
 
     let protocol = picker.guess_protocol();
 
