@@ -68,7 +68,7 @@ name = "utils"
 harness = false
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.60.2", features = ["Win32_Foundation", "Win32_System_Console", "Win32_UI_HiDpi"]}
+windows-sys = { version = "0.61.2", features = ["Win32_System_Console", "Win32_UI_HiDpi"]}
 
 [profile.release]
 codegen-units = 1
