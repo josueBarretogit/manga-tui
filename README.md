@@ -121,6 +121,20 @@ Or, to install persistently:
 nix profile install 'github:josueBarretogit/manga-tui'
 ```
 
+### Void
+
+You can install `manga-tui` using [Blackhole-vl](https://github.com/Event-Horizon-VL/blackhole-vl/blob/main/srcpkgs/manga-tui/template).
+
+Add unofficial community repo:
+```
+echo repository=https://raw.githubusercontent.com/Event-Horizon-VL/blackhole-vl/repository-x86_64 | sudo tee /etc/xbps.d/20-repository-extra.conf
+```
+After adding repo simply run following:
+```
+sudo xbps-install -S manga-tui
+```
+
+
 ## Binary release
 
 Download a binary from the [releases page](https://github.com/josueBarretogit/manga-tui/releases/latest)
