@@ -284,21 +284,18 @@ where
         if self.search_page.input_mode != InputMode::Typing && !self.search_page.is_typing_filter() && !self.feed_page.is_typing() {
             match key_event.code {
                 KeyCode::Char('c') if key_event.modifiers == KeyModifiers::CONTROL => self.quit(),
-                KeyCode::Char('u') | KeyCode::F(1) => {
-                    if self.current_tab != SelectedPage::ReaderTab {
+                KeyCode::Char('u') | KeyCode::F(1)
+                    if self.current_tab != SelectedPage::ReaderTab => {
                         self.global_event_tx.send(Events::GoToHome).ok();
-                    }
-                },
-                KeyCode::Char('i') | KeyCode::F(2) => {
-                    if self.current_tab != SelectedPage::ReaderTab {
+                    },
+                KeyCode::Char('i') | KeyCode::F(2)
+                    if self.current_tab != SelectedPage::ReaderTab => {
                         self.global_event_tx.send(Events::GoSearchPage).ok();
-                    }
-                },
-                KeyCode::Char('o') | KeyCode::F(3) => {
-                    if self.current_tab != SelectedPage::ReaderTab {
+                    },
+                KeyCode::Char('o') | KeyCode::F(3)
+                    if self.current_tab != SelectedPage::ReaderTab => {
                         self.global_event_tx.send(Events::GoFeedPage).ok();
-                    }
-                },
+                    },
 
                 _ => {},
             }

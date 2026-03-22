@@ -528,10 +528,8 @@ where
             MouseEventKind::ScrollUp => {
                 self.local_action_tx.send(SearchPageActions::ScrollUp).ok();
             },
-            MouseEventKind::Down(button) => {
-                if button == MouseButton::Left {
-                    self.local_action_tx.send(SearchPageActions::SearchMangaPage).ok();
-                }
+            MouseEventKind::Down(MouseButton::Left) => {
+                self.local_action_tx.send(SearchPageActions::SearchMangaPage).ok();
             },
             _ => {},
         }
