@@ -781,11 +781,10 @@ impl MangadexFilterProvider {
                 KeyCode::Tab => self.next_filter(),
                 KeyCode::BackTab => self.previous_filter(),
                 KeyCode::Char('s') => self.toggle_filter_list(),
-                KeyCode::Char('d') => {
-                    if *FILTERS.get(self.id_filter).unwrap() == MangaFilters::Tags {
+                KeyCode::Char('d')
+                    if *FILTERS.get(self.id_filter).unwrap() == MangaFilters::Tags => {
                         self.exclude_tag_selected();
-                    }
-                },
+                    },
                 KeyCode::Char('r') => self.reset(),
                 KeyCode::Char('l') | KeyCode::Right => self.toggle_focus_input(),
                 _ => {},

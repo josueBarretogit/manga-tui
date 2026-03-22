@@ -113,11 +113,10 @@ pub fn handle_events(tick_rate: Duration, event_tx: UnboundedSender<Events>) -> 
                     match maybe_event  {
                         Some(Ok(evt)) => {
                             match evt {
-                                crossterm::event::Event::Key(key) => {
-                                    if key.kind == crossterm::event::KeyEventKind::Press {
+                                crossterm::event::Event::Key(key)
+                                    if key.kind == crossterm::event::KeyEventKind::Press => {
                                         event_tx.send(Events::Key(key)).ok();
-                                    }
-                                },
+                                    },
                                 crossterm::event::Event::Mouse(mouse_event) => {
                                     event_tx.send(Events::Mouse(mouse_event)).ok();
                                 }
