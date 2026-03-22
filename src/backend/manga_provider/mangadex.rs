@@ -432,56 +432,77 @@ impl HomePageMangaProvider for MangadexClient {
 
         let endpoint = format!("{}/manga", self.api_url_base);
 
-        let response = self
-            .client
-            .get(endpoint)
-            .query(&[
-                ("limit", "5"),
-                ("contentRating[]", "safe"),
-                ("order[createdAt]", "desc"),
-                ("includes[]", "cover_art"),
-                ("includes[]", "artist"),
-                ("includes[]", "author"),
-                ("hasAvailableChapters", "true"),
-                ("availableTranslatedLanguage[]", language),
-            ])
-            .send()
-            .await?;
+        let id_cache = format!("{endpoint}{language}-recently-added-mangas");
 
-        if response.status() != StatusCode::OK {
-            return Err(
-                format!("Could not get recently added mangas on mangadex, more details about the request : {response:#?}").into()
-            );
+        match self.cache_provider.get(&id_cache).ok().flatten() {
+            Some(cached) => {
+                let response: Vec<RecentlyAddedManga> = serde_json::from_slice(&cached.data)?;
+                Ok(response)
+            },
+            None => {
+                let response = self
+                    .client
+                    .get(endpoint)
+                    .query(&[
+                        ("limit", "5"),
+                        ("contentRating[]", "safe"),
+                        ("order[createdAt]", "desc"),
+                        ("includes[]", "cover_art"),
+                        ("includes[]", "artist"),
+                        ("includes[]", "author"),
+                        ("hasAvailableChapters", "true"),
+                        ("availableTranslatedLanguage[]", language),
+                    ])
+                    .send()
+                    .await?;
+
+                if response.status() != StatusCode::OK {
+                    return Err(format!(
+                        "Could not get recently added mangas on mangadex, more details about the request : {response:#?}"
+                    )
+                    .into());
+                }
+
+                let response: SearchMangaResponse = response.json().await?;
+
+                let response: Vec<RecentlyAddedManga> = response
+                    .data
+                    .into_iter()
+                    .map(|manga| {
+                        let mut cover_img_url = String::new();
+
+                        for rel in &manga.relationships {
+                            if let Some(attributes) = &rel.attributes
+                                && rel.type_field.as_str() == "cover_art"
+                            {
+                                let file_name = attributes.file_name.as_ref().unwrap().to_string();
+                                cover_img_url = self.make_cover_img_url_lower_quality(&manga.id, &file_name);
+                            }
+                        }
+                        RecentlyAddedManga {
+                            id: manga.id,
+                            title: manga.attributes.title.into(),
+                            description: manga
+                                .attributes
+                                .description
+                                .map(|desc| desc.en.unwrap_or("No description".to_string()))
+                                .unwrap_or("No description".to_string()),
+                            cover_img_url,
+                        }
+                    })
+                    .collect();
+
+                self.cache_provider
+                    .cache(InsertEntry {
+                        id: &id_cache,
+                        data: &serde_json::to_vec(&response)?,
+                        duration: CacheDuration::Medium,
+                    })
+                    .ok();
+
+                Ok(response)
+            },
         }
-
-        let response: SearchMangaResponse = response.json().await?;
-
-        Ok(response
-            .data
-            .into_iter()
-            .map(|manga| {
-                let mut cover_img_url = String::new();
-
-                for rel in &manga.relationships {
-                    if let Some(attributes) = &rel.attributes
-                        && rel.type_field.as_str() == "cover_art"
-                    {
-                        let file_name = attributes.file_name.as_ref().unwrap().to_string();
-                        cover_img_url = self.make_cover_img_url_lower_quality(&manga.id, &file_name);
-                    }
-                }
-                RecentlyAddedManga {
-                    id: manga.id,
-                    title: manga.attributes.title.into(),
-                    description: manga
-                        .attributes
-                        .description
-                        .map(|desc| desc.en.unwrap_or("No description".to_string()))
-                        .unwrap_or("No description".to_string()),
-                    cover_img_url,
-                }
-            })
-            .collect())
     }
 
     async fn get_popular_mangas(&self) -> Result<Vec<PopularManga>, Box<dyn Error>> {
@@ -492,15 +513,15 @@ impl HomePageMangaProvider for MangadexClient {
 
         let from_date = format!("{current_date}T00:00:00");
 
-        let id_popular_manga_cache = format!("{endpoint}{from_date}-popular_manga");
+        let id_popular_manga_cache = format!("{endpoint}{from_date}{language}-popular_manga");
 
         let cache = self.cache_provider.get(&id_popular_manga_cache)?;
 
         match cache {
             Some(cached) => {
-                let response: SearchMangaResponse = serde_json::from_slice(&cached.data)?;
+                let response: Vec<PopularManga> = serde_json::from_slice(&cached.data)?;
 
-                Ok(response.data.into_iter().map(self.map_popular_mangas()).collect())
+                Ok(response)
             },
             None => {
                 let response = self
@@ -533,7 +554,7 @@ impl HomePageMangaProvider for MangadexClient {
                     .cache(InsertEntry {
                         id: &id_popular_manga_cache,
                         data: &serde_json::to_vec(&response)?,
-                        duration: CacheDuration::Short,
+                        duration: CacheDuration::Medium,
                     })
                     .ok();
 
@@ -650,8 +671,8 @@ impl MangaPageProvider for MangadexClient {
             super::ChapterOrderBy::Ascending => "asc",
             super::ChapterOrderBy::Descending => "desc",
         };
-
-        let id_cache = format!("{endpoint}{offset}{order}get-chapters-cache");
+        let language_code = filters.language.as_iso_code();
+        let id_cache = format!("{endpoint}{offset}{order}{language_code}get-chapters-cache");
 
         let cache = self.cache_provider.get(&id_cache)?;
 
@@ -685,7 +706,7 @@ impl MangaPageProvider for MangadexClient {
                         ("order[volume]", order),
                         ("order[chapter]", order),
                         ("includeExternalUrl", "0"),
-                        ("translatedLanguage[]", filters.language.as_iso_code()),
+                        ("translatedLanguage[]", language_code),
                     ])
                     .send()
                     .await?;
@@ -722,7 +743,7 @@ impl MangaPageProvider for MangadexClient {
 
         let endpoint = format!("{}/manga/{manga_id}/feed", self.api_url_base);
 
-        let id_cache = format!("{endpoint}get-all-chapters");
+        let id_cache = format!("{endpoint}{language}get-all-chapters");
         let cache = self.cache_provider.get(&id_cache)?;
 
         match cache {
