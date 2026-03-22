@@ -839,14 +839,12 @@ where
 
     fn handle_events(&mut self, events: crate::backend::tui::Events) {
         match events {
-            Events::Key(key_event)
-                if self.state != FeedState::SearchingMangaPage => {
-                    self.handle_key_events(key_event);
-                },
-            Events::Mouse(mouse_event)
-                if self.state != FeedState::SearchingMangaPage => {
-                    self.handle_mouse_event(mouse_event);
-                },
+            Events::Key(key_event) if self.state != FeedState::SearchingMangaPage => {
+                self.handle_key_events(key_event);
+            },
+            Events::Mouse(mouse_event) if self.state != FeedState::SearchingMangaPage => {
+                self.handle_mouse_event(mouse_event);
+            },
             Events::Tick => self.tick(),
             _ => {},
         }
