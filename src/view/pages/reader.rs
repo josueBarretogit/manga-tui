@@ -572,10 +572,8 @@ where
             KeyCode::Char('r') => {
                 self.local_action_tx.send(MangaReaderActions::ReloadPage).ok();
             },
-            KeyCode::Char('m') => {
-                if !self.auto_bookmark {
-                    self.local_action_tx.send(MangaReaderActions::BookMarkCurrentChapter).ok();
-                }
+            KeyCode::Char('m') if !self.auto_bookmark => {
+                self.local_action_tx.send(MangaReaderActions::BookMarkCurrentChapter).ok();
             },
             KeyCode::Backspace => {
                 self.local_action_tx.send(MangaReaderActions::ExitReaderPage).ok();
