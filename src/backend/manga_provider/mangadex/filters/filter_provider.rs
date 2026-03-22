@@ -709,13 +709,8 @@ impl FiltersHandler for MangadexFilterProvider {
 
 impl MangadexFilterProvider {
     pub fn reset(&mut self) {
-        if self.tags_state.tags.is_some() {
-            self.tags_state
-                .tags
-                .as_mut()
-                .unwrap()
-                .iter_mut()
-                .for_each(|tag| tag.state = TagListItemState::NotSelected);
+        if let Some(tags) = &mut self.tags_state.tags {
+            tags.iter_mut().for_each(|tag| tag.state = TagListItemState::NotSelected);
             self.tags_state.filter_input.reset();
         }
 

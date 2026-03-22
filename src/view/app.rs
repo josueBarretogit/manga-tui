@@ -72,8 +72,10 @@ where
     type Actions = Action;
 
     fn render(&mut self, area: Rect, frame: &mut Frame<'_>) {
-        if self.manga_reader_page.is_some() && self.current_tab == SelectedPage::ReaderTab {
-            self.manga_reader_page.as_mut().unwrap().render(area, frame);
+        if let Some(manga_reader) = &mut self.manga_reader_page
+            && self.current_tab == SelectedPage::ReaderTab
+        {
+            manga_reader.render(area, frame);
         } else {
             let main_layout = Layout::vertical([Constraint::Percentage(6), Constraint::Percentage(94)]);
 
@@ -105,8 +107,10 @@ where
             Events::Error(message) => self.display_error_message(message),
 
             Events::GoBackMangaPage => {
-                if self.current_tab == SelectedPage::ReaderTab && self.manga_reader_page.is_some() {
-                    self.manga_reader_page.as_mut().unwrap().clean_up();
+                if self.current_tab == SelectedPage::ReaderTab
+                    && let Some(manga_reader) = &mut self.manga_reader_page
+                {
+                    manga_reader.clean_up();
                     self.current_tab = SelectedPage::MangaTab;
                 }
             },
