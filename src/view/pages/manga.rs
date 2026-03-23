@@ -495,10 +495,8 @@ where
                     KeyCode::Char('b') => {
                         self.local_action_tx.send(MangaPageActions::SearchPreviousChapterPage).ok();
                     },
-                    KeyCode::Char('m') => {
-                        if !self.bookmark_state.auto_bookmark {
-                            self.local_action_tx.send(MangaPageActions::BookMarkChapterSelected).ok();
-                        }
+                    KeyCode::Char('m') if !self.bookmark_state.auto_bookmark => {
+                        self.local_action_tx.send(MangaPageActions::BookMarkChapterSelected).ok();
                     },
                     KeyCode::Tab => {
                         self.local_action_tx.send(MangaPageActions::GoToReadBookmarkedChapter).ok();
