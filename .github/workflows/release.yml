@@ -39,7 +39,7 @@ jobs:
       - name: Checksum
         run: shasum -a 256 manga-tui-${{ env.RELEASE_VERSION }}-${{ matrix.targets.target }}.tar.gz
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-${{ matrix.targets.target }}
           path: manga-tui-${{ env.RELEASE_VERSION }}-${{ matrix.targets.target }}.tar.gz
