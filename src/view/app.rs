@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
 use ::crossterm::event::KeyCode;
-use crossterm::event::{KeyEvent, KeyModifiers};
+use crossterm::event::{KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::Frame;
 use ratatui::buffer::Buffer;
-use ratatui::layout::{Constraint, Layout, Rect};
+use ratatui::layout::{Constraint, Layout, Position, Rect};
 use ratatui::widgets::{Block, Borders, Tabs, Widget};
 use ratatui_image::picker::Picker;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
@@ -62,6 +62,7 @@ where
     // terminal font size and the graphics it supports
     // if the terminal doesn't support any graphics protocol the picker is `None`
     picker: Option<Picker>,
+    top_tabs_area: Rect,
 }
 
 impl<T, S> Component for App<T, S>
@@ -79,6 +80,7 @@ where
 
             let [top_tabs_area, page_area] = main_layout.areas(area);
 
+            self.top_tabs_area = top_tabs_area;
             self.render_top_tabs(top_tabs_area, frame.buffer_mut());
 
             self.render_pages(page_area, frame);
@@ -92,6 +94,7 @@ where
     fn handle_events(&mut self, events: Events) {
         match events {
             Events::Key(key_event) => self.handle_key_events(key_event),
+            Events::Mouse(mouse_event) => self.handle_mouse_events(mouse_event),
             Events::GoToMangaPage(manga) => self.go_to_manga_page(manga),
             Events::ReadChapter(chapter_response, manga_to_read) => {
                 self.go_to_read_chapter(chapter_response, manga_to_read, self.manga_tracker.clone())
@@ -176,6 +179,7 @@ where
             state: AppState::Runnning,
             error_message: None,
             manga_provider: Arc::clone(&provider),
+            top_tabs_area: Rect::default(),
         }
     }
 
@@ -298,6 +302,30 @@ where
 
                 _ => {},
             }
+        }
+    }
+
+    fn handle_mouse_events(&mut self, mouse_event: MouseEvent) {
+        if self.current_tab == SelectedPage::ReaderTab {
+            return;
+        }
+        if let MouseEventKind::Down(MouseButton::Left) = mouse_event.kind {
+            let pos = Position::new(mouse_event.column, mouse_event.row);
+            if !self.top_tabs_area.contains(pos) {
+                return;
+            }
+            let num_tabs: u16 = if self.current_tab == SelectedPage::MangaTab { 4 } else { 3 };
+            let tab_width = self.top_tabs_area.width / num_tabs;
+            if tab_width == 0 {
+                return;
+            }
+            let tab_index = ((mouse_event.column.saturating_sub(self.top_tabs_area.x)) / tab_width).min(num_tabs - 1);
+            match tab_index {
+                0 => self.global_event_tx.send(Events::GoToHome).ok(),
+                1 => self.global_event_tx.send(Events::GoSearchPage).ok(),
+                2 => self.global_event_tx.send(Events::GoFeedPage).ok(),
+                _ => None,
+            };
         }
     }
 

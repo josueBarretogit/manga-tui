@@ -1,11 +1,11 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 use image::DynamicImage;
 use ratatui::Frame;
 use ratatui::buffer::Buffer;
-use ratatui::layout::{Constraint, Layout, Margin, Rect};
+use ratatui::layout::{Constraint, Layout, Margin, Position, Rect};
 use ratatui::style::Stylize;
 use ratatui::text::{Line, Span, ToSpan};
 use ratatui::widgets::{Block, List, StatefulWidget, Widget};
@@ -67,6 +67,8 @@ where
     picker: Option<Picker>,
     tasks: JoinSet<()>,
     manga_provider: Arc<T>,
+    popular_mangas_area: Rect,
+    recently_added_area: Rect,
 }
 
 impl<T> Component for Home<T>
@@ -80,6 +82,9 @@ where
         let buf = frame.buffer_mut();
 
         let [carrousel_popular_mangas_area, latest_updates_area] = layout.areas(area);
+
+        self.popular_mangas_area = carrousel_popular_mangas_area;
+        self.recently_added_area = latest_updates_area;
 
         self.render_popular_mangas_carrousel(carrousel_popular_mangas_area, buf);
 
@@ -115,6 +120,7 @@ where
     fn handle_events(&mut self, events: Events) {
         match events {
             Events::Key(key_event) => self.handle_key_events(key_event),
+            Events::Mouse(mouse_event) => self.handle_mouse_events(mouse_event),
             Events::Tick => self.tick(),
             _ => {},
         }
@@ -143,6 +149,8 @@ where
             recently_added_manga_state: ImageState::default(),
             tasks: JoinSet::new(),
             manga_provider,
+            popular_mangas_area: Rect::default(),
+            recently_added_area: Rect::default(),
         }
     }
 
@@ -427,6 +435,36 @@ where
             layout[0],
             buf,
         )
+    }
+
+    fn handle_mouse_events(&mut self, mouse_event: MouseEvent) {
+        let pos = Position::new(mouse_event.column, mouse_event.row);
+        let in_popular = self.popular_mangas_area.contains(pos);
+
+        match mouse_event.kind {
+            MouseEventKind::ScrollUp => {
+                if in_popular {
+                    self.local_action_tx.send(HomeActions::SelectPreviousPopularManga).ok();
+                } else {
+                    self.local_action_tx.send(HomeActions::SelectPreviousRecentlyAddedManga).ok();
+                }
+            },
+            MouseEventKind::ScrollDown => {
+                if in_popular {
+                    self.local_action_tx.send(HomeActions::SelectNextPopularManga).ok();
+                } else {
+                    self.local_action_tx.send(HomeActions::SelectNextRecentlyAddedManga).ok();
+                }
+            },
+            MouseEventKind::Down(MouseButton::Left) => {
+                if in_popular {
+                    self.local_action_tx.send(HomeActions::GoToPopularMangaPage).ok();
+                } else if self.recently_added_area.contains(pos) {
+                    self.local_action_tx.send(HomeActions::GoToRecentlyAddedMangaPage).ok();
+                }
+            },
+            _ => {},
+        }
     }
 
     pub fn handle_key_events(&mut self, key_event: KeyEvent) {
