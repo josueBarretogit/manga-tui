@@ -136,21 +136,49 @@ impl LeercapituloProvider {
     }
 
     /// Builds a `ChapterToRead`
-    async fn get_chapter_to_read(&self, chapter_path: &str) -> Result<ChapterToRead, Box<dyn Error>> {
+    async fn get_chapter_to_read(&self, chapter_path: &str, manga_id: &str) -> Result<ChapterToRead, Box<dyn Error>> {
         let pages = self.fetch_chapter_pages(chapter_path).await?;
         let pages_url = pages.into_iter().map(|p| p.url).collect();
 
-        let num = chapter_path
-            .trim_end_matches('/')
-            .rsplit('/')
-            .next()
-            .and_then(|s| s.parse::<f64>().ok())
-            .unwrap_or(0.0);
+        let resolved_manga_id = if !manga_id.is_empty() {
+            manga_id.to_string()
+        } else {
+            chapter_path
+                .strip_prefix("/leer/")
+                .unwrap_or(chapter_path)
+                .split('/')
+                .next()
+                .unwrap_or("")
+                .to_string()
+        };
+
+        let raw_chapters = if !resolved_manga_id.is_empty() {
+            self.fetch_raw_chapters(&resolved_manga_id).await.unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+
+        let chapter_item = raw_chapters
+            .iter()
+            .find(|ch| ch.id == chapter_path || chapter_path.starts_with(&ch.id) || ch.id.starts_with(chapter_path));
+
+        let (title, number) = match chapter_item {
+            Some(item) => (item.title.clone(), item.number),
+            None => {
+                let re = regex::Regex::new(r#"/([\d\.]+)"#).ok();
+                let num = re
+                    .and_then(|r| r.captures(chapter_path))
+                    .and_then(|c| c.get(1))
+                    .and_then(|m| m.as_str().parse::<f64>().ok())
+                    .unwrap_or(0.0);
+                (format!("Capítulo {num}"), num)
+            },
+        };
 
         Ok(ChapterToRead {
             id: chapter_path.to_string(),
-            title: format!("Capítulo {num}"),
-            number: num,
+            title,
+            number,
             volume_number: None,
             num_page_bookmarked: None,
             language: Languages::Spanish,
@@ -298,8 +326,8 @@ impl GetChapterPages for LeercapituloProvider {
 }
 
 impl SearchChapterById for LeercapituloProvider {
-    async fn search_chapter(&self, chapter_id: &str, _manga_id: &str) -> Result<ChapterToRead, Box<dyn Error>> {
-        self.get_chapter_to_read(chapter_id).await
+    async fn search_chapter(&self, chapter_id: &str, manga_id: &str) -> Result<ChapterToRead, Box<dyn Error>> {
+        self.get_chapter_to_read(chapter_id, manga_id).await
     }
 }
 
@@ -314,7 +342,7 @@ impl FetchChapterBookmarked for LeercapituloProvider {
 
 impl GoToReadChapter for LeercapituloProvider {
     async fn read_chapter(&self, chapter_id: &str, manga_id: &str) -> Result<(ChapterToRead, ListOfChapters), Box<dyn Error>> {
-        let chapter_to_read = self.get_chapter_to_read(chapter_id).await?;
+        let chapter_to_read = self.get_chapter_to_read(chapter_id, manga_id).await?;
         let list_of_chapters = self.get_list_of_chapters(manga_id).await?;
 
         Ok((chapter_to_read, list_of_chapters))
@@ -491,6 +519,59 @@ fn urlencoding_encode(s: &str) -> String {
 mod tests {
     use super::*;
     use crate::backend::cache::in_memory::InMemoryCache;
+
+    #[test]
+    fn test_leercapitulo_chapter_navigation_consecutive() {
+        let items = vec![
+            LeercapituloChapterItem {
+                id: "/leer/one-piece/1.00/cascada".to_string(),
+                number: 1.0,
+                number_str: "1".to_string(),
+                title: "Capítulo 1".to_string(),
+                publication_date: None,
+            },
+            LeercapituloChapterItem {
+                id: "/leer/one-piece/2.00/cascada".to_string(),
+                number: 2.0,
+                number_str: "2".to_string(),
+                title: "Capítulo 2".to_string(),
+                publication_date: None,
+            },
+            LeercapituloChapterItem {
+                id: "/leer/one-piece/1192.00/cascada".to_string(),
+                number: 1192.0,
+                number_str: "1192".to_string(),
+                title: "Capítulo 1192".to_string(),
+                publication_date: None,
+            },
+            LeercapituloChapterItem {
+                id: "/leer/one-piece/1193.00/cascada".to_string(),
+                number: 1193.0,
+                number_str: "1193".to_string(),
+                title: "Capítulo 1193".to_string(),
+                publication_date: None,
+            },
+        ];
+
+        let reader_chapters: Vec<ChapterReader> = items.iter().map(|c| c.to_chapter_reader()).collect();
+        let sorted = SortedChapters::new(reader_chapters);
+        let list = ListOfChapters {
+            volumes: SortedVolumes::new(vec![Volumes {
+                volume: "none".to_string(),
+                chapters: sorted,
+            }]),
+        };
+
+        // When reading chapter 1192 (number = 1192.0), pressing Next (W) must go to chapter 1193
+        let next = list.get_next_chapter(None, 1192.0).expect("should find next chapter");
+        assert_eq!(next.id, "/leer/one-piece/1193.00/cascada");
+        assert_eq!(next.number, "1193");
+
+        // When reading chapter 1193 (number = 1193.0), pressing Prev (B) must go to chapter 1192
+        let prev = list.get_previous_chapter(None, 1193.0).expect("should find previous chapter");
+        assert_eq!(prev.id, "/leer/one-piece/1192.00/cascada");
+        assert_eq!(prev.number, "1192");
+    }
 
     #[tokio::test]
     #[ignore]

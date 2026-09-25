@@ -200,18 +200,15 @@ pub fn parse_manga_details(html: &str, slug: &str) -> MangaoniMangaDetails {
         MangaStatus::Ongoing
     };
 
-    // Chapters from <div id="c_list"> or links with `/lector/<slug>/<chapter_id>/`
+    // Chapters from <div id="c_list"> with `/lector/<slug>/<chapter_id>/`
     let mut chapters = Vec::new();
-    let chap_pattern = format!(r#"href="https://manga-oni\.com/lector/{slug}/([^"/]+)/"#);
-    if let Ok(re) = regex::Regex::new(&chap_pattern) {
+    let entry_pattern = format!(r#"<a\s+href="https://manga-oni\.com/lector/{slug}/([^"/]+)/"[^>]*>([\s\S]*?)</a>"#);
+    if let Ok(entry_re) = regex::Regex::new(&entry_pattern) {
         let mut seen = std::collections::HashSet::new();
 
-        // Search each <a> block for data-num and title
-        let entry_re =
-            regex::Regex::new(r#"<a\s+href="https://manga-oni\.com/lector/[^/]+/([^"/]+)/"[^>]*>([\s\S]*?)</a>"#).unwrap();
         for cap in entry_re.captures_iter(html) {
             let chapter_id = cap.get(1).map(|m| m.as_str()).unwrap_or("");
-            if chapter_id.is_empty() || seen.contains(chapter_id) {
+            if chapter_id.is_empty() || chapter_id == "cascada" || chapter_id == "descargar" || seen.contains(chapter_id) {
                 continue;
             }
             seen.insert(chapter_id.to_string());

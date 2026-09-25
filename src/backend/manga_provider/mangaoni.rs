@@ -150,16 +150,27 @@ impl MangaoniProvider {
     }
 
     /// Builds a `ChapterToRead`
-    async fn get_chapter_to_read(&self, chapter_id_compound: &str) -> Result<ChapterToRead, Box<dyn Error>> {
-        let (slug, chap_id) = chapter_id_compound.split_once('|').unwrap_or(("", chapter_id_compound));
+    async fn get_chapter_to_read(&self, chapter_id_compound: &str, manga_id: &str) -> Result<ChapterToRead, Box<dyn Error>> {
+        let (slug, chap_id) = chapter_id_compound.split_once('|').unwrap_or((manga_id, chapter_id_compound));
+        let resolved_slug = if !slug.is_empty() { slug } else { manga_id };
 
-        let pages = self.fetch_chapter_pages(slug, chap_id).await?;
+        let pages = self.fetch_chapter_pages(resolved_slug, chap_id).await?;
         let pages_url = pages.into_iter().map(|p| p.url).collect();
+
+        let raw_chapters = self.fetch_raw_chapters(resolved_slug).await.unwrap_or_default();
+        let chapter_item = raw_chapters.iter().find(|ch| {
+            ch.id == chapter_id_compound || ch.id.ends_with(&format!("|{chap_id}")) || ch.id == format!("{resolved_slug}|{chap_id}")
+        });
+
+        let (title, number) = match chapter_item {
+            Some(item) => (item.title.clone(), item.number),
+            None => (format!("Capítulo {chap_id}"), chap_id.parse::<f64>().unwrap_or(0.0)),
+        };
 
         Ok(ChapterToRead {
             id: chapter_id_compound.to_string(),
-            title: format!("Capítulo {chap_id}"),
-            number: chap_id.parse::<f64>().unwrap_or(0.0),
+            title,
+            number,
             volume_number: None,
             num_page_bookmarked: None,
             language: Languages::Spanish,
@@ -308,8 +319,10 @@ impl GetChapterPages for MangaoniProvider {
 }
 
 impl SearchChapterById for MangaoniProvider {
-    async fn search_chapter(&self, chapter_id: &str, _manga_id: &str) -> Result<ChapterToRead, Box<dyn Error>> {
-        self.get_chapter_to_read(chapter_id).await
+    async fn search_chapter(&self, chapter_id: &str, manga_id: &str) -> Result<ChapterToRead, Box<dyn Error>> {
+        let (slug, _) = chapter_id.split_once('|').unwrap_or((manga_id, chapter_id));
+        let resolved_slug = if !slug.is_empty() { slug } else { manga_id };
+        self.get_chapter_to_read(chapter_id, resolved_slug).await
     }
 }
 
@@ -325,9 +338,10 @@ impl FetchChapterBookmarked for MangaoniProvider {
 impl GoToReadChapter for MangaoniProvider {
     async fn read_chapter(&self, chapter_id: &str, manga_id: &str) -> Result<(ChapterToRead, ListOfChapters), Box<dyn Error>> {
         let (slug, _) = chapter_id.split_once('|').unwrap_or((manga_id, chapter_id));
+        let resolved_slug = if !slug.is_empty() { slug } else { manga_id };
 
-        let chapter_to_read = self.get_chapter_to_read(chapter_id).await?;
-        let list_of_chapters = self.get_list_of_chapters(slug).await?;
+        let chapter_to_read = self.get_chapter_to_read(chapter_id, resolved_slug).await?;
+        let list_of_chapters = self.get_list_of_chapters(resolved_slug).await?;
 
         Ok((chapter_to_read, list_of_chapters))
     }
@@ -496,6 +510,59 @@ impl MangaProvider for MangaoniProvider {}
 mod tests {
     use super::*;
     use crate::backend::cache::in_memory::InMemoryCache;
+
+    #[test]
+    fn test_mangaoni_chapter_navigation_consecutive() {
+        let items = vec![
+            MangaoniChapterItem {
+                id: "one-piece|80".to_string(),
+                number: 1.0,
+                number_str: "1".to_string(),
+                title: "Capítulo 1".to_string(),
+                publication_date: None,
+            },
+            MangaoniChapterItem {
+                id: "one-piece|81".to_string(),
+                number: 2.0,
+                number_str: "2".to_string(),
+                title: "Capítulo 2".to_string(),
+                publication_date: None,
+            },
+            MangaoniChapterItem {
+                id: "one-piece|802800".to_string(),
+                number: 1192.0,
+                number_str: "1192".to_string(),
+                title: "Capítulo 1192".to_string(),
+                publication_date: None,
+            },
+            MangaoniChapterItem {
+                id: "one-piece|802904".to_string(),
+                number: 1193.0,
+                number_str: "1193".to_string(),
+                title: "Capítulo 1193".to_string(),
+                publication_date: None,
+            },
+        ];
+
+        let reader_chapters: Vec<ChapterReader> = items.iter().map(|c| c.to_chapter_reader()).collect();
+        let sorted = SortedChapters::new(reader_chapters);
+        let list = ListOfChapters {
+            volumes: SortedVolumes::new(vec![Volumes {
+                volume: "none".to_string(),
+                chapters: sorted,
+            }]),
+        };
+
+        // When reading chapter 1192 (number = 1192.0), pressing Next (W) must go to chapter 1193
+        let next = list.get_next_chapter(None, 1192.0).expect("should find next chapter");
+        assert_eq!(next.id, "one-piece|802904");
+        assert_eq!(next.number, "1193");
+
+        // When reading chapter 1193 (number = 1193.0), pressing Prev (B) must go to chapter 1192
+        let prev = list.get_previous_chapter(None, 1193.0).expect("should find previous chapter");
+        assert_eq!(prev.id, "one-piece|802800");
+        assert_eq!(prev.number, "1192");
+    }
 
     #[tokio::test]
     #[ignore]
