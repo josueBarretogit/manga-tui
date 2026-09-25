@@ -166,6 +166,9 @@ where
                     MangaProviders::Mangadex => 10,
                     MangaProviders::Weebcentral => 24,
                     MangaProviders::Mangapill => 50,
+                    MangaProviders::Inmanga => 10,
+                    MangaProviders::Mangaoni => 20,
+                    MangaProviders::Leercapitulo => 20,
                 }),
             )
             .with_global_sender(global_event_tx.clone()),

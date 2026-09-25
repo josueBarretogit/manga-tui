@@ -60,6 +60,8 @@ pub struct CliArgs {
     pub config_dir: bool,
     #[arg(short = 'p', long = "provider")]
     pub manga_provider: Option<MangaProviders>,
+    #[arg(short = 'l', long = "lang")]
+    pub lang: Option<String>,
 }
 
 pub struct AnilistCredentialsProvided<'a> {
@@ -120,6 +122,7 @@ impl CliArgs {
             command: None,
             data_dir: false,
             manga_provider: Some(MangaProviders::default()),
+            lang: None,
         }
     }
 
@@ -233,6 +236,22 @@ impl CliArgs {
             exit(0)
         }
 
+        let preferred_lang_to_set = if let Some(cli_lang_str) = &self.lang {
+            match Languages::from_str_lenient(cli_lang_str) {
+                Some(l) => l,
+                None => {
+                    println!(
+                        "`{}` is not a valid language or ISO code. Run `{} lang --print` to list available languages",
+                        cli_lang_str,
+                        env!("CARGO_BIN_NAME")
+                    );
+                    exit(0);
+                },
+            }
+        } else {
+            MangaTuiConfig::get().default_language
+        };
+
         match &self.command {
             Some(command) => match command {
                 Commands::Lang { print, set } => {
@@ -243,14 +262,11 @@ impl CliArgs {
 
                     match set {
                         Some(lang) => {
-                            println!(
-                                "WARNING: deprecated function this will be part of the config file in future releases, and only applies to mangadex"
-                            );
-                            let try_lang = Languages::try_from_iso_code(lang.as_str());
+                            let try_lang = Languages::from_str_lenient(lang.as_str());
 
                             if try_lang.is_none() {
                                 println!(
-                                    "`{}` is not a valid ISO language code, run `{} lang --print` to list available languages and their ISO codes",
+                                    "`{}` is not a valid language or ISO code, run `{} lang --print` to list available languages and their ISO codes",
                                     lang,
                                     env!("CARGO_BIN_NAME")
                                 );
@@ -258,10 +274,10 @@ impl CliArgs {
                                 exit(0)
                             }
 
-                            PREFERRED_LANGUAGE.set(try_lang.unwrap()).unwrap();
+                            PREFERRED_LANGUAGE.set(try_lang.unwrap()).ok();
                         },
                         None => {
-                            PREFERRED_LANGUAGE.set(Languages::default()).unwrap();
+                            PREFERRED_LANGUAGE.set(preferred_lang_to_set).ok();
                         },
                     }
                     Ok(())
@@ -288,7 +304,7 @@ impl CliArgs {
                 },
             },
             None => {
-                PREFERRED_LANGUAGE.set(Languages::default()).unwrap();
+                PREFERRED_LANGUAGE.set(preferred_lang_to_set).ok();
                 Ok(())
             },
         }

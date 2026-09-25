@@ -23,7 +23,10 @@ use crate::global::PREFERRED_LANGUAGE;
 use crate::view::widgets::StatefulWidgetFrame;
 
 pub mod filters;
+pub mod inmanga;
+pub mod leercapitulo;
 pub mod mangadex;
+pub mod mangaoni;
 pub mod mangapill;
 pub mod weebcentral;
 
@@ -115,7 +118,7 @@ impl From<MangaStatus> for Span<'_> {
 }
 
 /// NOTE this is very mangadex-specifc since its the only provider that provides a lot of languages
-#[derive(Debug, Display, EnumIter, Default, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Display, EnumIter, Default, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum Languages {
     French,
     #[default]
@@ -157,6 +160,18 @@ pub enum Languages {
     Persian,
     // Some language that is missing from this `list`
     Unkown,
+}
+
+impl<'de> Deserialize<'de> for Languages {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Languages::from_str_lenient(&s).ok_or_else(|| {
+            serde::de::Error::custom(format!("Unknown language: '{s}'. Run 'manga-tui lang --print' for valid codes"))
+        })
+    }
 }
 
 impl From<FilterListItem> for Languages {
@@ -259,6 +274,30 @@ impl Languages {
 
     pub fn try_from_iso_code(code: &str) -> Option<Self> {
         Self::iter().find(|lang| lang.as_iso_code() == code)
+    }
+
+    pub fn from_str_lenient(s: &str) -> Option<Self> {
+        let trimmed = s.trim().to_lowercase();
+        if let Some(lang) = Self::try_from_iso_code(&trimmed) {
+            return Some(lang);
+        }
+        match trimmed.as_str() {
+            "spanish" | "español" | "espanol" | "castellano" => return Some(Self::Spanish),
+            "spanish (latam)" | "spanish (la)" | "spanish_la" | "spanishla" | "es-la" | "es_la" | "latam" | "latino" => {
+                return Some(Self::SpanishLa);
+            },
+            "english" | "inglés" | "ingles" => return Some(Self::English),
+            "french" | "français" | "francais" => return Some(Self::French),
+            "japanese" | "japonés" | "japones" => return Some(Self::Japanese),
+            "brazilian portuguese" | "pt-br" | "pt_br" => return Some(Self::BrazilianPortuguese),
+            "portuguese" | "português" | "portugues" => return Some(Self::Portuguese),
+            "german" | "alemán" | "aleman" => return Some(Self::German),
+            "italian" | "italiano" => return Some(Self::Italian),
+            "russian" | "ruso" => return Some(Self::Russian),
+            _ => {},
+        }
+        Self::iter()
+            .find(|lang| lang.as_human_readable().to_lowercase() == trimmed || format!("{lang:?}").to_lowercase() == trimmed)
     }
 }
 
@@ -666,6 +705,12 @@ pub enum MangaProviders {
     Weebcentral,
     #[strum(to_string = "mangapill")]
     Mangapill,
+    #[strum(to_string = "inmanga")]
+    Inmanga,
+    #[strum(to_string = "mangaoni")]
+    Mangaoni,
+    #[strum(to_string = "leercapitulo")]
+    Leercapitulo,
 }
 
 pub trait GetRawImage {
@@ -1480,5 +1525,29 @@ mod tests {
         assert_eq!(chapter_to_search_2, previous_2);
         assert_eq!(chapter_to_search_1, previous_1);
         assert!(not_found.is_none());
+    }
+
+    #[test]
+    fn languages_from_str_lenient_and_deserialize() {
+        assert_eq!(Languages::from_str_lenient("es"), Some(Languages::Spanish));
+        assert_eq!(Languages::from_str_lenient("ES"), Some(Languages::Spanish));
+        assert_eq!(Languages::from_str_lenient("spanish"), Some(Languages::Spanish));
+        assert_eq!(Languages::from_str_lenient("español"), Some(Languages::Spanish));
+        assert_eq!(Languages::from_str_lenient("castellano"), Some(Languages::Spanish));
+        assert_eq!(Languages::from_str_lenient("es-la"), Some(Languages::SpanishLa));
+        assert_eq!(Languages::from_str_lenient("latam"), Some(Languages::SpanishLa));
+        assert_eq!(Languages::from_str_lenient("spanish (latam)"), Some(Languages::SpanishLa));
+        assert_eq!(Languages::from_str_lenient("en"), Some(Languages::English));
+        assert_eq!(Languages::from_str_lenient("english"), Some(Languages::English));
+        assert_eq!(Languages::from_str_lenient("SpanishLa"), Some(Languages::SpanishLa));
+
+        let des_es: Languages = serde_json::from_str(r#""spanish""#).unwrap();
+        assert_eq!(des_es, Languages::Spanish);
+
+        let des_latam: Languages = serde_json::from_str(r#""es-la""#).unwrap();
+        assert_eq!(des_latam, Languages::SpanishLa);
+
+        let des_en: Languages = serde_json::from_str(r#""English""#).unwrap();
+        assert_eq!(des_en, Languages::English);
     }
 }

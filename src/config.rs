@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumIter};
 use toml::Table;
 
-use crate::backend::manga_provider::MangaProviders;
+use crate::backend::manga_provider::{Languages, MangaProviders};
 use crate::cli::Credentials;
 
 static CONFIG_FILE_NAME: &str = "config.toml";
@@ -245,15 +245,36 @@ impl ConfigParam for DefaultMangaProvider {
     }
 
     fn comments(&self) -> &'static str {
-        "Sets which manga provider will be used when running manga-tui, \n# you can override it by running manga-tui with the -p flag like this: manga-tui -p weebcentral"
+        "Sets which manga provider will be used when running manga-tui, \n# you can override it by running manga-tui with the -p flag like this: manga-tui -p inmanga"
     }
 
     fn values(&self) -> &'static str {
-        "mangadex, weebcentral, mangapill"
+        "mangadex, weebcentral, mangapill, inmanga, mangaoni, leercapitulo"
     }
 
     fn defaults(&self) -> &'static str {
         r#""mangadex""#
+    }
+}
+
+#[derive(Debug, Default)]
+struct DefaultLanguageParam;
+
+impl ConfigParam for DefaultLanguageParam {
+    fn name(&self) -> &'static str {
+        "default_language"
+    }
+
+    fn comments(&self) -> &'static str {
+        "Sets the default language for manga chapters\n# values can be ISO codes (e.g. \"es\", \"es-la\", \"en\") or language names (e.g. \"spanish\", \"english\")"
+    }
+
+    fn values(&self) -> &'static str {
+        "english, spanish, spanish (latam), french, german, etc. (run `manga-tui lang --print` for ISO codes)"
+    }
+
+    fn defaults(&self) -> &'static str {
+        r#""english""#
     }
 }
 
@@ -335,6 +356,7 @@ fn config_params() -> Vec<Box<dyn ConfigParam>> {
         Box::new(TrackReadingWhenDownload),
         Box::new(CheckNewUpdates),
         Box::new(DefaultMangaProvider),
+        Box::new(DefaultLanguageParam),
         Box::new(TrackReadingHistory),
     ]
 }
@@ -548,6 +570,9 @@ pub struct MangaTuiConfig {
     pub check_new_updates: bool,
     /// The default manga provider.
     pub default_manga_provider: MangaProviders,
+    /// The default language for manga chapters.
+    #[serde(default)]
+    pub default_language: Languages,
     /// Wether or not to use services like anilist to track reading history
     pub track_reading_history: bool,
     /// Anilist configuration.
@@ -585,6 +610,7 @@ impl Default for MangaTuiConfig {
             track_reading_when_download: false,
             track_reading_history: true,
             default_manga_provider: MangaProviders::default(),
+            default_language: Languages::default(),
             anilist: AnilistConfig::default(),
         }
     }

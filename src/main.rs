@@ -11,9 +11,18 @@ use std::time::Duration;
 use backend::cache::Cacher;
 use backend::cache::in_memory::InMemoryCache;
 use backend::manga_provider::MangaProviders;
+use backend::manga_provider::inmanga::InmangaProvider;
+use backend::manga_provider::inmanga::filter_state::{InmangaFilterState, InmangaFiltersProvider};
+use backend::manga_provider::inmanga::filter_widget::InmangaFilterWidget;
+use backend::manga_provider::leercapitulo::LeercapituloProvider;
+use backend::manga_provider::leercapitulo::filter_state::{LeercapituloFilterState, LeercapituloFiltersProvider};
+use backend::manga_provider::leercapitulo::filter_widget::LeercapituloFilterWidget;
 use backend::manga_provider::mangadex::filter_widget::MangadexFilterWidget;
 use backend::manga_provider::mangadex::filters::filter_provider::MangadexFilterProvider;
 use backend::manga_provider::mangadex::{API_URL_BASE, COVER_IMG_URL_BASE, MangadexClient};
+use backend::manga_provider::mangaoni::MangaoniProvider;
+use backend::manga_provider::mangaoni::filter_state::{MangaoniFilterState, MangaoniFiltersProvider};
+use backend::manga_provider::mangaoni::filter_widget::MangaoniFilterWidget;
 use backend::manga_provider::weebcentral::filter_state::{WeebcentralFilterState, WeebcentralFiltersProvider};
 use backend::manga_provider::weebcentral::filter_widget::WeebcentralFilterWidget;
 use backend::manga_provider::weebcentral::{WEEBCENTRAL_BASE_URL, WeebcentralProvider};
@@ -183,6 +192,42 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 anilist_client,
                 MangaPillFiltersProvider::new(backend::manga_provider::mangapill::filter_state::MangaPillFilterState::default()),
                 MangaPillFilterWidget::new(),
+            )
+            .await?;
+        },
+        MangaProviders::Inmanga => {
+            logger.inform("Using InManga as manga provider");
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            run_app(
+                ratatui::init(),
+                InmangaProvider::new(cache_provider),
+                anilist_client,
+                InmangaFiltersProvider::new(InmangaFilterState::default()),
+                InmangaFilterWidget::new(),
+            )
+            .await?;
+        },
+        MangaProviders::Mangaoni => {
+            logger.inform("Using MangaOni as manga provider");
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            run_app(
+                ratatui::init(),
+                MangaoniProvider::new(cache_provider),
+                anilist_client,
+                MangaoniFiltersProvider::new(MangaoniFilterState::default()),
+                MangaoniFilterWidget::new(),
+            )
+            .await?;
+        },
+        MangaProviders::Leercapitulo => {
+            logger.inform("Using LeerCapitulo as manga provider");
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            run_app(
+                ratatui::init(),
+                LeercapituloProvider::new(cache_provider),
+                anilist_client,
+                LeercapituloFiltersProvider::new(LeercapituloFilterState::default()),
+                LeercapituloFilterWidget::new(),
             )
             .await?;
         },
