@@ -22,6 +22,7 @@ pub struct MangaoniSearchItem {
     pub autor: Option<String>,
     pub url: Option<String>,
     pub img: Option<String>,
+    pub tipo: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -163,6 +164,8 @@ impl From<MangaoniMangaDetails> for Manga {
 
 /// Parses a MangaOni manga details page
 pub fn parse_manga_details(html: &str, slug: &str) -> MangaoniMangaDetails {
+    let pure_slug = slug.rsplit('/').next().unwrap_or(slug);
+
     // Title from <h1 ...> or og:title
     let title = if let Some(idx) = html.find("<h1") {
         let rest = &html[idx..];
@@ -170,10 +173,10 @@ pub fn parse_manga_details(html: &str, slug: &str) -> MangaoniMangaDetails {
             let h1_content = &rest[..end];
             scraper_clean_text(h1_content)
         } else {
-            slug.replace('-', " ")
+            pure_slug.replace('-', " ")
         }
     } else {
-        slug.replace('-', " ")
+        pure_slug.replace('-', " ")
     };
 
     // Cover from og:image or <img ... archivos/mangas/...>
@@ -200,9 +203,9 @@ pub fn parse_manga_details(html: &str, slug: &str) -> MangaoniMangaDetails {
         MangaStatus::Ongoing
     };
 
-    // Chapters from <div id="c_list"> with `/lector/<slug>/<chapter_id>/`
+    // Chapters from <div id="c_list"> with `/lector/<pure_slug>/<chapter_id>/`
     let mut chapters = Vec::new();
-    let entry_pattern = format!(r#"<a\s+href="https://manga-oni\.com/lector/{slug}/([^"/]+)/"[^>]*>([\s\S]*?)</a>"#);
+    let entry_pattern = format!(r#"<a\s+href="(?:https://manga-oni\.com)?/lector/{pure_slug}/([^"/]+)[^"]*"[^>]*>([\s\S]*?)</a>"#);
     if let Ok(entry_re) = regex::Regex::new(&entry_pattern) {
         let mut seen = std::collections::HashSet::new();
 
@@ -264,7 +267,7 @@ pub fn parse_manga_details(html: &str, slug: &str) -> MangaoniMangaDetails {
 pub fn parse_home_popular(html: &str) -> Vec<PopularManga> {
     let mut results = Vec::new();
     let re = regex::Regex::new(
-        r#"<div class="media-left">[\s\S]*?<img[^>]+src="([^"]+)"[\s\S]*?alt="([^"]+)"[\s\S]*?<h2 class="media-heading"><a href="https://manga-oni\.com/(?:manga|manhua|manhwa)/([^"/]+)/""#,
+        r#"<div class="media-left">[\s\S]*?<img[^>]+src="([^"]+)"[\s\S]*?alt="([^"]+)"[\s\S]*?<h2 class="media-heading"><a href="https://manga-oni\.com/((?:manga|manhua|manhwa|novela)/[^"/]+)/""#,
     );
 
     if let Ok(re) = re {
@@ -296,7 +299,7 @@ pub fn parse_home_popular(html: &str) -> Vec<PopularManga> {
 pub fn parse_home_recent(html: &str) -> Vec<RecentlyAddedManga> {
     let mut results = Vec::new();
     let re = regex::Regex::new(
-        r#"<a href="https://manga-oni\.com/(?:manga|manhua|manhwa)/([^"/]+)/"[\s\S]*?<img[^>]+data-src="([^"]+)"[\s\S]*?data-test="latest-update-name"[^>]*>([^<]+)</a>"#,
+        r#"<a href="https://manga-oni\.com/((?:manga|manhua|manhwa|novela)/[^"/]+)/"[\s\S]*?<img[^>]+data-src="([^"]+)"[\s\S]*?data-test="latest-update-name"[^>]*>([^<]+)</a>"#,
     );
 
     if let Ok(re) = re {
@@ -362,5 +365,60 @@ mod tests {
         assert_eq!(pages.len(), 1);
         assert_eq!(pages[0].url.as_str(), "https://oni.ntr-files.online/public/001.webp");
         assert_eq!(pages[0].extension, "webp");
+    }
+
+    #[test]
+    fn test_parse_manhwa_details() {
+        let html = r#"
+            <h1>Solo Leveling: Ragnarok</h1>
+            <meta property="og:image" content="https://oni.ntr-files.online/public/cover.jpg">
+            <div id="c_list">
+                <a href="https://manga-oni.com/lector/solo-leveling-ragnarok/746763/cascada/" class="">
+                    <div class="entry-title">
+                        <span class="timeago" data-num="68.5" datetime="2026-01-07 17:25:44"></span>
+                        <h3 class="entry-title-h2">Capítulo 68.5</h3>
+                    </div>
+                </a>
+                <a href="https://manga-oni.com/lector/solo-leveling-ragnarok/746762/cascada/" class="">
+                    <div class="entry-title">
+                        <span class="timeago" data-num="68" datetime="2026-01-07 17:25:37"></span>
+                        <h3 class="entry-title-h2">Capítulo 68</h3>
+                    </div>
+                </a>
+            </div>
+        "#;
+        let details = parse_manga_details(html, "manhwa/solo-leveling-ragnarok");
+        assert_eq!(details.title, "Solo Leveling: Ragnarok");
+        assert_eq!(details.chapters.len(), 2);
+        assert_eq!(details.chapters[0].id, "manhwa/solo-leveling-ragnarok|746763");
+        assert_eq!(details.chapters[0].number, 68.5);
+        assert_eq!(details.chapters[0].title, "Capítulo 68.5");
+        assert_eq!(details.chapters[1].id, "manhwa/solo-leveling-ragnarok|746762");
+        assert_eq!(details.chapters[1].number, 68.0);
+    }
+
+    #[test]
+    fn test_parse_home_popular_and_recent() {
+        let popular_html = r#"
+            <div class="media-left">
+                <img src="https://example.com/cover.jpg" alt="Solo Leveling">
+                <h2 class="media-heading"><a href="https://manga-oni.com/manhwa/solo-leveling-alt/">Solo Leveling</a></h2>
+            </div>
+        "#;
+        let popular = parse_home_popular(popular_html);
+        assert_eq!(popular.len(), 1);
+        assert_eq!(popular[0].id, "manhwa/solo-leveling-alt");
+
+        let recent_html = r#"
+            <a href="https://manga-oni.com/manhwa/terminamos-en-otono/">
+                <img data-src="https://example.com/cover2.jpg">
+            </a>
+            <div>
+                <a href="https://manga-oni.com/manhwa/terminamos-en-otono/" data-test="latest-update-name">Terminamos en Otoño</a>
+            </div>
+        "#;
+        let recent = parse_home_recent(recent_html);
+        assert_eq!(recent.len(), 1);
+        assert_eq!(recent[0].id, "manhwa/terminamos-en-otono");
     }
 }
