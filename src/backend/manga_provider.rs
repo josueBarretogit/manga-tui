@@ -22,6 +22,7 @@ use crate::config::ImageQuality;
 use crate::global::PREFERRED_LANGUAGE;
 use crate::view::widgets::StatefulWidgetFrame;
 
+pub mod comizy;
 pub mod filters;
 pub mod inmanga;
 pub mod leercapitulo;
@@ -711,6 +712,8 @@ pub enum MangaProviders {
     Mangaoni,
     #[strum(to_string = "leercapitulo")]
     Leercapitulo,
+    #[strum(to_string = "comizy")]
+    Comizy,
 }
 
 pub trait GetRawImage {

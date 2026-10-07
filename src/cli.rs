@@ -9,12 +9,12 @@ use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 use strum_macros::Display;
 
-use crate::backend::APP_DATA_DIR;
 use crate::backend::error_log::write_to_error_log;
 use crate::backend::manga_provider::{Languages, MangaProviders};
 use crate::backend::secrets::SecretStorage;
 use crate::backend::secrets::keyring::KeyringStorage;
 use crate::backend::tracker::anilist::{self, BASE_ANILIST_API_URL};
+use crate::backend::{APP_DATA_DIR, AppDirectories};
 use crate::config::{MangaTuiConfig, get_config_directory_path, read_config_file};
 use crate::global::PREFERRED_LANGUAGE;
 use crate::logger::{ILogger, Logger};

@@ -11,6 +11,9 @@ use std::time::Duration;
 use backend::cache::Cacher;
 use backend::cache::in_memory::InMemoryCache;
 use backend::manga_provider::MangaProviders;
+use backend::manga_provider::comizy::ComizyProvider;
+use backend::manga_provider::comizy::filter_state::{ComizyFilterState, ComizyFiltersProvider};
+use backend::manga_provider::comizy::filter_widget::ComizyFilterWidget;
 use backend::manga_provider::inmanga::InmangaProvider;
 use backend::manga_provider::inmanga::filter_state::{InmangaFilterState, InmangaFiltersProvider};
 use backend::manga_provider::inmanga::filter_widget::InmangaFilterWidget;
@@ -228,6 +231,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 anilist_client,
                 LeercapituloFiltersProvider::new(LeercapituloFilterState::default()),
                 LeercapituloFilterWidget::new(),
+            )
+            .await?;
+        },
+        MangaProviders::Comizy => {
+            logger.inform("Using Comizy as manga provider");
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            run_app(
+                ratatui::init(),
+                ComizyProvider::new(cache_provider),
+                anilist_client,
+                ComizyFiltersProvider::new(ComizyFilterState::default()),
+                ComizyFilterWidget::new(),
             )
             .await?;
         },
