@@ -222,9 +222,19 @@ impl From<InmangaMangaDetails> for Manga {
     }
 }
 
+fn de_nested_json<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::de::DeserializeOwned,
+{
+    let s = String::deserialize(deserializer)?;
+    serde_json::from_str(&s).map_err(serde::de::Error::custom)
+}
+
 #[derive(Deserialize)]
 pub struct RawInmangaChaptersResponse {
-    pub data: String,
+    #[serde(deserialize_with = "de_nested_json")]
+    pub data: InnerInmangaChaptersResult,
 }
 
 #[derive(Deserialize)]
@@ -401,9 +411,8 @@ mod tests {
     fn test_parse_chapters_json() {
         let json = r#"{"data":"{\"result\":[{\"PagesCount\":20,\"Number\":146.00,\"RegistrationDate\":\"2025-10-21T09:04:35.8940981\",\"Identification\":\"4085F005-C102-46D1-8A77-56F544CF4804\",\"FriendlyChapterNumber\":\"146\",\"Description\":\"\"}]}"}"#;
         let raw: RawInmangaChaptersResponse = serde_json::from_str(json).unwrap();
-        let inner: InnerInmangaChaptersResult = serde_json::from_str(&raw.data).unwrap();
-        assert_eq!(inner.result.len(), 1);
-        let chap = inner.result[0].to_chapter("test-manga-id");
+        assert_eq!(raw.data.result.len(), 1);
+        let chap = raw.data.result[0].to_chapter("test-manga-id");
         assert_eq!(chap.id, "4085F005-C102-46D1-8A77-56F544CF4804");
         assert_eq!(chap.chapter_number, "146");
         assert_eq!(chap.title, "Capítulo 146");
