@@ -76,8 +76,7 @@ impl InmangaProvider {
         match cache {
             Some(cached) => {
                 let raw: RawInmangaChaptersResponse = serde_json::from_slice(&cached.data)?;
-                let inner: InnerInmangaChaptersResult = serde_json::from_str(&raw.data)?;
-                Ok(inner.result)
+                Ok(raw.data.result)
             },
             None => {
                 let response = self.client.get(&url).header(REFERER, INMANGA_BASE_URL).send().await?;
@@ -97,8 +96,7 @@ impl InmangaProvider {
                     .ok();
 
                 let raw: RawInmangaChaptersResponse = serde_json::from_slice(&bytes)?;
-                let inner: InnerInmangaChaptersResult = serde_json::from_str(&raw.data)?;
-                Ok(inner.result)
+                Ok(raw.data.result)
             },
         }
     }

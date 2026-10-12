@@ -408,17 +408,18 @@ impl SearchPageProvider for MangaoniProvider {
         _filters: Self::InnerState,
         _pagination: Pagination,
     ) -> Result<GetMangasResponse, Box<dyn Error>> {
-        let query = search_term.map(|t| t.to_string()).unwrap_or_default();
-        let trimmed = query.trim();
-        if trimmed.is_empty() {
-            return Ok(GetMangasResponse {
-                mangas: Vec::new(),
-                total_mangas: 0,
-                next_page: false,
-            });
-        }
+        let term = match search_term {
+            Some(term) => term,
+            None => {
+                return Ok(GetMangasResponse {
+                    mangas: Vec::new(),
+                    total_mangas: 0,
+                    next_page: false,
+                });
+            },
+        };
 
-        let cache_key = format!("mangaoni_search_{trimmed}");
+        let cache_key = format!("mangaoni_search_{}", term.get());
         let cache = self.cache_provider.get(&cache_key)?;
 
         let search_response: MangaoniSearchResponse = match cache {
@@ -434,7 +435,7 @@ impl SearchPageProvider for MangaoniProvider {
                     .header("X-CSRF-TOKEN", &csrf_token)
                     .header("X-Requested-With", "XMLHttpRequest")
                     .header(CONTENT_TYPE, "application/x-www-form-urlencoded; charset=UTF-8")
-                    .form(&[("buscar", trimmed), ("_token", &csrf_token)])
+                    .form(&[("buscar", term.get()), ("_token", &csrf_token)])
                     .send()
                     .await?;
 
@@ -533,7 +534,7 @@ impl MangaProvider for MangaoniProvider {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::cache::in_memory::InMemoryCache;
+    use crate::backend::cache::mock::EmptyCache;
 
     #[test]
     fn test_mangaoni_chapter_navigation_consecutive() {
@@ -591,8 +592,7 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn test_mangaoni_live_search() {
-        let cache = InMemoryCache::init(10);
-        let provider = MangaoniProvider::new(cache);
+        let provider = MangaoniProvider::new(EmptyCache::new_arc());
         let result = provider
             .search_mangas(SearchTerm::trimmed("one piece"), MangaoniFilterState::default(), Pagination::from_first_page(30))
             .await;
@@ -605,8 +605,7 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn test_mangaoni_live_chapters() {
-        let cache = InMemoryCache::init(10);
-        let provider = MangaoniProvider::new(cache);
+        let provider = MangaoniProvider::new(EmptyCache::new_arc());
         let chapters = provider.get_all_chapters("one-piece", Languages::Spanish).await;
         assert!(chapters.is_ok());
         let list = chapters.unwrap();
@@ -629,8 +628,7 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn test_mangaoni_live_manhwa() {
-        let cache = InMemoryCache::init(10);
-        let provider = MangaoniProvider::new(cache);
+        let provider = MangaoniProvider::new(EmptyCache::new_arc());
         // Test fetching details with bare slug (fallback)
         let manga = provider.get_manga_by_id("solo-leveling-ragnarok").await;
         assert!(manga.is_ok(), "failed to fetch manhwa by bare slug: {:?}", manga.err());

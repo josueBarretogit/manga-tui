@@ -58,36 +58,12 @@ impl MangaoniChapterItem {
     }
 }
 
-/// Simple, robust pure-Rust Base64 decoder
+/// Decodes Base64 string using the `base64` crate
 pub fn decode_base64(input: &str) -> Option<Vec<u8>> {
-    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut map = [0xffu8; 256];
-    for (i, &b) in TABLE.iter().enumerate() {
-        map[b as usize] = i as u8;
-    }
-
-    let trimmed = input.trim();
-    let mut buf = 0u32;
-    let mut bits = 0u32;
-    let mut output = Vec::with_capacity((trimmed.len() * 3) / 4);
-
-    for &b in trimmed.as_bytes() {
-        if b == b'=' {
-            break;
-        }
-        let val = map[b as usize];
-        if val == 0xff {
-            continue;
-        }
-        buf = (buf << 6) | (val as u32);
-        bits += 6;
-        if bits >= 8 {
-            bits -= 8;
-            output.push(((buf >> bits) & 0xff) as u8);
-        }
-    }
-
-    Some(output)
+    use base64::Engine;
+    base64::engine::general_purpose::STANDARD
+        .decode(input.trim())
+        .ok()
 }
 
 /// Parses the `var unicap = '...';` variable in reader HTML into chapter page URLs.
