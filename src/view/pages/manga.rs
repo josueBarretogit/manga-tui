@@ -371,6 +371,9 @@ where
                 chapter_instructions.push(" Download all ".into());
                 chapter_instructions.push(Span::raw("<a>").style(*INSTRUCTIONS_STYLE));
 
+                chapter_instructions.push(" Queue ".into());
+                chapter_instructions.push(Span::raw("<D>").style(*INSTRUCTIONS_STYLE));
+
                 chapter_instructions.push(" Favorite ".into());
                 if self.is_favorite {
                     chapter_instructions.push("<f> [★]".bold().yellow());
@@ -684,17 +687,6 @@ where
     }
 
     fn confirm_download_selected_chapters(&mut self) {
-        let total_selected = self.selected_chapters.len() as f64;
-        self.start_download_all_chapters(total_selected);
-
-        let manga_id = self.manga.id.clone();
-        let manga_id_safe_for_download = self.manga.id_safe_for_download.clone();
-        let manga_title = self.manga.title.clone();
-        let lang = self.get_current_selected_language();
-        let tx = self.local_event_tx.clone();
-        let client = Arc::clone(&self.manga_provider);
-        let config = MangaTuiConfig::get();
-
         let mut chapters_to_download: Vec<Chapter> = self.selected_chapters.values().cloned().collect();
         chapters_to_download.sort_by(|a, b| {
             let num_a = a.chapter_number.parse::<f64>().unwrap_or(0.0);
@@ -702,16 +694,43 @@ where
             num_a.partial_cmp(&num_b).unwrap_or(std::cmp::Ordering::Equal)
         });
 
-        self.tasks.spawn(download_selected_chapters(DownloadSelectedChapters {
-            client,
-            manga_id,
-            manga_id_safe_for_download,
-            manga_title,
-            lang,
-            chapters: chapters_to_download,
-            config: config.clone(),
-            tx,
-        }));
+        if let Some(tx) = &self.global_event_tx {
+            tx.send(Events::EnqueueDownloadBatch(crate::backend::download_queue::EnqueueDownloadBatch {
+                manga_id: self.manga.id.clone(),
+                manga_id_safe_for_download: self.manga.id_safe_for_download.clone(),
+                manga_title: self.manga.title.clone(),
+                manga_cover_url: Some(self.manga.cover_img_url.clone()),
+                lang: self.get_current_selected_language(),
+                chapters: chapters_to_download,
+                provider: self.manga_provider.name(),
+            }))
+            .ok();
+            self.clear_selected_chapters();
+            self.download_all_chapters_state.reset();
+            self.state = PageState::DisplayingChapters;
+        } else {
+            let total_selected = self.selected_chapters.len() as f64;
+            self.start_download_all_chapters(total_selected);
+
+            let manga_id = self.manga.id.clone();
+            let manga_id_safe_for_download = self.manga.id_safe_for_download.clone();
+            let manga_title = self.manga.title.clone();
+            let lang = self.get_current_selected_language();
+            let tx = self.local_event_tx.clone();
+            let client = Arc::clone(&self.manga_provider);
+            let config = MangaTuiConfig::get();
+
+            self.tasks.spawn(download_selected_chapters(DownloadSelectedChapters {
+                client,
+                manga_id,
+                manga_id_safe_for_download,
+                manga_title,
+                lang,
+                chapters: chapters_to_download,
+                config: config.clone(),
+                tx,
+            }));
+        }
     }
 
     fn scroll_language_down(&mut self) {
@@ -924,18 +943,39 @@ where
         let manga_id = self.manga.id.clone();
         let id_safe_for_download = self.manga.id_safe_for_download.clone();
         let manga_title = self.manga.title.clone();
-        let tx = self.local_event_tx.clone();
-        let client = Arc::clone(&self.manga_provider);
-        let manga_tracker = self.manga_tracker.clone();
+        let manga_cover_url = Some(self.manga.cover_img_url.clone());
+        let lang = self.get_current_selected_language();
+        let provider_name = self.manga_provider.name();
 
-        self.state = PageState::DownloadingChapters;
-        if let Some(item) = self.get_current_selected_chapter_mut() {
+        let chapter = {
+            let Some(item) = self.get_current_selected_chapter_mut() else {
+                return;
+            };
             if item.download_loading_state.is_some() {
                 return;
             }
             item.set_normal_state();
             item.download_loading_state = Some(0.001);
+            item.chapter.clone()
+        };
+
+        if let Some(tx) = &self.global_event_tx {
+            tx.send(Events::EnqueueDownloadBatch(crate::backend::download_queue::EnqueueDownloadBatch {
+                manga_id,
+                manga_id_safe_for_download: id_safe_for_download,
+                manga_title,
+                manga_cover_url,
+                lang,
+                chapters: vec![chapter],
+                provider: provider_name,
+            }))
+            .ok();
+        } else {
+            let tx = self.local_event_tx.clone();
+            let client = Arc::clone(&self.manga_provider);
+            let manga_tracker = self.manga_tracker.clone();
             let config = MangaTuiConfig::get();
+            self.state = PageState::DownloadingChapters;
 
             tokio::spawn(download_single_chapter(DownloadSingleChapter {
                 client,
@@ -943,18 +983,19 @@ where
                 manga_id,
                 manga_id_safe_for_download: id_safe_for_download,
                 manga_title,
-                chapter: item.chapter.clone(),
+                chapter,
                 config: config.clone(),
                 tx,
             }));
         }
     }
 
-    fn set_chapter_finished_downloading(&mut self, chapter_id: String) {
+    pub fn set_chapter_finished_downloading(&mut self, chapter_id: &str) {
         if let Some(chapters) = self.chapters.as_mut()
             && let Some(chap) = chapters.widget.chapters.iter_mut().find(|chap| chap.chapter.id == chapter_id)
         {
             chap.download_loading_state = None;
+            chap.is_downloaded = true;
             self.local_event_tx.send(MangaPageEvents::CheckChapterStatus).ok();
         }
     }
@@ -1049,23 +1090,53 @@ where
     }
 
     fn confirm_download_all_chapters(&mut self) {
-        self.download_all_chapters_state.fetch_chapters_data();
-        let manga_id = self.manga.id.clone();
-        let manga_id_safe_for_download = self.manga.id_safe_for_download.clone();
-        let manga_title = self.manga.title.clone();
-        let lang = self.get_current_selected_language();
-        let tx = self.local_event_tx.clone();
-        let client = Arc::clone(&self.manga_provider);
-        let config = MangaTuiConfig::get();
-        self.tasks.spawn(download_all_chapters(DownloadAllChapters {
-            client,
-            manga_id,
-            manga_id_safe_for_download,
-            manga_title,
-            lang,
-            config: config.clone(),
-            tx,
-        }));
+        if let Some(global_tx) = self.global_event_tx.clone() {
+            let manga_id = self.manga.id.clone();
+            let manga_id_safe_for_download = self.manga.id_safe_for_download.clone();
+            let manga_title = self.manga.title.clone();
+            let manga_cover_url = Some(self.manga.cover_img_url.clone());
+            let lang = self.get_current_selected_language();
+            let client = Arc::clone(&self.manga_provider);
+            let provider_name = self.manga_provider.name();
+
+            tokio::spawn(async move {
+                if let Ok(chapters) = client.get_all_chapters(&manga_id, lang).await {
+                    global_tx
+                        .send(Events::EnqueueDownloadBatch(crate::backend::download_queue::EnqueueDownloadBatch {
+                            manga_id,
+                            manga_id_safe_for_download,
+                            manga_title,
+                            manga_cover_url,
+                            lang,
+                            chapters,
+                            provider: provider_name,
+                        }))
+                        .ok();
+                }
+            });
+
+            self.clear_selected_chapters();
+            self.download_all_chapters_state.reset();
+            self.state = PageState::DisplayingChapters;
+        } else {
+            self.download_all_chapters_state.fetch_chapters_data();
+            let manga_id = self.manga.id.clone();
+            let manga_id_safe_for_download = self.manga.id_safe_for_download.clone();
+            let manga_title = self.manga.title.clone();
+            let lang = self.get_current_selected_language();
+            let tx = self.local_event_tx.clone();
+            let client = Arc::clone(&self.manga_provider);
+            let config = MangaTuiConfig::get();
+            self.tasks.spawn(download_all_chapters(DownloadAllChapters {
+                client,
+                manga_id,
+                manga_id_safe_for_download,
+                manga_title,
+                lang,
+                config: config.clone(),
+                tx,
+            }));
+        }
     }
 
     fn cancel_download_all_chapters(&mut self) {
@@ -1242,7 +1313,7 @@ where
                     self.set_download_progress_for_chapter(progress, id_chapter)
                 },
                 MangaPageEvents::SaveChapterDownloadStatus(id_chapter, title) => self.save_download_status(id_chapter, title),
-                MangaPageEvents::ChapterFinishedDownloading(id_chapter) => self.set_chapter_finished_downloading(id_chapter),
+                MangaPageEvents::ChapterFinishedDownloading(id_chapter) => self.set_chapter_finished_downloading(&id_chapter),
                 MangaPageEvents::SearchChapters => self.search_chapters(),
                 MangaPageEvents::LoadChapters(response) => self.load_chapters(response),
                 MangaPageEvents::CheckChapterStatus => {

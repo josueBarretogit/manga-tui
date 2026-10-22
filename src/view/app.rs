@@ -20,6 +20,7 @@ use self::reader::MangaReader;
 use self::search::{InputMode, SearchPage};
 use super::widgets::Component;
 use crate::backend::database::Database;
+use crate::backend::download_queue::{DownloadQueueCommand, DownloadQueueProgress, DownloadQueueWorker, EnqueueDownloadBatch};
 use crate::backend::error_log::write_to_error_log;
 use crate::backend::manga_provider::{
     ChapterToRead, FeedPageProvider, LatestChapter, ListOfChapters, Manga, MangaProvider, MangaProviders, MangaStatus, Pagination,
@@ -30,7 +31,7 @@ use crate::config::MangaTuiConfig;
 use crate::global::INSTRUCTIONS_STYLE;
 use crate::view::pages::*;
 use crate::view::tasks::manga::download_new_chapters;
-use crate::view::widgets::{ErrorModal, NewChapterItem, NewChaptersModal, NewChaptersModalState};
+use crate::view::widgets::{DownloadQueueModal, ErrorModal, NewChapterItem, NewChaptersModal, NewChaptersModalState};
 
 const NEW_CHAPTER_CHECK_INTERVAL: Duration = Duration::from_secs(10 * 60);
 
@@ -82,6 +83,10 @@ where
     error_message: Option<String>,
     new_chapters_state: Option<NewChaptersModalState>,
     favorite_status_toast: Option<(String, Instant)>,
+    pub download_queue_tx: UnboundedSender<DownloadQueueCommand>,
+    pub download_queue_progress: Option<DownloadQueueProgress>,
+    pub queue_status_toast: Option<(String, Instant)>,
+    pub is_queue_modal_open: bool,
     last_new_chapter_check: Instant,
     // The picker is what decides how big a image needs to be rendered depending on the user's
     // terminal font size and the graphics it supports
@@ -117,6 +122,8 @@ where
             self.render_modal_error_message(area, frame.buffer_mut(), &message);
         } else if let Some(state) = self.new_chapters_state.as_ref() {
             NewChaptersModal::new(state).render(area, frame.buffer_mut());
+        } else if self.is_queue_modal_open {
+            DownloadQueueModal::new(self.download_queue_progress.as_ref()).render(area, frame.buffer_mut());
         }
     }
 
@@ -169,6 +176,29 @@ where
             },
             Events::AutoDownloadedFavorites(count) => {
                 self.favorite_status_toast = Some((format!("★ Auto-downloaded {count} new favorite chapter(s)"), Instant::now()));
+            },
+            Events::EnqueueDownloadBatch(batch) => {
+                let count = batch.chapters.len();
+                let title = batch.manga_title.clone();
+                self.download_queue_tx.send(DownloadQueueCommand::Enqueue(batch)).ok();
+                self.queue_status_toast = Some((format!("+ Queued {count} chapter(s) of {title}"), Instant::now()));
+            },
+            Events::DownloadQueueProgress(progress) => {
+                self.download_queue_progress = Some(progress);
+            },
+            Events::DownloadQueueFinished(total) => {
+                self.download_queue_progress = None;
+                self.queue_status_toast = Some((format!("✓ Finished downloading {total} chapter(s)"), Instant::now()));
+            },
+            Events::DownloadQueueChapterFinished {
+                manga_id,
+                chapter_id,
+            } => {
+                if let Some(page) = &mut self.manga_page {
+                    if page.manga.id == manga_id {
+                        page.set_chapter_finished_downloading(&chapter_id);
+                    }
+                }
             },
 
             Events::GoBackMangaPage => {
@@ -243,13 +273,24 @@ where
             manga_reader_page: None,
             global_action_tx,
             global_action_rx,
-            global_event_tx,
+            global_event_tx: global_event_tx.clone(),
             global_event_rx,
             manga_tracker,
             state: AppState::Runnning,
             error_message: None,
             new_chapters_state: None,
             favorite_status_toast: None,
+            download_queue_tx: {
+                let (queue_tx, queue_rx) = tokio::sync::mpsc::unbounded_channel();
+                let worker = DownloadQueueWorker::new(Arc::clone(&provider), global_event_tx.clone(), queue_rx);
+                if let Ok(handle) = tokio::runtime::Handle::try_current() {
+                    handle.spawn(worker.run());
+                }
+                queue_tx
+            },
+            download_queue_progress: None,
+            queue_status_toast: None,
+            is_queue_modal_open: false,
             last_new_chapter_check: Instant::now(),
             manga_provider: Arc::clone(&provider),
             top_tabs_area: Rect::default(),
@@ -384,6 +425,31 @@ where
             .padding("", "")
             .divider(" | ")
             .render(area, buf);
+
+        if let Some(progress) = &self.download_queue_progress {
+            if progress.is_downloading {
+                let short_title: String = progress.current_manga_title.chars().take(16).collect();
+                let text = format!(
+                    " ⬇ [{}/{}] {} Ch.{} ({:.0}%) [<D>] ",
+                    progress.completed_in_batch + 1,
+                    progress.total_in_batch,
+                    short_title,
+                    progress.current_chapter_number,
+                    progress.current_page_percentage
+                );
+                let badge = Line::from(vec![Span::styled(text, Style::default().fg(Color::Cyan).bold())]);
+                Paragraph::new(badge).alignment(Alignment::Right).render(area, buf);
+                return;
+            }
+        }
+
+        if let Some((msg, time)) = &self.queue_status_toast {
+            if time.elapsed().as_secs() < 8 {
+                let toast = Line::from(vec![Span::styled(format!(" {msg} "), Style::default().fg(Color::Green).bold())]);
+                Paragraph::new(toast).alignment(Alignment::Right).render(area, buf);
+                return;
+            }
+        }
 
         if let Some((msg, time)) = &self.favorite_status_toast {
             if time.elapsed().as_secs() < 12 {
@@ -576,10 +642,29 @@ where
     }
 
     fn handle_key_events(&mut self, key_event: KeyEvent) {
+        if self.is_queue_modal_open {
+            match key_event.code {
+                KeyCode::Char('c') => {
+                    self.download_queue_tx.send(DownloadQueueCommand::CancelAll).ok();
+                    self.download_queue_progress = None;
+                    self.is_queue_modal_open = false;
+                    self.queue_status_toast = Some(("Downloads cancelled".to_string(), Instant::now()));
+                },
+                KeyCode::Char('q') | KeyCode::Esc | KeyCode::Char('D') => {
+                    self.is_queue_modal_open = false;
+                },
+                KeyCode::Char('c') if key_event.modifiers == KeyModifiers::CONTROL => self.quit(),
+                _ => {},
+            }
+            return;
+        }
+
         if self.is_displaying_modal() {
             return;
         }
-        if self.manga_page.as_ref().is_some_and(|page| page.is_downloading_all_chapters()) {
+
+        if key_event.code == KeyCode::Char('D') && self.current_tab != SelectedPage::ReaderTab {
+            self.is_queue_modal_open = true;
             return;
         }
 
@@ -955,20 +1040,18 @@ mod tests {
     }
 
     #[test]
-    fn doesnt_listen_to_key_events_if_it_is_downloading_all_chapters() {
+    fn can_navigate_tabs_while_downloading_all_chapters() {
         let mut app: App<MockMangaPageProvider, TrackerTest> =
             App::new(MockMangaPageProvider::new(), None, None, MockFiltersHandler::new(MockFilterState {}), MockWidgetFilter {})
                 .with_manga_page();
 
         app.manga_page.as_mut().unwrap().start_downloading_all_chapters();
 
-        press_key(&mut app, KeyCode::Char('o'));
         press_key(&mut app, KeyCode::Char('i'));
-        press_key(&mut app, KeyCode::F(2));
 
         tick(&mut app);
 
-        assert_eq!(app.current_tab, SelectedPage::Home)
+        assert_eq!(app.current_tab, SelectedPage::Search)
     }
 
     #[test]

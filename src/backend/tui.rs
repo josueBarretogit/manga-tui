@@ -43,6 +43,13 @@ pub enum Events {
     NewChaptersDownloadFinished(Result<usize, String>),
     AutoDownloadedFavorites(usize),
     ReadChapter(ChapterToRead, MangaToRead),
+    EnqueueDownloadBatch(super::download_queue::EnqueueDownloadBatch),
+    DownloadQueueProgress(super::download_queue::DownloadQueueProgress),
+    DownloadQueueFinished(usize),
+    DownloadQueueChapterFinished {
+        manga_id: String,
+        chapter_id: String,
+    },
 }
 
 #[cfg(unix)]

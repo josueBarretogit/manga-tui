@@ -304,6 +304,87 @@ impl<'a> Widget for NewChaptersModal<'a> {
     }
 }
 
+#[derive(Debug)]
+pub struct DownloadQueueModal<'a> {
+    progress: Option<&'a crate::backend::download_queue::DownloadQueueProgress>,
+}
+
+impl<'a> DownloadQueueModal<'a> {
+    pub fn new(progress: Option<&'a crate::backend::download_queue::DownloadQueueProgress>) -> Self {
+        Self { progress }
+    }
+}
+
+impl<'a> Widget for DownloadQueueModal<'a> {
+    fn render(self, area: Rect, buf: &mut ratatui::prelude::Buffer) {
+        let area = centered_rect(area, 60, 40);
+        Clear.render(area, buf);
+
+        let block = Block::bordered()
+            .title(Line::from(vec![Span::styled(
+                " ⬇ Download Queue ",
+                Style::default().add_modifier(Modifier::BOLD).fg(Color::Cyan),
+            )]))
+            .title_bottom(Line::from(vec![Span::styled(
+                " <c> Cancel All | <q> or <Esc> or <D> Close ",
+                Style::default().fg(Color::Yellow),
+            )]));
+
+        let inner = block.inner(area);
+        block.render(area, buf);
+
+        if inner.height < 3 || inner.width < 10 {
+            return;
+        }
+
+        let mut lines = Vec::new();
+        match self.progress {
+            Some(p) if p.is_downloading => {
+                lines.push(Line::from(vec![
+                    Span::styled("Currently downloading: ", Style::default().add_modifier(Modifier::BOLD)),
+                    Span::styled(&p.current_manga_title, Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+                ]));
+                lines.push(Line::from(vec![Span::raw(format!(
+                    "Chapter: {}  |  Page progress: {:.0}%",
+                    p.current_chapter_number, p.current_page_percentage
+                ))]));
+                lines.push(Line::from(vec![Span::styled(
+                    format!(
+                        "Batch: {} of {} completed ({} remaining in queue)",
+                        p.completed_in_batch, p.total_in_batch, p.remaining_items
+                    ),
+                    Style::default().fg(Color::Cyan),
+                )]));
+                lines.push(Line::raw(""));
+
+                // Gauge representation
+                let gauge_width = (inner.width.saturating_sub(10)) as usize;
+                let filled = ((p.current_page_percentage / 100.0) * gauge_width as f64).round() as usize;
+                let filled = filled.min(gauge_width);
+                let empty = gauge_width.saturating_sub(filled);
+                let bar = format!("[{}{}] {:.0}%", "█".repeat(filled), "░".repeat(empty), p.current_page_percentage);
+                lines.push(Line::from(vec![Span::styled(bar, Style::default().fg(Color::Cyan))]));
+            },
+            Some(p) if p.remaining_items > 0 => {
+                lines.push(Line::from(vec![Span::styled(
+                    format!("Queue waiting ({} items remaining)", p.remaining_items),
+                    Style::default().fg(Color::Yellow),
+                )]));
+            },
+            _ => {
+                lines.push(Line::raw("No active downloads in queue."));
+                lines.push(Line::raw(""));
+                lines.push(Line::from(vec![
+                    Span::styled("Tip: ", Style::default().add_modifier(Modifier::BOLD)),
+                    Span::raw("Select chapters with <Space> and press <d> to add them to the queue!"),
+                ]));
+            },
+        }
+
+        Paragraph::new(lines).render(inner, buf);
+    }
+}
+
 #[cfg(test)]
 // Use in testing
 pub fn press_key<T>(page: &mut dyn Component<Actions = T>, key: KeyCode) {

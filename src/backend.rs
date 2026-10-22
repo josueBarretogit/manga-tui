@@ -12,6 +12,7 @@ use crate::logger::ILogger;
 
 pub mod cache;
 pub mod database;
+pub mod download_queue;
 pub mod error_log;
 pub mod html_parser;
 pub mod manga_downloader;
