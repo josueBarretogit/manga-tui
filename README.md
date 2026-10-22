@@ -65,6 +65,8 @@ so if any one goes down you can still use manga-tui
 
 <https://github.com/user-attachments/assets/26ad493f-633c-41fc-9d09-49b316118923>
 
+- Get an in-app prompt for new chapters of downloaded, ongoing manga. Checks run at startup and every 10 minutes while the app is open; press `<y>` to download or `<q>` to dismiss.
+
 ### Join the [discord](https://discord.gg/SeqsWUCpVx) server for further help, feature requests or to chat with contributors
 
 ## Dependencies

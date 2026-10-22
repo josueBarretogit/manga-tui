@@ -58,6 +58,8 @@
 //!     provider: MangaProviders::Mangadx,
 //! })?;
 //! ```
+use std::collections::BTreeMap;
+
 use chrono::Utc;
 use manga_tui::SearchTerm;
 use rusqlite::types::ToSqlOutput;
@@ -149,6 +151,13 @@ pub struct MangaHistoryResponse {
     pub mangas: Vec<MangaHistory>,
     pub page: u32,
     pub total_items: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DownloadedManga {
+    pub id: String,
+    pub title: String,
+    pub downloaded_chapter_ids: Vec<String>,
 }
 
 /// Arguments for retrieving manga history with filtering and pagination.
@@ -252,6 +261,16 @@ impl<'a> Database<'a> {
         self.connection.execute(
             "CREATE TABLE if not exists app_version (
                 version TEXT PRIMARY KEY
+             )",
+            (),
+        )?;
+
+        self.connection.execute(
+            "CREATE TABLE if not exists chapter_notification_dismissals (
+                manga_id TEXT NOT NULL,
+                provider TEXT NOT NULL,
+                chapter_id TEXT NOT NULL,
+                PRIMARY KEY (manga_id, provider, chapter_id)
              )",
             (),
         )?;
@@ -741,6 +760,63 @@ impl<'a> Database<'a> {
         Ok(chapter_ids)
     }
 
+    pub fn get_downloaded_mangas(&self, provider: MangaProviders) -> rusqlite::Result<Vec<DownloadedManga>> {
+        let mut statement = self.connection.prepare(
+            "SELECT mangas.id, mangas.title, chapters.id
+             FROM mangas
+             INNER JOIN chapters ON chapters.manga_id = mangas.id
+             WHERE mangas.manga_provider = ?1 AND chapters.is_downloaded = 1
+             ORDER BY mangas.id",
+        )?;
+
+        let rows = statement.query_map(params![provider.to_string()], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?))
+        })?;
+        let mut mangas = BTreeMap::<String, DownloadedManga>::new();
+
+        for row in rows {
+            let (id, title, chapter_id) = row?;
+            mangas
+                .entry(id.clone())
+                .or_insert_with(|| DownloadedManga {
+                    id,
+                    title,
+                    downloaded_chapter_ids: Vec::new(),
+                })
+                .downloaded_chapter_ids
+                .push(chapter_id);
+        }
+
+        Ok(mangas.into_values().collect())
+    }
+
+    pub fn get_dismissed_chapter_ids(&self, manga_id: &str, provider: MangaProviders) -> rusqlite::Result<Vec<String>> {
+        let mut statement = self.connection.prepare(
+            "SELECT chapter_id FROM chapter_notification_dismissals
+             WHERE manga_id = ?1 AND provider = ?2",
+        )?;
+        let rows = statement.query_map(params![manga_id, provider.to_string()], |row| row.get(0))?;
+        rows.collect()
+    }
+
+    pub fn save_dismissed_chapter_ids(
+        &self,
+        manga_id: &str,
+        provider: MangaProviders,
+        chapter_ids: &[String],
+    ) -> rusqlite::Result<()> {
+        let transaction = self.connection.unchecked_transaction()?;
+        for chapter_id in chapter_ids {
+            transaction.execute(
+                "INSERT OR IGNORE INTO chapter_notification_dismissals(manga_id, provider, chapter_id)
+                 VALUES (?1, ?2, ?3)",
+                params![manga_id, provider.to_string(), chapter_id],
+            )?;
+        }
+
+        transaction.commit()
+    }
+
     fn get_total_mangas_in_history(&self, history_type_id: i32, provider: MangaProviders) -> rusqlite::Result<u32> {
         let total: u32 = self.connection.query_row(
             "
@@ -1145,6 +1221,7 @@ impl<'a> RetrieveBookmark for Database<'a> {
 #[cfg(test)]
 mod test {
 
+    use std::collections::BTreeMap;
     use std::error::Error;
 
     use pretty_assertions::assert_eq;
@@ -1199,6 +1276,42 @@ mod test {
         }
 
         Ok(chapters)
+    }
+
+    #[test]
+    fn downloaded_manga_and_dismissed_notifications_are_provider_scoped() -> Result<()> {
+        let connection = Connection::open_in_memory()?;
+        let database = Database::new(&connection);
+        database.setup()?;
+
+        let manga_id = Uuid::new_v4().to_string();
+        let downloaded_chapter_id = Uuid::new_v4().to_string();
+        database.set_chapter_downloaded(SetChapterDownloaded {
+            id: &downloaded_chapter_id,
+            title: "Chapter 1",
+            manga_id: &manga_id,
+            manga_title: "Downloaded manga",
+            img_url: None,
+            provider: MangaProviders::Mangadex,
+        })?;
+
+        let mangas = database.get_downloaded_mangas(MangaProviders::Mangadex)?;
+        assert_eq!(mangas.len(), 1);
+        assert_eq!(mangas[0].id, manga_id);
+        assert_eq!(mangas[0].title, "Downloaded manga");
+        assert_eq!(mangas[0].downloaded_chapter_ids, vec![downloaded_chapter_id]);
+        assert!(database.get_downloaded_mangas(MangaProviders::Weebcentral)?.is_empty());
+
+        let dismissed_chapters = vec!["chapter-1".to_string(), "chapter-2".to_string()];
+        database.save_dismissed_chapter_ids(&manga_id, MangaProviders::Mangadex, &dismissed_chapters)?;
+        assert_eq!(database.get_dismissed_chapter_ids(&manga_id, MangaProviders::Mangadex)?, dismissed_chapters);
+        database.save_dismissed_chapter_ids(&manga_id, MangaProviders::Mangadex, &["chapter-3".into()])?;
+        let all_dismissed_chapters = database.get_dismissed_chapter_ids(&manga_id, MangaProviders::Mangadex)?;
+        assert_eq!(all_dismissed_chapters.len(), 3);
+        assert!(all_dismissed_chapters.contains(&"chapter-3".to_string()));
+        assert!(database.get_dismissed_chapter_ids(&manga_id, MangaProviders::Weebcentral)?.is_empty());
+
+        Ok(())
     }
 
     #[test]

@@ -1,4 +1,6 @@
+use std::collections::HashSet;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use ::crossterm::event::KeyCode;
 use crossterm::event::{KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
@@ -15,13 +17,31 @@ use self::manga::MangaPage;
 use self::reader::MangaReader;
 use self::search::{InputMode, SearchPage};
 use super::widgets::Component;
-use crate::backend::manga_provider::{ChapterToRead, ListOfChapters, Manga, MangaProvider, MangaProviders, Pagination};
+use crate::backend::database::Database;
+use crate::backend::error_log::write_to_error_log;
+use crate::backend::manga_provider::{
+    ChapterToRead, FeedPageProvider, LatestChapter, ListOfChapters, Manga, MangaProvider, MangaProviders, MangaStatus, Pagination,
+};
 use crate::backend::tracker::MangaTracker;
 use crate::backend::tui::{Action, Events};
 use crate::config::MangaTuiConfig;
 use crate::global::INSTRUCTIONS_STYLE;
 use crate::view::pages::*;
-use crate::view::widgets::ErrorModal;
+use crate::view::tasks::manga::download_new_chapters;
+use crate::view::widgets::{ErrorModal, NewChaptersModal};
+
+const NEW_CHAPTER_CHECK_INTERVAL: Duration = Duration::from_secs(10 * 60);
+
+fn find_new_chapters(latest_chapters: &[LatestChapter], previous_ids: &[String], downloaded_ids: &[String]) -> Vec<LatestChapter> {
+    let mut known_ids: HashSet<&str> = previous_ids.iter().map(String::as_str).collect();
+    known_ids.extend(downloaded_ids.iter().map(String::as_str));
+
+    latest_chapters
+        .iter()
+        .filter(|chapter| !known_ids.contains(chapter.id.as_str()))
+        .cloned()
+        .collect()
+}
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
 pub enum AppState {
@@ -58,6 +78,9 @@ where
     manga_provider: Arc<T>,
     manga_tracker: Option<S>,
     error_message: Option<String>,
+    new_chapters_notification: Option<String>,
+    new_chapters_to_download: Vec<LatestChapter>,
+    last_new_chapter_check: Instant,
     // The picker is what decides how big a image needs to be rendered depending on the user's
     // terminal font size and the graphics it supports
     // if the terminal doesn't support any graphics protocol the picker is `None`
@@ -90,6 +113,8 @@ where
 
         if let Some(message) = self.error_message.as_ref().cloned() {
             self.render_modal_error_message(area, frame.buffer_mut(), &message);
+        } else if let Some(message) = self.new_chapters_notification.as_ref() {
+            NewChaptersModal::new(message).render(area, frame.buffer_mut());
         }
     }
 
@@ -108,6 +133,21 @@ where
             Events::GoFeedPage => self.go_feed_page(),
 
             Events::Error(message) => self.display_error_message(message),
+            Events::CheckForNewDownloadedChapters => {
+                self.last_new_chapter_check = Instant::now();
+                self.check_for_new_downloaded_chapters();
+            },
+            Events::NewChaptersNotification(message, chapters) => {
+                self.new_chapters_notification = Some(message);
+                self.new_chapters_to_download = chapters;
+            },
+            Events::NewChaptersDownloadFinished(result) => match result {
+                Ok(count) => {
+                    self.new_chapters_notification = Some(format!("Downloaded {count} new chapter(s). Press <q> to close."));
+                    self.new_chapters_to_download.clear();
+                },
+                Err(error) => self.display_error_message(error),
+            },
 
             Events::GoBackMangaPage => {
                 if self.current_tab == SelectedPage::ReaderTab
@@ -186,9 +226,88 @@ where
             manga_tracker,
             state: AppState::Runnning,
             error_message: None,
+            new_chapters_notification: None,
+            new_chapters_to_download: Vec::new(),
+            last_new_chapter_check: Instant::now(),
             manga_provider: Arc::clone(&provider),
             top_tabs_area: Rect::default(),
         }
+    }
+
+    pub fn check_for_new_downloaded_chapters(&self) {
+        let provider = Arc::clone(&self.manga_provider);
+        let provider_name = provider.name();
+        let event_tx = self.global_event_tx.clone();
+
+        tokio::spawn(async move {
+            let downloaded_mangas = match Database::get_connection().and_then(|connection| {
+                let database = Database::new(&connection);
+                database.get_downloaded_mangas(provider_name)
+            }) {
+                Ok(mangas) => mangas,
+                Err(error) => {
+                    event_tx.send(Events::Error(error.to_string())).ok();
+                    return;
+                },
+            };
+
+            let mut notifications = Vec::new();
+            let mut chapters_to_notify = Vec::new();
+            for manga in downloaded_mangas {
+                let manga_details = match provider.get_manga_by_id(&manga.id).await {
+                    Ok(details) => details,
+                    Err(error) => {
+                        let message = format!("Could not check the status of {}: {error}", manga.title);
+                        write_to_error_log(error.into());
+                        event_tx.send(Events::Error(message)).ok();
+                        return;
+                    },
+                };
+                if manga_details.status != MangaStatus::Ongoing {
+                    continue;
+                }
+
+                let latest_chapters = match provider.get_latest_chapters(&manga.id).await {
+                    Ok(chapters) if !chapters.is_empty() => chapters,
+                    Ok(_) => continue,
+                    Err(error) => {
+                        let message = format!("Could not check for new chapters of {}: {error}", manga.title);
+                        write_to_error_log(error.into());
+                        event_tx.send(Events::Error(message)).ok();
+                        return;
+                    },
+                };
+
+                let state_result = Database::get_connection().and_then(|connection| {
+                    let database = Database::new(&connection);
+                    let dismissed_ids = database.get_dismissed_chapter_ids(&manga.id, provider_name)?;
+                    Ok(find_new_chapters(&latest_chapters, &dismissed_ids, &manga.downloaded_chapter_ids))
+                });
+
+                let newly_available = match state_result {
+                    Ok(chapters) => chapters,
+                    Err(error) => {
+                        event_tx.send(Events::Error(error.to_string())).ok();
+                        return;
+                    },
+                };
+
+                if !newly_available.is_empty() {
+                    let chapter_numbers = newly_available
+                        .iter()
+                        .map(|chapter| chapter.chapter_number.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    notifications.push(format!("{}: Ch. {}", manga.title, chapter_numbers));
+                    chapters_to_notify.extend(newly_available);
+                }
+            }
+
+            if !notifications.is_empty() {
+                let message = format!("New chapters are available for downloaded manga:\n\n{}", notifications.join("\n"));
+                event_tx.send(Events::NewChaptersNotification(message, chapters_to_notify)).ok();
+            }
+        });
     }
 
     pub fn render_top_tabs(&self, area: Rect, buf: &mut Buffer) {
@@ -224,12 +343,31 @@ where
         self.error_message = Some(error_message);
     }
 
-    fn close_error_mesagge(&mut self) {
+    fn close_modal(&mut self) {
         self.error_message = None;
+        self.new_chapters_notification = None;
+        self.new_chapters_to_download.clear();
     }
 
-    fn is_displaying_error_message(&self) -> bool {
-        self.error_message.is_some()
+    fn dismiss_new_chapters_notification(&mut self) -> Result<(), String> {
+        let mut chapter_ids_by_manga = std::collections::BTreeMap::<String, Vec<String>>::new();
+        for chapter in &self.new_chapters_to_download {
+            chapter_ids_by_manga.entry(chapter.manga_id.clone()).or_default().push(chapter.id.clone());
+        }
+
+        let connection = Database::get_connection().map_err(|error| error.to_string())?;
+        let database = Database::new(&connection);
+        for (manga_id, chapter_ids) in chapter_ids_by_manga {
+            database
+                .save_dismissed_chapter_ids(&manga_id, self.manga_provider.name(), &chapter_ids)
+                .map_err(|error| error.to_string())?;
+        }
+
+        Ok(())
+    }
+
+    fn is_displaying_modal(&self) -> bool {
+        self.error_message.is_some() || self.new_chapters_notification.is_some()
     }
 
     pub fn render_pages(&mut self, area: Rect, frame: &mut Frame<'_>) {
@@ -276,12 +414,36 @@ where
         self.global_action_tx.send(Action::Quit).ok();
     }
 
-    fn key_events_error_message(&mut self, key_event: KeyEvent) {
+    fn key_events_modal(&mut self, key_event: KeyEvent) {
         match key_event.code {
-            KeyCode::Char('q') => self.close_error_mesagge(),
+            KeyCode::Char('y') if !self.new_chapters_to_download.is_empty() => self.download_new_chapters(),
+            KeyCode::Char('q') => {
+                let dismissal_result = if self.error_message.is_none() && !self.new_chapters_to_download.is_empty() {
+                    self.dismiss_new_chapters_notification()
+                } else {
+                    Ok(())
+                };
+                self.close_modal();
+                if let Err(error) = dismissal_result {
+                    self.display_error_message(error);
+                }
+            },
             KeyCode::Char('c') if key_event.modifiers == KeyModifiers::CONTROL => self.quit(),
             _ => {},
         }
+    }
+
+    fn download_new_chapters(&mut self) {
+        let chapters = std::mem::take(&mut self.new_chapters_to_download);
+        self.new_chapters_notification = Some("Downloading new chapters... Press <q> to close.".into());
+        let client = Arc::clone(&self.manga_provider);
+        let config = MangaTuiConfig::get().clone();
+        let event_tx = self.global_event_tx.clone();
+
+        tokio::spawn(async move {
+            let result = download_new_chapters(client, chapters, config).await;
+            event_tx.send(Events::NewChaptersDownloadFinished(result)).ok();
+        });
     }
 
     fn handle_key_events(&mut self, key_event: KeyEvent) {
@@ -415,12 +577,16 @@ where
         if let Some(event) = self.global_event_rx.recv().await {
             self.handle_events(event.clone());
 
+            if event == Events::Tick && self.last_new_chapter_check.elapsed() >= NEW_CHAPTER_CHECK_INTERVAL {
+                self.global_event_tx.send(Events::CheckForNewDownloadedChapters).ok();
+            }
+
             // If the app is displaying an error message then the user can only close the app or
             // the error message popup
-            if self.is_displaying_error_message()
+            if self.is_displaying_modal()
                 && let Events::Key(key_event) = event
             {
-                self.key_events_error_message(key_event);
+                self.key_events_modal(key_event);
                 return;
             }
 
@@ -517,6 +683,46 @@ mod tests {
             }
             count += 1;
         }
+    }
+
+    #[test]
+    fn new_chapters_remain_pending_until_dismissed() {
+        let latest = vec![
+            LatestChapter {
+                id: "chapter-2".into(),
+                chapter_number: "2".into(),
+                ..LatestChapter::default()
+            },
+            LatestChapter {
+                id: "chapter-1".into(),
+                chapter_number: "1".into(),
+                ..LatestChapter::default()
+            },
+        ];
+
+        let first_check = find_new_chapters(&latest, &[], &["chapter-1".into()]);
+        assert_eq!(first_check.len(), 1);
+        assert_eq!(first_check[0].id, "chapter-2");
+
+        let repeated_check = find_new_chapters(&latest, &[], &["chapter-1".into()]);
+        assert_eq!(repeated_check.len(), 1);
+        assert_eq!(repeated_check[0].id, "chapter-2");
+
+        let dismissed = find_new_chapters(&latest, &["chapter-2".into()], &["chapter-1".into()]);
+        assert!(dismissed.is_empty());
+        assert!(find_new_chapters(&[latest[0].clone()], &[], &["chapter-2".into()]).is_empty());
+
+        let latest_after_release = vec![
+            LatestChapter {
+                id: "chapter-3".into(),
+                chapter_number: "3".into(),
+                ..LatestChapter::default()
+            },
+            latest[0].clone(),
+        ];
+        let new_release = find_new_chapters(&latest_after_release, &["chapter-2".into()], &[]);
+        assert_eq!(new_release.len(), 1);
+        assert_eq!(new_release[0].id, "chapter-3");
     }
 
     #[test]

@@ -196,6 +196,29 @@ impl MangaoniProvider {
         Ok(details.chapters)
     }
 
+    async fn fetch_latest_chapters(&self, slug: &str) -> Result<Vec<MangaoniChapterItem>, Box<dyn Error>> {
+        let urls_to_try: Vec<String> = if slug.contains('/') {
+            vec![format!("{MANGAONI_BASE_URL}/{slug}/")]
+        } else {
+            vec![
+                format!("{MANGAONI_BASE_URL}/manhwa/{slug}/"),
+                format!("{MANGAONI_BASE_URL}/manga/{slug}/"),
+                format!("{MANGAONI_BASE_URL}/manhua/{slug}/"),
+                format!("{MANGAONI_BASE_URL}/novela/{slug}/"),
+            ]
+        };
+
+        for url in urls_to_try {
+            let response = self.client.get(&url).header(REFERER, MANGAONI_BASE_URL).send().await?;
+            if response.status() == StatusCode::OK {
+                let html = response.text().await?;
+                return Ok(parse_manga_details(&html, slug).chapters);
+            }
+        }
+
+        Err(format!("Could not fetch current chapter list for MangaOni manga: {slug}").into())
+    }
+
     /// Builds a `ListOfChapters` from manga details
     async fn get_list_of_chapters(&self, slug: &str) -> Result<ListOfChapters, Box<dyn Error>> {
         let chapters = self.fetch_raw_chapters(slug).await?;
@@ -392,7 +415,7 @@ impl MangaPageProvider for MangaoniProvider {
     }
 
     async fn get_all_chapters(&self, manga_id: &str, _language: Languages) -> Result<Vec<Chapter>, Box<dyn Error>> {
-        let raw = self.fetch_raw_chapters(manga_id).await?;
+        let raw = self.fetch_latest_chapters(manga_id).await?;
         Ok(raw.iter().map(|ch| ch.to_chapter(manga_id)).collect())
     }
 }
@@ -508,7 +531,7 @@ impl SearchPageProvider for MangaoniProvider {
 
 impl FeedPageProvider for MangaoniProvider {
     async fn get_latest_chapters(&self, manga_id: &str) -> Result<Vec<LatestChapter>, Box<dyn Error>> {
-        let mut raw = self.fetch_raw_chapters(manga_id).await?;
+        let mut raw = self.fetch_latest_chapters(manga_id).await?;
         raw.sort_by(|a, b| b.number.total_cmp(&a.number));
         let latest: Vec<LatestChapter> = raw
             .into_iter()

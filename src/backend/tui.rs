@@ -30,6 +30,9 @@ pub enum Events {
     GoSearchPage,
     GoFeedPage,
     Error(String),
+    CheckForNewDownloadedChapters,
+    NewChaptersNotification(String, Vec<super::manga_provider::LatestChapter>),
+    NewChaptersDownloadFinished(Result<usize, String>),
     ReadChapter(ChapterToRead, MangaToRead),
 }
 
@@ -80,6 +83,7 @@ pub async fn run_app<T: MangaProvider>(
     filter_widget: T::Widget,
 ) -> Result<(), Box<dyn Error>> {
     let mut app = App::new(api_client, manga_tracker, get_picker(), filter_state, filter_widget);
+    app.check_for_new_downloaded_chapters();
 
     let tick_rate = std::time::Duration::from_millis(250);
 

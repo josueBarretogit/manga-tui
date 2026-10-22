@@ -164,6 +164,38 @@ impl<'a> Widget for ErrorModal<'a> {
     }
 }
 
+#[derive(Debug)]
+pub struct NewChaptersModal<'a> {
+    message: &'a str,
+}
+
+impl<'a> NewChaptersModal<'a> {
+    #[inline]
+    pub fn new(message: &'a str) -> Self {
+        Self { message }
+    }
+}
+
+impl<'a> Widget for NewChaptersModal<'a> {
+    fn render(self, area: Rect, buf: &mut ratatui::prelude::Buffer)
+    where
+        Self: Sized,
+    {
+        let area = centered_rect(area, 60, 50);
+        Clear.render(area, buf);
+        Block::bordered()
+            .title("New chapters available - press <y> to download or <q> to close")
+            .render(area, buf);
+
+        let inner = area.inner(Margin {
+            horizontal: 2,
+            vertical: 2,
+        });
+
+        Paragraph::new(self.message).wrap(Wrap { trim: true }).render(inner, buf);
+    }
+}
+
 #[cfg(test)]
 // Use in testing
 pub fn press_key<T>(page: &mut dyn Component<Actions = T>, key: KeyCode) {

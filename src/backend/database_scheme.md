@@ -65,3 +65,16 @@ To query mangas that are in reading history or plan to read
 PRIMARY KEY (manga_id, type_id),
 FOREIGN KEY (manga_id) REFERENCES mangas (id),
 FOREIGN KEY (type_id) REFERENCES history_types (id)
+
+# chapter_notification_dismissals
+
+Stores chapter IDs whose new-chapter notifications the user dismissed, so those notifications are not shown again.
+
+- manga_id
+    - type: TEXT NOT NULL
+- provider
+    - type: TEXT NOT NULL
+- chapter_id
+    - type: TEXT NOT NULL
+
+PRIMARY KEY (manga_id, provider, chapter_id)
