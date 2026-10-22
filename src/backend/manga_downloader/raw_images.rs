@@ -20,7 +20,13 @@ impl MangaDownloader for RawImagesDownloader {
         base_directory: &std::path::Path,
         chapter: &super::ChapterToDownloadSanitized,
     ) -> PathBuf {
-        base_directory.join(chapter.manga_title.as_path()).join(self.make_chapter_name(chapter))
+        let base = base_directory.join(chapter.manga_title.as_path());
+        let base = if chapter.provider.unwrap_or_default().is_multi_language() {
+            base.join(chapter.language.as_human_readable())
+        } else {
+            base
+        };
+        base.join(self.make_chapter_name(chapter))
     }
 
     fn save_chapter_in_file_system(
@@ -47,6 +53,7 @@ impl MangaDownloader for RawImagesDownloader {
 #[cfg(test)]
 mod tests {
     use std::error::Error;
+    use std::path::Path;
 
     use fake::Fake;
     use fake::faker::name::en::Name;
@@ -55,8 +62,34 @@ mod tests {
     use super::*;
     use crate::backend::AppDirectories;
     use crate::backend::manga_downloader::ChapterToDownloadSanitized;
-    use crate::backend::manga_provider::{ChapterPage, Languages};
+    use crate::backend::manga_provider::{ChapterPage, Languages, MangaProviders};
     use crate::config::DownloadType;
+
+    #[test]
+    fn raw_images_downloader_multi_and_single_language_directory() {
+        let downloader = RawImagesDownloader::new();
+
+        let mut test_chapter = ChapterToDownloadSanitized {
+            chapter_id: "123".to_string(),
+            manga_id: "456".to_string(),
+            manga_title: "One Piece".to_string().into(),
+            chapter_title: "Romance Dawn".to_string().into(),
+            chapter_number: "1".to_string(),
+            volume_number: Some("1".to_string()),
+            language: Languages::Spanish,
+            scanlator: "Scan".to_string().into(),
+            download_type: DownloadType::Raw,
+            pages: vec![],
+            provider: Some(MangaProviders::Mangadex),
+        };
+
+        let res_multi = downloader.make_manga_base_directory_name(Path::new("./test"), &test_chapter);
+        assert_eq!(Path::new("./test/One Piece/Spanish/Ch 1 Vol 1 Romance Dawn Scan 123"), res_multi);
+
+        test_chapter.provider = Some(MangaProviders::Inmanga);
+        let res_single = downloader.make_manga_base_directory_name(Path::new("./test"), &test_chapter);
+        assert_eq!(Path::new("./test/One Piece/Ch 1 Vol 1 Romance Dawn Scan 123"), res_single);
+    }
 
     #[test]
     #[ignore]
@@ -85,6 +118,7 @@ mod tests {
                     extension: "jpg".to_string(),
                 },
             ],
+            ..Default::default()
         };
 
         let downloader = RawImagesDownloader::new();

@@ -153,6 +153,7 @@ mod tests {
                     extension: "jpg".to_string(),
                 },
             ],
+            ..Default::default()
         };
 
         let downloader = PdfDownloader::new();

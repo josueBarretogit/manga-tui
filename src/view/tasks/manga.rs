@@ -78,6 +78,7 @@ async fn download_chapters_batch<T: MangaPageProvider>(
                     scanlator: chapter.scanlator.unwrap_or_default().into(),
                     download_type: config.download_type,
                     pages,
+                    provider: Some(client.name()),
                 };
 
                 let downloader: &dyn MangaDownloader = match config.download_type {
@@ -206,6 +207,7 @@ pub async fn download_single_chapter<T: MangaPageProvider, S: MangaTracker>(args
                 scanlator: args.chapter.scanlator.unwrap_or_default().into(),
                 download_type: args.config.download_type,
                 pages,
+                provider: Some(args.client.name()),
             };
             if args.config.track_reading_when_download {
                 // clone chapter title so that it can be used inside `track_manga` error
@@ -321,6 +323,7 @@ pub async fn download_new_chapters<T: MangaProvider>(
                 scanlator: chapter.scanlator.unwrap_or_default().into(),
                 download_type: config.download_type,
                 pages,
+                provider: Some(client.name()),
             };
             let downloader: &dyn MangaDownloader = match config.download_type {
                 DownloadType::Cbz => &CbzDownloader::new(),

@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use manga_tui::{SanitizedFilename, exists};
 
-use super::manga_provider::{ChapterPage, Languages};
+use super::manga_provider::{ChapterPage, Languages, MangaProviders};
 use crate::config::DownloadType;
 
 pub mod cbz_downloader;
@@ -26,12 +26,18 @@ pub struct ChapterToDownloadSanitized {
     pub scanlator: SanitizedFilename,
     pub download_type: DownloadType,
     pub pages: Vec<ChapterPage>,
+    pub provider: Option<MangaProviders>,
 }
 
 pub trait MangaDownloader {
     /// The `base_directory` where the pages will be saved, for `raw_images`
     fn make_manga_base_directory_name(&self, base_directory: &Path, chapter: &ChapterToDownloadSanitized) -> PathBuf {
-        base_directory.join(chapter.manga_title.as_path())
+        let base = base_directory.join(chapter.manga_title.as_path());
+        if chapter.provider.unwrap_or_default().is_multi_language() {
+            base.join(chapter.language.as_human_readable())
+        } else {
+            base
+        }
     }
     fn create_manga_base_directory(&self, base_directory: &Path) -> Result<(), Box<dyn Error>> {
         if !exists!(base_directory) {
@@ -87,6 +93,31 @@ mod tests {
             scanlator: "".to_string().into(),
             download_type: crate::config::DownloadType::Cbz,
             pages: vec![],
+            provider: None,
+        };
+
+        let expected = Path::new("./test/some manga title/English");
+        let result = downloader.make_manga_base_directory_name(Path::new("./test"), &test_chapter);
+
+        assert_eq!(expected, result);
+    }
+
+    #[test]
+    fn single_language_provider_omits_language_directory() {
+        let downloader = MockMangaDownloader {};
+
+        let test_chapter: ChapterToDownloadSanitized = ChapterToDownloadSanitized {
+            chapter_id: "chapter id".to_string(),
+            manga_id: "manga id".to_string(),
+            manga_title: "some manga title".to_string().into(),
+            chapter_title: "some chapter title".to_string().into(),
+            chapter_number: "3".to_string(),
+            volume_number: None,
+            language: Languages::Spanish,
+            scanlator: "".to_string().into(),
+            download_type: crate::config::DownloadType::Cbz,
+            pages: vec![],
+            provider: Some(MangaProviders::Inmanga),
         };
 
         let expected = Path::new("./test/some manga title");
@@ -110,6 +141,7 @@ mod tests {
             scanlator: "some scanlator".to_string().into(),
             download_type: crate::config::DownloadType::Cbz,
             pages: vec![],
+            ..Default::default()
         };
 
         let expected = Path::new("Ch 3 Vol 3 some chapter title some scanlator chapter id");

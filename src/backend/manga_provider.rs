@@ -716,6 +716,12 @@ pub enum MangaProviders {
     Comizy,
 }
 
+impl MangaProviders {
+    pub fn is_multi_language(&self) -> bool {
+        matches!(self, Self::Mangadex)
+    }
+}
+
 pub trait GetRawImage {
     fn get_raw_image(&self, url: &str) -> impl Future<Output = Result<Bytes, Box<dyn Error>>> + Send;
 }
