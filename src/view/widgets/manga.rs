@@ -287,12 +287,10 @@ impl DownloadAllChaptersState {
     }
 
     pub fn reset(&mut self) {
-        if self.is_downloading() || self.phase == DownloadPhase::AskAbortProcess {
-            self.phase = DownloadPhase::ProccessNotStarted;
-            self.total_chapters = 0.0;
-            self.download_progress = 0.0;
-            self.is_selected_mode = false;
-        }
+        self.phase = DownloadPhase::ProccessNotStarted;
+        self.total_chapters = 0.0;
+        self.download_progress = 0.0;
+        self.is_selected_mode = false;
     }
 
     pub fn ask_abort_proccess(&mut self) {

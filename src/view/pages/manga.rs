@@ -2164,5 +2164,18 @@ mod test {
         // Toggle all again deselects all
         manga_page.toggle_select_all_current_page();
         assert_eq!(0, manga_page.selected_chapters.len());
+
+        // Select chapters and confirm download with background queue
+        manga_page.toggle_select_current_chapter();
+        manga_page.ask_download_selected_chapters();
+        assert_eq!(DownloadPhase::Asking, manga_page.download_all_chapters_state.phase);
+
+        let (global_tx, _global_rx) = tokio::sync::mpsc::unbounded_channel();
+        manga_page.global_event_tx = Some(global_tx);
+        manga_page.confirm_download_selected_chapters();
+
+        assert_eq!(DownloadPhase::ProccessNotStarted, manga_page.download_all_chapters_state.phase);
+        assert!(!manga_page.download_process_started());
+        assert_eq!(0, manga_page.selected_chapters.len());
     }
 }
