@@ -502,10 +502,7 @@ where
                     chapters_to_download.extend(item.chapters.clone());
                 } else {
                     for chapter in &item.chapters {
-                        unselected_by_manga
-                            .entry(item.manga_id.clone())
-                            .or_default()
-                            .push(chapter.id.clone());
+                        unselected_by_manga.entry(item.manga_id.clone()).or_default().push(chapter.id.clone());
                     }
                 }
             }
@@ -523,10 +520,8 @@ where
                 }
             }
 
-            state.status_message = Some(format!(
-                "Downloading {} new chapter(s)... Press <q> to close.",
-                chapters_to_download.len()
-            ));
+            state.status_message =
+                Some(format!("Downloading {} new chapter(s)... Press <q> to close.", chapters_to_download.len()));
 
             let client = Arc::clone(&self.manga_provider);
             let config = MangaTuiConfig::get().clone();

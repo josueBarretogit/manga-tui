@@ -356,13 +356,9 @@ impl<'a> DownloadAllChaptersWidget<'a> {
             "Downloading all chapters, this will take a while, "
         };
 
-        Paragraph::new(Line::from(vec![
-            title_text.into(),
-            download_location.into(),
-            " ".into(),
-        ]))
-        .wrap(Wrap { trim: true })
-        .render(information_area, buf);
+        Paragraph::new(Line::from(vec![title_text.into(), download_location.into(), " ".into()]))
+            .wrap(Wrap { trim: true })
+            .render(information_area, buf);
 
         let loader = Throbber::default()
             .label("Download in progress")

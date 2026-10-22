@@ -213,19 +213,14 @@ impl<'a> Widget for NewChaptersModal<'a> {
 
         if let Some(status) = &self.state.status_message {
             let block = Block::bordered()
-                .title(Line::from(vec![Span::styled(
-                    " New chapters ",
-                    Style::default().add_modifier(Modifier::BOLD),
-                )]))
+                .title(Line::from(vec![Span::styled(" New chapters ", Style::default().add_modifier(Modifier::BOLD))]))
                 .title_bottom(Line::from(vec![Span::styled(
                     " Press <q> or <Esc> to close ",
                     Style::default().add_modifier(Modifier::ITALIC),
                 )]));
             let inner = block.inner(area);
             block.render(area, buf);
-            Paragraph::new(status.as_str())
-                .wrap(Wrap { trim: true })
-                .render(inner, buf);
+            Paragraph::new(status.as_str()).wrap(Wrap { trim: true }).render(inner, buf);
             return;
         }
 
@@ -252,10 +247,8 @@ impl<'a> Widget for NewChaptersModal<'a> {
             return;
         }
 
-        let header = Line::from(vec![Span::styled(
-            "Select manga to download new chapters:",
-            Style::default().add_modifier(Modifier::BOLD),
-        )]);
+        let header =
+            Line::from(vec![Span::styled("Select manga to download new chapters:", Style::default().add_modifier(Modifier::BOLD))]);
 
         let max_items_visible = (inner.height.saturating_sub(2)) as usize;
         let cursor = self.state.cursor;
@@ -269,14 +262,7 @@ impl<'a> Widget for NewChaptersModal<'a> {
 
         let mut lines = vec![header, Line::raw("")];
 
-        for (idx, item) in self
-            .state
-            .items
-            .iter()
-            .enumerate()
-            .skip(scroll)
-            .take(max_items_visible)
-        {
+        for (idx, item) in self.state.items.iter().enumerate().skip(scroll).take(max_items_visible) {
             let is_focused = idx == cursor;
             let cursor_span = if is_focused {
                 Span::styled("> ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
@@ -302,11 +288,7 @@ impl<'a> Widget for NewChaptersModal<'a> {
                 Style::default().fg(Color::DarkGray)
             };
 
-            let ch_style = if item.selected {
-                Style::default().fg(Color::Yellow)
-            } else {
-                Style::default().fg(Color::DarkGray)
-            };
+            let ch_style = if item.selected { Style::default().fg(Color::Yellow) } else { Style::default().fg(Color::DarkGray) };
 
             let status_extra = if !item.selected { " (skipped)" } else { "" };
 

@@ -61,9 +61,7 @@ impl MangaoniChapterItem {
 /// Decodes Base64 string using the `base64` crate
 pub fn decode_base64(input: &str) -> Option<Vec<u8>> {
     use base64::Engine;
-    base64::engine::general_purpose::STANDARD
-        .decode(input.trim())
-        .ok()
+    base64::engine::general_purpose::STANDARD.decode(input.trim()).ok()
 }
 
 /// Parses the `var unicap = '...';` variable in reader HTML into chapter page URLs.

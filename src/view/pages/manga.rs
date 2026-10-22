@@ -34,8 +34,8 @@ use crate::config::MangaTuiConfig;
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
 use crate::view::app::MangaToRead;
 use crate::view::tasks::manga::{
-    DownloadAllChapters, DownloadSelectedChapters, DownloadSingleChapter, download_all_chapters,
-    download_selected_chapters, download_single_chapter,
+    DownloadAllChapters, DownloadSelectedChapters, DownloadSingleChapter, download_all_chapters, download_selected_chapters,
+    download_single_chapter,
 };
 use crate::view::widgets::Component;
 use crate::view::widgets::manga::{
@@ -364,11 +364,7 @@ where
                     chapter_instructions.push(Span::raw("<Tab>").style(*INSTRUCTIONS_STYLE));
                 }
 
-                let mut bottom_instructions: Vec<Span<'_>> = vec![
-                    page.into(),
-                    " | ".into(),
-                    total.into(),
-                ];
+                let mut bottom_instructions: Vec<Span<'_>> = vec![page.into(), " | ".into(), total.into()];
                 if selected_count > 0 {
                     bottom_instructions.push(format!(" | Selected: {selected_count}").bold().green());
                 }
@@ -626,8 +622,7 @@ where
 
     fn toggle_select_all_current_page(&mut self) {
         if let Some(chapters) = self.chapters.as_mut() {
-            let all_selected = !chapters.widget.chapters.is_empty()
-                && chapters.widget.chapters.iter().all(|item| item.is_selected);
+            let all_selected = !chapters.widget.chapters.is_empty() && chapters.widget.chapters.iter().all(|item| item.is_selected);
             for item in chapters.widget.chapters.iter_mut() {
                 if all_selected {
                     item.is_selected = false;
