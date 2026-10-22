@@ -41,6 +41,7 @@ pub enum Events {
     CheckForNewDownloadedChapters,
     NewChaptersNotification(Vec<NewChapterNotificationGroup>),
     NewChaptersDownloadFinished(Result<usize, String>),
+    AutoDownloadedFavorites(usize),
     ReadChapter(ChapterToRead, MangaToRead),
 }
 

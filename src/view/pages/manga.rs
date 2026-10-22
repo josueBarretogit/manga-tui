@@ -94,6 +94,7 @@ pub enum MangaPageActions {
     SearchNextChapterPage,
     SearchPreviousChapterPage,
     BookMarkChapterSelected,
+    ToggleFavorite,
 }
 
 #[derive(Debug, PartialEq, EnumIs)]
@@ -146,6 +147,7 @@ where
     is_list_languages_open: bool,
     download_all_chapters_state: DownloadAllChaptersState,
     pub selected_chapters: HashMap<String, Chapter>,
+    pub is_favorite: bool,
     manga_tracker: Option<S>,
     manga_provider: Arc<T>,
 }
@@ -170,6 +172,9 @@ where
         local_event_tx.send(MangaPageEvents::SearchCover).ok();
 
         let cover_area = Rect::default();
+        let is_favorite = Database::get_connection()
+            .and_then(|conn| Database::new(&conn).is_favorite(&manga.id, provider.name()))
+            .unwrap_or(false);
 
         let preferred = *Languages::get_preferred_lang();
         let chapter_language = manga
@@ -207,6 +212,7 @@ where
             is_list_languages_open: false,
             download_all_chapters_state: DownloadAllChaptersState::new(local_event_tx),
             selected_chapters: HashMap::new(),
+            is_favorite,
             cover_area,
             manga_tracker: None,
             manga_provider: provider,
@@ -289,8 +295,17 @@ where
             None => String::new(),
         };
 
+        let title_spans = if self.is_favorite {
+            Line::from(vec![
+                Span::styled("★ ", Style::default().fg(ratatui::style::Color::Yellow).bold()),
+                Span::raw(self.manga.title.clone()),
+            ])
+        } else {
+            Line::from(self.manga.title.clone())
+        };
+
         Block::bordered()
-            .title_top(self.manga.title.clone())
+            .title_top(title_spans)
             .title_bottom(Line::from(vec![statistics, " ".into(), Span::raw(authors), Span::raw(artist)]))
             .render(manga_information_area, buf);
 
@@ -355,6 +370,13 @@ where
 
                 chapter_instructions.push(" Download all ".into());
                 chapter_instructions.push(Span::raw("<a>").style(*INSTRUCTIONS_STYLE));
+
+                chapter_instructions.push(" Favorite ".into());
+                if self.is_favorite {
+                    chapter_instructions.push("<f> [★]".bold().yellow());
+                } else {
+                    chapter_instructions.push(Span::raw("<f> [☆]").style(*INSTRUCTIONS_STYLE));
+                }
 
                 if self.picker.is_some() {
                     chapter_instructions.push(" Read ".into());
@@ -568,6 +590,9 @@ where
                     KeyCode::Char('b') => {
                         self.local_action_tx.send(MangaPageActions::SearchPreviousChapterPage).ok();
                     },
+                    KeyCode::Char('f') => {
+                        self.local_action_tx.send(MangaPageActions::ToggleFavorite).ok();
+                    },
                     KeyCode::Char('m') if !self.bookmark_state.auto_bookmark => {
                         self.local_action_tx.send(MangaPageActions::BookMarkChapterSelected).ok();
                     },
@@ -631,6 +656,15 @@ where
                     item.is_selected = true;
                     self.selected_chapters.insert(item.chapter.id.clone(), item.chapter.clone());
                 }
+            }
+        }
+    }
+
+    fn toggle_favorite(&mut self) {
+        if let Ok(conn) = Database::get_connection() {
+            let database = Database::new(&conn);
+            if let Ok(new_fav) = database.toggle_favorite(&self.manga.id, self.manga_provider.name(), &self.manga.title) {
+                self.is_favorite = new_fav;
             }
         }
     }
@@ -1323,6 +1357,7 @@ where
                     self.read_chapter();
                 }
             },
+            MangaPageActions::ToggleFavorite => self.toggle_favorite(),
 
             MangaPageActions::DownloadChapter => self.download_chapter_selected(),
         }
@@ -1981,6 +2016,11 @@ mod test {
         press_key(&mut manga_page, KeyCode::Char('c'));
         let action = manga_page.local_action_rx.recv().await.unwrap();
         assert_eq!(MangaPageActions::ClearSelectedChapters, action);
+
+        // Press f -> ToggleFavorite
+        press_key(&mut manga_page, KeyCode::Char('f'));
+        let action = manga_page.local_action_rx.recv().await.unwrap();
+        assert_eq!(MangaPageActions::ToggleFavorite, action);
 
         // When no chapters are selected, pressing d triggers single chapter download
         press_key(&mut manga_page, KeyCode::Char('d'));

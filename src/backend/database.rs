@@ -275,6 +275,17 @@ impl<'a> Database<'a> {
             (),
         )?;
 
+        self.connection.execute(
+            "CREATE TABLE if not exists favorite_mangas (
+                manga_id TEXT NOT NULL,
+                provider TEXT NOT NULL,
+                title TEXT NOT NULL,
+                created_at DATETIME DEFAULT (datetime('now')),
+                PRIMARY KEY (manga_id, provider)
+             )",
+            (),
+        )?;
+
         let already_has_data: i32 = self.connection.query_row("SELECT COUNT(*) from app_version", [], |row| row.get(0))?;
 
         if already_has_data == 0 {
@@ -817,6 +828,43 @@ impl<'a> Database<'a> {
         transaction.commit()
     }
 
+    pub fn is_favorite(&self, manga_id: &str, provider: MangaProviders) -> rusqlite::Result<bool> {
+        let count: i32 = self.connection.query_row(
+            "SELECT COUNT(*) FROM favorite_mangas WHERE manga_id = ?1 AND provider = ?2",
+            params![manga_id, provider.to_string()],
+            |row| row.get(0),
+        )?;
+        Ok(count > 0)
+    }
+
+    pub fn toggle_favorite(&self, manga_id: &str, provider: MangaProviders, title: &str) -> rusqlite::Result<bool> {
+        let is_fav = self.is_favorite(manga_id, provider)?;
+        if is_fav {
+            self.connection
+                .execute("DELETE FROM favorite_mangas WHERE manga_id = ?1 AND provider = ?2", params![
+                    manga_id,
+                    provider.to_string()
+                ])?;
+            Ok(false)
+        } else {
+            self.connection.execute(
+                "INSERT OR REPLACE INTO favorite_mangas (manga_id, provider, title) VALUES (?1, ?2, ?3)",
+                params![manga_id, provider.to_string(), title],
+            )?;
+            Ok(true)
+        }
+    }
+
+    pub fn get_favorite_manga_ids(&self, provider: MangaProviders) -> rusqlite::Result<std::collections::HashSet<String>> {
+        let mut statement = self.connection.prepare("SELECT manga_id FROM favorite_mangas WHERE provider = ?1")?;
+        let rows = statement.query_map(params![provider.to_string()], |row| row.get(0))?;
+        let mut set = std::collections::HashSet::new();
+        for id in rows {
+            set.insert(id?);
+        }
+        Ok(set)
+    }
+
     fn get_total_mangas_in_history(&self, history_type_id: i32, provider: MangaProviders) -> rusqlite::Result<u32> {
         let total: u32 = self.connection.query_row(
             "
@@ -1310,6 +1358,35 @@ mod test {
         assert_eq!(all_dismissed_chapters.len(), 3);
         assert!(all_dismissed_chapters.contains(&"chapter-3".to_string()));
         assert!(database.get_dismissed_chapter_ids(&manga_id, MangaProviders::Weebcentral)?.is_empty());
+
+        Ok(())
+    }
+
+    #[test]
+    fn favorites_are_provider_scoped_and_toggleable() -> Result<()> {
+        let connection = Connection::open_in_memory()?;
+        let database = Database::new(&connection);
+        database.setup()?;
+
+        let manga_id = "one-piece";
+        assert!(!database.is_favorite(manga_id, MangaProviders::Mangadex)?);
+
+        // Toggle on
+        let is_fav = database.toggle_favorite(manga_id, MangaProviders::Mangadex, "One Piece")?;
+        assert!(is_fav);
+        assert!(database.is_favorite(manga_id, MangaProviders::Mangadex)?);
+        // Provider scoped:
+        assert!(!database.is_favorite(manga_id, MangaProviders::Inmanga)?);
+
+        let fav_ids = database.get_favorite_manga_ids(MangaProviders::Mangadex)?;
+        assert_eq!(fav_ids.len(), 1);
+        assert!(fav_ids.contains(manga_id));
+
+        // Toggle off
+        let is_fav = database.toggle_favorite(manga_id, MangaProviders::Mangadex, "One Piece")?;
+        assert!(!is_fav);
+        assert!(!database.is_favorite(manga_id, MangaProviders::Mangadex)?);
+        assert!(database.get_favorite_manga_ids(MangaProviders::Mangadex)?.is_empty());
 
         Ok(())
     }

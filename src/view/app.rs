@@ -6,8 +6,10 @@ use ::crossterm::event::KeyCode;
 use crossterm::event::{KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::Frame;
 use ratatui::buffer::Buffer;
-use ratatui::layout::{Constraint, Layout, Position, Rect};
-use ratatui::widgets::{Block, Borders, Tabs, Widget};
+use ratatui::layout::{Alignment, Constraint, Layout, Position, Rect};
+use ratatui::style::{Color, Style, Stylize};
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Block, Borders, Paragraph, Tabs, Widget};
 use ratatui_image::picker::Picker;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
@@ -79,6 +81,7 @@ where
     manga_tracker: Option<S>,
     error_message: Option<String>,
     new_chapters_state: Option<NewChaptersModalState>,
+    favorite_status_toast: Option<(String, Instant)>,
     last_new_chapter_check: Instant,
     // The picker is what decides how big a image needs to be rendered depending on the user's
     // terminal font size and the graphics it supports
@@ -164,6 +167,9 @@ where
                 },
                 Err(error) => self.display_error_message(error),
             },
+            Events::AutoDownloadedFavorites(count) => {
+                self.favorite_status_toast = Some((format!("★ Auto-downloaded {count} new favorite chapter(s)"), Instant::now()));
+            },
 
             Events::GoBackMangaPage => {
                 if self.current_tab == SelectedPage::ReaderTab
@@ -243,6 +249,7 @@ where
             state: AppState::Runnning,
             error_message: None,
             new_chapters_state: None,
+            favorite_status_toast: None,
             last_new_chapter_check: Instant::now(),
             manga_provider: Arc::clone(&provider),
             top_tabs_area: Rect::default(),
@@ -267,6 +274,12 @@ where
             };
 
             let mut groups = Vec::new();
+            let mut auto_download_chapters = Vec::new();
+
+            let favorite_ids = Database::get_connection()
+                .and_then(|conn| Database::new(&conn).get_favorite_manga_ids(provider_name))
+                .unwrap_or_default();
+
             for manga in downloaded_mangas {
                 let manga_details = match provider.get_manga_by_id(&manga.id).await {
                     Ok(details) => details,
@@ -307,18 +320,39 @@ where
                 };
 
                 if !newly_available.is_empty() {
-                    let chapter_numbers = newly_available
-                        .iter()
-                        .map(|chapter| chapter.chapter_number.as_str())
-                        .collect::<Vec<_>>()
-                        .join(", ");
-                    groups.push(NewChapterNotificationGroup {
-                        manga_id: manga.id,
-                        manga_title: manga.title,
-                        chapter_numbers,
-                        chapters: newly_available,
-                    });
+                    if favorite_ids.contains(&manga.id) {
+                        auto_download_chapters.extend(newly_available);
+                    } else {
+                        let chapter_numbers = newly_available
+                            .iter()
+                            .map(|chapter| chapter.chapter_number.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        groups.push(NewChapterNotificationGroup {
+                            manga_id: manga.id,
+                            manga_title: manga.title,
+                            chapter_numbers,
+                            chapters: newly_available,
+                        });
+                    }
                 }
+            }
+
+            if !auto_download_chapters.is_empty() {
+                let client = Arc::clone(&provider);
+                let config = MangaTuiConfig::get().clone();
+                let tx = event_tx.clone();
+                tokio::spawn(async move {
+                    let result = download_new_chapters(client, auto_download_chapters, config).await;
+                    match result {
+                        Ok(count) => {
+                            tx.send(Events::AutoDownloadedFavorites(count)).ok();
+                        },
+                        Err(e) => {
+                            tx.send(Events::Error(format!("Auto-download of favorite chapters failed: {e}"))).ok();
+                        },
+                    }
+                });
             }
 
             if !groups.is_empty() {
@@ -350,6 +384,13 @@ where
             .padding("", "")
             .divider(" | ")
             .render(area, buf);
+
+        if let Some((msg, time)) = &self.favorite_status_toast {
+            if time.elapsed().as_secs() < 12 {
+                let toast = Line::from(vec![Span::styled(format!(" {msg} "), Style::default().fg(Color::Yellow).bold())]);
+                Paragraph::new(toast).alignment(Alignment::Right).render(area, buf);
+            }
+        }
     }
 
     fn render_modal_error_message(&self, area: Rect, buf: &mut Buffer, message: &str) {
