@@ -253,7 +253,7 @@ On the `manga-tui` directory there will be 3 directories
 
 To customize only the download location (e.g. for Google Drive or an external drive), set `download_dir` in `config.toml`:
 ```toml
-download_dir = "G:/Mi unidad/Mangas"
+download_dir = "/some-directory/Mangas"
 ```
 
 You can view the active download directory by running:

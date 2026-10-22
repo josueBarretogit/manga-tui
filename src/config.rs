@@ -123,7 +123,7 @@ impl ConfigParam for DownloadDirParam {
     }
 
     fn values(&self) -> &'static str {
-        "path string (e.g. \"G:/Mi unidad/Mangas\" or 'G:\\Mi unidad\\Mangas')"
+        "path string (e.g. \"G:/some_directory/Mangas\" or 'G:\\some_directory\\Mangas' or '~/some-directory/mangas')"
     }
 
     fn defaults(&self) -> &'static str {

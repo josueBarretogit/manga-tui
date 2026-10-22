@@ -444,17 +444,10 @@ where
         ]))
         .render(sorting_area, buf);
 
+        let languages_list_area =
+            Rect::new(language_area.x, language_area.y, language_area.width, language_area.height + 10).intersection(buf.area);
+
         if self.is_list_languages_open {
-            let desired_height = (self.manga.languages.len() as u16 + 2).clamp(4, 10);
-            let max_height = desired_height.min(buf.area.height);
-
-            let y = if language_area.y + max_height <= buf.area.bottom() {
-                language_area.y
-            } else {
-                buf.area.bottom().saturating_sub(max_height)
-            };
-
-            let languages_list_area = Rect::new(language_area.x, y, language_area.width, max_height).intersection(buf.area);
             Clear.render(languages_list_area, buf);
             let instructions = Line::from(vec![
                 "Close".into(),

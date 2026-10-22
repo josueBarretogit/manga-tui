@@ -473,17 +473,18 @@ impl SearchPageProvider for ComizyProvider {
         let page = pagination.current_page;
         let limit = pagination.items_per_page;
 
-        let query = search_term.map(|t| t.to_string()).unwrap_or_default();
-        let trimmed = query.trim();
-
-        let url = if !trimmed.is_empty() {
-            let encoded = urlencoding_encode(trimmed);
-            format!("{COMIZY_API_URL}/titles/search?q={encoded}&page={page}&limit={limit}")
-        } else {
-            format!("{COMIZY_API_URL}/titles/search?page={page}&limit={limit}")
+        let url = match search_term.as_ref() {
+            Some(term) => {
+                let encoded = urlencoding_encode(term.get());
+                format!("{COMIZY_API_URL}/titles/search?q={encoded}&page={page}&limit={limit}")
+            },
+            None => format!("{COMIZY_API_URL}/titles/search?page={page}&limit={limit}"),
         };
 
-        let cache_key = format!("comizy_search_{trimmed}_{page}_{limit}");
+        let cache_key = match search_term.as_ref() {
+            Some(term) => format!("comizy_search_{}_{page}_{limit}", term.get()),
+            None => format!("comizy_search_empty_{page}_{limit}"),
+        };
         let cache = self.cache_provider.get(&cache_key)?;
 
         let search_data: ComizySearchData = match cache {

@@ -258,9 +258,19 @@ pub fn parse_status(status_str: &str) -> MangaStatus {
 
 /// Extracts chapter number as `(f64, String)`
 pub fn parse_chapter_number(name: &str, slug: Option<&str>, number_val: Option<&serde_json::Value>) -> (f64, String) {
-    let re_chapter = regex::Regex::new(r#"(?i)chapter\s*([\d\.]+)"#).ok();
-    if let Some(ref re) = re_chapter {
-        if let Some(caps) = re.captures(name) {
+    let re_chapter = regex::Regex::new(r#"(?i)chapter\s*([\d\.]+)"#).unwrap();
+    if let Some(caps) = re_chapter.captures(name) {
+        if let Some(m) = caps.get(1) {
+            if let Ok(num) = m.as_str().parse::<f64>() {
+                let num_str = if num.fract() == 0.0 { format!("{:.0}", num) } else { format!("{num}") };
+                return (num, num_str);
+            }
+        }
+    }
+
+    if let Some(slug_str) = slug {
+        let re_slug = regex::Regex::new(r#"(?i)chapter-([\d]+(?:\.[\d]+)?)"#).unwrap();
+        if let Some(caps) = re_slug.captures(slug_str) {
             if let Some(m) = caps.get(1) {
                 if let Ok(num) = m.as_str().parse::<f64>() {
                     let num_str = if num.fract() == 0.0 { format!("{:.0}", num) } else { format!("{num}") };
@@ -268,29 +278,13 @@ pub fn parse_chapter_number(name: &str, slug: Option<&str>, number_val: Option<&
                 }
             }
         }
-    }
 
-    if let Some(slug_str) = slug {
-        let re_slug = regex::Regex::new(r#"(?i)chapter-([\d]+(?:\.[\d]+)?)"#).ok();
-        if let Some(ref re) = re_slug {
-            if let Some(caps) = re.captures(slug_str) {
-                if let Some(m) = caps.get(1) {
-                    if let Ok(num) = m.as_str().parse::<f64>() {
-                        let num_str = if num.fract() == 0.0 { format!("{:.0}", num) } else { format!("{num}") };
-                        return (num, num_str);
-                    }
-                }
-            }
-        }
-
-        let re_slug_sub = regex::Regex::new(r#"(?i)chapter-([\d]+)-([\d]+)"#).ok();
-        if let Some(ref re) = re_slug_sub {
-            if let Some(caps) = re.captures(slug_str) {
-                if let (Some(m1), Some(m2)) = (caps.get(1), caps.get(2)) {
-                    let combined = format!("{}.{}", m1.as_str(), m2.as_str());
-                    if let Ok(num) = combined.parse::<f64>() {
-                        return (num, combined);
-                    }
+        let re_slug_sub = regex::Regex::new(r#"(?i)chapter-([\d]+)-([\d]+)"#).unwrap();
+        if let Some(caps) = re_slug_sub.captures(slug_str) {
+            if let (Some(m1), Some(m2)) = (caps.get(1), caps.get(2)) {
+                let combined = format!("{}.{}", m1.as_str(), m2.as_str());
+                if let Ok(num) = combined.parse::<f64>() {
+                    return (num, combined);
                 }
             }
         }

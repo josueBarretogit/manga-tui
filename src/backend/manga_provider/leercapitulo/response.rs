@@ -199,34 +199,32 @@ pub fn parse_home_popular(html: &str) -> Vec<PopularManga> {
     let mut results = Vec::new();
     let re = regex::Regex::new(
         r#"<a class="lc-side-item" href="(/manga/[^"]+)">[\s\S]*?<img src="([^"]+)"[^>]*alt="([^"]*)"[\s\S]*?<span class="lc-side-name">([^<]+)</span>"#,
-    );
+    ).unwrap();
 
-    if let Ok(re) = re {
-        let mut seen = std::collections::HashSet::new();
-        for cap in re.captures_iter(html) {
-            let uri = cap.get(1).map(|m| m.as_str()).unwrap_or("");
-            let cover_uri = cap.get(2).map(|m| m.as_str()).unwrap_or("");
-            let name = cap.get(4).map(|m| m.as_str().trim()).unwrap_or("");
+    let mut seen = std::collections::HashSet::new();
+    for cap in re.captures_iter(html) {
+        let uri = cap.get(1).map(|m| m.as_str()).unwrap_or("");
+        let cover_uri = cap.get(2).map(|m| m.as_str()).unwrap_or("");
+        let name = cap.get(4).map(|m| m.as_str().trim()).unwrap_or("");
 
-            let manga_id = uri.trim_matches('/').strip_prefix("manga/").unwrap_or(uri).to_string();
+        let manga_id = uri.trim_matches('/').strip_prefix("manga/").unwrap_or(uri).to_string();
 
-            if manga_id.is_empty() || seen.contains(&manga_id) {
-                continue;
-            }
-            seen.insert(manga_id.clone());
-
-            let cover_img_url =
-                if cover_uri.starts_with("http") { cover_uri.to_string() } else { format!("{LEERCAPITULO_BASE_URL}{cover_uri}") };
-
-            results.push(PopularManga {
-                id: manga_id,
-                title: name.to_string(),
-                genres: Vec::new(),
-                description: String::new(),
-                status: Some(MangaStatus::Ongoing),
-                cover_img_url,
-            });
+        if manga_id.is_empty() || seen.contains(&manga_id) {
+            continue;
         }
+        seen.insert(manga_id.clone());
+
+        let cover_img_url =
+            if cover_uri.starts_with("http") { cover_uri.to_string() } else { format!("{LEERCAPITULO_BASE_URL}{cover_uri}") };
+
+        results.push(PopularManga {
+            id: manga_id,
+            title: name.to_string(),
+            genres: Vec::new(),
+            description: String::new(),
+            status: Some(MangaStatus::Ongoing),
+            cover_img_url,
+        });
     }
 
     results
@@ -237,32 +235,30 @@ pub fn parse_home_recent(html: &str) -> Vec<RecentlyAddedManga> {
     let mut results = Vec::new();
     let re = regex::Regex::new(
         r#"<a class="lc-side-item" href="(/manga/[^"]+)">[\s\S]*?<img src="([^"]+)"[^>]*alt="([^"]*)"[\s\S]*?<span class="lc-side-name">([^<]+)</span>"#,
-    );
+    ).unwrap();
 
-    if let Ok(re) = re {
-        let mut seen = std::collections::HashSet::new();
-        for cap in re.captures_iter(html) {
-            let uri = cap.get(1).map(|m| m.as_str()).unwrap_or("");
-            let cover_uri = cap.get(2).map(|m| m.as_str()).unwrap_or("");
-            let name = cap.get(4).map(|m| m.as_str().trim()).unwrap_or("");
+    let mut seen = std::collections::HashSet::new();
+    for cap in re.captures_iter(html) {
+        let uri = cap.get(1).map(|m| m.as_str()).unwrap_or("");
+        let cover_uri = cap.get(2).map(|m| m.as_str()).unwrap_or("");
+        let name = cap.get(4).map(|m| m.as_str().trim()).unwrap_or("");
 
-            let manga_id = uri.trim_matches('/').strip_prefix("manga/").unwrap_or(uri).to_string();
+        let manga_id = uri.trim_matches('/').strip_prefix("manga/").unwrap_or(uri).to_string();
 
-            if manga_id.is_empty() || seen.contains(&manga_id) {
-                continue;
-            }
-            seen.insert(manga_id.clone());
-
-            let cover_img_url =
-                if cover_uri.starts_with("http") { cover_uri.to_string() } else { format!("{LEERCAPITULO_BASE_URL}{cover_uri}") };
-
-            results.push(RecentlyAddedManga {
-                id: manga_id,
-                title: name.to_string(),
-                description: String::new(),
-                cover_img_url,
-            });
+        if manga_id.is_empty() || seen.contains(&manga_id) {
+            continue;
         }
+        seen.insert(manga_id.clone());
+
+        let cover_img_url =
+            if cover_uri.starts_with("http") { cover_uri.to_string() } else { format!("{LEERCAPITULO_BASE_URL}{cover_uri}") };
+
+        results.push(RecentlyAddedManga {
+            id: manga_id,
+            title: name.to_string(),
+            description: String::new(),
+            cover_img_url,
+        });
     }
 
     results
