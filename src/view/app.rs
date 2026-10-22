@@ -23,12 +23,12 @@ use crate::backend::manga_provider::{
     ChapterToRead, FeedPageProvider, LatestChapter, ListOfChapters, Manga, MangaProvider, MangaProviders, MangaStatus, Pagination,
 };
 use crate::backend::tracker::MangaTracker;
-use crate::backend::tui::{Action, Events};
+use crate::backend::tui::{Action, Events, NewChapterNotificationGroup};
 use crate::config::MangaTuiConfig;
 use crate::global::INSTRUCTIONS_STYLE;
 use crate::view::pages::*;
 use crate::view::tasks::manga::download_new_chapters;
-use crate::view::widgets::{ErrorModal, NewChaptersModal};
+use crate::view::widgets::{ErrorModal, NewChapterItem, NewChaptersModal, NewChaptersModalState};
 
 const NEW_CHAPTER_CHECK_INTERVAL: Duration = Duration::from_secs(10 * 60);
 
@@ -78,8 +78,7 @@ where
     manga_provider: Arc<T>,
     manga_tracker: Option<S>,
     error_message: Option<String>,
-    new_chapters_notification: Option<String>,
-    new_chapters_to_download: Vec<LatestChapter>,
+    new_chapters_state: Option<NewChaptersModalState>,
     last_new_chapter_check: Instant,
     // The picker is what decides how big a image needs to be rendered depending on the user's
     // terminal font size and the graphics it supports
@@ -113,8 +112,8 @@ where
 
         if let Some(message) = self.error_message.as_ref().cloned() {
             self.render_modal_error_message(area, frame.buffer_mut(), &message);
-        } else if let Some(message) = self.new_chapters_notification.as_ref() {
-            NewChaptersModal::new(message).render(area, frame.buffer_mut());
+        } else if let Some(state) = self.new_chapters_state.as_ref() {
+            NewChaptersModal::new(state).render(area, frame.buffer_mut());
         }
     }
 
@@ -137,14 +136,31 @@ where
                 self.last_new_chapter_check = Instant::now();
                 self.check_for_new_downloaded_chapters();
             },
-            Events::NewChaptersNotification(message, chapters) => {
-                self.new_chapters_notification = Some(message);
-                self.new_chapters_to_download = chapters;
+            Events::NewChaptersNotification(groups) => {
+                let items = groups
+                    .into_iter()
+                    .map(|g| NewChapterItem {
+                        manga_id: g.manga_id,
+                        manga_title: g.manga_title,
+                        chapter_numbers: g.chapter_numbers,
+                        chapters: g.chapters,
+                        selected: true,
+                    })
+                    .collect();
+                self.new_chapters_state = Some(NewChaptersModalState::new(items));
             },
             Events::NewChaptersDownloadFinished(result) => match result {
                 Ok(count) => {
-                    self.new_chapters_notification = Some(format!("Downloaded {count} new chapter(s). Press <q> to close."));
-                    self.new_chapters_to_download.clear();
+                    if let Some(state) = &mut self.new_chapters_state {
+                        state.status_message = Some(format!("Downloaded {count} new chapter(s). Press <q> to close."));
+                        state.items.clear();
+                    } else {
+                        self.new_chapters_state = Some(NewChaptersModalState {
+                            items: Vec::new(),
+                            cursor: 0,
+                            status_message: Some(format!("Downloaded {count} new chapter(s). Press <q> to close.")),
+                        });
+                    }
                 },
                 Err(error) => self.display_error_message(error),
             },
@@ -226,8 +242,7 @@ where
             manga_tracker,
             state: AppState::Runnning,
             error_message: None,
-            new_chapters_notification: None,
-            new_chapters_to_download: Vec::new(),
+            new_chapters_state: None,
             last_new_chapter_check: Instant::now(),
             manga_provider: Arc::clone(&provider),
             top_tabs_area: Rect::default(),
@@ -251,8 +266,7 @@ where
                 },
             };
 
-            let mut notifications = Vec::new();
-            let mut chapters_to_notify = Vec::new();
+            let mut groups = Vec::new();
             for manga in downloaded_mangas {
                 let manga_details = match provider.get_manga_by_id(&manga.id).await {
                     Ok(details) => details,
@@ -298,14 +312,17 @@ where
                         .map(|chapter| chapter.chapter_number.as_str())
                         .collect::<Vec<_>>()
                         .join(", ");
-                    notifications.push(format!("{}: Ch. {}", manga.title, chapter_numbers));
-                    chapters_to_notify.extend(newly_available);
+                    groups.push(NewChapterNotificationGroup {
+                        manga_id: manga.id,
+                        manga_title: manga.title,
+                        chapter_numbers,
+                        chapters: newly_available,
+                    });
                 }
             }
 
-            if !notifications.is_empty() {
-                let message = format!("New chapters are available for downloaded manga:\n\n{}", notifications.join("\n"));
-                event_tx.send(Events::NewChaptersNotification(message, chapters_to_notify)).ok();
+            if !groups.is_empty() {
+                event_tx.send(Events::NewChaptersNotification(groups)).ok();
             }
         });
     }
@@ -345,29 +362,32 @@ where
 
     fn close_modal(&mut self) {
         self.error_message = None;
-        self.new_chapters_notification = None;
-        self.new_chapters_to_download.clear();
+        self.new_chapters_state = None;
     }
 
     fn dismiss_new_chapters_notification(&mut self) -> Result<(), String> {
-        let mut chapter_ids_by_manga = std::collections::BTreeMap::<String, Vec<String>>::new();
-        for chapter in &self.new_chapters_to_download {
-            chapter_ids_by_manga.entry(chapter.manga_id.clone()).or_default().push(chapter.id.clone());
-        }
+        if let Some(state) = &self.new_chapters_state {
+            let mut chapter_ids_by_manga = std::collections::BTreeMap::<String, Vec<String>>::new();
+            for item in &state.items {
+                for chapter in &item.chapters {
+                    chapter_ids_by_manga.entry(item.manga_id.clone()).or_default().push(chapter.id.clone());
+                }
+            }
 
-        let connection = Database::get_connection().map_err(|error| error.to_string())?;
-        let database = Database::new(&connection);
-        for (manga_id, chapter_ids) in chapter_ids_by_manga {
-            database
-                .save_dismissed_chapter_ids(&manga_id, self.manga_provider.name(), &chapter_ids)
-                .map_err(|error| error.to_string())?;
+            let connection = Database::get_connection().map_err(|error| error.to_string())?;
+            let database = Database::new(&connection);
+            for (manga_id, chapter_ids) in chapter_ids_by_manga {
+                database
+                    .save_dismissed_chapter_ids(&manga_id, self.manga_provider.name(), &chapter_ids)
+                    .map_err(|error| error.to_string())?;
+            }
         }
 
         Ok(())
     }
 
     fn is_displaying_modal(&self) -> bool {
-        self.error_message.is_some() || self.new_chapters_notification.is_some()
+        self.error_message.is_some() || self.new_chapters_state.is_some()
     }
 
     pub fn render_pages(&mut self, area: Rect, frame: &mut Frame<'_>) {
@@ -415,18 +435,57 @@ where
     }
 
     fn key_events_modal(&mut self, key_event: KeyEvent) {
-        match key_event.code {
-            KeyCode::Char('y') if !self.new_chapters_to_download.is_empty() => self.download_new_chapters(),
-            KeyCode::Char('q') => {
-                let dismissal_result = if self.error_message.is_none() && !self.new_chapters_to_download.is_empty() {
-                    self.dismiss_new_chapters_notification()
-                } else {
-                    Ok(())
-                };
-                self.close_modal();
-                if let Err(error) = dismissal_result {
-                    self.display_error_message(error);
+        if let Some(state) = &mut self.new_chapters_state {
+            if state.status_message.is_none() {
+                match key_event.code {
+                    KeyCode::Up | KeyCode::Char('k') => {
+                        state.cursor = state.cursor.saturating_sub(1);
+                    },
+                    KeyCode::Down | KeyCode::Char('j') => {
+                        if state.cursor + 1 < state.items.len() {
+                            state.cursor += 1;
+                        }
+                    },
+                    KeyCode::Char(' ') => {
+                        if let Some(item) = state.items.get_mut(state.cursor) {
+                            item.selected = !item.selected;
+                        }
+                    },
+                    KeyCode::Char('a') | KeyCode::Char('v') => {
+                        let all_selected = state.items.iter().all(|i| i.selected);
+                        for item in &mut state.items {
+                            item.selected = !all_selected;
+                        }
+                    },
+                    KeyCode::Char('y') | KeyCode::Char('d') | KeyCode::Enter => {
+                        self.download_new_chapters();
+                    },
+                    KeyCode::Char('q') | KeyCode::Esc => {
+                        let dismissal_result = self.dismiss_new_chapters_notification();
+                        self.close_modal();
+                        if let Err(error) = dismissal_result {
+                            self.display_error_message(error);
+                        }
+                    },
+                    KeyCode::Char('c') if key_event.modifiers == KeyModifiers::CONTROL => self.quit(),
+                    _ => {},
                 }
+                return;
+            } else {
+                match key_event.code {
+                    KeyCode::Char('q') | KeyCode::Esc => {
+                        self.close_modal();
+                    },
+                    KeyCode::Char('c') if key_event.modifiers == KeyModifiers::CONTROL => self.quit(),
+                    _ => {},
+                }
+                return;
+            }
+        }
+
+        match key_event.code {
+            KeyCode::Char('q') | KeyCode::Esc => {
+                self.close_modal();
             },
             KeyCode::Char('c') if key_event.modifiers == KeyModifiers::CONTROL => self.quit(),
             _ => {},
@@ -434,19 +493,56 @@ where
     }
 
     fn download_new_chapters(&mut self) {
-        let chapters = std::mem::take(&mut self.new_chapters_to_download);
-        self.new_chapters_notification = Some("Downloading new chapters... Press <q> to close.".into());
-        let client = Arc::clone(&self.manga_provider);
-        let config = MangaTuiConfig::get().clone();
-        let event_tx = self.global_event_tx.clone();
+        if let Some(state) = &mut self.new_chapters_state {
+            let mut chapters_to_download = Vec::new();
+            let mut unselected_by_manga = std::collections::BTreeMap::<String, Vec<String>>::new();
 
-        tokio::spawn(async move {
-            let result = download_new_chapters(client, chapters, config).await;
-            event_tx.send(Events::NewChaptersDownloadFinished(result)).ok();
-        });
+            for item in &state.items {
+                if item.selected {
+                    chapters_to_download.extend(item.chapters.clone());
+                } else {
+                    for chapter in &item.chapters {
+                        unselected_by_manga
+                            .entry(item.manga_id.clone())
+                            .or_default()
+                            .push(chapter.id.clone());
+                    }
+                }
+            }
+
+            if chapters_to_download.is_empty() {
+                return;
+            }
+
+            if !unselected_by_manga.is_empty() {
+                if let Ok(connection) = Database::get_connection() {
+                    let database = Database::new(&connection);
+                    for (manga_id, chapter_ids) in unselected_by_manga {
+                        let _ = database.save_dismissed_chapter_ids(&manga_id, self.manga_provider.name(), &chapter_ids);
+                    }
+                }
+            }
+
+            state.status_message = Some(format!(
+                "Downloading {} new chapter(s)... Press <q> to close.",
+                chapters_to_download.len()
+            ));
+
+            let client = Arc::clone(&self.manga_provider);
+            let config = MangaTuiConfig::get().clone();
+            let event_tx = self.global_event_tx.clone();
+
+            tokio::spawn(async move {
+                let result = download_new_chapters(client, chapters_to_download, config).await;
+                event_tx.send(Events::NewChaptersDownloadFinished(result)).ok();
+            });
+        }
     }
 
     fn handle_key_events(&mut self, key_event: KeyEvent) {
+        if self.is_displaying_modal() {
+            return;
+        }
         if self.manga_page.as_ref().is_some_and(|page| page.is_downloading_all_chapters()) {
             return;
         }
@@ -723,6 +819,54 @@ mod tests {
         let new_release = find_new_chapters(&latest_after_release, &["chapter-2".into()], &[]);
         assert_eq!(new_release.len(), 1);
         assert_eq!(new_release[0].id, "chapter-3");
+    }
+
+    #[test]
+    fn test_new_chapters_modal_selection_toggle() {
+        let items = vec![
+            NewChapterItem {
+                manga_id: "one-piece".into(),
+                manga_title: "One Piece".into(),
+                chapter_numbers: "1196, 1195".into(),
+                chapters: vec![LatestChapter {
+                    id: "ch-1196".into(),
+                    manga_id: "one-piece".into(),
+                    chapter_number: "1196".into(),
+                    ..Default::default()
+                }],
+                selected: true,
+            },
+            NewChapterItem {
+                manga_id: "dandadan".into(),
+                manga_title: "Dandadan".into(),
+                chapter_numbers: "249".into(),
+                chapters: vec![LatestChapter {
+                    id: "ch-249".into(),
+                    manga_id: "dandadan".into(),
+                    chapter_number: "249".into(),
+                    ..Default::default()
+                }],
+                selected: true,
+            },
+        ];
+
+        let mut state = NewChaptersModalState::new(items);
+        assert_eq!(state.cursor, 0);
+        assert!(state.items[0].selected);
+        assert!(state.items[1].selected);
+
+        // Toggle first item (e.g. One Piece)
+        state.items[0].selected = !state.items[0].selected;
+        assert!(!state.items[0].selected);
+        assert!(state.items[1].selected);
+
+        // Toggle all
+        let all_selected = state.items.iter().all(|i| i.selected);
+        for item in &mut state.items {
+            item.selected = !all_selected;
+        }
+        assert!(state.items[0].selected);
+        assert!(state.items[1].selected);
     }
 
     #[test]

@@ -18,6 +18,14 @@ pub enum Action {
     Quit,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct NewChapterNotificationGroup {
+    pub manga_id: String,
+    pub manga_title: String,
+    pub chapter_numbers: String,
+    pub chapters: Vec<super::manga_provider::LatestChapter>,
+}
+
 /// These are the events this app will listen to
 #[derive(Clone, Debug, PartialEq)]
 pub enum Events {
@@ -31,7 +39,7 @@ pub enum Events {
     GoFeedPage,
     Error(String),
     CheckForNewDownloadedChapters,
-    NewChaptersNotification(String, Vec<super::manga_provider::LatestChapter>),
+    NewChaptersNotification(Vec<NewChapterNotificationGroup>),
     NewChaptersDownloadFinished(Result<usize, String>),
     ReadChapter(ChapterToRead, MangaToRead),
 }
