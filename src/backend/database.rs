@@ -160,6 +160,13 @@ pub struct DownloadedManga {
     pub downloaded_chapter_ids: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FavoriteMangaRecord {
+    pub manga_id: String,
+    pub provider: MangaProviders,
+    pub title: String,
+}
+
 /// Arguments for retrieving manga history with filtering and pagination.
 ///
 /// Used with `Database::get_history()` to specify exactly what manga to retrieve.
@@ -865,6 +872,35 @@ impl<'a> Database<'a> {
         Ok(set)
     }
 
+    pub fn get_all_favorite_mangas(&self) -> rusqlite::Result<Vec<FavoriteMangaRecord>> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT manga_id, provider, title FROM favorite_mangas ORDER BY created_at DESC")?;
+        let rows = statement.query_map([], |row| {
+            let manga_id: String = row.get(0)?;
+            let provider_str: String = row.get(1)?;
+            let title: String = row.get(2)?;
+            let provider = provider_str.parse::<MangaProviders>().unwrap_or_default();
+            Ok(FavoriteMangaRecord {
+                manga_id,
+                provider,
+                title,
+            })
+        })?;
+        rows.collect()
+    }
+
+    pub fn get_downloaded_chapter_ids(&self, manga_id: &str, provider: MangaProviders) -> rusqlite::Result<Vec<String>> {
+        let mut statement = self.connection.prepare(
+            "SELECT chapters.id
+             FROM chapters
+             INNER JOIN mangas ON mangas.id = chapters.manga_id
+             WHERE mangas.id = ?1 AND mangas.manga_provider = ?2 AND chapters.is_downloaded = 1",
+        )?;
+        let rows = statement.query_map(params![manga_id, provider.to_string()], |row| row.get(0))?;
+        rows.collect()
+    }
+
     fn get_total_mangas_in_history(&self, history_type_id: i32, provider: MangaProviders) -> rusqlite::Result<u32> {
         let total: u32 = self.connection.query_row(
             "
@@ -1387,6 +1423,40 @@ mod test {
         assert!(!is_fav);
         assert!(!database.is_favorite(manga_id, MangaProviders::Mangadex)?);
         assert!(database.get_favorite_manga_ids(MangaProviders::Mangadex)?.is_empty());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_get_all_favorite_mangas_and_downloaded_chapter_ids() -> Result<()> {
+        let connection = Connection::open_in_memory()?;
+        let database = Database::new(&connection);
+        database.setup()?;
+
+        database.toggle_favorite("op-dex", MangaProviders::Mangadex, "One Piece Dex")?;
+        database.toggle_favorite("naruto-inm", MangaProviders::Inmanga, "Naruto Inmanga")?;
+
+        let all_favs = database.get_all_favorite_mangas()?;
+        assert_eq!(all_favs.len(), 2);
+        assert!(all_favs.iter().any(|f| f.manga_id == "op-dex" && f.provider == MangaProviders::Mangadex));
+        assert!(
+            all_favs
+                .iter()
+                .any(|f| f.manga_id == "naruto-inm" && f.provider == MangaProviders::Inmanga)
+        );
+
+        database.set_chapter_downloaded(SetChapterDownloaded {
+            id: "ch-1",
+            title: "Cap 1",
+            manga_id: "naruto-inm",
+            manga_title: "Naruto Inmanga",
+            img_url: None,
+            provider: MangaProviders::Inmanga,
+        })?;
+
+        let downloaded_ids = database.get_downloaded_chapter_ids("naruto-inm", MangaProviders::Inmanga)?;
+        assert_eq!(downloaded_ids, vec!["ch-1"]);
+        assert!(database.get_downloaded_chapter_ids("naruto-inm", MangaProviders::Mangadex)?.is_empty());
 
         Ok(())
     }

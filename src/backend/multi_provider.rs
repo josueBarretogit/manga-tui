@@ -25,9 +25,10 @@ use crate::backend::manga_provider::mangapill::filter_state::MangaPillFilterStat
 use crate::backend::manga_provider::weebcentral::filter_state::WeebcentralFilterState;
 use crate::backend::manga_provider::weebcentral::{WEEBCENTRAL_BASE_URL, WeebcentralProvider};
 use crate::backend::manga_provider::{
-    Chapter, ChapterFilters, ChapterPage, ChapterToRead, DecodeBytesToImage, FetchChapterBookmarked, GetChapterPages,
-    GetChaptersResponse, GetRawImage, GoToReadChapter, Languages, ListOfChapters, Manga, MangaPageProvider, MangaPanel,
-    MangaProviders, Pagination, SearchChapterById, SearchManga, SearchMangaById, SearchMangaPanel, SearchPageProvider,
+    Chapter, ChapterFilters, ChapterPage, ChapterToRead, DecodeBytesToImage, FeedPageProvider, FetchChapterBookmarked,
+    GetChapterPages, GetChaptersResponse, GetRawImage, GoToReadChapter, Languages, LatestChapter, ListOfChapters, Manga,
+    MangaPageProvider, MangaPanel, MangaProviders, Pagination, SearchChapterById, SearchManga, SearchMangaById, SearchMangaPanel,
+    SearchPageProvider,
 };
 use crate::config::{ImageQuality, MangaTuiConfig};
 
@@ -245,6 +246,22 @@ pub async fn get_all_chapters_for_provider(
         MangaProviders::Weebcentral => pool.weebcentral.get_all_chapters(manga_id, lang).await,
         MangaProviders::Mangapill => pool.mangapill.get_all_chapters(manga_id, lang).await,
         MangaProviders::Comizy => pool.comizy.get_all_chapters(manga_id, lang).await,
+    }
+}
+
+pub async fn get_latest_chapters_for_provider(
+    provider: MangaProviders,
+    manga_id: &str,
+) -> Result<Vec<LatestChapter>, Box<dyn Error>> {
+    let pool = &*POOL;
+    match provider {
+        MangaProviders::Mangadex => pool.mangadex.get_latest_chapters(manga_id).await,
+        MangaProviders::Inmanga => pool.inmanga.get_latest_chapters(manga_id).await,
+        MangaProviders::Leercapitulo => pool.leercapitulo.get_latest_chapters(manga_id).await,
+        MangaProviders::Mangaoni => pool.mangaoni.get_latest_chapters(manga_id).await,
+        MangaProviders::Weebcentral => pool.weebcentral.get_latest_chapters(manga_id).await,
+        MangaProviders::Mangapill => pool.mangapill.get_latest_chapters(manga_id).await,
+        MangaProviders::Comizy => pool.comizy.get_latest_chapters(manga_id).await,
     }
 }
 

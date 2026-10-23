@@ -11,7 +11,7 @@ use crate::backend::manga_downloader::epub_downloader::EpubDownloader;
 use crate::backend::manga_downloader::pdf_downloader::PdfDownloader;
 use crate::backend::manga_downloader::raw_images::RawImagesDownloader;
 use crate::backend::manga_downloader::{ChapterToDownloadSanitized, MangaDownloader};
-use crate::backend::manga_provider::{Chapter, Languages, LatestChapter, MangaPageProvider, MangaProvider};
+use crate::backend::manga_provider::{Chapter, Languages, LatestChapter, MangaPageProvider, MangaProvider, MangaProviders};
 use crate::backend::tracker::{MangaTracker, track_manga};
 use crate::common::format_error_message_tracking_reading_history;
 use crate::config::{DownloadType, MangaTuiConfig};
@@ -257,6 +257,129 @@ pub async fn download_single_chapter<T: MangaPageProvider, S: MangaTracker>(args
             tx.send(MangaPageEvents::DownloadError(args.chapter.id)).ok();
         },
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct AutoDownloadItem {
+    pub provider: MangaProviders,
+    pub manga_id: String,
+    pub chapter: LatestChapter,
+}
+
+pub async fn download_new_favorite_chapters(
+    items: Vec<AutoDownloadItem>,
+    config: MangaTuiConfig,
+) -> Result<(usize, Vec<String>), String> {
+    let mut downloaded_count = 0;
+    let mut downloaded_details = Vec::new();
+
+    let mut grouped = std::collections::BTreeMap::<(MangaProviders, String), Vec<LatestChapter>>::new();
+    for item in items {
+        grouped.entry((item.provider, item.manga_id)).or_default().push(item.chapter);
+    }
+
+    for ((provider, manga_id), latest_chapters) in grouped {
+        let manga = match crate::backend::multi_provider::get_manga_by_id_for_provider(provider, &manga_id).await {
+            Ok(m) => m,
+            Err(e) => {
+                write_to_error_log(format!("Could not load manga details for {manga_id} on {provider}: {e}").into());
+                continue;
+            },
+        };
+
+        let latest_ids: std::collections::HashSet<&str> = latest_chapters.iter().map(|c| c.id.as_str()).collect();
+        let mut chapters_to_download = Vec::new();
+        let mut checked_languages = Vec::new();
+
+        for latest in &latest_chapters {
+            if checked_languages.contains(&latest.language) {
+                continue;
+            }
+            checked_languages.push(latest.language);
+
+            let all_chapters =
+                match crate::backend::multi_provider::get_all_chapters_for_provider(provider, &manga_id, latest.language).await {
+                    Ok(chaps) => chaps,
+                    Err(e) => {
+                        write_to_error_log(format!("Could not load chapters for {} on {provider}: {e}", manga.title).into());
+                        continue;
+                    },
+                };
+            chapters_to_download.extend(all_chapters.into_iter().filter(|c| latest_ids.contains(c.id.as_str())));
+        }
+
+        let mut is_first_chapter = true;
+        for chapter in chapters_to_download {
+            if !is_first_chapter {
+                tokio::time::sleep(Duration::from_secs(2)).await;
+            }
+            is_first_chapter = false;
+
+            let pages = match crate::backend::multi_provider::get_chapter_pages_for_provider(
+                provider,
+                &chapter.id,
+                &manga_id,
+                config.image_quality,
+                |_, _| {},
+            )
+            .await
+            {
+                Ok(p) => p,
+                Err(e) => {
+                    write_to_error_log(
+                        format!("Could not fetch chapter {} for {} on {provider}: {e}", chapter.chapter_number, manga.title).into(),
+                    );
+                    continue;
+                },
+            };
+
+            let chapter_title = chapter.title.clone();
+            let chapter_id = chapter.id.clone();
+            let chapter_to_download = ChapterToDownloadSanitized {
+                chapter_id: chapter.id_safe_for_download,
+                manga_id: manga.id_safe_for_download.clone(),
+                manga_title: manga.title.clone().into(),
+                chapter_title: chapter.title.into(),
+                chapter_number: chapter.chapter_number.clone(),
+                volume_number: chapter.volume_number,
+                language: chapter.language,
+                scanlator: chapter.scanlator.unwrap_or_default().into(),
+                download_type: config.download_type,
+                pages,
+                provider: Some(provider),
+            };
+
+            let downloader: &dyn MangaDownloader = match config.download_type {
+                DownloadType::Cbz => &CbzDownloader::new(),
+                DownloadType::Raw => &RawImagesDownloader::new(),
+                DownloadType::Epub => &EpubDownloader::new(),
+                DownloadType::Pdf => &PdfDownloader::new(),
+            };
+
+            if let Err(e) =
+                downloader.save_chapter_in_file_system(&AppDirectories::MangaDownloads.get_full_path(), chapter_to_download)
+            {
+                write_to_error_log(format!("Could not save chapter {chapter_title}: {e}").into());
+                continue;
+            }
+
+            if let Ok(connection) = Database::get_connection() {
+                let _ = Database::new(&connection).set_chapter_downloaded(SetChapterDownloaded {
+                    id: &chapter_id,
+                    title: &chapter_title,
+                    manga_id: &manga_id,
+                    manga_title: &manga.title,
+                    img_url: Some(&manga.cover_img_url),
+                    provider,
+                });
+            }
+
+            downloaded_count += 1;
+            downloaded_details.push(format!("{} c.{}", manga.title, chapter.chapter_number));
+        }
+    }
+
+    Ok((downloaded_count, downloaded_details))
 }
 
 pub async fn download_new_chapters<T: MangaProvider>(

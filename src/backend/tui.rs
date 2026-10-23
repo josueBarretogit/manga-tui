@@ -41,7 +41,10 @@ pub enum Events {
     CheckForNewDownloadedChapters,
     NewChaptersNotification(Vec<NewChapterNotificationGroup>),
     NewChaptersDownloadFinished(Result<usize, String>),
-    AutoDownloadedFavorites(usize),
+    AutoDownloadedFavorites {
+        count: usize,
+        details: Vec<String>,
+    },
     ReadChapter(ChapterToRead, MangaToRead),
     EnqueueDownloadBatch(super::download_queue::EnqueueDownloadBatch),
     DownloadQueueProgress(super::download_queue::DownloadQueueProgress),

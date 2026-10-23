@@ -14,7 +14,7 @@ use ratatui::text::Span;
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
-use strum_macros::{Display, EnumIter};
+use strum_macros::{Display, EnumIter, EnumString};
 
 use super::database::ChapterBookmarked;
 use super::tui::Events;
@@ -699,7 +699,10 @@ pub struct ChapterPageUrl {
 /// 1. determine which manga provider to use when running manga-tui
 /// 2. apply specific configuration for each provider, for example `manganato` provides larger paginations sizes than `mangadex`
 ///    since `mangadex` has been the first manga provider it is the default
-#[derive(Debug, Clone, Copy, Display, Default, clap::ValueEnum, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, Display, EnumString, Default, clap::ValueEnum, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+)]
+#[strum(serialize_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
 pub enum MangaProviders {
     #[default]

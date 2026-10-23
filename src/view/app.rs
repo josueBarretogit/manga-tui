@@ -30,7 +30,7 @@ use crate::backend::tui::{Action, Events, NewChapterNotificationGroup};
 use crate::config::MangaTuiConfig;
 use crate::global::INSTRUCTIONS_STYLE;
 use crate::view::pages::*;
-use crate::view::tasks::manga::download_new_chapters;
+use crate::view::tasks::manga::{AutoDownloadItem, download_new_chapters, download_new_favorite_chapters};
 use crate::view::widgets::{DownloadQueueModal, ErrorModal, NewChapterItem, NewChaptersModal, NewChaptersModalState};
 
 const NEW_CHAPTER_CHECK_INTERVAL: Duration = Duration::from_secs(10 * 60);
@@ -175,8 +175,15 @@ where
                 },
                 Err(error) => self.display_error_message(error),
             },
-            Events::AutoDownloadedFavorites(count) => {
-                self.favorite_status_toast = Some((format!("★ Auto-downloaded {count} new favorite chapter(s)"), Instant::now()));
+            Events::AutoDownloadedFavorites { count, details } => {
+                let summary = if details.is_empty() {
+                    format!("{count} capítulo(s)")
+                } else if details.len() <= 2 {
+                    details.join(", ")
+                } else {
+                    format!("{}, {} (+{} más)", details[0], details[1], details.len() - 2)
+                };
+                self.favorite_status_toast = Some((format!("★ Auto-descargado: {summary}"), Instant::now()));
             },
             Events::EnqueueDownloadBatch(batch) => {
                 let count = batch.chapters.len();
@@ -317,6 +324,19 @@ where
         let event_tx = self.global_event_tx.clone();
 
         tokio::spawn(async move {
+            // 1. Get all favorite mangas across all providers
+            let all_favorites = match Database::get_connection().and_then(|conn| {
+                let db = Database::new(&conn);
+                db.get_all_favorite_mangas()
+            }) {
+                Ok(favs) => favs,
+                Err(e) => {
+                    write_to_error_log(format!("Failed to query favorites: {e}").into());
+                    Vec::new()
+                },
+            };
+
+            // 2. Get downloaded mangas for current provider (for modal notification of non-favorites)
             let downloaded_mangas = match Database::get_connection().and_then(|connection| {
                 let database = Database::new(&connection);
                 database.get_downloaded_mangas(provider_name)
@@ -324,18 +344,84 @@ where
                 Ok(mangas) => mangas,
                 Err(error) => {
                     event_tx.send(Events::Error(error.to_string())).ok();
-                    return;
+                    Vec::new()
                 },
             };
 
             let mut groups = Vec::new();
-            let mut auto_download_chapters = Vec::new();
+            let mut auto_download_items = Vec::new();
+            let mut checked_mangas = HashSet::new();
 
-            let favorite_ids = Database::get_connection()
-                .and_then(|conn| Database::new(&conn).get_favorite_manga_ids(provider_name))
-                .unwrap_or_default();
+            // Check all favorites across all providers
+            for fav in all_favorites {
+                checked_mangas.insert((fav.provider, fav.manga_id.clone()));
 
+                let manga_details = match crate::backend::multi_provider::get_manga_by_id_for_provider(fav.provider, &fav.manga_id)
+                    .await
+                {
+                    Ok(details) => details,
+                    Err(error) => {
+                        write_to_error_log(format!("Could not check favorite {} on {}: {error}", fav.title, fav.provider).into());
+                        continue;
+                    },
+                };
+                if manga_details.status != MangaStatus::Ongoing {
+                    continue;
+                }
+
+                let latest_chapters =
+                    match crate::backend::multi_provider::get_latest_chapters_for_provider(fav.provider, &fav.manga_id).await {
+                        Ok(chapters) if !chapters.is_empty() => chapters,
+                        _ => continue,
+                    };
+
+                let state_result = Database::get_connection().and_then(|connection| {
+                    let database = Database::new(&connection);
+                    let dismissed_ids = database.get_dismissed_chapter_ids(&fav.manga_id, fav.provider)?;
+                    let downloaded_ids = database.get_downloaded_chapter_ids(&fav.manga_id, fav.provider)?;
+                    Ok((dismissed_ids, downloaded_ids))
+                });
+
+                let (dismissed_ids, downloaded_ids) = match state_result {
+                    Ok(ids) => ids,
+                    Err(error) => {
+                        write_to_error_log(format!("Database error checking favorite chapters for {}: {error}", fav.title).into());
+                        continue;
+                    },
+                };
+
+                let newly_available = find_new_chapters(&latest_chapters, &dismissed_ids, &downloaded_ids);
+
+                if !newly_available.is_empty() {
+                    let chapters_to_auto_download =
+                        if dismissed_ids.is_empty() && downloaded_ids.is_empty() && newly_available.len() > 1 {
+                            let to_download = vec![newly_available[0].clone()];
+                            let older_ids: Vec<String> = newly_available[1..].iter().map(|c| c.id.clone()).collect();
+                            if let Ok(connection) = Database::get_connection() {
+                                let _ =
+                                    Database::new(&connection).save_dismissed_chapter_ids(&fav.manga_id, fav.provider, &older_ids);
+                            }
+                            to_download
+                        } else {
+                            newly_available
+                        };
+
+                    for chapter in chapters_to_auto_download {
+                        auto_download_items.push(AutoDownloadItem {
+                            provider: fav.provider,
+                            manga_id: fav.manga_id.clone(),
+                            chapter,
+                        });
+                    }
+                }
+            }
+
+            // Check downloaded non-favorites for current provider
             for manga in downloaded_mangas {
+                if checked_mangas.contains(&(provider_name, manga.id.clone())) {
+                    continue;
+                }
+
                 let manga_details = match provider.get_manga_by_id(&manga.id).await {
                     Ok(details) => details,
                     Err(error) => {
@@ -375,34 +461,30 @@ where
                 };
 
                 if !newly_available.is_empty() {
-                    if favorite_ids.contains(&manga.id) {
-                        auto_download_chapters.extend(newly_available);
-                    } else {
-                        let chapter_numbers = newly_available
-                            .iter()
-                            .map(|chapter| chapter.chapter_number.as_str())
-                            .collect::<Vec<_>>()
-                            .join(", ");
-                        groups.push(NewChapterNotificationGroup {
-                            manga_id: manga.id,
-                            manga_title: manga.title,
-                            chapter_numbers,
-                            chapters: newly_available,
-                        });
-                    }
+                    let chapter_numbers = newly_available
+                        .iter()
+                        .map(|chapter| chapter.chapter_number.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    groups.push(NewChapterNotificationGroup {
+                        manga_id: manga.id,
+                        manga_title: manga.title,
+                        chapter_numbers,
+                        chapters: newly_available,
+                    });
                 }
             }
 
-            if !auto_download_chapters.is_empty() {
-                let client = Arc::clone(&provider);
+            if !auto_download_items.is_empty() {
                 let config = MangaTuiConfig::get().clone();
                 let tx = event_tx.clone();
                 tokio::spawn(async move {
-                    let result = download_new_chapters(client, auto_download_chapters, config).await;
+                    let result = download_new_favorite_chapters(auto_download_items, config).await;
                     match result {
-                        Ok(count) => {
-                            tx.send(Events::AutoDownloadedFavorites(count)).ok();
+                        Ok((count, details)) if count > 0 => {
+                            tx.send(Events::AutoDownloadedFavorites { count, details }).ok();
                         },
+                        Ok(_) => {},
                         Err(e) => {
                             tx.send(Events::Error(format!("Auto-download of favorite chapters failed: {e}"))).ok();
                         },
@@ -466,7 +548,7 @@ where
         }
 
         if let Some((msg, time)) = &self.favorite_status_toast {
-            if time.elapsed().as_secs() < 12 {
+            if time.elapsed().as_secs() < 15 {
                 let toast = Line::from(vec![Span::styled(format!(" {msg} "), Style::default().fg(Color::Yellow).bold())]);
                 Paragraph::new(toast).alignment(Alignment::Right).render(area, buf);
             }
