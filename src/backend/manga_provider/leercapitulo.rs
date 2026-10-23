@@ -310,6 +310,7 @@ impl SearchMangaById for LeercapituloProvider {
             rating: String::new(),
             artist: None,
             author: None,
+            provider: Some(MangaProviders::Leercapitulo),
         })
     }
 }
@@ -461,6 +462,7 @@ impl SearchPageProvider for LeercapituloProvider {
                     languages: vec![Languages::Spanish],
                     artist: None,
                     author: None,
+                    provider: Some(MangaProviders::Leercapitulo),
                 }
             })
             .collect();

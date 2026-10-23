@@ -50,6 +50,7 @@ pub enum Events {
         manga_id: String,
         chapter_id: String,
     },
+    SearchAllProviders(String),
 }
 
 #[cfg(unix)]

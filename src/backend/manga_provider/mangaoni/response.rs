@@ -132,6 +132,7 @@ impl From<MangaoniMangaDetails> for Manga {
             rating: String::new(),
             artist: None,
             author: None,
+            provider: Some(crate::backend::manga_provider::MangaProviders::Mangaoni),
         }
     }
 }

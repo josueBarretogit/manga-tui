@@ -16,7 +16,9 @@ use tokio::task::JoinSet;
 
 use crate::backend::database::{Bookmark, ChapterToBookmark, ChapterToSaveHistory, Database, MangaReadingHistorySave};
 use crate::backend::error_log::{ErrorType, write_to_error_log};
-use crate::backend::manga_provider::{ChapterReader, ChapterToRead, ListOfChapters, MangaPanel, ReaderPageProvider};
+use crate::backend::manga_provider::{
+    ChapterReader, ChapterToRead, ListOfChapters, MangaPanel, MangaProviders, ReaderPageProvider,
+};
 use crate::backend::tracker::{MangaTracker, track_manga};
 use crate::backend::tui::Events;
 use crate::common::format_error_message_tracking_reading_history;
@@ -153,6 +155,7 @@ where
     picker: Picker,
     search_next_chapter_loader: ThrobberState,
     api_client: Arc<T>,
+    pub provider: Option<MangaProviders>,
     pub manga_tracker: Option<S>,
     pub auto_bookmark: bool,
     pub global_event_tx: Option<UnboundedSender<Events>>,
@@ -287,6 +290,7 @@ where
             search_next_chapter_loader: ThrobberState::default(),
             picker,
             api_client,
+            provider: None,
         }
     }
 
@@ -311,6 +315,11 @@ where
 
     pub fn with_manga_tracker(mut self, manga_tracker: Option<S>) -> Self {
         self.manga_tracker = manga_tracker;
+        self
+    }
+
+    pub fn with_provider(mut self, provider: Option<MangaProviders>) -> Self {
+        self.provider = provider;
         self
     }
 
@@ -468,10 +477,14 @@ where
             if item.state != PageItemState::Loading && item.state != PageItemState::FinishedLoad {
                 let tx = self.local_event_tx.clone();
                 let api_client = Arc::clone(&self.api_client);
+                let provider = self.provider;
                 let url = url.clone();
 
                 self.image_tasks.spawn(async move {
-                    let response = api_client.search_manga_panel(url).await;
+                    let response = match provider {
+                        Some(p) => crate::backend::multi_provider::search_manga_panel_for_provider(p, url).await,
+                        None => api_client.search_manga_panel(url).await,
+                    };
 
                     match response {
                         Ok(panel) => {
@@ -513,7 +526,7 @@ where
             manga_cover_url: None,
             translated_language: self.current_chapter.language,
             page_number: num_page,
-            provider: self.api_client.name(),
+            provider: self.provider.unwrap_or_else(|| self.api_client.name()),
         };
 
         match database.bookmark(chapter_to_bookmark) {
@@ -742,10 +755,14 @@ where
 
     fn search_chapter(&mut self, chapter_id: String) {
         let api_client = self.api_client.clone();
+        let provider = self.provider;
         let sender = self.local_event_tx.clone();
         let manga_id = self.manga_id.clone();
         self.image_tasks.spawn(async move {
-            let response = api_client.search_chapter(&chapter_id, &manga_id).await;
+            let response = match provider {
+                Some(p) => crate::backend::multi_provider::search_chapter_for_provider(p, &chapter_id, &manga_id).await,
+                None => api_client.search_chapter(&chapter_id, &manga_id).await,
+            };
             match response {
                 Ok(res) => {
                     sender.send(MangaReaderEvents::LoadChapter(res)).ok();
@@ -772,7 +789,7 @@ where
                         title: &self.current_chapter.title,
                         translated_language: "en",
                     },
-                    provider: self.api_client.name(),
+                    provider: self.provider.unwrap_or_else(|| self.api_client.name()),
                 })
                 .unwrap();
             return self.current_chapter.id.clone();

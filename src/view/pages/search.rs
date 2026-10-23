@@ -68,6 +68,14 @@ pub enum SearchPageActions {
     PreviousPage,
     SearchMangaPage,
     PlanToRead,
+    ToggleScope,
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum SearchScope {
+    #[default]
+    AllProviders,
+    CurrentProvider,
 }
 
 #[derive(Default, PartialEq, Eq, PartialOrd, Ord)]
@@ -99,6 +107,7 @@ where
     picker: Option<Picker>,
     manga_cover_state: ImageState,
     tasks: JoinSet<()>,
+    pub search_scope: SearchScope,
     manga_provider: Arc<T>,
     manga_tracker: Option<S>,
 }
@@ -157,6 +166,7 @@ where
             SearchPageActions::PreviousPage => self.search_previous_page(),
             SearchPageActions::SearchMangaPage => self.search_manga_page(),
             SearchPageActions::PlanToRead => self.plan_to_read(),
+            SearchPageActions::ToggleScope => self.toggle_scope(),
         }
     }
 
@@ -221,6 +231,7 @@ where
             manga_added_to_plan_to_read: None,
             picker,
             manga_cover_state: ImageState::default(),
+            search_scope: SearchScope::default(),
             manga_provider: api_client,
             manga_tracker,
         }
@@ -253,17 +264,29 @@ where
 
         render_search_bar(self.input_mode == InputMode::Typing, input_help, &self.search_bar, frame, input_area);
 
+        let scope_span = match self.search_scope {
+            SearchScope::AllProviders => {
+                Span::styled(" [All Providers (Multi-search)] ", Style::default().fg(Color::Yellow).bold())
+            },
+            SearchScope::CurrentProvider => {
+                Span::styled(format!(" [{}] ", self.manga_provider.name()), Style::default().fg(Color::Cyan).bold())
+            },
+        };
+
+        let mut info_lines =
+            vec![Line::from(vec!["Scope: ".into(), scope_span, " (<Tab> or <m> to toggle)".to_span().style(*INSTRUCTIONS_STYLE)])];
+
         if let Some(name) = self.manga_added_to_plan_to_read.as_ref() {
-            Paragraph::new(format!("Added: {name} to plan to read 📖").to_span().underlined())
-                .wrap(Wrap { trim: true })
-                .render(
-                    information_area.inner(Margin {
-                        horizontal: 1,
-                        vertical: 1,
-                    }),
-                    frame.buffer_mut(),
-                );
+            info_lines.push(Line::from(Span::styled(format!("Added: {name} to plan to read 📖"), Style::default().underlined())));
         }
+
+        Paragraph::new(info_lines).wrap(Wrap { trim: true }).render(
+            information_area.inner(Margin {
+                horizontal: 1,
+                vertical: 1,
+            }),
+            frame.buffer_mut(),
+        );
     }
 
     fn render_manga_found_area(&mut self, area: Rect, frame: &mut Frame<'_>) {
@@ -346,6 +369,7 @@ where
                                 manga_selected.manga.description.as_ref().unwrap_or(&"No description".to_string()),
                                 &manga_selected.manga.genres,
                                 manga_selected.manga.status,
+                                manga_selected.manga.provider,
                                 self.picker.is_some(),
                                 loader_state,
                             ),
@@ -436,7 +460,7 @@ where
                 id: &item.manga.id,
                 title: &item.manga.title,
                 img_url: Some(&item.manga.cover_img_url),
-                provider: self.manga_provider.name(),
+                provider: item.manga.provider.unwrap_or_else(|| self.manga_provider.name()),
             });
 
             match plan_to_read_operation {
@@ -453,15 +477,24 @@ where
         if let Some(manga) = manga_selected {
             let client = Arc::clone(&self.manga_provider);
             let id = manga.manga.id.clone();
+            let provider = manga.manga.provider;
             let tx = self.local_event_tx.clone();
             self.tasks.spawn(async move {
-                let response = client.get_manga_by_id(&id).await;
+                let response = match provider {
+                    Some(p) => crate::backend::multi_provider::get_manga_by_id_for_provider(p, &id)
+                        .await
+                        .map_err(|e| e.to_string()),
+                    None => client.get_manga_by_id(&id).await.map_err(|e| e.to_string()),
+                };
                 match response {
-                    Ok(res) => {
+                    Ok(mut res) => {
+                        if res.provider.is_none() {
+                            res.provider = provider;
+                        }
                         tx.send(SearchPageEvents::GoToMangaPage(Box::new(res))).ok();
                     },
                     Err(e) => {
-                        tx.send(SearchPageEvents::FailedGoToMangaPage(e.to_string())).ok();
+                        tx.send(SearchPageEvents::FailedGoToMangaPage(e.clone())).ok();
                         write_to_error_log(e.into());
                     },
                 }
@@ -498,6 +531,9 @@ where
                 KeyCode::Char('f') => {
                     self.local_action_tx.send(SearchPageActions::ToggleFilters).ok();
                 },
+                KeyCode::Tab | KeyCode::Char('m') => {
+                    self.local_action_tx.send(SearchPageActions::ToggleScope).ok();
+                },
                 KeyCode::Char('r') | KeyCode::Enter => {
                     self.local_action_tx.send(SearchPageActions::SearchMangaPage).ok();
                 },
@@ -509,6 +545,9 @@ where
                     if self.state != PageState::SearchingMangas {
                         self.local_action_tx.send(SearchPageActions::Search).ok();
                     }
+                },
+                KeyCode::Tab => {
+                    self.local_action_tx.send(SearchPageActions::ToggleScope).ok();
                 },
                 KeyCode::Esc => {
                     self.local_action_tx.send(SearchPageActions::StopTyping).ok();
@@ -539,6 +578,20 @@ where
         self.filter_state.is_typing()
     }
 
+    fn toggle_scope(&mut self) {
+        self.search_scope = match self.search_scope {
+            SearchScope::AllProviders => SearchScope::CurrentProvider,
+            SearchScope::CurrentProvider => SearchScope::AllProviders,
+        };
+    }
+
+    pub fn search_with_query_all_providers(&mut self, query: &str) {
+        self.search_bar = Input::default().with_value(query.to_string());
+        self.search_scope = SearchScope::AllProviders;
+        self.reset_search();
+        self.search_mangas();
+    }
+
     fn search_mangas(&mut self) {
         self.clean_up();
 
@@ -549,16 +602,35 @@ where
         let search_term = SearchTerm::trimmed_lowercased(self.search_bar.value());
         let filters = self.filter_state.get_state().clone();
         let client = Arc::clone(&self.manga_provider);
+        let scope = self.search_scope;
 
         self.tasks.spawn(async move {
-            let response = client.search_mangas(search_term, filters, page).await;
-            match response {
-                Ok(res) => {
-                    tx.send(SearchPageEvents::LoadMangasFound(Some(res))).ok();
+            match scope {
+                SearchScope::AllProviders => {
+                    let results = if let Some(term) = search_term {
+                        crate::backend::multi_provider::search_all_providers(term.get()).await
+                    } else {
+                        vec![]
+                    };
+                    let total = results.len() as u32;
+                    let response = GetMangasResponse {
+                        mangas: results,
+                        total_mangas: total,
+                        next_page: false,
+                    };
+                    tx.send(SearchPageEvents::LoadMangasFound(Some(response))).ok();
                 },
-                Err(e) => {
-                    write_to_error_log(e.into());
-                    tx.send(SearchPageEvents::LoadMangasFound(None)).ok();
+                SearchScope::CurrentProvider => {
+                    let response = client.search_mangas(search_term, filters, page).await;
+                    match response {
+                        Ok(res) => {
+                            tx.send(SearchPageEvents::LoadMangasFound(Some(res))).ok();
+                        },
+                        Err(e) => {
+                            write_to_error_log(e.into());
+                            tx.send(SearchPageEvents::LoadMangasFound(None)).ok();
+                        },
+                    }
                 },
             }
         });
@@ -618,20 +690,25 @@ where
     }
 
     fn search_covers(&mut self) {
-        let cover_urls_and_manga_ids: Vec<(String, String)> = self
+        let cover_items: Vec<(String, String, Option<crate::backend::manga_provider::MangaProviders>)> = self
             .mangas_found_list
             .widget
             .mangas
             .iter()
-            .map(|item| (item.manga.cover_img_url.clone(), item.manga.id.clone()))
+            .map(|item| (item.manga.cover_img_url.clone(), item.manga.id.clone(), item.manga.provider))
             .collect();
 
         let tx = self.local_event_tx.clone();
         let client = Arc::clone(&self.manga_provider);
 
         self.tasks.spawn(async move {
-            for (cover, id) in cover_urls_and_manga_ids {
-                let response = client.get_image(&cover).await;
+            for (cover, id, provider) in cover_items {
+                let response = match provider {
+                    Some(p) => crate::backend::multi_provider::get_image_for_provider(p, &cover)
+                        .await
+                        .map_err(|e| e as Box<dyn std::error::Error>),
+                    None => client.get_image(&cover).await,
+                };
                 if let Ok(res) = response {
                     tx.send(SearchPageEvents::LoadCover(Some(res), id)).ok();
                 }

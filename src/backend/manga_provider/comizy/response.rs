@@ -6,8 +6,8 @@ use reqwest::Url;
 use serde::{Deserialize, Serialize};
 
 use crate::backend::manga_provider::{
-    Artist, Author, Chapter, ChapterPageUrl, ChapterReader, Genres, Languages, Manga, MangaStatus, PopularManga, Rating,
-    RecentlyAddedManga, SearchManga,
+    Artist, Author, Chapter, ChapterPageUrl, ChapterReader, Genres, Languages, Manga, MangaProviders, MangaStatus, PopularManga,
+    Rating, RecentlyAddedManga, SearchManga,
 };
 
 pub const COMIZY_BASE_URL: &str = "https://comizy.io";
@@ -103,6 +103,7 @@ impl ComizyTitleItem {
             languages: vec![Languages::English],
             artist: None,
             author: None,
+            provider: Some(MangaProviders::Comizy),
         }
     }
 }
@@ -183,6 +184,7 @@ impl ComizyTitleDetails {
             rating: String::new(),
             artist,
             author,
+            provider: Some(MangaProviders::Comizy),
         }
     }
 }

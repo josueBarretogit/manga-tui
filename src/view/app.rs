@@ -57,6 +57,7 @@ pub struct MangaToRead {
     pub title: String,
     pub manga_id: String,
     pub list: ListOfChapters,
+    pub provider: Option<MangaProviders>,
 }
 
 /// The application which owns every `page` or section in manga-tui
@@ -208,6 +209,19 @@ where
                     manga_reader.clean_up();
                     self.current_tab = SelectedPage::MangaTab;
                 }
+            },
+            Events::SearchAllProviders(query) => {
+                if let Some(manga_page) = self.manga_page.as_mut() {
+                    manga_page.clean_up();
+                    self.manga_page = None;
+                }
+                if let Some(manga_reader) = self.manga_reader_page.as_mut() {
+                    manga_reader.clean_up();
+                    self.manga_reader_page = None;
+                }
+                self.feed_page.clean_up();
+                self.current_tab = SelectedPage::Search;
+                self.search_page.search_with_query_all_providers(&query);
             },
             _ => {},
         }
@@ -753,7 +767,8 @@ where
         .with_global_sender(self.global_event_tx.clone())
         .with_list_of_chapters(manga_to_read.list)
         .with_manga_title(manga_to_read.title)
-        .with_manga_tracker(manga_tracker);
+        .with_manga_tracker(manga_tracker)
+        .with_provider(manga_to_read.provider);
 
         let config = MangaTuiConfig::get();
 
@@ -1090,6 +1105,7 @@ mod tests {
                 title: "some_title".to_string(),
                 manga_id: "some_manga_id".to_string(),
                 list: list_of_chapter.clone(),
+                provider: None,
             },
             Some(manga_tracker),
         );

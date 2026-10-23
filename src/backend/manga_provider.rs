@@ -332,6 +332,8 @@ pub struct Manga {
     pub artist: Option<Artist>,
     /// Some manga providers provide the author of the manga
     pub author: Option<Author>,
+    #[serde(default)]
+    pub provider: Option<MangaProviders>,
 }
 
 /// Optional values exist because some manga providers dont include them when using their search
@@ -349,6 +351,7 @@ pub struct SearchManga {
     pub artist: Option<Artist>,
     /// Some manga providers provide the author of the manga
     pub author: Option<Author>,
+    pub provider: Option<MangaProviders>,
 }
 
 #[derive(Debug, Default, PartialEq, Clone, Serialize, Deserialize)]
@@ -696,7 +699,7 @@ pub struct ChapterPageUrl {
 /// 1. determine which manga provider to use when running manga-tui
 /// 2. apply specific configuration for each provider, for example `manganato` provides larger paginations sizes than `mangadex`
 ///    since `mangadex` has been the first manga provider it is the default
-#[derive(Debug, Clone, Copy, Display, Default, clap::ValueEnum, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Display, Default, clap::ValueEnum, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum MangaProviders {
     #[default]

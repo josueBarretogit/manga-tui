@@ -121,23 +121,46 @@ impl<T: MangaProvider + 'static> DownloadQueueWorker<T> {
                 let total = self.total_in_batch;
                 let remaining = self.queue.len();
 
-                let pages_result = self
-                    .client
-                    .get_chapter_pages(&item.chapter.id, &item.manga_id, config.image_quality, move |percent, _| {
-                        event_tx_clone
-                            .send(Events::DownloadQueueProgress(DownloadQueueProgress {
-                                is_downloading: true,
-                                current_manga_title: manga_title_clone.clone(),
-                                current_chapter_number: chapter_num_clone.clone(),
-                                current_page_percentage: percent,
-                                completed_in_batch: completed,
-                                total_in_batch: total,
-                                remaining_items: remaining + 1,
-                            }))
-                            .ok();
-                    })
+                let pages_result = if item.provider != self.client.name() {
+                    crate::backend::multi_provider::get_chapter_pages_for_provider(
+                        item.provider,
+                        &item.chapter.id,
+                        &item.manga_id,
+                        config.image_quality,
+                        move |percent, _| {
+                            event_tx_clone
+                                .send(Events::DownloadQueueProgress(DownloadQueueProgress {
+                                    is_downloading: true,
+                                    current_manga_title: manga_title_clone.clone(),
+                                    current_chapter_number: chapter_num_clone.clone(),
+                                    current_page_percentage: percent,
+                                    completed_in_batch: completed,
+                                    total_in_batch: total,
+                                    remaining_items: remaining + 1,
+                                }))
+                                .ok();
+                        },
+                    )
                     .await
-                    .map_err(|e| e.to_string());
+                    .map_err(|e| e.to_string())
+                } else {
+                    self.client
+                        .get_chapter_pages(&item.chapter.id, &item.manga_id, config.image_quality, move |percent, _| {
+                            event_tx_clone
+                                .send(Events::DownloadQueueProgress(DownloadQueueProgress {
+                                    is_downloading: true,
+                                    current_manga_title: manga_title_clone.clone(),
+                                    current_chapter_number: chapter_num_clone.clone(),
+                                    current_page_percentage: percent,
+                                    completed_in_batch: completed,
+                                    total_in_batch: total,
+                                    remaining_items: remaining + 1,
+                                }))
+                                .ok();
+                        })
+                        .await
+                        .map_err(|e| e.to_string())
+                };
 
                 match pages_result {
                     Ok(pages) => {

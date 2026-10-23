@@ -484,6 +484,7 @@ impl MangaPillProvider {
                 title: ma.title,
                 status: Some(ma.status.into()),
                 languages: vec![Languages::English],
+                provider: Some(MangaProviders::Mangapill),
                 ..Default::default()
             })
             .collect();

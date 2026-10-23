@@ -303,6 +303,7 @@ impl MangadexClient {
             languages,
             artist,
             author,
+            provider: Some(super::MangaProviders::Mangadex),
         }
     }
 
@@ -1011,6 +1012,7 @@ impl SearchPageProvider for MangadexClient {
                     cover_img_url,
                     languages,
                     status: Some(status),
+                    provider: Some(super::MangaProviders::Mangadex),
                 }
             })
             .collect();
@@ -1120,6 +1122,7 @@ mod test {
                 genres: vec![Genres::default()],
                 description: Some("".to_string()),
                 status: Some(MangaStatus::Ongoing),
+                provider: Some(MangaProviders::Mangadex),
                 ..Default::default()
             }],
             total_mangas: 5,
@@ -1344,6 +1347,7 @@ mod test {
             id_safe_for_download: "some_id".to_string(),
             genres: vec![Genres::default()],
             title: "No title".to_string(),
+            provider: Some(MangaProviders::Mangadex),
             ..Default::default()
         };
 

@@ -18,6 +18,7 @@ pub mod html_parser;
 pub mod manga_downloader;
 pub mod manga_provider;
 pub mod migration;
+pub mod multi_provider;
 pub mod release_notifier;
 pub mod secrets;
 pub mod tracker;

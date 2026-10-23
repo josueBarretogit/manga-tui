@@ -7,7 +7,8 @@ use scraper::{Html, Selector};
 use serde::Deserialize;
 
 use crate::backend::manga_provider::{
-    Chapter, ChapterPageUrl, ChapterReader, Languages, Manga, MangaStatus, PopularManga, RecentlyAddedManga, SearchManga,
+    Chapter, ChapterPageUrl, ChapterReader, Languages, Manga, MangaProviders, MangaStatus, PopularManga, RecentlyAddedManga,
+    SearchManga,
 };
 
 pub static INMANGA_BASE_URL: &str = "https://inmanga.com";
@@ -78,6 +79,7 @@ impl From<InmangaMangaItem> for SearchManga {
             languages: vec![Languages::Spanish],
             artist: None,
             author: None,
+            provider: Some(MangaProviders::Inmanga),
         }
     }
 }
@@ -218,6 +220,7 @@ impl From<InmangaMangaDetails> for Manga {
             rating: "10".to_string(),
             artist: None,
             author: None,
+            provider: Some(MangaProviders::Inmanga),
         }
     }
 }

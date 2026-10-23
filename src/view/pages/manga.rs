@@ -172,8 +172,9 @@ where
         local_event_tx.send(MangaPageEvents::SearchCover).ok();
 
         let cover_area = Rect::default();
+        let provider_name = manga.provider.unwrap_or_else(|| provider.name());
         let is_favorite = Database::get_connection()
-            .and_then(|conn| Database::new(&conn).is_favorite(&manga.id, provider.name()))
+            .and_then(|conn| Database::new(&conn).is_favorite(&manga.id, provider_name))
             .unwrap_or(false);
 
         let preferred = *Languages::get_preferred_lang();
@@ -295,14 +296,24 @@ where
             None => String::new(),
         };
 
-        let title_spans = if self.is_favorite {
-            Line::from(vec![
-                Span::styled("★ ", Style::default().fg(ratatui::style::Color::Yellow).bold()),
-                Span::raw(self.manga.title.clone()),
-            ])
-        } else {
-            Line::from(self.manga.title.clone())
-        };
+        let mut title_spans_vec = Vec::new();
+        if self.is_favorite {
+            title_spans_vec.push(Span::styled("★ ", Style::default().fg(ratatui::style::Color::Yellow).bold()));
+        }
+        if let Some(provider) = self.manga.provider {
+            let (provider_name, color) = match provider {
+                crate::backend::manga_provider::MangaProviders::Inmanga => ("InManga", ratatui::style::Color::Cyan),
+                crate::backend::manga_provider::MangaProviders::Mangaoni => ("MangaOni", ratatui::style::Color::LightRed),
+                crate::backend::manga_provider::MangaProviders::Leercapitulo => ("LeerCapítulo", ratatui::style::Color::Green),
+                crate::backend::manga_provider::MangaProviders::Mangadex => ("MangaDex", ratatui::style::Color::Yellow),
+                crate::backend::manga_provider::MangaProviders::Weebcentral => ("WeebCentral", ratatui::style::Color::Magenta),
+                crate::backend::manga_provider::MangaProviders::Mangapill => ("MangaPill", ratatui::style::Color::Blue),
+                crate::backend::manga_provider::MangaProviders::Comizy => ("Comizy", ratatui::style::Color::LightYellow),
+            };
+            title_spans_vec.push(Span::styled(format!("[{provider_name}] "), Style::default().fg(color).bold()));
+        }
+        title_spans_vec.push(Span::raw(self.manga.title.clone()));
+        let title_spans = Line::from(title_spans_vec);
 
         Block::bordered()
             .title_top(title_spans)
@@ -405,6 +416,8 @@ where
                     bottom_instructions.push(" Bookmark ".into());
                     bottom_instructions.push("<m>".to_span().style(*INSTRUCTIONS_STYLE));
                 }
+                bottom_instructions.push(" Multi-search ".into());
+                bottom_instructions.push("<p>".to_span().style(*INSTRUCTIONS_STYLE));
 
                 Block::bordered()
                     .title_top(Line::from(chapter_instructions))
@@ -602,6 +615,11 @@ where
                     KeyCode::Tab => {
                         self.local_action_tx.send(MangaPageActions::GoToReadBookmarkedChapter).ok();
                     },
+                    KeyCode::Char('p') | KeyCode::Char('o') => {
+                        if let Some(tx) = &self.global_event_tx {
+                            tx.send(Events::SearchAllProviders(self.manga.title.clone())).ok();
+                        }
+                    },
 
                     _ => {},
                 }
@@ -666,7 +684,8 @@ where
     fn toggle_favorite(&mut self) {
         if let Ok(conn) = Database::get_connection() {
             let database = Database::new(&conn);
-            if let Ok(new_fav) = database.toggle_favorite(&self.manga.id, self.manga_provider.name(), &self.manga.title) {
+            let provider = self.manga.provider.unwrap_or_else(|| self.manga_provider.name());
+            if let Ok(new_fav) = database.toggle_favorite(&self.manga.id, provider, &self.manga.title) {
                 self.is_favorite = new_fav;
             }
         }
@@ -694,6 +713,7 @@ where
             num_a.partial_cmp(&num_b).unwrap_or(std::cmp::Ordering::Equal)
         });
 
+        let provider = self.manga.provider.unwrap_or_else(|| self.manga_provider.name());
         if let Some(tx) = &self.global_event_tx {
             tx.send(Events::EnqueueDownloadBatch(crate::backend::download_queue::EnqueueDownloadBatch {
                 manga_id: self.manga.id.clone(),
@@ -702,7 +722,7 @@ where
                 manga_cover_url: Some(self.manga.cover_img_url.clone()),
                 lang: self.get_current_selected_language(),
                 chapters: chapters_to_download,
-                provider: self.manga_provider.name(),
+                provider,
             }))
             .ok();
             self.clear_selected_chapters();
@@ -777,9 +797,13 @@ where
                 let manga_id = self.manga.id.clone();
                 let local_tx = self.local_event_tx.clone();
                 let client = Arc::clone(&self.manga_provider);
+                let provider = self.manga.provider;
 
                 tokio::spawn(async move {
-                    let search_chapter_response = client.read_chapter(&id_chapter, &manga_id).await;
+                    let search_chapter_response = match provider {
+                        Some(p) => crate::backend::multi_provider::read_chapter_for_provider(p, &id_chapter, &manga_id).await,
+                        None => client.read_chapter(&id_chapter, &manga_id).await,
+                    };
 
                     match search_chapter_response {
                         Ok((chapter, manga_to_read)) => {
@@ -833,9 +857,13 @@ where
         let pagination =
             if let Some(chapters) = self.chapters.as_ref() { chapters.pagination.clone() } else { Pagination::default() };
         let filters = self.chapter_filters.clone();
+        let provider = self.manga.provider;
 
         self.tasks.spawn(async move {
-            let response = client.get_chapters(&manga_id, filters, pagination).await;
+            let response = match provider {
+                Some(p) => crate::backend::multi_provider::get_chapters_for_provider(p, &manga_id, filters, pagination).await,
+                None => client.get_chapters(&manga_id, filters, pagination).await,
+            };
 
             match response {
                 Ok(res) => {
@@ -881,7 +909,7 @@ where
         let manga_id = self.manga.id.clone();
         let manga_title = self.manga.title.clone();
         let cover_img_url = self.manga.cover_img_url.clone();
-        let provider = self.manga_provider.name();
+        let provider = self.manga.provider.unwrap_or_else(|| self.manga_provider.name());
         let chapter_language = self.get_current_selected_language();
         if let Some(chapter_selected) = self.get_current_selected_chapter_mut() {
             let chapter_to_bookmark: ChapterToBookmark = ChapterToBookmark {
@@ -920,9 +948,13 @@ where
         let sender = self.local_event_tx.clone();
         self.bookmark_state.phase = BookmarkPhase::SearchingFromApi;
         let client = Arc::clone(&self.manga_provider);
+        let provider = self.manga.provider;
 
         self.tasks.spawn(async move {
-            let response = client.fetch_chapter_bookmarked(bookmarked_chapter).await;
+            let response = match provider {
+                Some(p) => crate::backend::multi_provider::fetch_chapter_bookmarked_for_provider(p, bookmarked_chapter).await,
+                None => client.fetch_chapter_bookmarked(bookmarked_chapter).await,
+            };
 
             match response {
                 Ok(response) => {
@@ -945,7 +977,7 @@ where
         let manga_title = self.manga.title.clone();
         let manga_cover_url = Some(self.manga.cover_img_url.clone());
         let lang = self.get_current_selected_language();
-        let provider_name = self.manga_provider.name();
+        let provider_name = self.manga.provider.unwrap_or_else(|| self.manga_provider.name());
 
         let chapter = {
             let Some(item) = self.get_current_selected_chapter_mut() else {
@@ -1010,7 +1042,7 @@ where
             manga_id: &self.manga.id,
             manga_title: &self.manga.title,
             img_url: Some(&self.manga.cover_img_url),
-            provider: self.manga_provider.name(),
+            provider: self.manga.provider.unwrap_or_else(|| self.manga_provider.name()),
         });
 
         if let Err(e) = save_download_operation {
@@ -1097,10 +1129,15 @@ where
             let manga_cover_url = Some(self.manga.cover_img_url.clone());
             let lang = self.get_current_selected_language();
             let client = Arc::clone(&self.manga_provider);
-            let provider_name = self.manga_provider.name();
+            let provider_name = self.manga.provider.unwrap_or_else(|| self.manga_provider.name());
+            let provider_opt = self.manga.provider;
 
             tokio::spawn(async move {
-                if let Ok(chapters) = client.get_all_chapters(&manga_id, lang).await {
+                let chapters_res = match provider_opt {
+                    Some(p) => crate::backend::multi_provider::get_all_chapters_for_provider(p, &manga_id, lang).await,
+                    None => client.get_all_chapters(&manga_id, lang).await,
+                };
+                if let Ok(chapters) = chapters_res {
                     global_tx
                         .send(Events::EnqueueDownloadBatch(crate::backend::download_queue::EnqueueDownloadBatch {
                             manga_id,
@@ -1186,9 +1223,15 @@ where
         let tx = self.local_event_tx.clone();
         let client = Arc::clone(&self.manga_provider);
         let url = self.manga.cover_img_url.clone();
+        let provider = self.manga.provider;
 
         self.tasks.spawn(async move {
-            let response = client.get_image(&url).await;
+            let response = match provider {
+                Some(p) => crate::backend::multi_provider::get_image_for_provider(p, &url)
+                    .await
+                    .map_err(|e| e as Box<dyn std::error::Error>),
+                None => client.get_image(&url).await,
+            };
             match response {
                 Ok(res) => {
                     tx.send(MangaPageEvents::LoadCover(res)).ok();
@@ -1249,7 +1292,7 @@ where
                     title: &chapter.title,
                     translated_language: chapter.language.as_iso_code(),
                 },
-                provider: self.manga_provider.name(),
+                provider: self.manga.provider.unwrap_or_else(|| self.manga_provider.name()),
             });
 
             if let Err(e) = save_read_history_result {
@@ -1269,6 +1312,7 @@ where
                 title: self.manga.title.clone(),
                 manga_id: self.manga.id.clone(),
                 list: list_of_chapters,
+                provider: self.manga.provider,
             }))
             .ok();
     }
@@ -1335,6 +1379,7 @@ where
                             title: self.manga.title.clone(),
                             manga_id: self.manga.id.clone(),
                             list,
+                            provider: self.manga.provider,
                         }))
                         .ok();
                 },

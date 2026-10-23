@@ -337,6 +337,7 @@ impl SearchMangaById for MangaoniProvider {
             rating: String::new(),
             artist: None,
             author: None,
+            provider: Some(MangaProviders::Mangaoni),
         })
     }
 }
@@ -516,6 +517,7 @@ impl SearchPageProvider for MangaoniProvider {
                         id: String::new(),
                         name,
                     }),
+                    provider: Some(MangaProviders::Mangaoni),
                 }
             })
             .collect();
