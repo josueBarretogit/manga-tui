@@ -425,10 +425,10 @@ where
                 let manga_details = match provider.get_manga_by_id(&manga.id).await {
                     Ok(details) => details,
                     Err(error) => {
-                        let message = format!("Could not check the status of {}: {error}", manga.title);
-                        write_to_error_log(error.into());
-                        event_tx.send(Events::Error(message)).ok();
-                        return;
+                        write_to_error_log(
+                            format!("Could not check downloaded {} on {}: {error}", manga.title, provider_name).into(),
+                        );
+                        continue;
                     },
                 };
                 if manga_details.status != MangaStatus::Ongoing {
@@ -439,10 +439,10 @@ where
                     Ok(chapters) if !chapters.is_empty() => chapters,
                     Ok(_) => continue,
                     Err(error) => {
-                        let message = format!("Could not check for new chapters of {}: {error}", manga.title);
-                        write_to_error_log(error.into());
-                        event_tx.send(Events::Error(message)).ok();
-                        return;
+                        write_to_error_log(
+                            format!("Could not check for new chapters of {} on {}: {error}", manga.title, provider_name).into(),
+                        );
+                        continue;
                     },
                 };
 
