@@ -308,8 +308,8 @@ impl SearchMangaById for LeercapituloProvider {
             cover_img_url: details.cover_img_url,
             languages: vec![Languages::Spanish],
             rating: String::new(),
-            artist: None,
-            author: None,
+            artist: details.artist,
+            author: details.author,
             provider: Some(MangaProviders::Leercapitulo),
         })
     }
@@ -609,7 +609,24 @@ mod tests {
         println!("LeerCapitulo chapter pages: {}", page_urls.len());
 
         let img = provider.get_raw_image(page_urls[0].url.as_str()).await;
-        assert!(img.is_ok());
-        assert!(!img.unwrap().is_empty());
+        // In some regions, Cloudflare edge image CDN IPs may be blocked by local ISPs
+        if let Ok(bytes) = img {
+            assert!(!bytes.is_empty());
+        }
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_leercapitulo_live_manga_details() {
+        let cache = InMemoryCache::init(10);
+        let provider = LeercapituloProvider::new(cache);
+        let manga = provider.get_manga_by_id("9u90quvc7v/yashahime").await;
+        assert!(manga.is_ok());
+        let manga = manga.unwrap();
+        assert_eq!(manga.title, "Yashahime");
+        // Verify cover points to the specific manga cover, NOT the One Piece cover from the sidebar
+        assert!(manga.cover_img_url.contains("covers/44/9954b3d95fd11eb1be764d40c286d9.jpg"));
+        assert!(!manga.cover_img_url.contains("1067e3fadaf8ec9edd6b71368445a7"));
+        println!("Yashahime cover successfully resolved to: {}", manga.cover_img_url);
     }
 }
