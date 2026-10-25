@@ -61,6 +61,10 @@ impl MangaoniProvider {
             .timeout(Duration::from_secs(30))
             .cookie_store(true)
             .default_headers(default_headers)
+            // Spanish ISPs (Movistar/Orange/Vodafone) block 188.114.96.0/24 & 188.114.97.0/24.
+            // Direct requests to Cloudflare anycast edge IPs bypass this block seamlessly.
+            .resolve("manga-oni.com", std::net::SocketAddr::from(([104, 21, 65, 2], 443)))
+            .resolve("oni.ntr-files.online", std::net::SocketAddr::from(([104, 21, 65, 2], 443)))
             .build()
             .unwrap();
 
