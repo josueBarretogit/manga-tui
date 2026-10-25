@@ -14,3 +14,5 @@ Whenever you make changes, bug fixes, or enhancements to the `manga-tui` codebas
    cargo install --path .
    ```
    This ensures that whenever the user runs `manga-tui` in their command prompt or terminal, they are immediately running the newly modified version.
+4. **MANDATORY**: Once verified and installed, commit and push changes to the active branch (`git push`).
+
