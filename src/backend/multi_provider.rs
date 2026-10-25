@@ -410,4 +410,17 @@ mod tests {
         println!("Mangadex results count: {}", mangadex_count);
         assert!(mangadex_count > 0, "No mangadex results returned in search_all_providers!");
     }
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_search_all_providers_made_in_abyss() {
+        let results = search_all_providers("made in abyss").await;
+        println!("Total results: {}", results.len());
+        for r in &results {
+            println!("Provider: {:?} | Title: {}", r.provider, r.title);
+        }
+        let mangaoni_count = results.iter().filter(|r| r.provider == Some(MangaProviders::Mangaoni)).count();
+        println!("MangaOni results count: {}", mangaoni_count);
+        assert!(mangaoni_count > 0, "No mangaoni results returned in search_all_providers for made in abyss!");
+    }
 }

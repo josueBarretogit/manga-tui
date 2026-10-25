@@ -8,7 +8,7 @@ use filter_widget::LeercapituloFilterWidget;
 use http::header::{ACCEPT, ACCEPT_LANGUAGE, CACHE_CONTROL, REFERER, USER_AGENT};
 use http::{HeaderMap, HeaderValue, StatusCode};
 use manga_tui::SearchTerm;
-use reqwest::Client;
+use reqwest::{Client, Url};
 use response::*;
 
 use super::{
@@ -219,7 +219,24 @@ impl GetRawImage for LeercapituloProvider {
         match cache {
             Some(cached) => Ok(cached.data.into()),
             None => {
-                let response = self.client.get(url).header(REFERER, LEERCAPITULO_BASE_URL).send().await?;
+                let parsed_host = Url::parse(url).ok().and_then(|u| u.host_str().map(|h| h.to_string()));
+
+                // If the host is on the Cloudflare CDN blocked by Spanish ISPs (e.g. t34798ndc.com on 188.114.96.0/24),
+                // route directly to unblocked Cloudflare anycast edge IP.
+                let response = if let Some(ref host) = parsed_host {
+                    if host.contains("t34798ndc.com") {
+                        let cf_client = Client::builder()
+                            .timeout(Duration::from_secs(20))
+                            .resolve(host, std::net::SocketAddr::from(([104, 21, 65, 2], 443)))
+                            .build()
+                            .unwrap_or_else(|_| self.client.clone());
+                        cf_client.get(url).header(REFERER, LEERCAPITULO_BASE_URL).send().await?
+                    } else {
+                        self.client.get(url).header(REFERER, LEERCAPITULO_BASE_URL).send().await?
+                    }
+                } else {
+                    self.client.get(url).header(REFERER, LEERCAPITULO_BASE_URL).send().await?
+                };
 
                 if response.status() != StatusCode::OK {
                     return Err(format!("Could not get image from LeerCapitulo: {url}").into());
@@ -230,7 +247,7 @@ impl GetRawImage for LeercapituloProvider {
                 self.cache_provider
                     .cache(InsertEntry {
                         id: url,
-                        data: &bytes,
+                        data: bytes.as_ref(),
                         duration: CacheDuration::Long,
                     })
                     .ok();
@@ -609,10 +626,8 @@ mod tests {
         println!("LeerCapitulo chapter pages: {}", page_urls.len());
 
         let img = provider.get_raw_image(page_urls[0].url.as_str()).await;
-        // In some regions, Cloudflare edge image CDN IPs may be blocked by local ISPs
-        if let Ok(bytes) = img {
-            assert!(!bytes.is_empty());
-        }
+        assert!(img.is_ok(), "Failed to get chapter image: {:?}", img.err());
+        assert!(!img.unwrap().is_empty());
     }
 
     #[tokio::test]
