@@ -302,6 +302,14 @@ impl<'a> Database<'a> {
             (),
         )?;
 
+        self.connection.execute(
+            "CREATE TABLE if not exists search_history (
+                query TEXT PRIMARY KEY,
+                searched_at INTEGER NOT NULL
+             )",
+            (),
+        )?;
+
         let already_has_data: i32 = self.connection.query_row("SELECT COUNT(*) from app_version", [], |row| row.get(0))?;
 
         if already_has_data == 0 {
@@ -897,6 +905,37 @@ impl<'a> Database<'a> {
             })
         })?;
         rows.collect()
+    }
+
+    pub fn save_search_history(&self, query: &str) -> rusqlite::Result<()> {
+        let trimmed = query.trim();
+        if trimmed.is_empty() {
+            return Ok(());
+        }
+        let now = Utc::now().timestamp_millis();
+        self.connection.execute(
+            "INSERT INTO search_history (query, searched_at) VALUES (?1, ?2)
+             ON CONFLICT(query) DO UPDATE SET searched_at = ?2",
+            rusqlite::params![trimmed, now],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_recent_searches(&self, limit: usize) -> rusqlite::Result<Vec<String>> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT query FROM search_history ORDER BY searched_at DESC, rowid DESC LIMIT ?1")?;
+        let rows = statement.query_map([limit as i64], |row| row.get(0))?;
+        let mut searches = Vec::new();
+        for query in rows {
+            searches.push(query?);
+        }
+        Ok(searches)
+    }
+
+    pub fn clear_search_history(&self) -> rusqlite::Result<()> {
+        self.connection.execute("DELETE FROM search_history", ())?;
+        Ok(())
     }
 
     pub fn get_recent_reading_mangas(&self, limit: u32) -> rusqlite::Result<Vec<FavoriteMangaRecord>> {
@@ -2855,6 +2894,34 @@ mod test {
 
         /* the plan to read history should remain untouched */
         assert_eq!(expected.mangas.len(), 4);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_search_history() -> Result<()> {
+        let conn = Connection::open_in_memory()?;
+        let database = Database::new(&conn);
+        database.setup()?;
+
+        database.save_search_history("One Piece")?;
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        database.save_search_history("Naruto")?;
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        database.save_search_history("Bleach")?;
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        // Re-searching "One Piece" bumps it to the top
+        database.save_search_history("One Piece")?;
+
+        let recent = database.get_recent_searches(10)?;
+        assert_eq!(recent.len(), 3);
+        assert_eq!(recent[0], "One Piece");
+        assert_eq!(recent[1], "Bleach");
+        assert_eq!(recent[2], "Naruto");
+
+        database.clear_search_history()?;
+        let recent_empty = database.get_recent_searches(10)?;
+        assert_eq!(recent_empty.len(), 0);
 
         Ok(())
     }

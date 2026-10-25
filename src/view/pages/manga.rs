@@ -301,16 +301,16 @@ where
             title_spans_vec.push(Span::styled("★ ", Style::default().fg(ratatui::style::Color::Yellow).bold()));
         }
         if let Some(provider) = self.manga.provider {
-            let (provider_name, color) = match provider {
-                crate::backend::manga_provider::MangaProviders::Inmanga => ("InManga", ratatui::style::Color::Cyan),
-                crate::backend::manga_provider::MangaProviders::Mangaoni => ("MangaOni", ratatui::style::Color::LightRed),
-                crate::backend::manga_provider::MangaProviders::Leercapitulo => ("LeerCapítulo", ratatui::style::Color::Green),
-                crate::backend::manga_provider::MangaProviders::Mangadex => ("MangaDex", ratatui::style::Color::Yellow),
-                crate::backend::manga_provider::MangaProviders::Weebcentral => ("WeebCentral", ratatui::style::Color::Magenta),
-                crate::backend::manga_provider::MangaProviders::Mangapill => ("MangaPill", ratatui::style::Color::Blue),
-                crate::backend::manga_provider::MangaProviders::Comizy => ("Comizy", ratatui::style::Color::LightYellow),
+            let color = match provider {
+                crate::backend::manga_provider::MangaProviders::Inmanga => ratatui::style::Color::Cyan,
+                crate::backend::manga_provider::MangaProviders::Mangaoni => ratatui::style::Color::LightRed,
+                crate::backend::manga_provider::MangaProviders::Leercapitulo => ratatui::style::Color::Green,
+                crate::backend::manga_provider::MangaProviders::Mangadex => ratatui::style::Color::Yellow,
+                crate::backend::manga_provider::MangaProviders::Weebcentral => ratatui::style::Color::Magenta,
+                crate::backend::manga_provider::MangaProviders::Mangapill => ratatui::style::Color::Blue,
+                crate::backend::manga_provider::MangaProviders::Comizy => ratatui::style::Color::LightYellow,
             };
-            title_spans_vec.push(Span::styled(format!("[{provider_name}] "), Style::default().fg(color).bold()));
+            title_spans_vec.push(Span::styled(format!("[{}] ", provider.badge_label()), Style::default().fg(color).bold()));
         }
         title_spans_vec.push(Span::raw(self.manga.title.clone()));
         let title_spans = Line::from(title_spans_vec);

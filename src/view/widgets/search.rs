@@ -106,16 +106,16 @@ impl<'a> MangaPreview<'a> {
 
         let mut status_spans = Vec::new();
         if let Some(provider) = self.provider {
-            let (provider_name, color) = match provider {
-                MangaProviders::Inmanga => ("InManga", Color::Cyan),
-                MangaProviders::Mangaoni => ("MangaOni", Color::LightRed),
-                MangaProviders::Leercapitulo => ("LeerCapítulo", Color::Green),
-                MangaProviders::Mangadex => ("MangaDex", Color::Yellow),
-                MangaProviders::Weebcentral => ("WeebCentral", Color::Magenta),
-                MangaProviders::Mangapill => ("MangaPill", Color::Blue),
-                MangaProviders::Comizy => ("Comizy", Color::LightYellow),
+            let color = match provider {
+                MangaProviders::Inmanga => Color::Cyan,
+                MangaProviders::Mangaoni => Color::LightRed,
+                MangaProviders::Leercapitulo => Color::Green,
+                MangaProviders::Mangadex => Color::Yellow,
+                MangaProviders::Weebcentral => Color::Magenta,
+                MangaProviders::Mangapill => Color::Blue,
+                MangaProviders::Comizy => Color::LightYellow,
             };
-            status_spans.push(Span::styled(format!("[{provider_name}] "), Style::default().fg(color).bold()));
+            status_spans.push(Span::styled(format!("[{}] ", provider.badge_label()), Style::default().fg(color).bold()));
         }
 
         if let Some(status) = self.status {
@@ -154,15 +154,16 @@ impl Widget for MangaItem {
         Self: Sized,
     {
         let line = if let Some(provider) = self.manga.provider {
-            let (tag, color) = match provider {
-                MangaProviders::Inmanga => ("[InManga] ", Color::Cyan),
-                MangaProviders::Mangaoni => ("[MangaOni] ", Color::LightRed),
-                MangaProviders::Leercapitulo => ("[LeerCapítulo] ", Color::Green),
-                MangaProviders::Mangadex => ("[MangaDex] ", Color::Yellow),
-                MangaProviders::Weebcentral => ("[WeebCentral] ", Color::Magenta),
-                MangaProviders::Mangapill => ("[MangaPill] ", Color::Blue),
-                MangaProviders::Comizy => ("[Comizy] ", Color::LightYellow),
+            let color = match provider {
+                MangaProviders::Inmanga => Color::Cyan,
+                MangaProviders::Mangaoni => Color::LightRed,
+                MangaProviders::Leercapitulo => Color::Green,
+                MangaProviders::Mangadex => Color::Yellow,
+                MangaProviders::Weebcentral => Color::Magenta,
+                MangaProviders::Mangapill => Color::Blue,
+                MangaProviders::Comizy => Color::LightYellow,
             };
+            let tag = format!("[{}] ", provider.badge_label());
             Line::from(vec![Span::styled(tag, Style::default().fg(color).bold()), Span::raw(self.manga.title)])
         } else {
             Line::from(vec![Span::raw(self.manga.title)])

@@ -63,17 +63,47 @@ impl MultiProviderPool {
 
 pub static POOL: LazyLock<MultiProviderPool> = LazyLock::new(MultiProviderPool::new);
 
-/// Search concurrently across all available manga providers
-pub async fn search_all_providers(query: &str) -> Vec<SearchManga> {
-    if query.trim().is_empty() {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MultiSearchLanguage {
+    #[default]
+    All,
+    Spanish,
+    English,
+}
+
+pub fn calculate_relevance_score(title: &str, query_lower: &str) -> u8 {
+    let t = title.to_lowercase();
+    if t == query_lower {
+        0
+    } else if t.starts_with(query_lower) {
+        1
+    } else if t.split_whitespace().any(|word| word.starts_with(query_lower)) {
+        2
+    } else if t.contains(query_lower) {
+        3
+    } else {
+        4
+    }
+}
+
+/// Search concurrently across manga providers matching the specified language filter
+pub async fn search_all_providers_with_lang(query: &str, lang: MultiSearchLanguage) -> Vec<SearchManga> {
+    let query_trimmed = query.trim();
+    if query_trimmed.is_empty() {
         return Vec::new();
     }
     let pool = &*POOL;
     let timeout_duration = Duration::from_secs(8);
 
+    let query_spanish = lang == MultiSearchLanguage::All || lang == MultiSearchLanguage::Spanish;
+    let query_english = lang == MultiSearchLanguage::All || lang == MultiSearchLanguage::English;
+
     let (inmanga_res, mangaoni_res, leercapitulo_res, mangadex_res, weebcentral_res, mangapill_res, comizy_res) = tokio::join!(
         // InManga
         async {
+            if !query_spanish {
+                return None;
+            }
             let term = SearchTerm::trimmed_lowercased(query);
             tokio::time::timeout(
                 timeout_duration,
@@ -85,6 +115,9 @@ pub async fn search_all_providers(query: &str) -> Vec<SearchManga> {
         },
         // MangaOni
         async {
+            if !query_spanish {
+                return None;
+            }
             let term = SearchTerm::trimmed_lowercased(query);
             tokio::time::timeout(
                 timeout_duration,
@@ -96,6 +129,9 @@ pub async fn search_all_providers(query: &str) -> Vec<SearchManga> {
         },
         // LeerCapítulo
         async {
+            if !query_spanish {
+                return None;
+            }
             let term = SearchTerm::trimmed_lowercased(query);
             tokio::time::timeout(
                 timeout_duration,
@@ -106,7 +142,7 @@ pub async fn search_all_providers(query: &str) -> Vec<SearchManga> {
             .ok()
             .and_then(|r| r.ok())
         },
-        // MangaDex
+        // MangaDex (included in All, Spanish, and English)
         async {
             let term = SearchTerm::trimmed_lowercased(query);
             let mut filters = Filters::default();
@@ -119,6 +155,9 @@ pub async fn search_all_providers(query: &str) -> Vec<SearchManga> {
         },
         // WeebCentral
         async {
+            if !query_english {
+                return None;
+            }
             let term = SearchTerm::trimmed_lowercased(query);
             tokio::time::timeout(
                 timeout_duration,
@@ -131,6 +170,9 @@ pub async fn search_all_providers(query: &str) -> Vec<SearchManga> {
         },
         // MangaPill
         async {
+            if !query_english {
+                return None;
+            }
             let term = SearchTerm::trimmed_lowercased(query);
             tokio::time::timeout(
                 timeout_duration,
@@ -142,6 +184,9 @@ pub async fn search_all_providers(query: &str) -> Vec<SearchManga> {
         },
         // Comizy
         async {
+            if !query_english {
+                return None;
+            }
             let term = SearchTerm::trimmed_lowercased(query);
             tokio::time::timeout(
                 timeout_duration,
@@ -199,7 +244,20 @@ pub async fn search_all_providers(query: &str) -> Vec<SearchManga> {
         }
     }
 
+    // Sort by query relevance (exact match first -> prefix -> word match -> substring)
+    let query_lower = query_trimmed.to_lowercase();
+    combined.sort_by(|a, b| {
+        let score_a = calculate_relevance_score(&a.title, &query_lower);
+        let score_b = calculate_relevance_score(&b.title, &query_lower);
+        score_a.cmp(&score_b)
+    });
+
     combined
+}
+
+/// Search concurrently across all available manga providers
+pub async fn search_all_providers(query: &str) -> Vec<SearchManga> {
+    search_all_providers_with_lang(query, MultiSearchLanguage::All).await
 }
 
 pub async fn get_manga_by_id_for_provider(provider: MangaProviders, manga_id: &str) -> Result<Manga, Box<dyn Error + Send + Sync>> {
@@ -396,6 +454,15 @@ mod tests {
         assert_eq!(POOL.weebcentral.name(), MangaProviders::Weebcentral);
         assert_eq!(POOL.mangapill.name(), MangaProviders::Mangapill);
         assert_eq!(POOL.comizy.name(), MangaProviders::Comizy);
+    }
+
+    #[test]
+    fn test_calculate_relevance_score() {
+        assert_eq!(calculate_relevance_score("One Piece", "one piece"), 0);
+        assert_eq!(calculate_relevance_score("One Piece: Ace's Story", "one piece"), 1);
+        assert_eq!(calculate_relevance_score("That One Piece Fan", "piece"), 2);
+        assert_eq!(calculate_relevance_score("Clone Piece", "one"), 3);
+        assert_eq!(calculate_relevance_score("Naruto", "one piece"), 4);
     }
 
     #[tokio::test]

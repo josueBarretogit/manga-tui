@@ -726,6 +726,18 @@ impl MangaProviders {
     pub fn is_multi_language(&self) -> bool {
         matches!(self, Self::Mangadex)
     }
+
+    pub fn badge_label(&self) -> &'static str {
+        match self {
+            Self::Inmanga => "InManga 🇪🇸",
+            Self::Mangaoni => "MangaOni 🇪🇸",
+            Self::Leercapitulo => "LeerCapítulo 🇪🇸",
+            Self::Mangadex => "MangaDex 🌐",
+            Self::Weebcentral => "WeebCentral 🇬🇧",
+            Self::Mangapill => "MangaPill 🇬🇧",
+            Self::Comizy => "Comizy 🇬🇧",
+        }
+    }
 }
 
 pub trait GetRawImage {
