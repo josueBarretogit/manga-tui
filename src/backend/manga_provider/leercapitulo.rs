@@ -412,7 +412,7 @@ impl SearchPageProvider for LeercapituloProvider {
         &self,
         search_term: Option<SearchTerm>,
         _filters: Self::InnerState,
-        _pagination: Pagination,
+        pagination: Pagination,
     ) -> Result<GetMangasResponse, Box<dyn Error>> {
         let query = search_term.map(|t| t.to_string()).unwrap_or_default();
         let trimmed = query.trim();
@@ -485,11 +485,15 @@ impl SearchPageProvider for LeercapituloProvider {
             .collect();
 
         let total_mangas = mangas.len() as u32;
+        let from = pagination.index_to_slice_from();
+        let to = pagination.to_index(total_mangas as usize);
+        let next_page = to < total_mangas as usize;
+        let paged_mangas = mangas.as_slice().get(from..to).unwrap_or(&[]).to_vec();
 
         Ok(GetMangasResponse {
-            mangas,
+            mangas: paged_mangas,
             total_mangas,
-            next_page: false,
+            next_page,
         })
     }
 }

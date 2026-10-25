@@ -22,7 +22,7 @@ use tui_widget_list::ListState;
 use crate::backend::database::{Database, MangaPlanToReadSave};
 use crate::backend::error_log::{ErrorType, write_to_error_log};
 use crate::backend::manga_provider::{
-    EventHandler as FilterEventHandler, FiltersHandler, GetMangasResponse, Manga, Pagination, SearchPageProvider,
+    EventHandler as FilterEventHandler, FiltersHandler, GetMangasResponse, Manga, Pagination, SearchManga, SearchPageProvider,
 };
 use crate::backend::tracker::{MangaTracker, track_manga_plan_to_read};
 use crate::backend::tui::Events;
@@ -110,6 +110,7 @@ where
     pub search_scope: SearchScope,
     manga_provider: Arc<T>,
     manga_tracker: Option<S>,
+    all_providers_results: Vec<SearchManga>,
 }
 
 /// This contains the data the application gets when doing a search
@@ -234,6 +235,7 @@ where
             search_scope: SearchScope::default(),
             manga_provider: api_client,
             manga_tracker,
+            all_providers_results: Vec::new(),
         }
     }
 
@@ -424,6 +426,7 @@ where
     fn reset_search(&mut self) {
         self.mangas_found_list.pagination.reset();
         self.mangas_found_list.next_page = false;
+        self.all_providers_results.clear();
     }
 
     fn get_current_manga_selected_mut(&mut self) -> Option<&mut MangaItem> {
@@ -613,10 +616,11 @@ where
                         vec![]
                     };
                     let total = results.len() as u32;
+                    let next_page = (page.current_page * page.items_per_page) < total;
                     let response = GetMangasResponse {
                         mangas: results,
                         total_mangas: total,
-                        next_page: false,
+                        next_page,
                     };
                     tx.send(SearchPageEvents::LoadMangasFound(Some(response))).ok();
                 },
@@ -640,10 +644,15 @@ where
         if self.state == PageState::DisplayingMangasFound
             && self.state != PageState::SearchingMangas
             && self.mangas_found_list.pagination.can_go_next_page()
-            && self.mangas_found_list.next_page
+            && (self.mangas_found_list.next_page || !self.all_providers_results.is_empty())
         {
-            self.mangas_found_list.pagination.go_next_page();
-            self.search_mangas();
+            if !self.all_providers_results.is_empty() {
+                self.mangas_found_list.pagination.go_next_page();
+                self.load_all_providers_page();
+            } else {
+                self.mangas_found_list.pagination.go_next_page();
+                self.search_mangas();
+            }
         }
     }
 
@@ -652,13 +661,37 @@ where
             && self.state != PageState::SearchingMangas
             && self.mangas_found_list.pagination.can_go_previous_page()
         {
-            self.mangas_found_list.pagination.go_previous_page();
-            self.search_mangas();
+            if !self.all_providers_results.is_empty() {
+                self.mangas_found_list.pagination.go_previous_page();
+                self.load_all_providers_page();
+            } else {
+                self.mangas_found_list.pagination.go_previous_page();
+                self.search_mangas();
+            }
         }
     }
 
     fn go_to_manga_page(&self, manga: Manga) {
         self.global_event_tx.as_ref().unwrap().send(Events::GoToMangaPage(manga)).ok();
+    }
+
+    fn load_all_providers_page(&mut self) {
+        let total = self.all_providers_results.len();
+        let from = self.mangas_found_list.pagination.index_to_slice_from();
+        let to = self.mangas_found_list.pagination.to_index(total);
+
+        let slice = if from < total { self.all_providers_results[from..to].to_vec() } else { vec![] };
+
+        self.abort_tasks();
+        self.manga_cover_state = ImageState::default();
+        self.mangas_found_list.widget = ListMangasFoundWidget::from_response(slice.clone());
+        if !slice.is_empty() {
+            self.mangas_found_list.state.select(Some(0));
+        } else {
+            self.mangas_found_list.state.select(None);
+        }
+        self.mangas_found_list.next_page = self.mangas_found_list.pagination.can_go_next_page();
+        self.init_search_manga_covers();
     }
 
     fn load_mangas_found(&mut self, response: Option<GetMangasResponse>) {
@@ -667,18 +700,28 @@ where
                 if response.mangas.is_empty() {
                     self.state = PageState::NotFound;
                     self.mangas_found_list.pagination.total_items = 0;
+                    self.all_providers_results.clear();
                     return;
                 }
-                self.mangas_found_list.pagination.total_items = response.total_mangas;
-                self.mangas_found_list.state.select(Some(0));
-                self.mangas_found_list.widget = ListMangasFoundWidget::from_response(response.mangas);
-                self.mangas_found_list.next_page = response.next_page;
-                self.state = PageState::DisplayingMangasFound;
-                self.init_search_manga_covers();
+                if self.search_scope == SearchScope::AllProviders {
+                    self.all_providers_results = response.mangas;
+                    self.mangas_found_list.pagination.total_items = response.total_mangas;
+                    self.load_all_providers_page();
+                    self.state = PageState::DisplayingMangasFound;
+                } else {
+                    self.all_providers_results.clear();
+                    self.mangas_found_list.pagination.total_items = response.total_mangas;
+                    self.mangas_found_list.state.select(Some(0));
+                    self.mangas_found_list.widget = ListMangasFoundWidget::from_response(response.mangas);
+                    self.mangas_found_list.next_page = response.next_page;
+                    self.state = PageState::DisplayingMangasFound;
+                    self.init_search_manga_covers();
+                }
             },
             None => {
                 self.state = PageState::ErrorOcurredSearchingMangas;
                 self.mangas_found_list.pagination.total_items = 0;
+                self.all_providers_results.clear();
             },
         }
     }
@@ -960,4 +1003,76 @@ mod test {
     //
     //    assert!(search_page.local_event_rx.is_empty());
     //}
+
+    #[tokio::test]
+    async fn test_all_providers_pagination_w_and_b() {
+        use super::*;
+        use crate::backend::manga_provider::mock::{MockFilterState, MockFiltersHandler, MockMangaPageProvider, MockWidgetFilter};
+        use crate::global::test_utils::TrackerTest;
+        use crate::view::widgets::press_key;
+
+        let mut search_page: SearchPage<MockMangaPageProvider, TrackerTest> = SearchPage::new(
+            None,
+            MockMangaPageProvider::new().into(),
+            None,
+            MockFiltersHandler::new(MockFilterState {}),
+            MockWidgetFilter {},
+            Pagination::from_first_page(20),
+        );
+
+        search_page.search_scope = SearchScope::AllProviders;
+
+        // Create 25 mock mangas
+        let mock_mangas: Vec<SearchManga> = (0..25)
+            .map(|i| SearchManga {
+                id: format!("manga_{i}"),
+                title: format!("Manga {i}"),
+                ..Default::default()
+            })
+            .collect();
+
+        // Simulate search response in AllProviders
+        search_page.load_mangas_found(Some(GetMangasResponse {
+            mangas: mock_mangas,
+            total_mangas: 25,
+            next_page: true,
+        }));
+
+        assert_eq!(PageState::DisplayingMangasFound, search_page.state);
+        assert_eq!(1, search_page.mangas_found_list.pagination.current_page);
+        assert_eq!(2, search_page.mangas_found_list.pagination.get_total_pages());
+        assert_eq!(20, search_page.mangas_found_list.widget.mangas.len());
+        assert_eq!(true, search_page.mangas_found_list.next_page);
+        assert_eq!(true, search_page.mangas_found_list.pagination.can_go_next_page());
+        assert_eq!(false, search_page.mangas_found_list.pagination.can_go_previous_page());
+
+        // Press 'w' (NextPage)
+        press_key(&mut search_page, KeyCode::Char('w'));
+        if let Ok(action) = search_page.local_action_rx.try_recv() {
+            assert_eq!(SearchPageActions::NextPage, action);
+            search_page.update(action);
+        } else {
+            panic!("NextPage action was not sent on 'w'");
+        }
+
+        assert_eq!(2, search_page.mangas_found_list.pagination.current_page);
+        assert_eq!(5, search_page.mangas_found_list.widget.mangas.len());
+        assert_eq!(false, search_page.mangas_found_list.next_page);
+        assert_eq!(false, search_page.mangas_found_list.pagination.can_go_next_page());
+        assert_eq!(true, search_page.mangas_found_list.pagination.can_go_previous_page());
+
+        // Press 'b' (PreviousPage)
+        press_key(&mut search_page, KeyCode::Char('b'));
+        if let Ok(action) = search_page.local_action_rx.try_recv() {
+            assert_eq!(SearchPageActions::PreviousPage, action);
+            search_page.update(action);
+        } else {
+            panic!("PreviousPage action was not sent on 'b'");
+        }
+
+        assert_eq!(1, search_page.mangas_found_list.pagination.current_page);
+        assert_eq!(20, search_page.mangas_found_list.widget.mangas.len());
+        assert_eq!(true, search_page.mangas_found_list.next_page);
+        assert_eq!(true, search_page.mangas_found_list.pagination.can_go_next_page());
+    }
 }
