@@ -61,6 +61,8 @@ impl ComizyProvider {
         let client = Client::builder()
             .timeout(Duration::from_secs(30))
             .default_headers(default_headers)
+            .resolve("comizy.io", std::net::SocketAddr::from(([104, 21, 65, 2], 443)))
+            .resolve("api.comizy.io", std::net::SocketAddr::from(([104, 21, 65, 2], 443)))
             .build()
             .unwrap();
 
