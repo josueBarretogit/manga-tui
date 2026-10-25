@@ -16,7 +16,7 @@ use crate::backend::manga_provider::inmanga::InmangaProvider;
 use crate::backend::manga_provider::inmanga::filter_state::InmangaFilterState;
 use crate::backend::manga_provider::leercapitulo::LeercapituloProvider;
 use crate::backend::manga_provider::leercapitulo::filter_state::LeercapituloFilterState;
-use crate::backend::manga_provider::mangadex::filters::api_parameter::Filters;
+use crate::backend::manga_provider::mangadex::filters::api_parameter::{ContentRating, Filters, SortBy};
 use crate::backend::manga_provider::mangadex::{API_URL_BASE, COVER_IMG_URL_BASE, MangadexClient};
 use crate::backend::manga_provider::mangaoni::MangaoniProvider;
 use crate::backend::manga_provider::mangaoni::filter_state::MangaoniFilterState;
@@ -109,7 +109,10 @@ pub async fn search_all_providers(query: &str) -> Vec<SearchManga> {
         // MangaDex
         async {
             let term = SearchTerm::trimmed_lowercased(query);
-            tokio::time::timeout(timeout_duration, pool.mangadex.search_mangas(term, Filters::default(), Pagination::default()))
+            let mut filters = Filters::default();
+            filters.set_sort_by(SortBy::BestMatch);
+            filters.set_content_rating(vec![ContentRating::Safe, ContentRating::Suggestive]);
+            tokio::time::timeout(timeout_duration, pool.mangadex.search_mangas(term, filters, Pagination::default()))
                 .await
                 .ok()
                 .and_then(|r| r.ok())
@@ -393,5 +396,18 @@ mod tests {
         assert_eq!(POOL.weebcentral.name(), MangaProviders::Weebcentral);
         assert_eq!(POOL.mangapill.name(), MangaProviders::Mangapill);
         assert_eq!(POOL.comizy.name(), MangaProviders::Comizy);
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_search_all_providers_one_piece() {
+        let results = search_all_providers("one piece").await;
+        println!("Total results: {}", results.len());
+        for r in &results {
+            println!("Provider: {:?} | Title: {}", r.provider, r.title);
+        }
+        let mangadex_count = results.iter().filter(|r| r.provider == Some(MangaProviders::Mangadex)).count();
+        println!("Mangadex results count: {}", mangadex_count);
+        assert!(mangadex_count > 0, "No mangadex results returned in search_all_providers!");
     }
 }
