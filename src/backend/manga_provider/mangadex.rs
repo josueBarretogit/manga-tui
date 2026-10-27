@@ -63,6 +63,18 @@ pub struct MangadexClient {
 }
 
 impl MangadexClient {
+    /// Builds a full API URL from the base URL and a path (which may include a query string).
+    ///
+    /// `Url` always serializes with a trailing slash, so `format!("{}/ping", base)` would
+    /// produce `https://api.mangadex.org//ping`, which the API rejects.
+    fn endpoint(&self, path: &str) -> String {
+        Self::join_endpoint(&self.api_url_base, path)
+    }
+
+    fn join_endpoint(base: &Url, path: &str) -> String {
+        format!("{}/{}", base.as_str().trim_end_matches('/'), path.trim_start_matches('/'))
+    }
+
     /// see: `https://api.mangadex.org/docs/04-chapter/retrieving-chapter/#2-construct-page-urls`
     fn make_cover_img_url_lower_quality(&self, manga_id: &str, file_name: &str) -> String {
         let file_name = format!("{}/{manga_id}/{file_name}.256.jpg", self.cover_img_url_base);
@@ -104,7 +116,7 @@ impl MangadexClient {
 
     /// Check if mangadex is available
     pub async fn check_status(&self) -> Result<Response, reqwest::Error> {
-        let endpoint = format!("{}/ping", self.api_url_base);
+        let endpoint = self.endpoint("ping");
         self.client.get(endpoint).send().await
     }
 
@@ -113,8 +125,7 @@ impl MangadexClient {
         manga_id: &str,
         language: Languages,
     ) -> Result<AggregateChapterResponse, Box<dyn Error>> {
-        let endpoint =
-            format!("{}/manga/{}/aggregate?translatedLanguage[]={}", self.api_url_base, manga_id, language.as_iso_code());
+        let endpoint = self.endpoint(&format!("manga/{}/aggregate?translatedLanguage[]={}", manga_id, language.as_iso_code()));
 
         let cache = self.cache_provider.get(&endpoint)?;
 
@@ -138,7 +149,7 @@ impl MangadexClient {
 
     /// Used in `manga` page to request the the amount of follows and stars a manga has
     async fn get_manga_statistics(&self, id_manga: &str) -> Result<MangaStatisticsResponse, reqwest::Error> {
-        let endpoint = format!("{}/statistics/manga/{id_manga}", self.api_url_base);
+        let endpoint = self.endpoint(&format!("statistics/manga/{id_manga}"));
 
         let response: MangaStatisticsResponse =
             self.client.get(endpoint).timeout(StdDuration::from_secs(1)).send().await?.json().await?;
@@ -148,14 +159,14 @@ impl MangadexClient {
 
     /// Request the tags / genres available on mangadex used in `FilterWidget`
     async fn get_tags(&self) -> Result<Response, reqwest::Error> {
-        let endpoint = format!("{}/manga/tag", self.api_url_base);
+        let endpoint = self.endpoint("manga/tag");
 
         self.client.get(endpoint).send().await
     }
 
     /// Used in `FilterWidget` to search an author and artist
     async fn get_authors(&self, name_to_search: SearchTerm) -> Result<Response, reqwest::Error> {
-        let endpoint = format!("{}/author?name={name_to_search}", self.api_url_base);
+        let endpoint = self.endpoint(&format!("author?name={name_to_search}"));
 
         self.client.get(endpoint).send().await
     }
@@ -430,7 +441,7 @@ impl HomePageMangaProvider for MangadexClient {
     async fn get_recently_added_mangas(&self) -> Result<Vec<RecentlyAddedManga>, Box<dyn Error>> {
         let language = Languages::get_preferred_lang().as_iso_code();
 
-        let endpoint = format!("{}/manga", self.api_url_base);
+        let endpoint = self.endpoint("manga");
 
         let id_cache = format!("{endpoint}{language}-recently-added-mangas");
 
@@ -509,7 +520,7 @@ impl HomePageMangaProvider for MangadexClient {
         let current_date = chrono::offset::Local::now().date_naive().checked_sub_months(Months::new(1)).unwrap();
         let language = Languages::get_preferred_lang().as_iso_code();
 
-        let endpoint = format!("{}/manga", self.api_url_base);
+        let endpoint = self.endpoint("manga");
 
         let from_date = format!("{current_date}T00:00:00");
 
@@ -566,7 +577,7 @@ impl HomePageMangaProvider for MangadexClient {
 
 impl SearchMangaById for MangadexClient {
     async fn get_manga_by_id(&self, manga_id: &str) -> Result<super::Manga, Box<dyn Error>> {
-        let endpoint = format!("{}/manga/{manga_id}", self.api_url_base);
+        let endpoint = self.endpoint(&format!("manga/{manga_id}"));
         let id_cache = format!("{endpoint}-manga-by-id");
         let cache = self.cache_provider.get(&id_cache)?;
 
@@ -622,7 +633,7 @@ impl GetChapterPages for MangadexClient {
         _manga_id: &str,
         image_quality: ImageQuality,
     ) -> Result<Vec<ChapterPageUrl>, Box<dyn Error>> {
-        let endpoint = format!("{}/at-home/server/{chapter_id}", self.api_url_base);
+        let endpoint = self.endpoint(&format!("at-home/server/{chapter_id}"));
         let cache = self.cache_provider.get(&endpoint)?;
         match cache {
             Some(cached) => {
@@ -663,7 +674,7 @@ impl MangaPageProvider for MangadexClient {
         filters: super::ChapterFilters,
         pagination: super::Pagination,
     ) -> Result<GetChaptersResponse, Box<dyn Error>> {
-        let endpoint = format!("{}/manga/{manga_id}/feed", self.api_url_base);
+        let endpoint = self.endpoint(&format!("manga/{manga_id}/feed"));
 
         let offset = (pagination.current_page.saturating_sub(1)) * pagination.items_per_page;
 
@@ -741,7 +752,7 @@ impl MangaPageProvider for MangadexClient {
     async fn get_all_chapters(&self, manga_id: &str, language: Languages) -> Result<Vec<Chapter>, Box<dyn Error>> {
         let language = language.as_iso_code();
 
-        let endpoint = format!("{}/manga/{manga_id}/feed", self.api_url_base);
+        let endpoint = self.endpoint(&format!("manga/{manga_id}/feed"));
 
         let id_cache = format!("{endpoint}{language}get-all-chapters");
         let cache = self.cache_provider.get(&id_cache)?;
@@ -806,7 +817,7 @@ impl MangaPageProvider for MangadexClient {
 
 impl SearchChapterById for MangadexClient {
     async fn search_chapter(&self, chapter_id: &str, _manga_id: &str) -> Result<ChapterToRead, Box<dyn std::error::Error>> {
-        let endpoint = format!("{}/chapter/{chapter_id}", self.api_url_base);
+        let endpoint = self.endpoint(&format!("chapter/{chapter_id}"));
         let cache = self.cache_provider.get(&endpoint)?;
 
         match cache {
@@ -927,10 +938,7 @@ impl SearchPageProvider for MangadexClient {
         let filters = filters.into_param();
         let items_per_page = pagination.items_per_page;
 
-        let url = format!(
-            "{}/manga?{search_by_title}&includes[]=cover_art&includes[]=author&includes[]=artist&limit={items_per_page}&offset={offset}{filters}&includedTagsMode=AND&excludedTagsMode=OR&hasAvailableChapters=true",
-            self.api_url_base,
-        );
+        let url = self.endpoint(&format!("manga?{search_by_title}&includes[]=cover_art&includes[]=author&includes[]=artist&limit={items_per_page}&offset={offset}{filters}&includedTagsMode=AND&excludedTagsMode=OR&hasAvailableChapters=true"));
 
         let response: SearchMangaResponse = self.client.get(url).send().await?.json().await?;
 
@@ -1027,7 +1035,7 @@ impl SearchPageProvider for MangadexClient {
 
 impl FeedPageProvider for MangadexClient {
     async fn get_latest_chapters(&self, manga_id: &str) -> Result<Vec<super::LatestChapter>, Box<dyn Error>> {
-        let endpoint = format!("{}/manga/{manga_id}/feed", self.api_url_base);
+        let endpoint = self.endpoint(&format!("manga/{manga_id}/feed"));
         let id_cache = format!("{endpoint}latest-chapters");
 
         let cache = self.cache_provider.get(&id_cache)?;
@@ -1593,5 +1601,35 @@ mod test {
         request.assert_async().await;
 
         assert_eq!(expected_response, response);
+    }
+}
+
+#[cfg(test)]
+mod url_join_tests {
+    use super::*;
+
+    #[test]
+    fn no_duplicate_slashes() {
+        for base in ["https://api.mangadex.org", "https://api.mangadex.org/"] {
+            let url = Url::parse(base).unwrap();
+            for path in ["ping", "/ping"] {
+                assert_eq!(MangadexClient::join_endpoint(&url, path), "https://api.mangadex.org/ping");
+            }
+        }
+    }
+
+    #[test]
+    fn keeps_query_string() {
+        let url = Url::parse("https://api.mangadex.org").unwrap();
+        assert_eq!(
+            MangadexClient::join_endpoint(&url, "manga?limit=10&includes[]=author"),
+            "https://api.mangadex.org/manga?limit=10&includes[]=author"
+        );
+    }
+
+    #[test]
+    fn keeps_scheme_slashes() {
+        let url = Url::parse("https://api.mangadex.org/").unwrap();
+        assert!(MangadexClient::join_endpoint(&url, "/ping").starts_with("https://api"));
     }
 }
