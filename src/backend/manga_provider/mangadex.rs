@@ -63,6 +63,11 @@ pub struct MangadexClient {
 }
 
 impl MangadexClient {
+    #[inline]
+    fn cover_base(&self) -> &str {
+        self.cover_img_url_base.as_str().trim_end_matches('/')
+    }
+
     /// Builds a full API URL from the base URL and a path (which may include a query string).
     ///
     /// `Url` always serializes with a trailing slash, so `format!("{}/ping", base)` would
@@ -77,13 +82,13 @@ impl MangadexClient {
 
     /// see: `https://api.mangadex.org/docs/04-chapter/retrieving-chapter/#2-construct-page-urls`
     fn make_cover_img_url_lower_quality(&self, manga_id: &str, file_name: &str) -> String {
-        let file_name = format!("{}/{manga_id}/{file_name}.256.jpg", self.cover_img_url_base);
+        let file_name = format!("{}/{manga_id}/{file_name}.256.jpg", self.cover_base());
         file_name
     }
 
     /// see: `https://api.mangadex.org/docs/04-chapter/retrieving-chapter/#2-construct-page-urls`
     fn make_cover_img_url(&self, manga_id: &str, file_name: &str) -> String {
-        let file_name = format!("{}/{manga_id}/{file_name}.512.jpg", self.cover_img_url_base);
+        let file_name = format!("{}/{manga_id}/{file_name}.512.jpg", self.cover_base());
         file_name
     }
 
@@ -314,6 +319,7 @@ impl MangadexClient {
             languages,
             artist,
             author,
+            provider: Some(super::MangaProviders::Mangadex),
         }
     }
 
@@ -1019,6 +1025,7 @@ impl SearchPageProvider for MangadexClient {
                     cover_img_url,
                     languages,
                     status: Some(status),
+                    provider: Some(super::MangaProviders::Mangadex),
                 }
             })
             .collect();
@@ -1128,6 +1135,7 @@ mod test {
                 genres: vec![Genres::default()],
                 description: Some("".to_string()),
                 status: Some(MangaStatus::Ongoing),
+                provider: Some(MangaProviders::Mangadex),
                 ..Default::default()
             }],
             total_mangas: 5,
@@ -1352,6 +1360,7 @@ mod test {
             id_safe_for_download: "some_id".to_string(),
             genres: vec![Genres::default()],
             title: "No title".to_string(),
+            provider: Some(MangaProviders::Mangadex),
             ..Default::default()
         };
 
@@ -1601,6 +1610,83 @@ mod test {
         request.assert_async().await;
 
         assert_eq!(expected_response, response);
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_mangadex_live_flow() {
+        let client = MangadexClient::new(API_URL_BASE.parse().unwrap(), COVER_IMG_URL_BASE.parse().unwrap(), EmptyCache::new_arc());
+
+        // 1. Status Ping
+        println!("\n--- Phase 1: Status Ping ---");
+        let status = client.check_status().await;
+        println!("Ping status: {:?}", status.as_ref().map(|r| r.status()));
+        assert!(status.is_ok(), "check_status failed: {:?}", status.err());
+
+        // 2. Search
+        println!("\n--- Phase 2: Search mangas ---");
+        let search = client
+            .search_mangas(
+                manga_tui::SearchTerm::trimmed("one piece"),
+                filters::api_parameter::Filters::default(),
+                Pagination::from_first_page(5),
+            )
+            .await;
+        println!("Search result: {:?}", search.as_ref().map(|r| r.mangas.len()));
+        assert!(search.is_ok(), "search failed: {:?}", search.err());
+        let mangas = search.unwrap().mangas;
+        assert!(!mangas.is_empty(), "no mangas found in search");
+
+        let first_manga = &mangas[0];
+        println!("First manga: '{}' (ID: {})", first_manga.title, first_manga.id);
+
+        // 3. Manga details
+        println!("\n--- Phase 3: Manga Details ---");
+        let details = client.get_manga_by_id(&first_manga.id).await;
+        println!("Details title: {:?}", details.as_ref().map(|m| &m.title));
+        assert!(details.is_ok(), "get_manga_by_id failed: {:?}", details.err());
+
+        // 4. Chapters
+        println!("\n--- Phase 4: Get All Chapters ---");
+        let chapters = client.get_all_chapters(&first_manga.id, Languages::English).await;
+        println!("Chapters count: {:?}", chapters.as_ref().map(|c| c.len()));
+        assert!(chapters.is_ok(), "get_all_chapters failed: {:?}", chapters.err());
+        let chaps = chapters.unwrap();
+
+        if let Some(chap) = chaps.first() {
+            println!("First chapter: '{}' (ID: {})", chap.title, chap.id);
+
+            // 5. Chapter pages
+            println!("\n--- Phase 5: Chapter Pages ---");
+            let pages = client
+                .get_chapter_pages_url_with_extension(&chap.id, &first_manga.id, crate::config::ImageQuality::Low)
+                .await;
+            println!("Pages count: {:?}", pages.as_ref().map(|p| p.len()));
+            assert!(pages.is_ok(), "get_chapter_pages failed: {:?}", pages.err());
+            let page_urls = pages.unwrap();
+
+            if let Some(first_page) = page_urls.first() {
+                println!("First page url: {}", first_page.url);
+                // 6. Raw image
+                println!("\n--- Phase 6: Raw Image Fetch ---");
+                let img = client.get_raw_image(first_page.url.as_str()).await;
+                println!("Image size: {:?} bytes", img.as_ref().map(|b| b.len()));
+                assert!(img.is_ok(), "get_raw_image failed: {:?}", img.err());
+            }
+        }
+
+        // 7. Popular mangas
+        println!("\n--- Phase 7: Popular Mangas ---");
+        let popular = client.get_popular_mangas().await;
+        println!("Popular count: {:?}", popular.as_ref().map(|p| p.len()));
+        assert!(popular.is_ok(), "get_popular_mangas failed: {:?}", popular.err());
+
+        // 8. Recently added mangas
+        println!("\n--- Phase 8: Recently Added Mangas ---");
+        let recent = client.get_recently_added_mangas().await;
+        println!("Recently added count: {:?}", recent.as_ref().map(|r| r.len()));
+        assert!(recent.is_ok(), "get_recently_added_mangas failed: {:?}", recent.err());
+        println!("\n--- MangaDex Diagnostic Complete: ALL PASSED ---");
     }
 }
 

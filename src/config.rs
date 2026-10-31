@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumIter};
 use toml::Table;
 
-use crate::backend::manga_provider::MangaProviders;
+use crate::backend::manga_provider::{Languages, MangaProviders};
 use crate::cli::Credentials;
 
 static CONFIG_FILE_NAME: &str = "config.toml";
@@ -107,6 +107,27 @@ impl ConfigParam for DownloadTypeParam {
 
     fn defaults(&self) -> &'static str {
         r#""cbz""#
+    }
+}
+
+#[derive(Debug, Default)]
+struct DownloadDirParam;
+
+impl ConfigParam for DownloadDirParam {
+    fn name(&self) -> &'static str {
+        "download_dir"
+    }
+
+    fn comments(&self) -> &'static str {
+        "Custom directory for downloaded mangas, leave empty \"\" to use the default directory"
+    }
+
+    fn values(&self) -> &'static str {
+        "path string (e.g. \"G:/some_directory/Mangas\" or 'G:\\some_directory\\Mangas' or '~/some-directory/mangas')"
+    }
+
+    fn defaults(&self) -> &'static str {
+        r#""""#
     }
 }
 
@@ -245,15 +266,57 @@ impl ConfigParam for DefaultMangaProvider {
     }
 
     fn comments(&self) -> &'static str {
-        "Sets which manga provider will be used when running manga-tui, \n# you can override it by running manga-tui with the -p flag like this: manga-tui -p weebcentral"
+        "Sets which manga provider will be used when running manga-tui, \n# you can override it by running manga-tui with the -p flag like this: manga-tui -p inmanga"
     }
 
     fn values(&self) -> &'static str {
-        "mangadex, weebcentral, mangapill"
+        "mangadex, weebcentral, mangapill, inmanga, mangaoni, leercapitulo"
     }
 
     fn defaults(&self) -> &'static str {
         r#""mangadex""#
+    }
+}
+
+#[derive(Debug, Default)]
+struct DefaultLanguageParam;
+
+impl ConfigParam for DefaultLanguageParam {
+    fn name(&self) -> &'static str {
+        "default_language"
+    }
+
+    fn comments(&self) -> &'static str {
+        "Sets the default language for manga chapters\n# values can be ISO codes (e.g. \"es\", \"es-la\", \"en\") or language names (e.g. \"spanish\", \"english\")"
+    }
+
+    fn values(&self) -> &'static str {
+        "english, spanish, spanish (latam), french, german, etc. (run `manga-tui lang --print` for ISO codes)"
+    }
+
+    fn defaults(&self) -> &'static str {
+        r#""english""#
+    }
+}
+
+#[derive(Debug, Default)]
+struct ImageResizeFilterParam;
+
+impl ConfigParam for ImageResizeFilterParam {
+    fn name(&self) -> &'static str {
+        "image_resize_filter"
+    }
+
+    fn comments(&self) -> &'static str {
+        "Filter used to resize manga pages in the reader.\n# lanczos3 gives the best quality for text and fine lines (recommended for manga).\n# nearest is the fastest but lowest quality (pixel-art style)."
+    }
+
+    fn values(&self) -> &'static str {
+        "lanczos3, catmull_rom, triangle, nearest"
+    }
+
+    fn defaults(&self) -> &'static str {
+        r#""lanczos3""#
     }
 }
 
@@ -329,12 +392,15 @@ struct ConfigBuilder<'a> {
 fn config_params() -> Vec<Box<dyn ConfigParam>> {
     vec![
         Box::new(DownloadTypeParam),
+        Box::new(DownloadDirParam),
         Box::new(ImageQualityParam),
+        Box::new(ImageResizeFilterParam),
         Box::new(AmountPagesParam),
         Box::new(AutoBookmarkParam),
         Box::new(TrackReadingWhenDownload),
         Box::new(CheckNewUpdates),
         Box::new(DefaultMangaProvider),
+        Box::new(DefaultLanguageParam),
         Box::new(TrackReadingHistory),
     ]
 }
@@ -536,8 +602,15 @@ pub struct AnilistConfig {
 pub struct MangaTuiConfig {
     /// The format to download manga in.
     pub download_type: DownloadType,
+    /// Custom directory for downloaded mangas. If empty, the default mangaDownloads directory is used.
+    #[serde(default)]
+    pub download_dir: String,
     /// The image quality for downloads.
     pub image_quality: ImageQuality,
+    /// The filter used to resize manga pages in the reader.
+    /// Lanczos3 is the default and gives the best quality for text and fine lines.
+    #[serde(default)]
+    pub image_resize_filter: ImageResizeFilter,
     /// Whether to automatically bookmark chapters.
     pub auto_bookmark: bool,
     /// Number of pages to prefetch around the current page.
@@ -548,6 +621,9 @@ pub struct MangaTuiConfig {
     pub check_new_updates: bool,
     /// The default manga provider.
     pub default_manga_provider: MangaProviders,
+    /// The default language for manga chapters.
+    #[serde(default)]
+    pub default_language: Languages,
     /// Wether or not to use services like anilist to track reading history
     pub track_reading_history: bool,
     /// Anilist configuration.
@@ -574,6 +650,41 @@ pub enum ImageQuality {
     High,
 }
 
+/// Filter used when resizing manga page images in the reader.
+///
+/// Lanczos3 produces the sharpest result for manga text and fine lines.
+/// Nearest is the fastest but lowest quality (pixel-art style).
+#[derive(Debug, Serialize, Deserialize, Display, EnumIter, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ImageResizeFilter {
+    /// Best quality for manga – preserves text and fine lines (default)
+    Lanczos3,
+    /// Good quality, smooth results
+    CatmullRom,
+    /// Decent quality, bilinear interpolation
+    Triangle,
+    /// Worst quality but fastest (original default)
+    Nearest,
+}
+
+impl Default for ImageResizeFilter {
+    fn default() -> Self {
+        Self::Lanczos3
+    }
+}
+
+impl ImageResizeFilter {
+    /// Converts to the `image::imageops::FilterType` used by `ratatui-image`.
+    pub fn to_filter_type(self) -> ratatui_image::FilterType {
+        match self {
+            Self::Lanczos3 => ratatui_image::FilterType::Lanczos3,
+            Self::CatmullRom => ratatui_image::FilterType::CatmullRom,
+            Self::Triangle => ratatui_image::FilterType::Triangle,
+            Self::Nearest => ratatui_image::FilterType::Nearest,
+        }
+    }
+}
+
 impl Default for MangaTuiConfig {
     fn default() -> Self {
         Self {
@@ -581,10 +692,13 @@ impl Default for MangaTuiConfig {
             auto_bookmark: true,
             check_new_updates: true,
             download_type: DownloadType::default(),
+            download_dir: String::default(),
             image_quality: ImageQuality::default(),
+            image_resize_filter: ImageResizeFilter::default(),
             track_reading_when_download: false,
             track_reading_history: true,
             default_manga_provider: MangaProviders::default(),
+            default_language: Languages::default(),
             anilist: AnilistConfig::default(),
         }
     }
@@ -620,6 +734,23 @@ impl MangaTuiConfig {
             access_token: self.anilist.credentials.access_token.clone(),
             client_id: self.anilist.credentials.client_id.clone(),
         })
+    }
+
+    /// Returns the custom download directory path if configured, or None.
+    pub fn get_custom_download_dir(&self) -> Option<PathBuf> {
+        let trimmed = self.download_dir.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+
+        if trimmed.starts_with('~') {
+            if let Some(home) = directories::BaseDirs::new().map(|b| b.home_dir().to_path_buf()) {
+                let without_tilde = trimmed.trim_start_matches('~').trim_start_matches(['/', '\\']);
+                return Some(home.join(without_tilde));
+            }
+        }
+
+        Some(PathBuf::from(trimmed))
     }
 }
 
@@ -922,4 +1053,16 @@ param2 = ""
     //
     //    Ok(())
     //}
+
+    #[test]
+    fn custom_download_dir_is_parsed_correctly() {
+        let mut config = MangaTuiConfig::default();
+        assert_eq!(config.get_custom_download_dir(), None);
+
+        config.download_dir = "G:/Mi unidad/Mangas".to_string();
+        assert_eq!(config.get_custom_download_dir(), Some(PathBuf::from("G:/Mi unidad/Mangas")));
+
+        config.download_dir = "   ".to_string();
+        assert_eq!(config.get_custom_download_dir(), None);
+    }
 }

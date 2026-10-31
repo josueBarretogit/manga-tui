@@ -22,7 +22,7 @@ use tui_widget_list::ListState;
 use crate::backend::database::{Database, MangaPlanToReadSave};
 use crate::backend::error_log::{ErrorType, write_to_error_log};
 use crate::backend::manga_provider::{
-    EventHandler as FilterEventHandler, FiltersHandler, GetMangasResponse, Manga, Pagination, SearchPageProvider,
+    EventHandler as FilterEventHandler, FiltersHandler, GetMangasResponse, Manga, Pagination, SearchManga, SearchPageProvider,
 };
 use crate::backend::tracker::{MangaTracker, track_manga_plan_to_read};
 use crate::backend::tui::Events;
@@ -68,6 +68,61 @@ pub enum SearchPageActions {
     PreviousPage,
     SearchMangaPage,
     PlanToRead,
+    ToggleScope,
+    ToggleLanguageFilter,
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum SearchLanguageFilter {
+    #[default]
+    All,
+    Spanish,
+    English,
+}
+
+impl SearchLanguageFilter {
+    pub fn next(&self) -> Self {
+        match self {
+            Self::All => Self::Spanish,
+            Self::Spanish => Self::English,
+            Self::English => Self::All,
+        }
+    }
+
+    pub fn to_multi_search_language(&self) -> crate::backend::multi_provider::MultiSearchLanguage {
+        match self {
+            Self::All => crate::backend::multi_provider::MultiSearchLanguage::All,
+            Self::Spanish => crate::backend::multi_provider::MultiSearchLanguage::Spanish,
+            Self::English => crate::backend::multi_provider::MultiSearchLanguage::English,
+        }
+    }
+
+    pub fn matches_provider(&self, provider: Option<crate::backend::manga_provider::MangaProviders>) -> bool {
+        match self {
+            Self::All => true,
+            Self::Spanish => matches!(
+                provider,
+                Some(crate::backend::manga_provider::MangaProviders::Inmanga)
+                    | Some(crate::backend::manga_provider::MangaProviders::Mangaoni)
+                    | Some(crate::backend::manga_provider::MangaProviders::Leercapitulo)
+                    | Some(crate::backend::manga_provider::MangaProviders::Mangadex)
+            ),
+            Self::English => matches!(
+                provider,
+                Some(crate::backend::manga_provider::MangaProviders::Weebcentral)
+                    | Some(crate::backend::manga_provider::MangaProviders::Mangapill)
+                    | Some(crate::backend::manga_provider::MangaProviders::Comizy)
+                    | Some(crate::backend::manga_provider::MangaProviders::Mangadex)
+            ),
+        }
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum SearchScope {
+    #[default]
+    AllProviders,
+    CurrentProvider,
 }
 
 #[derive(Default, PartialEq, Eq, PartialOrd, Ord)]
@@ -99,8 +154,15 @@ where
     picker: Option<Picker>,
     manga_cover_state: ImageState,
     tasks: JoinSet<()>,
+    pub search_scope: SearchScope,
+    pub language_filter: SearchLanguageFilter,
+    pub search_history: Vec<String>,
+    pub history_index: Option<usize>,
+    pub stashed_input: String,
     manga_provider: Arc<T>,
     manga_tracker: Option<S>,
+    all_providers_results: Vec<SearchManga>,
+    all_providers_unfiltered_results: Vec<SearchManga>,
 }
 
 /// This contains the data the application gets when doing a search
@@ -157,6 +219,8 @@ where
             SearchPageActions::PreviousPage => self.search_previous_page(),
             SearchPageActions::SearchMangaPage => self.search_manga_page(),
             SearchPageActions::PlanToRead => self.plan_to_read(),
+            SearchPageActions::ToggleScope => self.toggle_scope(),
+            SearchPageActions::ToggleLanguageFilter => self.toggle_language_filter(),
         }
     }
 
@@ -204,6 +268,10 @@ where
         let (action_tx, action_rx) = mpsc::unbounded_channel::<SearchPageActions>();
         let (local_event_tx, local_event) = mpsc::unbounded_channel::<SearchPageEvents>();
 
+        let search_history = Database::get_connection()
+            .and_then(|conn| Database::new(&conn).get_recent_searches(30))
+            .unwrap_or_default();
+
         Self {
             global_event_tx: None,
             local_action_tx: action_tx,
@@ -221,8 +289,15 @@ where
             manga_added_to_plan_to_read: None,
             picker,
             manga_cover_state: ImageState::default(),
+            search_scope: SearchScope::default(),
+            language_filter: SearchLanguageFilter::default(),
+            search_history,
+            history_index: None,
+            stashed_input: String::new(),
             manga_provider: api_client,
             manga_tracker,
+            all_providers_results: Vec::new(),
+            all_providers_unfiltered_results: Vec::new(),
         }
     }
 
@@ -238,32 +313,66 @@ where
             InputMode::Idle => Line::from(vec![
                 "Press ".into(),
                 "<s>".to_span().style(*INSTRUCTIONS_STYLE),
-                " to search mangas ".into(),
+                " search ".into(),
+                "<l>".to_span().style(*INSTRUCTIONS_STYLE),
+                " lang ".into(),
                 "<f>".to_span().style(*INSTRUCTIONS_STYLE),
-                " to open advanced filters".into(),
+                " filters".into(),
             ]),
             InputMode::Typing => Line::from(vec![
                 "Press ".into(),
                 "<Enter>".to_span().style(*INSTRUCTIONS_STYLE),
-                " to search ".into(),
+                " search ".into(),
+                "<Up>/<Down>".to_span().style(*INSTRUCTIONS_STYLE),
+                " history ".into(),
                 "<Esc>".to_span().style(*INSTRUCTIONS_STYLE),
-                " to stop typing".into(),
+                " stop".into(),
             ]),
         };
 
         render_search_bar(self.input_mode == InputMode::Typing, input_help, &self.search_bar, frame, input_area);
 
-        if let Some(name) = self.manga_added_to_plan_to_read.as_ref() {
-            Paragraph::new(format!("Added: {name} to plan to read 📖").to_span().underlined())
-                .wrap(Wrap { trim: true })
-                .render(
-                    information_area.inner(Margin {
-                        horizontal: 1,
-                        vertical: 1,
-                    }),
-                    frame.buffer_mut(),
-                );
+        let scope_span = match self.search_scope {
+            SearchScope::AllProviders => Span::styled(" [All Providers] ", Style::default().fg(Color::Yellow).bold()),
+            SearchScope::CurrentProvider => {
+                Span::styled(format!(" [{}] ", self.manga_provider.name()), Style::default().fg(Color::Cyan).bold())
+            },
+        };
+
+        let lang_span = match self.language_filter {
+            SearchLanguageFilter::All => Span::styled(" [All] ", Style::default().fg(Color::White).bold()),
+            SearchLanguageFilter::Spanish => Span::styled(" [ES 🇪🇸] ", Style::default().fg(Color::Green).bold()),
+            SearchLanguageFilter::English => Span::styled(" [EN 🇬🇧] ", Style::default().fg(Color::Blue).bold()),
+        };
+
+        let mut info_lines = vec![Line::from(vec![
+            "Scope: ".into(),
+            scope_span,
+            " (<Tab>/<m>) ".to_span().style(*INSTRUCTIONS_STYLE),
+            "Lang: ".into(),
+            lang_span,
+            " (<l>)".to_span().style(*INSTRUCTIONS_STYLE),
+        ])];
+
+        if let Some(idx) = self.history_index {
+            info_lines.push(Line::from(vec![
+                "History: ".into(),
+                Span::styled(
+                    format!("{}/{} (navigate with <Up>/<Down>)", idx + 1, self.search_history.len()),
+                    Style::default().fg(Color::Yellow),
+                ),
+            ]));
+        } else if let Some(name) = self.manga_added_to_plan_to_read.as_ref() {
+            info_lines.push(Line::from(Span::styled(format!("Added: {name} to plan to read 📖"), Style::default().underlined())));
         }
+
+        Paragraph::new(info_lines).wrap(Wrap { trim: true }).render(
+            information_area.inner(Margin {
+                horizontal: 1,
+                vertical: 1,
+            }),
+            frame.buffer_mut(),
+        );
     }
 
     fn render_manga_found_area(&mut self, area: Rect, frame: &mut Frame<'_>) {
@@ -346,6 +455,7 @@ where
                                 manga_selected.manga.description.as_ref().unwrap_or(&"No description".to_string()),
                                 &manga_selected.manga.genres,
                                 manga_selected.manga.status,
+                                manga_selected.manga.provider,
                                 self.picker.is_some(),
                                 loader_state,
                             ),
@@ -382,6 +492,8 @@ where
 
     fn focus_search_bar(&mut self) {
         self.input_mode = InputMode::Typing;
+        self.history_index = None;
+        self.stashed_input = self.search_bar.value().to_string();
     }
 
     fn scroll_down(&mut self) {
@@ -400,6 +512,8 @@ where
     fn reset_search(&mut self) {
         self.mangas_found_list.pagination.reset();
         self.mangas_found_list.next_page = false;
+        self.all_providers_results.clear();
+        self.all_providers_unfiltered_results.clear();
     }
 
     fn get_current_manga_selected_mut(&mut self) -> Option<&mut MangaItem> {
@@ -436,7 +550,7 @@ where
                 id: &item.manga.id,
                 title: &item.manga.title,
                 img_url: Some(&item.manga.cover_img_url),
-                provider: self.manga_provider.name(),
+                provider: item.manga.provider.unwrap_or_else(|| self.manga_provider.name()),
             });
 
             match plan_to_read_operation {
@@ -453,15 +567,24 @@ where
         if let Some(manga) = manga_selected {
             let client = Arc::clone(&self.manga_provider);
             let id = manga.manga.id.clone();
+            let provider = manga.manga.provider;
             let tx = self.local_event_tx.clone();
             self.tasks.spawn(async move {
-                let response = client.get_manga_by_id(&id).await;
+                let response = match provider {
+                    Some(p) => crate::backend::multi_provider::get_manga_by_id_for_provider(p, &id)
+                        .await
+                        .map_err(|e| e.to_string()),
+                    None => client.get_manga_by_id(&id).await.map_err(|e| e.to_string()),
+                };
                 match response {
-                    Ok(res) => {
+                    Ok(mut res) => {
+                        if res.provider.is_none() {
+                            res.provider = provider;
+                        }
                         tx.send(SearchPageEvents::GoToMangaPage(Box::new(res))).ok();
                     },
                     Err(e) => {
-                        tx.send(SearchPageEvents::FailedGoToMangaPage(e.to_string())).ok();
+                        tx.send(SearchPageEvents::FailedGoToMangaPage(e.clone())).ok();
                         write_to_error_log(e.into());
                     },
                 }
@@ -478,6 +601,9 @@ where
             InputMode::Idle => match key_event.code {
                 KeyCode::Char('s') => {
                     self.local_action_tx.send(SearchPageActions::StartTyping).ok();
+                },
+                KeyCode::Char('l') => {
+                    self.local_action_tx.send(SearchPageActions::ToggleLanguageFilter).ok();
                 },
                 KeyCode::Char('j') | KeyCode::Down => {
                     self.local_action_tx.send(SearchPageActions::ScrollDown).ok();
@@ -498,6 +624,9 @@ where
                 KeyCode::Char('f') => {
                     self.local_action_tx.send(SearchPageActions::ToggleFilters).ok();
                 },
+                KeyCode::Tab | KeyCode::Char('m') => {
+                    self.local_action_tx.send(SearchPageActions::ToggleScope).ok();
+                },
                 KeyCode::Char('r') | KeyCode::Enter => {
                     self.local_action_tx.send(SearchPageActions::SearchMangaPage).ok();
                 },
@@ -510,13 +639,77 @@ where
                         self.local_action_tx.send(SearchPageActions::Search).ok();
                     }
                 },
+                KeyCode::Tab => {
+                    self.local_action_tx.send(SearchPageActions::ToggleScope).ok();
+                },
                 KeyCode::Esc => {
                     self.local_action_tx.send(SearchPageActions::StopTyping).ok();
                 },
+                KeyCode::Up => {
+                    self.cycle_search_history_up();
+                },
+                KeyCode::Down => {
+                    self.cycle_search_history_down();
+                },
                 _ => {
+                    if self.history_index.is_some() && key_event.code != KeyCode::Left && key_event.code != KeyCode::Right {
+                        self.history_index = None;
+                    }
                     self.search_bar.handle_event(&event::Event::Key(key_event));
                 },
             },
+        }
+    }
+
+    pub fn cycle_search_history_up(&mut self) {
+        if self.search_history.is_empty() {
+            return;
+        }
+        match self.history_index {
+            None => {
+                self.stashed_input = self.search_bar.value().to_string();
+                self.history_index = Some(0);
+                self.search_bar = Input::default().with_value(self.search_history[0].clone());
+            },
+            Some(idx) => {
+                if idx + 1 < self.search_history.len() {
+                    let next_idx = idx + 1;
+                    self.history_index = Some(next_idx);
+                    self.search_bar = Input::default().with_value(self.search_history[next_idx].clone());
+                }
+            },
+        }
+    }
+
+    pub fn cycle_search_history_down(&mut self) {
+        match self.history_index {
+            Some(0) => {
+                self.history_index = None;
+                self.search_bar = Input::default().with_value(self.stashed_input.clone());
+            },
+            Some(idx) => {
+                let prev_idx = idx - 1;
+                self.history_index = Some(prev_idx);
+                self.search_bar = Input::default().with_value(self.search_history[prev_idx].clone());
+            },
+            None => {},
+        }
+    }
+
+    fn toggle_language_filter(&mut self) {
+        self.language_filter = self.language_filter.next();
+        if self.search_scope == SearchScope::AllProviders && !self.all_providers_unfiltered_results.is_empty() {
+            let filtered: Vec<SearchManga> = self
+                .all_providers_unfiltered_results
+                .iter()
+                .filter(|m| self.language_filter.matches_provider(m.provider))
+                .cloned()
+                .collect();
+            self.all_providers_results = filtered;
+            self.mangas_found_list.pagination.total_items = self.all_providers_results.len() as u32;
+            self.mangas_found_list.pagination.current_page = 1;
+            self.load_all_providers_page();
+            self.state = if self.all_providers_results.is_empty() { PageState::NotFound } else { PageState::DisplayingMangasFound };
         }
     }
 
@@ -539,7 +732,33 @@ where
         self.filter_state.is_typing()
     }
 
+    fn toggle_scope(&mut self) {
+        self.search_scope = match self.search_scope {
+            SearchScope::AllProviders => SearchScope::CurrentProvider,
+            SearchScope::CurrentProvider => SearchScope::AllProviders,
+        };
+    }
+
+    pub fn search_with_query_all_providers(&mut self, query: &str) {
+        self.search_bar = Input::default().with_value(query.to_string());
+        self.search_scope = SearchScope::AllProviders;
+        self.reset_search();
+        self.search_mangas();
+    }
+
     fn search_mangas(&mut self) {
+        let query_str = self.search_bar.value().trim().to_string();
+        if !query_str.is_empty() {
+            if let Ok(conn) = Database::get_connection() {
+                let db = Database::new(&conn);
+                db.save_search_history(&query_str).ok();
+            }
+            self.search_history.retain(|q| q != &query_str);
+            self.search_history.insert(0, query_str);
+            self.history_index = None;
+            self.stashed_input.clear();
+        }
+
         self.clean_up();
 
         self.state = PageState::SearchingMangas;
@@ -549,16 +768,37 @@ where
         let search_term = SearchTerm::trimmed_lowercased(self.search_bar.value());
         let filters = self.filter_state.get_state().clone();
         let client = Arc::clone(&self.manga_provider);
+        let scope = self.search_scope;
+        let lang = self.language_filter.to_multi_search_language();
 
         self.tasks.spawn(async move {
-            let response = client.search_mangas(search_term, filters, page).await;
-            match response {
-                Ok(res) => {
-                    tx.send(SearchPageEvents::LoadMangasFound(Some(res))).ok();
+            match scope {
+                SearchScope::AllProviders => {
+                    let results = if let Some(term) = search_term {
+                        crate::backend::multi_provider::search_all_providers_with_lang(term.get(), lang).await
+                    } else {
+                        vec![]
+                    };
+                    let total = results.len() as u32;
+                    let next_page = (page.current_page * page.items_per_page) < total;
+                    let response = GetMangasResponse {
+                        mangas: results,
+                        total_mangas: total,
+                        next_page,
+                    };
+                    tx.send(SearchPageEvents::LoadMangasFound(Some(response))).ok();
                 },
-                Err(e) => {
-                    write_to_error_log(e.into());
-                    tx.send(SearchPageEvents::LoadMangasFound(None)).ok();
+                SearchScope::CurrentProvider => {
+                    let response = client.search_mangas(search_term, filters, page).await;
+                    match response {
+                        Ok(res) => {
+                            tx.send(SearchPageEvents::LoadMangasFound(Some(res))).ok();
+                        },
+                        Err(e) => {
+                            write_to_error_log(e.into());
+                            tx.send(SearchPageEvents::LoadMangasFound(None)).ok();
+                        },
+                    }
                 },
             }
         });
@@ -568,10 +808,15 @@ where
         if self.state == PageState::DisplayingMangasFound
             && self.state != PageState::SearchingMangas
             && self.mangas_found_list.pagination.can_go_next_page()
-            && self.mangas_found_list.next_page
+            && (self.mangas_found_list.next_page || !self.all_providers_results.is_empty())
         {
-            self.mangas_found_list.pagination.go_next_page();
-            self.search_mangas();
+            if !self.all_providers_results.is_empty() {
+                self.mangas_found_list.pagination.go_next_page();
+                self.load_all_providers_page();
+            } else {
+                self.mangas_found_list.pagination.go_next_page();
+                self.search_mangas();
+            }
         }
     }
 
@@ -580,13 +825,37 @@ where
             && self.state != PageState::SearchingMangas
             && self.mangas_found_list.pagination.can_go_previous_page()
         {
-            self.mangas_found_list.pagination.go_previous_page();
-            self.search_mangas();
+            if !self.all_providers_results.is_empty() {
+                self.mangas_found_list.pagination.go_previous_page();
+                self.load_all_providers_page();
+            } else {
+                self.mangas_found_list.pagination.go_previous_page();
+                self.search_mangas();
+            }
         }
     }
 
     fn go_to_manga_page(&self, manga: Manga) {
         self.global_event_tx.as_ref().unwrap().send(Events::GoToMangaPage(manga)).ok();
+    }
+
+    fn load_all_providers_page(&mut self) {
+        let total = self.all_providers_results.len();
+        let from = self.mangas_found_list.pagination.index_to_slice_from();
+        let to = self.mangas_found_list.pagination.to_index(total);
+
+        let slice = if from < total { self.all_providers_results[from..to].to_vec() } else { vec![] };
+
+        self.abort_tasks();
+        self.manga_cover_state = ImageState::default();
+        self.mangas_found_list.widget = ListMangasFoundWidget::from_response(slice.clone());
+        if !slice.is_empty() {
+            self.mangas_found_list.state.select(Some(0));
+        } else {
+            self.mangas_found_list.state.select(None);
+        }
+        self.mangas_found_list.next_page = self.mangas_found_list.pagination.can_go_next_page();
+        self.init_search_manga_covers();
     }
 
     fn load_mangas_found(&mut self, response: Option<GetMangasResponse>) {
@@ -595,18 +864,39 @@ where
                 if response.mangas.is_empty() {
                     self.state = PageState::NotFound;
                     self.mangas_found_list.pagination.total_items = 0;
+                    self.all_providers_results.clear();
+                    self.all_providers_unfiltered_results.clear();
                     return;
                 }
-                self.mangas_found_list.pagination.total_items = response.total_mangas;
-                self.mangas_found_list.state.select(Some(0));
-                self.mangas_found_list.widget = ListMangasFoundWidget::from_response(response.mangas);
-                self.mangas_found_list.next_page = response.next_page;
-                self.state = PageState::DisplayingMangasFound;
-                self.init_search_manga_covers();
+                if self.search_scope == SearchScope::AllProviders {
+                    self.all_providers_unfiltered_results = response.mangas.clone();
+                    let filtered: Vec<SearchManga> = response
+                        .mangas
+                        .into_iter()
+                        .filter(|m| self.language_filter.matches_provider(m.provider))
+                        .collect();
+                    self.all_providers_results = filtered;
+                    self.mangas_found_list.pagination.total_items = self.all_providers_results.len() as u32;
+                    self.mangas_found_list.pagination.current_page = 1;
+                    self.load_all_providers_page();
+                    self.state =
+                        if self.all_providers_results.is_empty() { PageState::NotFound } else { PageState::DisplayingMangasFound };
+                } else {
+                    self.all_providers_results.clear();
+                    self.all_providers_unfiltered_results.clear();
+                    self.mangas_found_list.pagination.total_items = response.total_mangas;
+                    self.mangas_found_list.state.select(Some(0));
+                    self.mangas_found_list.widget = ListMangasFoundWidget::from_response(response.mangas);
+                    self.mangas_found_list.next_page = response.next_page;
+                    self.state = PageState::DisplayingMangasFound;
+                    self.init_search_manga_covers();
+                }
             },
             None => {
                 self.state = PageState::ErrorOcurredSearchingMangas;
                 self.mangas_found_list.pagination.total_items = 0;
+                self.all_providers_results.clear();
+                self.all_providers_unfiltered_results.clear();
             },
         }
     }
@@ -618,20 +908,25 @@ where
     }
 
     fn search_covers(&mut self) {
-        let cover_urls_and_manga_ids: Vec<(String, String)> = self
+        let cover_items: Vec<(String, String, Option<crate::backend::manga_provider::MangaProviders>)> = self
             .mangas_found_list
             .widget
             .mangas
             .iter()
-            .map(|item| (item.manga.cover_img_url.clone(), item.manga.id.clone()))
+            .map(|item| (item.manga.cover_img_url.clone(), item.manga.id.clone(), item.manga.provider))
             .collect();
 
         let tx = self.local_event_tx.clone();
         let client = Arc::clone(&self.manga_provider);
 
         self.tasks.spawn(async move {
-            for (cover, id) in cover_urls_and_manga_ids {
-                let response = client.get_image(&cover).await;
+            for (cover, id, provider) in cover_items {
+                let response = match provider {
+                    Some(p) => crate::backend::multi_provider::get_image_for_provider(p, &cover)
+                        .await
+                        .map_err(|e| e as Box<dyn std::error::Error>),
+                    None => client.get_image(&cover).await,
+                };
                 if let Ok(res) = response {
                     tx.send(SearchPageEvents::LoadCover(Some(res), id)).ok();
                 }
@@ -883,4 +1178,213 @@ mod test {
     //
     //    assert!(search_page.local_event_rx.is_empty());
     //}
+
+    #[tokio::test]
+    async fn test_all_providers_pagination_w_and_b() {
+        use super::*;
+        use crate::backend::manga_provider::mock::{MockFilterState, MockFiltersHandler, MockMangaPageProvider, MockWidgetFilter};
+        use crate::global::test_utils::TrackerTest;
+        use crate::view::widgets::press_key;
+
+        let mut search_page: SearchPage<MockMangaPageProvider, TrackerTest> = SearchPage::new(
+            None,
+            MockMangaPageProvider::new().into(),
+            None,
+            MockFiltersHandler::new(MockFilterState {}),
+            MockWidgetFilter {},
+            Pagination::from_first_page(20),
+        );
+
+        search_page.search_scope = SearchScope::AllProviders;
+
+        // Create 25 mock mangas
+        let mock_mangas: Vec<SearchManga> = (0..25)
+            .map(|i| SearchManga {
+                id: format!("manga_{i}"),
+                title: format!("Manga {i}"),
+                ..Default::default()
+            })
+            .collect();
+
+        // Simulate search response in AllProviders
+        search_page.load_mangas_found(Some(GetMangasResponse {
+            mangas: mock_mangas,
+            total_mangas: 25,
+            next_page: true,
+        }));
+
+        assert_eq!(PageState::DisplayingMangasFound, search_page.state);
+        assert_eq!(1, search_page.mangas_found_list.pagination.current_page);
+        assert_eq!(2, search_page.mangas_found_list.pagination.get_total_pages());
+        assert_eq!(20, search_page.mangas_found_list.widget.mangas.len());
+        assert_eq!(true, search_page.mangas_found_list.next_page);
+        assert_eq!(true, search_page.mangas_found_list.pagination.can_go_next_page());
+        assert_eq!(false, search_page.mangas_found_list.pagination.can_go_previous_page());
+
+        // Press 'w' (NextPage)
+        press_key(&mut search_page, KeyCode::Char('w'));
+        if let Ok(action) = search_page.local_action_rx.try_recv() {
+            assert_eq!(SearchPageActions::NextPage, action);
+            search_page.update(action);
+        } else {
+            panic!("NextPage action was not sent on 'w'");
+        }
+
+        assert_eq!(2, search_page.mangas_found_list.pagination.current_page);
+        assert_eq!(5, search_page.mangas_found_list.widget.mangas.len());
+        assert_eq!(false, search_page.mangas_found_list.next_page);
+        assert_eq!(false, search_page.mangas_found_list.pagination.can_go_next_page());
+        assert_eq!(true, search_page.mangas_found_list.pagination.can_go_previous_page());
+
+        // Press 'b' (PreviousPage)
+        press_key(&mut search_page, KeyCode::Char('b'));
+        if let Ok(action) = search_page.local_action_rx.try_recv() {
+            assert_eq!(SearchPageActions::PreviousPage, action);
+            search_page.update(action);
+        } else {
+            panic!("PreviousPage action was not sent on 'b'");
+        }
+
+        assert_eq!(1, search_page.mangas_found_list.pagination.current_page);
+        assert_eq!(20, search_page.mangas_found_list.widget.mangas.len());
+        assert_eq!(true, search_page.mangas_found_list.next_page);
+        assert_eq!(true, search_page.mangas_found_list.pagination.can_go_next_page());
+    }
+
+    #[tokio::test]
+    async fn test_search_history_cycling() {
+        use super::*;
+        use crate::backend::manga_provider::mock::{MockFilterState, MockFiltersHandler, MockMangaPageProvider, MockWidgetFilter};
+        use crate::global::test_utils::TrackerTest;
+        use crate::view::widgets::press_key;
+
+        let mut search_page: SearchPage<MockMangaPageProvider, TrackerTest> = SearchPage::new(
+            None,
+            MockMangaPageProvider::new().into(),
+            None,
+            MockFiltersHandler::new(MockFilterState {}),
+            MockWidgetFilter {},
+            Pagination::from_first_page(20),
+        );
+
+        search_page.search_history = vec!["One Piece".to_string(), "Naruto".to_string(), "Bleach".to_string()];
+        search_page.input_mode = InputMode::Typing;
+        search_page.search_bar = Input::default().with_value("My draft".to_string());
+
+        // Press Up -> should recall "One Piece"
+        press_key(&mut search_page, KeyCode::Up);
+        assert_eq!(search_page.search_bar.value(), "One Piece");
+        assert_eq!(search_page.history_index, Some(0));
+
+        // Press Up again -> should recall "Naruto"
+        press_key(&mut search_page, KeyCode::Up);
+        assert_eq!(search_page.search_bar.value(), "Naruto");
+        assert_eq!(search_page.history_index, Some(1));
+
+        // Press Up again -> should recall "Bleach"
+        press_key(&mut search_page, KeyCode::Up);
+        assert_eq!(search_page.search_bar.value(), "Bleach");
+        assert_eq!(search_page.history_index, Some(2));
+
+        // Press Up again at the end of history -> stays on "Bleach"
+        press_key(&mut search_page, KeyCode::Up);
+        assert_eq!(search_page.search_bar.value(), "Bleach");
+
+        // Press Down -> back to "Naruto"
+        press_key(&mut search_page, KeyCode::Down);
+        assert_eq!(search_page.search_bar.value(), "Naruto");
+
+        // Press Down -> back to "One Piece"
+        press_key(&mut search_page, KeyCode::Down);
+        assert_eq!(search_page.search_bar.value(), "One Piece");
+
+        // Press Down -> back to "My draft"
+        press_key(&mut search_page, KeyCode::Down);
+        assert_eq!(search_page.search_bar.value(), "My draft");
+        assert_eq!(search_page.history_index, None);
+    }
+
+    #[tokio::test]
+    async fn test_language_filter_toggle_and_filtering() {
+        use super::*;
+        use crate::backend::manga_provider::MangaProviders;
+        use crate::backend::manga_provider::mock::{MockFilterState, MockFiltersHandler, MockMangaPageProvider, MockWidgetFilter};
+        use crate::global::test_utils::TrackerTest;
+        use crate::view::widgets::press_key;
+
+        let mut search_page: SearchPage<MockMangaPageProvider, TrackerTest> = SearchPage::new(
+            None,
+            MockMangaPageProvider::new().into(),
+            None,
+            MockFiltersHandler::new(MockFilterState {}),
+            MockWidgetFilter {},
+            Pagination::from_first_page(20),
+        );
+
+        search_page.search_scope = SearchScope::AllProviders;
+        assert_eq!(search_page.language_filter, SearchLanguageFilter::All);
+
+        let results = vec![
+            SearchManga {
+                id: "1".to_string(),
+                title: "Spanish 1".to_string(),
+                provider: Some(MangaProviders::Inmanga),
+                ..Default::default()
+            },
+            SearchManga {
+                id: "2".to_string(),
+                title: "English 1".to_string(),
+                provider: Some(MangaProviders::Weebcentral),
+                ..Default::default()
+            },
+            SearchManga {
+                id: "3".to_string(),
+                title: "Global 1".to_string(),
+                provider: Some(MangaProviders::Mangadex),
+                ..Default::default()
+            },
+        ];
+
+        search_page.load_mangas_found(Some(GetMangasResponse {
+            mangas: results,
+            total_mangas: 3,
+            next_page: false,
+        }));
+
+        assert_eq!(search_page.all_providers_results.len(), 3);
+
+        // Press 'l' -> ToggleLanguageFilter (to Spanish)
+        press_key(&mut search_page, KeyCode::Char('l'));
+        if let Ok(action) = search_page.local_action_rx.try_recv() {
+            assert_eq!(SearchPageActions::ToggleLanguageFilter, action);
+            search_page.update(action);
+        } else {
+            panic!("ToggleLanguageFilter action not sent on 'l'");
+        }
+
+        assert_eq!(search_page.language_filter, SearchLanguageFilter::Spanish);
+        // Spanish filter matches Inmanga + Mangadex -> 2 results
+        assert_eq!(search_page.all_providers_results.len(), 2);
+        assert_eq!(search_page.all_providers_results[0].title, "Spanish 1");
+        assert_eq!(search_page.all_providers_results[1].title, "Global 1");
+
+        // Press 'l' again -> to English
+        press_key(&mut search_page, KeyCode::Char('l'));
+        let action = search_page.local_action_rx.try_recv().unwrap();
+        search_page.update(action);
+
+        assert_eq!(search_page.language_filter, SearchLanguageFilter::English);
+        // English filter matches Weebcentral + Mangadex -> 2 results
+        assert_eq!(search_page.all_providers_results.len(), 2);
+        assert_eq!(search_page.all_providers_results[0].title, "English 1");
+        assert_eq!(search_page.all_providers_results[1].title, "Global 1");
+
+        // Press 'l' again -> to All
+        press_key(&mut search_page, KeyCode::Char('l'));
+        let action = search_page.local_action_rx.try_recv().unwrap();
+        search_page.update(action);
+
+        assert_eq!(search_page.language_filter, SearchLanguageFilter::All);
+        assert_eq!(search_page.all_providers_results.len(), 3);
+    }
 }

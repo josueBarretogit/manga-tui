@@ -9,8 +9,8 @@ use scraper::{ElementRef, html};
 use crate::backend::html_parser::scraper::AsSelector;
 use crate::backend::html_parser::{HtmlElement, ParseHtml};
 use crate::backend::manga_provider::{
-    Author, ChapterPageUrl, ChapterReader, Genres, GetMangasResponse, Languages, ListOfChapters, Manga, MangaStatus, PopularManga,
-    Rating, RecentlyAddedManga, SearchManga, SortedChapters, SortedVolumes, Volumes,
+    Author, ChapterPageUrl, ChapterReader, Genres, GetMangasResponse, Languages, ListOfChapters, Manga, MangaProviders,
+    MangaStatus, PopularManga, Rating, RecentlyAddedManga, SearchManga, SortedChapters, SortedVolumes, Volumes,
 };
 
 #[derive(Debug)]
@@ -300,6 +300,7 @@ impl From<MangaPageData> for Manga {
             rating: "".to_string(),
             artist: None,
             author,
+            provider: Some(MangaProviders::Weebcentral),
         }
     }
 }
@@ -770,6 +771,7 @@ impl From<SearchPageItem> for SearchManga {
             languages: vec![Languages::English],
             artist: None,
             author: None,
+            provider: Some(MangaProviders::Weebcentral),
         }
     }
 }

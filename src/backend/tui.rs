@@ -18,6 +18,14 @@ pub enum Action {
     Quit,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct NewChapterNotificationGroup {
+    pub manga_id: String,
+    pub manga_title: String,
+    pub chapter_numbers: String,
+    pub chapters: Vec<super::manga_provider::LatestChapter>,
+}
+
 /// These are the events this app will listen to
 #[derive(Clone, Debug, PartialEq)]
 pub enum Events {
@@ -30,7 +38,22 @@ pub enum Events {
     GoSearchPage,
     GoFeedPage,
     Error(String),
+    CheckForNewDownloadedChapters,
+    NewChaptersNotification(Vec<NewChapterNotificationGroup>),
+    NewChaptersDownloadFinished(Result<usize, String>),
+    AutoDownloadedFavorites {
+        count: usize,
+        details: Vec<String>,
+    },
     ReadChapter(ChapterToRead, MangaToRead),
+    EnqueueDownloadBatch(super::download_queue::EnqueueDownloadBatch),
+    DownloadQueueProgress(super::download_queue::DownloadQueueProgress),
+    DownloadQueueFinished(usize),
+    DownloadQueueChapterFinished {
+        manga_id: String,
+        chapter_id: String,
+    },
+    SearchAllProviders(String),
 }
 
 #[cfg(unix)]
@@ -80,6 +103,7 @@ pub async fn run_app<T: MangaProvider>(
     filter_widget: T::Widget,
 ) -> Result<(), Box<dyn Error>> {
     let mut app = App::new(api_client, manga_tracker, get_picker(), filter_state, filter_widget);
+    app.check_for_new_downloaded_chapters();
 
     let tick_rate = std::time::Duration::from_millis(250);
 

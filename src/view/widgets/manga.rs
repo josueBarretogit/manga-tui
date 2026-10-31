@@ -4,7 +4,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Margin, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::symbols::line::THICK;
-use ratatui::text::{Line, ToSpan};
+use ratatui::text::{Line, Span, ToSpan};
 use ratatui::widgets::{Block, LineGauge, Paragraph, StatefulWidget, Widget, Wrap};
 use throbber_widgets_tui::{Throbber, ThrobberState};
 use tokio::sync::mpsc::UnboundedSender;
@@ -31,6 +31,7 @@ pub struct ChapterItem {
     pub is_read: bool,
     pub is_downloaded: bool,
     pub is_bookmarked: bool,
+    pub is_selected: bool,
     pub state: ChapterItemState,
     pub download_loading_state: Option<f64>,
     pub style: Style,
@@ -42,6 +43,7 @@ impl Widget for ChapterItem {
         Self: Sized,
     {
         let layout = Layout::horizontal([
+            Constraint::Length(4),
             Constraint::Length(3),
             Constraint::Length(3),
             Constraint::Fill(50),
@@ -49,7 +51,14 @@ impl Widget for ChapterItem {
             Constraint::Fill(20),
         ]);
 
-        let [is_read_area, is_downloaded_area, title_area, scanlator_area, readable_at_area] = layout.areas(area);
+        let [select_area, is_read_area, is_downloaded_area, title_area, scanlator_area, readable_at_area] = layout.areas(area);
+
+        let select_span = if self.is_selected {
+            Span::styled("[✓] ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))
+        } else {
+            Span::styled("[ ] ", Style::default().fg(Color::DarkGray))
+        };
+        Line::from(select_span).render(select_area, buf);
 
         let is_read_icon = if self.is_read { "👀" } else { " " };
 
@@ -142,6 +151,7 @@ impl ChapterItem {
             is_read: false,
             is_downloaded: false,
             is_bookmarked: false,
+            is_selected: false,
             download_loading_state: None,
             style: Style::default(),
             state: ChapterItemState::Normal,
@@ -207,6 +217,7 @@ pub struct DownloadAllChaptersState {
     pub download_progress: f64,
     pub download_location: PathBuf,
     pub tx: UnboundedSender<MangaPageEvents>,
+    pub is_selected_mode: bool,
 }
 
 impl DownloadAllChaptersState {
@@ -218,6 +229,7 @@ impl DownloadAllChaptersState {
             download_progress: 0.0,
             download_location: PathBuf::default(),
             tx,
+            is_selected_mode: false,
         }
     }
 
@@ -241,6 +253,15 @@ impl DownloadAllChaptersState {
     pub fn ask_for_confirmation(&mut self) {
         if !self.is_downloading() {
             self.phase = DownloadPhase::Asking;
+            self.is_selected_mode = false;
+        }
+    }
+
+    pub fn ask_for_confirmation_selected(&mut self, total_selected: f64) {
+        if !self.is_downloading() {
+            self.phase = DownloadPhase::Asking;
+            self.is_selected_mode = true;
+            self.total_chapters = total_selected;
         }
     }
 
@@ -261,15 +282,15 @@ impl DownloadAllChaptersState {
     pub fn cancel(&mut self) {
         if !self.is_downloading() {
             self.phase = DownloadPhase::ProccessNotStarted;
+            self.is_selected_mode = false;
         }
     }
 
     pub fn reset(&mut self) {
-        if self.is_downloading() || self.phase == DownloadPhase::AskAbortProcess {
-            self.phase = DownloadPhase::ProccessNotStarted;
-            self.total_chapters = 0.0;
-            self.download_progress = 0.0;
-        }
+        self.phase = DownloadPhase::ProccessNotStarted;
+        self.total_chapters = 0.0;
+        self.download_progress = 0.0;
+        self.is_selected_mode = false;
     }
 
     pub fn ask_abort_proccess(&mut self) {
@@ -327,13 +348,15 @@ impl<'a> DownloadAllChaptersWidget<'a> {
 
         let download_location = format!("Download location : {}", state.download_location.as_path().display(),);
 
-        Paragraph::new(Line::from(vec![
-            "Downloading all chapters, this will take a while, ".into(),
-            download_location.into(),
-            " ".into(),
-        ]))
-        .wrap(Wrap { trim: true })
-        .render(information_area, buf);
+        let title_text = if state.is_selected_mode {
+            "Downloading selected chapters, this will take a while, "
+        } else {
+            "Downloading all chapters, this will take a while, "
+        };
+
+        Paragraph::new(Line::from(vec![title_text.into(), download_location.into(), " ".into()]))
+            .wrap(Wrap { trim: true })
+            .render(information_area, buf);
 
         let loader = Throbber::default()
             .label("Download in progress")
@@ -358,12 +381,21 @@ impl<'a> StatefulWidget for DownloadAllChaptersWidget<'a> {
         match state.phase {
             DownloadPhase::ProccessNotStarted => {},
             DownloadPhase::Asking => {
-                let instructions = vec![
-                    "Do you want to download all chapters? Yes: ".into(),
-                    "<Enter>".to_span().style(*INSTRUCTIONS_STYLE),
-                    " no ".into(),
-                    "<Esc>".to_span().style(*INSTRUCTIONS_STYLE),
-                ];
+                let instructions = if state.is_selected_mode {
+                    vec![
+                        format!("Do you want to download {} selected chapters? Yes: ", state.total_chapters as usize).into(),
+                        "<Enter>".to_span().style(*INSTRUCTIONS_STYLE),
+                        " no ".into(),
+                        "<Esc>".to_span().style(*INSTRUCTIONS_STYLE),
+                    ]
+                } else {
+                    vec![
+                        "Do you want to download all chapters? Yes: ".into(),
+                        "<Enter>".to_span().style(*INSTRUCTIONS_STYLE),
+                        " no ".into(),
+                        "<Esc>".to_span().style(*INSTRUCTIONS_STYLE),
+                    ]
+                };
 
                 Paragraph::new(Line::from(instructions)).render(download_information_area, buf);
             },

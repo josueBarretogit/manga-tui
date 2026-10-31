@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use crossterm::event::{KeyCode, KeyEvent};
+use image::DynamicImage;
 use ratatui::Frame;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Margin, Rect};
@@ -15,7 +16,9 @@ use tokio::task::JoinSet;
 
 use crate::backend::database::{Bookmark, ChapterToBookmark, ChapterToSaveHistory, Database, MangaReadingHistorySave};
 use crate::backend::error_log::{ErrorType, write_to_error_log};
-use crate::backend::manga_provider::{ChapterReader, ChapterToRead, ListOfChapters, MangaPanel, ReaderPageProvider};
+use crate::backend::manga_provider::{
+    ChapterReader, ChapterToRead, ListOfChapters, MangaPanel, MangaProviders, ReaderPageProvider,
+};
 use crate::backend::tracker::{MangaTracker, track_manga};
 use crate::backend::tui::Events;
 use crate::common::format_error_message_tracking_reading_history;
@@ -73,16 +76,64 @@ pub enum MangaReaderEvents {
 }
 
 pub struct Page {
-    pub image_state: Option<Box<dyn StatefulProtocol>>,
+    pub raw_image: Option<Arc<DynamicImage>>,
+    pub cached_protocol: Option<Box<dyn StatefulProtocol>>,
+    pub cached_y: u32,
+    pub scroll_y: u32,
     pub dimensions: Option<(u32, u32)>,
 }
 
 impl Page {
     pub fn new() -> Self {
         Self {
-            image_state: None,
+            raw_image: None,
+            cached_protocol: None,
+            cached_y: u32::MAX,
+            scroll_y: 0,
             dimensions: None,
         }
+    }
+
+    pub fn is_loaded(&self) -> bool {
+        self.cached_protocol.is_some() || self.raw_image.is_some()
+    }
+
+    pub fn is_tall_strip(&self) -> bool {
+        if let Some((w, h)) = self.dimensions { w > 0 && (h as f64) > (w as f64) * 1.6 } else { false }
+    }
+
+    pub fn viewport_height(&self) -> u32 {
+        if let Some((w, h)) = self.dimensions { if self.is_tall_strip() { ((w as f64) * 1.35) as u32 } else { h } } else { 0 }
+    }
+
+    pub fn max_scroll_y(&self) -> u32 {
+        if let Some((_, h)) = self.dimensions {
+            let v_h = self.viewport_height();
+            h.saturating_sub(v_h)
+        } else {
+            0
+        }
+    }
+
+    pub fn scroll_step(&self) -> u32 {
+        let v_h = self.viewport_height();
+        (v_h / 4).max(150)
+    }
+
+    pub fn get_or_create_protocol(&mut self, picker: &mut Picker) -> Option<&mut Box<dyn StatefulProtocol>> {
+        if self.is_tall_strip() {
+            if let Some(ref raw) = self.raw_image {
+                if self.cached_protocol.is_none() || self.cached_y != self.scroll_y {
+                    let (width, height) = self.dimensions.unwrap_or((raw.width(), raw.height()));
+                    let v_h = self.viewport_height();
+                    let curr_h = v_h.min(height.saturating_sub(self.scroll_y));
+                    let cropped = raw.crop_imm(0, self.scroll_y, width, curr_h);
+                    self.cached_protocol = Some(picker.new_resize_protocol(cropped));
+                    self.cached_y = self.scroll_y;
+                }
+            }
+        }
+        self.cached_protocol.as_mut()
     }
 }
 
@@ -104,6 +155,7 @@ where
     picker: Picker,
     search_next_chapter_loader: ThrobberState,
     api_client: Arc<T>,
+    pub provider: Option<MangaProviders>,
     pub manga_tracker: Option<S>,
     pub auto_bookmark: bool,
     pub global_event_tx: Option<UnboundedSender<Events>>,
@@ -124,8 +176,8 @@ where
         let buf = frame.buffer_mut();
 
         let layout = match self.current_page_size {
-            PageSize::Normal => [Constraint::Percentage(30), Constraint::Percentage(40), Constraint::Percentage(30)],
-            PageSize::Wide => [Constraint::Percentage(20), Constraint::Percentage(60), Constraint::Percentage(20)],
+            PageSize::Normal => [Constraint::Percentage(25), Constraint::Percentage(50), Constraint::Percentage(25)],
+            PageSize::Wide => [Constraint::Percentage(15), Constraint::Percentage(70), Constraint::Percentage(15)],
         };
 
         let [left, center, right] = Layout::horizontal(layout).areas(area);
@@ -133,10 +185,17 @@ where
         Block::bordered().render(left, buf);
 
         let index = self.current_page_index();
-        let show_reload = if let Some(page) = self.pages.get_mut(index).filter(|page| page.image_state.is_some()) {
-            let image = StatefulImage::new(None).resize(Resize::Fit(None));
-            StatefulWidget::render(image, center, buf, page.image_state.as_mut().unwrap());
-            let (width, height) = page.dimensions.unwrap();
+        let page_loaded = self.pages.get(index).map(|page| page.is_loaded()).unwrap_or(false);
+        let show_reload = if page_loaded {
+            let (width, height) = {
+                let page = &mut self.pages[index];
+                let filter = MangaTuiConfig::get().image_resize_filter.to_filter_type();
+                let image = StatefulImage::new(None).resize(Resize::Fit(Some(filter)));
+                if let Some(protocol) = page.get_or_create_protocol(&mut self.picker) {
+                    StatefulWidget::render(image, center, buf, protocol);
+                }
+                page.dimensions.unwrap()
+            };
             self.resize_based_on_image_size(width, height);
 
             false
@@ -231,6 +290,7 @@ where
             search_next_chapter_loader: ThrobberState::default(),
             picker,
             api_client,
+            provider: None,
         }
     }
 
@@ -258,14 +318,54 @@ where
         self
     }
 
+    pub fn with_provider(mut self, provider: Option<MangaProviders>) -> Self {
+        self.provider = provider;
+        self
+    }
+
     fn next_page(&mut self) {
+        let curr_index = self.current_page_index();
+        if let Some(page) = self.pages.get_mut(curr_index) {
+            if page.is_tall_strip() {
+                let max_scroll = page.max_scroll_y();
+                if page.scroll_y < max_scroll {
+                    let step = page.scroll_step();
+                    page.scroll_y = (page.scroll_y + step).min(max_scroll);
+                    return;
+                }
+            }
+        }
         self.page_list_state.list_state.next();
+        let new_index = self.current_page_index();
+        if new_index != curr_index {
+            if let Some(page) = self.pages.get_mut(new_index) {
+                page.scroll_y = 0;
+            }
+        }
         self.fetch_pages();
     }
 
     fn previous_page(&mut self) {
-        self.page_list_state.list_state.previous();
-        self.fetch_pages();
+        let curr_index = self.current_page_index();
+        if let Some(page) = self.pages.get_mut(curr_index) {
+            if page.is_tall_strip() && page.scroll_y > 0 {
+                let step = page.scroll_step();
+                page.scroll_y = page.scroll_y.saturating_sub(step);
+                return;
+            }
+        }
+        if curr_index > 0 {
+            self.page_list_state.list_state.previous();
+            let new_index = self.current_page_index();
+            if new_index != curr_index {
+                if let Some(page) = self.pages.get_mut(new_index) {
+                    if page.is_tall_strip() {
+                        page.scroll_y = page.max_scroll_y();
+                    }
+                }
+            }
+            self.fetch_pages();
+        }
     }
 
     fn reload_page(&mut self) {
@@ -283,9 +383,17 @@ where
     fn load_page(&mut self, data: PageData) {
         match self.pages.get_mut(data.index) {
             Some(page) => {
-                let protocol = self.picker.new_resize_protocol(data.panel.image_decoded);
-                page.image_state = Some(protocol);
-                page.dimensions = Some(data.panel.dimensions);
+                let (width, height) = data.panel.dimensions;
+                page.dimensions = Some((width, height));
+                page.scroll_y = 0;
+                page.cached_y = u32::MAX;
+                if width > 0 && (height as f64) > (width as f64) * 1.6 {
+                    page.raw_image = Some(Arc::new(data.panel.image_decoded));
+                    page.cached_protocol = None;
+                } else {
+                    page.raw_image = None;
+                    page.cached_protocol = Some(self.picker.new_resize_protocol(data.panel.image_decoded));
+                }
             },
             None => {
                 // Todo! indicate that the page couldnot be loaded
@@ -300,7 +408,7 @@ where
     }
 
     fn resize_based_on_image_size(&mut self, width: u32, height: u32) {
-        if width > height && width > 300 {
+        if width > 300 && (width > height || height as f64 > (width as f64) * 1.6) {
             self.current_page_size = PageSize::Wide;
         } else {
             self.current_page_size = PageSize::Normal;
@@ -351,10 +459,7 @@ where
             self.pages[start_index..=end_index]
                 .iter()
                 .enumerate()
-                .filter_map(|(base_index, page)| match page.image_state {
-                    Some(_) => None,
-                    None => Some(base_index + start_index),
-                })
+                .filter_map(|(base_index, page)| if page.is_loaded() { None } else { Some(base_index + start_index) })
                 .collect()
         } else {
             vec![]
@@ -372,10 +477,14 @@ where
             if item.state != PageItemState::Loading && item.state != PageItemState::FinishedLoad {
                 let tx = self.local_event_tx.clone();
                 let api_client = Arc::clone(&self.api_client);
+                let provider = self.provider;
                 let url = url.clone();
 
                 self.image_tasks.spawn(async move {
-                    let response = api_client.search_manga_panel(url).await;
+                    let response = match provider {
+                        Some(p) => crate::backend::multi_provider::search_manga_panel_for_provider(p, url).await,
+                        None => api_client.search_manga_panel(url).await,
+                    };
 
                     match response {
                         Ok(panel) => {
@@ -417,7 +526,7 @@ where
             manga_cover_url: None,
             translated_language: self.current_chapter.language,
             page_number: num_page,
-            provider: self.api_client.name(),
+            provider: self.provider.unwrap_or_else(|| self.api_client.name()),
         };
 
         match database.bookmark(chapter_to_bookmark) {
@@ -469,8 +578,16 @@ where
                 .margin(2)
                 .areas(area);
 
+        let (prev_label, next_label) = if self.pages.get(self.current_page_index()).map(|p| p.is_tall_strip()).unwrap_or(false) {
+            ("Scroll up / Prev: ", "Scroll down / Next: ")
+        } else {
+            ("Previous page: ", "Next page: ")
+        };
+
         let mut instructions = vec![
             Line::from(vec!["Go back: ".into(), "<Backspace>".to_span().style(*INSTRUCTIONS_STYLE)]),
+            Line::from(vec![prev_label.into(), "<k>, <Up>, Scroll".to_span().style(*INSTRUCTIONS_STYLE)]),
+            Line::from(vec![next_label.into(), "<j>, <Down>, Scroll".to_span().style(*INSTRUCTIONS_STYLE)]),
             Line::from(vec!["Next chapter: ".into(), "<w>".to_span().style(*INSTRUCTIONS_STYLE)]),
             Line::from(vec!["Previous chapter: ".into(), "<b>".to_span().style(*INSTRUCTIONS_STYLE)]),
         ];
@@ -485,12 +602,20 @@ where
 
         Widget::render(List::new(instructions).block(Block::bordered()), instructions_area, buf);
 
-        let current_chapter_title = format!(
+        let mut current_chapter_title = format!(
             "Reading : Vol {} Ch. {} {}",
             self.current_chapter.volume_number.as_ref().cloned().unwrap_or("none".to_string()),
             self.current_chapter.number,
             self.current_chapter.title
         );
+
+        if let Some(page) = self.pages.get(self.current_page_index()) {
+            if page.is_tall_strip() {
+                let max_scroll = page.max_scroll_y();
+                let percent = if max_scroll > 0 { (page.scroll_y as f64 / max_scroll as f64 * 100.0).round() as u32 } else { 100 };
+                current_chapter_title.push_str(&format!("\nScroll : {}%", percent));
+            }
+        }
 
         Paragraph::new(current_chapter_title)
             .wrap(Wrap { trim: true })
@@ -557,10 +682,10 @@ where
 
     fn handle_key_events(&mut self, key_event: KeyEvent) {
         match key_event.code {
-            KeyCode::Down | KeyCode::Char('j') => {
+            KeyCode::Down | KeyCode::Char('j') | KeyCode::PageDown => {
                 self.local_action_tx.send(MangaReaderActions::NextPage).ok();
             },
-            KeyCode::Up | KeyCode::Char('k') => {
+            KeyCode::Up | KeyCode::Char('k') | KeyCode::PageUp => {
                 self.local_action_tx.send(MangaReaderActions::PreviousPage).ok();
             },
             KeyCode::Char('w') => {
@@ -630,10 +755,14 @@ where
 
     fn search_chapter(&mut self, chapter_id: String) {
         let api_client = self.api_client.clone();
+        let provider = self.provider;
         let sender = self.local_event_tx.clone();
         let manga_id = self.manga_id.clone();
         self.image_tasks.spawn(async move {
-            let response = api_client.search_chapter(&chapter_id, &manga_id).await;
+            let response = match provider {
+                Some(p) => crate::backend::multi_provider::search_chapter_for_provider(p, &chapter_id, &manga_id).await,
+                None => api_client.search_chapter(&chapter_id, &manga_id).await,
+            };
             match response {
                 Ok(res) => {
                     sender.send(MangaReaderEvents::LoadChapter(res)).ok();
@@ -660,7 +789,7 @@ where
                         title: &self.current_chapter.title,
                         translated_language: "en",
                     },
-                    provider: self.api_client.name(),
+                    provider: self.provider.unwrap_or_else(|| self.api_client.name()),
                 })
                 .unwrap();
             return self.current_chapter.id.clone();
@@ -1245,5 +1374,66 @@ mod test {
         assert_eq!(expected, result);
 
         Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_manhwa_strip_scrolling_and_navigation() {
+        use image::DynamicImage;
+
+        use crate::backend::manga_provider::MangaPanel;
+
+        let chapter: ChapterToRead = ChapterToRead {
+            pages_url: vec!["http://localhost".parse().unwrap(), "http://localhost/2".parse().unwrap()],
+            ..Default::default()
+        };
+
+        let mut manga_reader: MangaReader<ReaderPageProvierMock, TrackerTest> =
+            MangaReader::new(chapter, "some_id".to_string(), Picker::new((8, 8)), ReaderPageProvierMock::new().into());
+
+        manga_reader.init_fetching_pages();
+        let area = Rect::new(0, 0, 20, 20);
+        let mut buf = Buffer::empty(area);
+        manga_reader.render_page_list(area, &mut buf);
+        manga_reader.page_list_state.list_state.select(Some(0));
+        assert_eq!(2, manga_reader.pages.len());
+
+        // Create a tall image (800x4000) representing a manhwa strip
+        let tall_image = DynamicImage::new_rgb8(800, 4000);
+        let panel = MangaPanel {
+            image_decoded: tall_image,
+            dimensions: (800, 4000),
+        };
+
+        manga_reader.load_page(PageData { panel, index: 0 });
+
+        let page0 = &manga_reader.pages[0];
+        assert!(page0.is_loaded());
+        assert!(page0.is_tall_strip(), "Expected is_tall_strip to be true");
+        assert_eq!(0, manga_reader.pages[0].scroll_y);
+
+        // Next page action advances scroll_y by step first
+        let step = manga_reader.pages[0].scroll_step();
+        assert!(step > 0);
+        manga_reader.next_page();
+        assert_eq!(step, manga_reader.pages[0].scroll_y);
+        assert_eq!(0, manga_reader.current_page_index());
+
+        // Previous page decreases scroll_y
+        manga_reader.previous_page();
+        assert_eq!(0, manga_reader.pages[0].scroll_y);
+        assert_eq!(0, manga_reader.current_page_index());
+
+        // Scroll to the end of the page
+        let max_scroll = manga_reader.pages[0].max_scroll_y();
+        manga_reader.pages[0].scroll_y = max_scroll;
+
+        // Next page when at max_scroll transitions to page 1
+        manga_reader.next_page();
+        assert_eq!(1, manga_reader.current_page_index());
+
+        // Previous page transitions back to page 0 positioned at bottom
+        manga_reader.previous_page();
+        assert_eq!(0, manga_reader.current_page_index());
+        assert_eq!(max_scroll, manga_reader.pages[0].scroll_y);
     }
 }

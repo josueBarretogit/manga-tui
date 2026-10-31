@@ -58,6 +58,8 @@
 //!     provider: MangaProviders::Mangadx,
 //! })?;
 //! ```
+use std::collections::BTreeMap;
+
 use chrono::Utc;
 use manga_tui::SearchTerm;
 use rusqlite::types::ToSqlOutput;
@@ -90,8 +92,9 @@ impl ToSql for MangaHistoryType {
 impl From<FeedTabs> for MangaHistoryType {
     fn from(value: FeedTabs) -> Self {
         match value {
-            FeedTabs::History => Self::ReadingHistory,
-            FeedTabs::PlantToRead => Self::PlanToRead,
+            FeedTabs::Timeline => Self::ReadingHistory,
+            FeedTabs::ContinueReading => Self::ReadingHistory,
+            FeedTabs::Library => Self::PlanToRead,
         }
     }
 }
@@ -141,7 +144,15 @@ pub struct MangaReadingHistoryRetrieve {
 pub struct MangaHistory {
     pub id: String,
     pub title: String,
-    // img_url: Option<String>,
+    pub provider: MangaProviders,
+    pub last_read: Option<String>,
+    pub last_read_chapter: Option<String>,
+    pub total_read_count: u32,
+    pub bookmark_chapter: Option<String>,
+    pub bookmark_page: Option<u32>,
+    pub is_favorite: bool,
+    pub is_plan_to_read: bool,
+    pub downloaded_count: u32,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -149,6 +160,20 @@ pub struct MangaHistoryResponse {
     pub mangas: Vec<MangaHistory>,
     pub page: u32,
     pub total_items: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DownloadedManga {
+    pub id: String,
+    pub title: String,
+    pub downloaded_chapter_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FavoriteMangaRecord {
+    pub manga_id: String,
+    pub provider: MangaProviders,
+    pub title: String,
 }
 
 /// Arguments for retrieving manga history with filtering and pagination.
@@ -256,6 +281,35 @@ impl<'a> Database<'a> {
             (),
         )?;
 
+        self.connection.execute(
+            "CREATE TABLE if not exists chapter_notification_dismissals (
+                manga_id TEXT NOT NULL,
+                provider TEXT NOT NULL,
+                chapter_id TEXT NOT NULL,
+                PRIMARY KEY (manga_id, provider, chapter_id)
+             )",
+            (),
+        )?;
+
+        self.connection.execute(
+            "CREATE TABLE if not exists favorite_mangas (
+                manga_id TEXT NOT NULL,
+                provider TEXT NOT NULL,
+                title TEXT NOT NULL,
+                created_at DATETIME DEFAULT (datetime('now')),
+                PRIMARY KEY (manga_id, provider)
+             )",
+            (),
+        )?;
+
+        self.connection.execute(
+            "CREATE TABLE if not exists search_history (
+                query TEXT PRIMARY KEY,
+                searched_at INTEGER NOT NULL
+             )",
+            (),
+        )?;
+
         let already_has_data: i32 = self.connection.query_row("SELECT COUNT(*) from app_version", [], |row| row.get(0))?;
 
         if already_has_data == 0 {
@@ -355,7 +409,7 @@ impl<'a> Database<'a> {
     ///     db.save_history(reading_data)?;
     /// }
     /// ```
-    fn check_chapter_is_already_reading(&self, id: &str) -> rusqlite::Result<bool> {
+    pub fn check_chapter_is_already_reading(&self, id: &str) -> rusqlite::Result<bool> {
         let exists = self.check_exists(id, Table::Chapters)?;
 
         if !exists {
@@ -741,6 +795,184 @@ impl<'a> Database<'a> {
         Ok(chapter_ids)
     }
 
+    pub fn get_downloaded_mangas(&self, provider: MangaProviders) -> rusqlite::Result<Vec<DownloadedManga>> {
+        let mut statement = self.connection.prepare(
+            "SELECT mangas.id, mangas.title, chapters.id
+             FROM mangas
+             INNER JOIN chapters ON chapters.manga_id = mangas.id
+             WHERE mangas.manga_provider = ?1 AND chapters.is_downloaded = 1
+             ORDER BY mangas.id",
+        )?;
+
+        let rows = statement.query_map(params![provider.to_string()], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?))
+        })?;
+        let mut mangas = BTreeMap::<String, DownloadedManga>::new();
+
+        for row in rows {
+            let (id, title, chapter_id) = row?;
+            mangas
+                .entry(id.clone())
+                .or_insert_with(|| DownloadedManga {
+                    id,
+                    title,
+                    downloaded_chapter_ids: Vec::new(),
+                })
+                .downloaded_chapter_ids
+                .push(chapter_id);
+        }
+
+        Ok(mangas.into_values().collect())
+    }
+
+    pub fn get_dismissed_chapter_ids(&self, manga_id: &str, provider: MangaProviders) -> rusqlite::Result<Vec<String>> {
+        let mut statement = self.connection.prepare(
+            "SELECT chapter_id FROM chapter_notification_dismissals
+             WHERE manga_id = ?1 AND provider = ?2",
+        )?;
+        let rows = statement.query_map(params![manga_id, provider.to_string()], |row| row.get(0))?;
+        rows.collect()
+    }
+
+    pub fn save_dismissed_chapter_ids(
+        &self,
+        manga_id: &str,
+        provider: MangaProviders,
+        chapter_ids: &[String],
+    ) -> rusqlite::Result<()> {
+        let transaction = self.connection.unchecked_transaction()?;
+        for chapter_id in chapter_ids {
+            transaction.execute(
+                "INSERT OR IGNORE INTO chapter_notification_dismissals(manga_id, provider, chapter_id)
+                 VALUES (?1, ?2, ?3)",
+                params![manga_id, provider.to_string(), chapter_id],
+            )?;
+        }
+
+        transaction.commit()
+    }
+
+    pub fn is_favorite(&self, manga_id: &str, provider: MangaProviders) -> rusqlite::Result<bool> {
+        let count: i32 = self.connection.query_row(
+            "SELECT COUNT(*) FROM favorite_mangas WHERE manga_id = ?1 AND provider = ?2",
+            params![manga_id, provider.to_string()],
+            |row| row.get(0),
+        )?;
+        Ok(count > 0)
+    }
+
+    pub fn toggle_favorite(&self, manga_id: &str, provider: MangaProviders, title: &str) -> rusqlite::Result<bool> {
+        let is_fav = self.is_favorite(manga_id, provider)?;
+        if is_fav {
+            self.connection
+                .execute("DELETE FROM favorite_mangas WHERE manga_id = ?1 AND provider = ?2", params![
+                    manga_id,
+                    provider.to_string()
+                ])?;
+            Ok(false)
+        } else {
+            self.connection.execute(
+                "INSERT OR REPLACE INTO favorite_mangas (manga_id, provider, title) VALUES (?1, ?2, ?3)",
+                params![manga_id, provider.to_string(), title],
+            )?;
+            Ok(true)
+        }
+    }
+
+    pub fn get_favorite_manga_ids(&self, provider: MangaProviders) -> rusqlite::Result<std::collections::HashSet<String>> {
+        let mut statement = self.connection.prepare("SELECT manga_id FROM favorite_mangas WHERE provider = ?1")?;
+        let rows = statement.query_map(params![provider.to_string()], |row| row.get(0))?;
+        let mut set = std::collections::HashSet::new();
+        for id in rows {
+            set.insert(id?);
+        }
+        Ok(set)
+    }
+
+    pub fn get_all_favorite_mangas(&self) -> rusqlite::Result<Vec<FavoriteMangaRecord>> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT manga_id, provider, title FROM favorite_mangas ORDER BY created_at DESC")?;
+        let rows = statement.query_map([], |row| {
+            let manga_id: String = row.get(0)?;
+            let provider_str: String = row.get(1)?;
+            let title: String = row.get(2)?;
+            let provider = provider_str.parse::<MangaProviders>().unwrap_or_default();
+            Ok(FavoriteMangaRecord {
+                manga_id,
+                provider,
+                title,
+            })
+        })?;
+        rows.collect()
+    }
+
+    pub fn save_search_history(&self, query: &str) -> rusqlite::Result<()> {
+        let trimmed = query.trim();
+        if trimmed.is_empty() {
+            return Ok(());
+        }
+        let now = Utc::now().timestamp_millis();
+        self.connection.execute(
+            "INSERT INTO search_history (query, searched_at) VALUES (?1, ?2)
+             ON CONFLICT(query) DO UPDATE SET searched_at = ?2",
+            rusqlite::params![trimmed, now],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_recent_searches(&self, limit: usize) -> rusqlite::Result<Vec<String>> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT query FROM search_history ORDER BY searched_at DESC, rowid DESC LIMIT ?1")?;
+        let rows = statement.query_map([limit as i64], |row| row.get(0))?;
+        let mut searches = Vec::new();
+        for query in rows {
+            searches.push(query?);
+        }
+        Ok(searches)
+    }
+
+    pub fn clear_search_history(&self) -> rusqlite::Result<()> {
+        self.connection.execute("DELETE FROM search_history", ())?;
+        Ok(())
+    }
+
+    pub fn get_recent_reading_mangas(&self, limit: u32) -> rusqlite::Result<Vec<FavoriteMangaRecord>> {
+        let mut statement = self.connection.prepare(
+            "SELECT mangas.id, mangas.manga_provider, mangas.title 
+             FROM mangas
+             INNER JOIN manga_history_union ON mangas.id = manga_history_union.manga_id
+             INNER JOIN history_types ON manga_history_union.type_id = history_types.id
+             WHERE history_types.name = 'ReadingHistory'
+             ORDER BY mangas.last_read DESC
+             LIMIT ?1",
+        )?;
+        let rows = statement.query_map(params![limit], |row| {
+            let manga_id: String = row.get(0)?;
+            let provider_str: String = row.get(1)?;
+            let title: String = row.get(2)?;
+            let provider = provider_str.parse::<MangaProviders>().unwrap_or_default();
+            Ok(FavoriteMangaRecord {
+                manga_id,
+                provider,
+                title,
+            })
+        })?;
+        rows.collect()
+    }
+
+    pub fn get_downloaded_chapter_ids(&self, manga_id: &str, provider: MangaProviders) -> rusqlite::Result<Vec<String>> {
+        let mut statement = self.connection.prepare(
+            "SELECT chapters.id
+             FROM chapters
+             INNER JOIN mangas ON mangas.id = chapters.manga_id
+             WHERE mangas.id = ?1 AND mangas.manga_provider = ?2 AND chapters.is_downloaded = 1",
+        )?;
+        let rows = statement.query_map(params![manga_id, provider.to_string()], |row| row.get(0))?;
+        rows.collect()
+    }
+
     fn get_total_mangas_in_history(&self, history_type_id: i32, provider: MangaProviders) -> rusqlite::Result<u32> {
         let total: u32 = self.connection.query_row(
             "
@@ -775,19 +1007,46 @@ impl<'a> Database<'a> {
         )?;
 
         let mut get_statement_with_search_term = self.connection.prepare(
-            "SELECT  mangas.id, mangas.title from mangas 
-                     INNER JOIN manga_history_union ON mangas.id = manga_history_union.manga_id 
-                     WHERE manga_history_union.type_id = ?1 AND LOWER(mangas.title) LIKE '%' || ?2 || '%' AND mangas.manga_provider = ?3
-                     ORDER BY mangas.last_read DESC
-                     LIMIT ?4 OFFSET ?5",
+            "SELECT  mangas.id, mangas.title, mangas.manga_provider, mangas.last_read,
+                     (SELECT title FROM chapters WHERE chapters.manga_id = mangas.id AND chapters.is_read = 1 ORDER BY chapters.rowid DESC LIMIT 1) AS last_chapter,
+                     (SELECT COUNT(*) FROM chapters WHERE chapters.manga_id = mangas.id AND chapters.is_read = 1) AS read_count,
+                     (SELECT title FROM chapters WHERE chapters.manga_id = mangas.id AND chapters.is_bookmarked = 1 LIMIT 1) AS bookmark_title,
+                     (SELECT number_page_bookmarked FROM chapters WHERE chapters.manga_id = mangas.id AND chapters.is_bookmarked = 1 LIMIT 1) AS bookmark_page,
+                     (SELECT COUNT(*) FROM favorite_mangas WHERE favorite_mangas.manga_id = mangas.id AND favorite_mangas.provider = mangas.manga_provider) AS is_fav,
+                     (SELECT COUNT(*) FROM chapters WHERE chapters.manga_id = mangas.id AND chapters.is_downloaded = 1) AS dl_count
+             FROM mangas 
+             INNER JOIN manga_history_union ON mangas.id = manga_history_union.manga_id 
+             WHERE manga_history_union.type_id = ?1 AND LOWER(mangas.title) LIKE '%' || ?2 || '%' AND mangas.manga_provider = ?3
+             ORDER BY mangas.last_read DESC
+             LIMIT ?4 OFFSET ?5",
         )?;
         let iter_mangas = get_statement_with_search_term.query_map(
             params![history_type_id, search_term, provider.to_string(), items_per_page, offset],
             |row| {
+                let id: String = row.get(0)?;
+                let title: String = row.get(1)?;
+                let provider_str: String = row.get(2).unwrap_or_default();
+                let provider = provider_str.parse::<MangaProviders>().unwrap_or_default();
+                let last_read: Option<String> = row.get(3).ok();
+                let last_read_chapter: Option<String> = row.get(4).ok();
+                let total_read_count: u32 = row.get(5).unwrap_or(0);
+                let bookmark_chapter: Option<String> = row.get(6).ok();
+                let bookmark_page: Option<u32> = row.get(7).ok();
+                let is_fav_count: i32 = row.get(8).unwrap_or(0);
+                let dl_count: u32 = row.get(9).unwrap_or(0);
+
                 Ok(MangaHistory {
-                    id: row.get(0)?,
-                    title: row.get(1)?,
-                    // img_url: row.get(2)?,
+                    id,
+                    title,
+                    provider,
+                    last_read,
+                    last_read_chapter,
+                    total_read_count,
+                    bookmark_chapter,
+                    bookmark_page,
+                    is_favorite: is_fav_count > 0,
+                    is_plan_to_read: false,
+                    downloaded_count: dl_count,
                 })
             },
         )?;
@@ -867,21 +1126,48 @@ impl<'a> Database<'a> {
         let total_mangas: u32 = self.get_total_mangas_in_history(history_type_id, args.provider)?;
 
         let mut get_statement = self.connection.prepare(
-            "SELECT  mangas.id, mangas.title from mangas 
-                     INNER JOIN manga_history_union ON mangas.id = manga_history_union.manga_id 
-                     WHERE manga_history_union.type_id = ?1 AND mangas.manga_provider = ?2
-                     ORDER BY mangas.last_read DESC
-                     LIMIT ?3 OFFSET ?4",
+            "SELECT  mangas.id, mangas.title, mangas.manga_provider, mangas.last_read,
+                     (SELECT title FROM chapters WHERE chapters.manga_id = mangas.id AND chapters.is_read = 1 ORDER BY chapters.rowid DESC LIMIT 1) AS last_chapter,
+                     (SELECT COUNT(*) FROM chapters WHERE chapters.manga_id = mangas.id AND chapters.is_read = 1) AS read_count,
+                     (SELECT title FROM chapters WHERE chapters.manga_id = mangas.id AND chapters.is_bookmarked = 1 LIMIT 1) AS bookmark_title,
+                     (SELECT number_page_bookmarked FROM chapters WHERE chapters.manga_id = mangas.id AND chapters.is_bookmarked = 1 LIMIT 1) AS bookmark_page,
+                     (SELECT COUNT(*) FROM favorite_mangas WHERE favorite_mangas.manga_id = mangas.id AND favorite_mangas.provider = mangas.manga_provider) AS is_fav,
+                     (SELECT COUNT(*) FROM chapters WHERE chapters.manga_id = mangas.id AND chapters.is_downloaded = 1) AS dl_count
+             FROM mangas 
+             INNER JOIN manga_history_union ON mangas.id = manga_history_union.manga_id 
+             WHERE manga_history_union.type_id = ?1 AND mangas.manga_provider = ?2
+             ORDER BY mangas.last_read DESC
+             LIMIT ?3 OFFSET ?4",
         )?;
 
         let mut manga_history: Vec<MangaHistory> = vec![];
 
         let iter_mangas =
             get_statement.query_map(params![history_type_id, args.provider.to_string(), items_per_page, offset], |row| {
+                let id: String = row.get(0)?;
+                let title: String = row.get(1)?;
+                let provider_str: String = row.get(2).unwrap_or_default();
+                let provider = provider_str.parse::<MangaProviders>().unwrap_or_default();
+                let last_read: Option<String> = row.get(3).ok();
+                let last_read_chapter: Option<String> = row.get(4).ok();
+                let total_read_count: u32 = row.get(5).unwrap_or(0);
+                let bookmark_chapter: Option<String> = row.get(6).ok();
+                let bookmark_page: Option<u32> = row.get(7).ok();
+                let is_fav_count: i32 = row.get(8).unwrap_or(0);
+                let dl_count: u32 = row.get(9).unwrap_or(0);
+
                 Ok(MangaHistory {
-                    id: row.get(0)?,
-                    title: row.get(1)?,
-                    // img_url: row.get(2)?,
+                    id,
+                    title,
+                    provider,
+                    last_read,
+                    last_read_chapter,
+                    total_read_count,
+                    bookmark_chapter,
+                    bookmark_page,
+                    is_favorite: is_fav_count > 0,
+                    is_plan_to_read: false,
+                    downloaded_count: dl_count,
                 })
             })?;
 
@@ -892,6 +1178,104 @@ impl<'a> Database<'a> {
         Ok(MangaHistoryResponse {
             mangas: manga_history,
             total_items: total_mangas,
+            page: args.page,
+        })
+    }
+
+    pub fn get_library(&self, args: GetHistoryArgs) -> rusqlite::Result<MangaHistoryResponse> {
+        let items_per_page = args.items_per_page;
+        let offset = (args.page - 1) * items_per_page;
+        let search_filter = args.search.map(|s| s.get().to_lowercase());
+
+        let count_query = "
+            WITH library_entries AS (
+                SELECT manga_id, provider, title FROM favorite_mangas
+                UNION
+                SELECT mangas.id, mangas.manga_provider, mangas.title
+                FROM mangas
+                INNER JOIN manga_history_union ON mangas.id = manga_history_union.manga_id
+                INNER JOIN history_types ON manga_history_union.type_id = history_types.id
+                WHERE history_types.name = 'PlanToRead'
+            )
+            SELECT COUNT(*) FROM library_entries
+            WHERE (?1 IS NULL OR LOWER(title) LIKE '%' || ?1 || '%')
+        ";
+        let total_items: u32 = self.connection.query_row(count_query, params![search_filter], |row| row.get(0))?;
+
+        let select_query = "
+            WITH library_entries AS (
+                SELECT 
+                    manga_id, 
+                    provider, 
+                    title, 
+                    1 AS is_fav, 
+                    0 AS is_plan, 
+                    created_at AS added_at 
+                FROM favorite_mangas
+                UNION ALL
+                SELECT 
+                    mangas.id AS manga_id, 
+                    mangas.manga_provider AS provider, 
+                    mangas.title, 
+                    0 AS is_fav, 
+                    1 AS is_plan, 
+                    mangas.created_at AS added_at
+                FROM mangas
+                INNER JOIN manga_history_union ON mangas.id = manga_history_union.manga_id
+                INNER JOIN history_types ON manga_history_union.type_id = history_types.id
+                WHERE history_types.name = 'PlanToRead'
+            )
+            SELECT 
+                manga_id, 
+                provider, 
+                title, 
+                MAX(is_fav) AS is_favorite, 
+                MAX(is_plan) AS is_plan_to_read,
+                (SELECT COUNT(*) FROM chapters WHERE chapters.manga_id = library_entries.manga_id AND chapters.is_downloaded = 1) AS dl_count,
+                (SELECT COUNT(*) FROM chapters WHERE chapters.manga_id = library_entries.manga_id AND chapters.is_read = 1) AS read_count,
+                (SELECT title FROM chapters WHERE chapters.manga_id = library_entries.manga_id AND chapters.is_read = 1 ORDER BY chapters.rowid DESC LIMIT 1) AS last_chapter
+            FROM library_entries
+            WHERE (?1 IS NULL OR LOWER(title) LIKE '%' || ?1 || '%')
+            GROUP BY manga_id, provider
+            ORDER BY is_favorite DESC, added_at DESC
+            LIMIT ?2 OFFSET ?3
+        ";
+
+        let mut stmt = self.connection.prepare(select_query)?;
+        let rows = stmt.query_map(params![search_filter, items_per_page, offset], |row| {
+            let id: String = row.get(0)?;
+            let provider_str: String = row.get(1)?;
+            let title: String = row.get(2)?;
+            let is_fav_val: i32 = row.get(3).unwrap_or(0);
+            let is_plan_val: i32 = row.get(4).unwrap_or(0);
+            let dl_count: u32 = row.get(5).unwrap_or(0);
+            let read_count: u32 = row.get(6).unwrap_or(0);
+            let last_chapter: Option<String> = row.get(7).ok();
+            let provider = provider_str.parse::<MangaProviders>().unwrap_or_default();
+
+            Ok(MangaHistory {
+                id,
+                title,
+                provider,
+                last_read: None,
+                last_read_chapter: last_chapter,
+                total_read_count: read_count,
+                bookmark_chapter: None,
+                bookmark_page: None,
+                is_favorite: is_fav_val > 0,
+                is_plan_to_read: is_plan_val > 0,
+                downloaded_count: dl_count,
+            })
+        })?;
+
+        let mut mangas = Vec::new();
+        for manga in rows {
+            mangas.push(manga?);
+        }
+
+        Ok(MangaHistoryResponse {
+            mangas,
+            total_items,
             page: args.page,
         })
     }
@@ -1145,6 +1529,7 @@ impl<'a> RetrieveBookmark for Database<'a> {
 #[cfg(test)]
 mod test {
 
+    use std::collections::BTreeMap;
     use std::error::Error;
 
     use pretty_assertions::assert_eq;
@@ -1199,6 +1584,105 @@ mod test {
         }
 
         Ok(chapters)
+    }
+
+    #[test]
+    fn downloaded_manga_and_dismissed_notifications_are_provider_scoped() -> Result<()> {
+        let connection = Connection::open_in_memory()?;
+        let database = Database::new(&connection);
+        database.setup()?;
+
+        let manga_id = Uuid::new_v4().to_string();
+        let downloaded_chapter_id = Uuid::new_v4().to_string();
+        database.set_chapter_downloaded(SetChapterDownloaded {
+            id: &downloaded_chapter_id,
+            title: "Chapter 1",
+            manga_id: &manga_id,
+            manga_title: "Downloaded manga",
+            img_url: None,
+            provider: MangaProviders::Mangadex,
+        })?;
+
+        let mangas = database.get_downloaded_mangas(MangaProviders::Mangadex)?;
+        assert_eq!(mangas.len(), 1);
+        assert_eq!(mangas[0].id, manga_id);
+        assert_eq!(mangas[0].title, "Downloaded manga");
+        assert_eq!(mangas[0].downloaded_chapter_ids, vec![downloaded_chapter_id]);
+        assert!(database.get_downloaded_mangas(MangaProviders::Weebcentral)?.is_empty());
+
+        let dismissed_chapters = vec!["chapter-1".to_string(), "chapter-2".to_string()];
+        database.save_dismissed_chapter_ids(&manga_id, MangaProviders::Mangadex, &dismissed_chapters)?;
+        assert_eq!(database.get_dismissed_chapter_ids(&manga_id, MangaProviders::Mangadex)?, dismissed_chapters);
+        database.save_dismissed_chapter_ids(&manga_id, MangaProviders::Mangadex, &["chapter-3".into()])?;
+        let all_dismissed_chapters = database.get_dismissed_chapter_ids(&manga_id, MangaProviders::Mangadex)?;
+        assert_eq!(all_dismissed_chapters.len(), 3);
+        assert!(all_dismissed_chapters.contains(&"chapter-3".to_string()));
+        assert!(database.get_dismissed_chapter_ids(&manga_id, MangaProviders::Weebcentral)?.is_empty());
+
+        Ok(())
+    }
+
+    #[test]
+    fn favorites_are_provider_scoped_and_toggleable() -> Result<()> {
+        let connection = Connection::open_in_memory()?;
+        let database = Database::new(&connection);
+        database.setup()?;
+
+        let manga_id = "one-piece";
+        assert!(!database.is_favorite(manga_id, MangaProviders::Mangadex)?);
+
+        // Toggle on
+        let is_fav = database.toggle_favorite(manga_id, MangaProviders::Mangadex, "One Piece")?;
+        assert!(is_fav);
+        assert!(database.is_favorite(manga_id, MangaProviders::Mangadex)?);
+        // Provider scoped:
+        assert!(!database.is_favorite(manga_id, MangaProviders::Inmanga)?);
+
+        let fav_ids = database.get_favorite_manga_ids(MangaProviders::Mangadex)?;
+        assert_eq!(fav_ids.len(), 1);
+        assert!(fav_ids.contains(manga_id));
+
+        // Toggle off
+        let is_fav = database.toggle_favorite(manga_id, MangaProviders::Mangadex, "One Piece")?;
+        assert!(!is_fav);
+        assert!(!database.is_favorite(manga_id, MangaProviders::Mangadex)?);
+        assert!(database.get_favorite_manga_ids(MangaProviders::Mangadex)?.is_empty());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_get_all_favorite_mangas_and_downloaded_chapter_ids() -> Result<()> {
+        let connection = Connection::open_in_memory()?;
+        let database = Database::new(&connection);
+        database.setup()?;
+
+        database.toggle_favorite("op-dex", MangaProviders::Mangadex, "One Piece Dex")?;
+        database.toggle_favorite("naruto-inm", MangaProviders::Inmanga, "Naruto Inmanga")?;
+
+        let all_favs = database.get_all_favorite_mangas()?;
+        assert_eq!(all_favs.len(), 2);
+        assert!(all_favs.iter().any(|f| f.manga_id == "op-dex" && f.provider == MangaProviders::Mangadex));
+        assert!(
+            all_favs
+                .iter()
+                .any(|f| f.manga_id == "naruto-inm" && f.provider == MangaProviders::Inmanga)
+        );
+
+        database.set_chapter_downloaded(SetChapterDownloaded {
+            id: "ch-1",
+            title: "Cap 1",
+            manga_id: "naruto-inm",
+            manga_title: "Naruto Inmanga",
+            img_url: None,
+            provider: MangaProviders::Inmanga,
+        })?;
+
+        let downloaded_ids = database.get_downloaded_chapter_ids("naruto-inm", MangaProviders::Inmanga)?;
+        assert_eq!(downloaded_ids, vec!["ch-1"]);
+        assert!(database.get_downloaded_chapter_ids("naruto-inm", MangaProviders::Mangadex)?.is_empty());
+
+        Ok(())
     }
 
     #[test]
@@ -2410,6 +2894,34 @@ mod test {
 
         /* the plan to read history should remain untouched */
         assert_eq!(expected.mangas.len(), 4);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_search_history() -> Result<()> {
+        let conn = Connection::open_in_memory()?;
+        let database = Database::new(&conn);
+        database.setup()?;
+
+        database.save_search_history("One Piece")?;
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        database.save_search_history("Naruto")?;
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        database.save_search_history("Bleach")?;
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        // Re-searching "One Piece" bumps it to the top
+        database.save_search_history("One Piece")?;
+
+        let recent = database.get_recent_searches(10)?;
+        assert_eq!(recent.len(), 3);
+        assert_eq!(recent[0], "One Piece");
+        assert_eq!(recent[1], "Bleach");
+        assert_eq!(recent[2], "Naruto");
+
+        database.clear_search_history()?;
+        let recent_empty = database.get_recent_searches(10)?;
+        assert_eq!(recent_empty.len(), 0);
 
         Ok(())
     }

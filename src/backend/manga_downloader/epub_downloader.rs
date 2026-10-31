@@ -117,6 +117,7 @@ mod tests {
                     extension: "jpg".to_string(),
                 },
             ],
+            ..Default::default()
         };
 
         let downloader = EpubDownloader::new();

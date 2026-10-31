@@ -65,6 +65,8 @@ so if any one goes down you can still use manga-tui
 
 <https://github.com/user-attachments/assets/26ad493f-633c-41fc-9d09-49b316118923>
 
+- Get an in-app prompt for new chapters of downloaded, ongoing manga. Checks run at startup and every 10 minutes while the app is open; press `<y>` to download or `<q>` to dismiss.
+
 ### Join the [discord](https://discord.gg/SeqsWUCpVx) server for further help, feature requests or to chat with contributors
 
 ## Dependencies
@@ -246,10 +248,20 @@ On linux it will output something like: `~/.local/share/manga-tui` <br />
 On the `manga-tui` directory there will be 3 directories
 
 - `history`, which contains a sqlite database to store reading history
-- `mangaDownloads`, where manga will be downloaded
+- `mangaDownloads`, where manga will be downloaded by default
 - `errorLogs`, for storing posible errors / bugs
 
-If you want to change the location of this directory you can set the environment variable `MANGA_TUI_DATA_DIR` to some path pointing to a directory, like: <br />
+To customize only the download location (e.g. for Google Drive or an external drive), set `download_dir` in `config.toml`:
+```toml
+download_dir = "/some-directory/Mangas"
+```
+
+You can view the active download directory by running:
+```shell
+manga-tui --download-dir
+```
+
+If you want to change the location of the entire data directory you can set the environment variable `MANGA_TUI_DATA_DIR` to some path pointing to a directory, like: <br />
 
 ```shell
 export MANGA_TUI_DATA_DIR="/home/user/Desktop/mangas"

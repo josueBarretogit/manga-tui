@@ -1,13 +1,13 @@
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Margin, Rect};
-use ratatui::style::Style;
-use ratatui::text::Line;
+use ratatui::style::{Color, Style, Stylize};
+use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Paragraph, StatefulWidget, StatefulWidgetRef, Widget, Wrap};
 use ratatui_image::Image;
 use throbber_widgets_tui::{Throbber, ThrobberState};
 use tui_widget_list::PreRender;
 
-use crate::backend::manga_provider::{Genres, MangaStatus, SearchManga};
+use crate::backend::manga_provider::{Genres, MangaProviders, MangaStatus, SearchManga};
 use crate::common::ImageState;
 use crate::global::CURRENT_LIST_ITEM_STYLE;
 
@@ -17,6 +17,7 @@ pub struct MangaPreview<'a> {
     description: &'a str,
     genres: &'a Vec<Genres>,
     status: Option<MangaStatus>,
+    provider: Option<MangaProviders>,
     can_display_images: bool,
     loader_state: ThrobberState,
 }
@@ -29,6 +30,7 @@ impl<'a> MangaPreview<'a> {
         description: &'a str,
         genres: &'a Vec<Genres>,
         status: Option<MangaStatus>,
+        provider: Option<MangaProviders>,
         can_display_images: bool,
         loader_state: ThrobberState,
     ) -> Self {
@@ -38,6 +40,7 @@ impl<'a> MangaPreview<'a> {
             description,
             genres,
             status,
+            provider,
             can_display_images,
             loader_state,
         }
@@ -101,9 +104,25 @@ impl<'a> MangaPreview<'a> {
         let layout = Layout::vertical([Constraint::Percentage(20), Constraint::Percentage(80)]);
         let [details_area, tags_area] = layout.areas(area);
 
-        if let Some(status) = self.status {
-            Paragraph::new(Line::from_iter(vec![status])).render(details_area, buf);
+        let mut status_spans = Vec::new();
+        if let Some(provider) = self.provider {
+            let color = match provider {
+                MangaProviders::Inmanga => Color::Cyan,
+                MangaProviders::Mangaoni => Color::LightRed,
+                MangaProviders::Leercapitulo => Color::Green,
+                MangaProviders::Mangadex => Color::Yellow,
+                MangaProviders::Weebcentral => Color::Magenta,
+                MangaProviders::Mangapill => Color::Blue,
+                MangaProviders::Comizy => Color::LightYellow,
+            };
+            status_spans.push(Span::styled(format!("[{}] ", provider.badge_label()), Style::default().fg(color).bold()));
         }
+
+        if let Some(status) = self.status {
+            status_spans.push(status.into());
+        }
+
+        Paragraph::new(Line::from(status_spans)).render(details_area, buf);
 
         Paragraph::new(Line::from_iter(self.genres.clone()))
             .wrap(Wrap { trim: true })
@@ -134,10 +153,23 @@ impl Widget for MangaItem {
     where
         Self: Sized,
     {
-        Paragraph::new(self.manga.title)
-            .wrap(Wrap { trim: true })
-            .style(self.style)
-            .render(area, buf);
+        let line = if let Some(provider) = self.manga.provider {
+            let color = match provider {
+                MangaProviders::Inmanga => Color::Cyan,
+                MangaProviders::Mangaoni => Color::LightRed,
+                MangaProviders::Leercapitulo => Color::Green,
+                MangaProviders::Mangadex => Color::Yellow,
+                MangaProviders::Weebcentral => Color::Magenta,
+                MangaProviders::Mangapill => Color::Blue,
+                MangaProviders::Comizy => Color::LightYellow,
+            };
+            let tag = format!("[{}] ", provider.badge_label());
+            Line::from(vec![Span::styled(tag, Style::default().fg(color).bold()), Span::raw(self.manga.title)])
+        } else {
+            Line::from(vec![Span::raw(self.manga.title)])
+        };
+
+        Paragraph::new(line).wrap(Wrap { trim: true }).style(self.style).render(area, buf);
     }
 }
 

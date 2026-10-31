@@ -399,6 +399,7 @@ impl From<SearchMangaItem> for SearchManga {
             languages: ManganatoProvider::MANGANATO_MANGA_LANGUAGE.into(),
             artist: None,
             author: None,
+            provider: None,
         }
     }
 }

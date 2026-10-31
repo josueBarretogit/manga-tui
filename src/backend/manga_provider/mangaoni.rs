@@ -1,0 +1,683 @@
+use std::error::Error;
+use std::sync::Arc;
+use std::time::Duration;
+
+use bytes::Bytes;
+use filter_state::{MangaoniFilterState, MangaoniFiltersProvider};
+use filter_widget::MangaoniFilterWidget;
+use http::header::{ACCEPT, ACCEPT_LANGUAGE, CACHE_CONTROL, CONTENT_TYPE, REFERER, USER_AGENT};
+use http::{HeaderMap, HeaderValue, StatusCode};
+use manga_tui::SearchTerm;
+use reqwest::Client;
+use response::*;
+
+use super::{
+    Author, Chapter, ChapterFilters, ChapterOrderBy, ChapterPageUrl, ChapterReader, DecodeBytesToImage, FeedPageProvider,
+    FetchChapterBookmarked, GetChapterPages, GetChaptersResponse, GetMangasResponse, GetRawImage, GoToReadChapter,
+    HomePageMangaProvider, Languages, LatestChapter, ListOfChapters, Manga, MangaPageProvider, MangaProvider, MangaProviders,
+    MangaStatus, Pagination, PopularManga, ProviderIdentity, ReaderPageProvider, RecentlyAddedManga, SearchChapterById,
+    SearchManga, SearchMangaById, SearchMangaPanel, SearchPageProvider, SortedChapters, SortedVolumes, Volumes,
+};
+use crate::backend::cache::{CacheDuration, Cacher, InsertEntry};
+use crate::backend::database::ChapterBookmarked;
+use crate::backend::manga_provider::ChapterToRead;
+use crate::config::ImageQuality;
+
+pub mod filter_state;
+pub mod filter_widget;
+pub mod response;
+
+/// MangaOni: `https://manga-oni.com`
+/// Popular Spanish manga and webtoon provider.
+/// - Chapters and manga in Spanish
+/// - Fast direct search API via POST `/buscar` with CSRF token
+/// - Reader pages with base64-encoded `unicap` image lists
+#[derive(Clone, Debug)]
+pub struct MangaoniProvider {
+    client: Client,
+    cache_provider: Arc<dyn Cacher>,
+}
+
+impl MangaoniProvider {
+    const CHAPTER_PAGE_CACHE_DURATION: CacheDuration = CacheDuration::Long;
+    const HOME_PAGE_CACHE_DURATION: CacheDuration = CacheDuration::Short;
+    const MANGA_PAGE_CACHE_DURATION: CacheDuration = CacheDuration::LongLong;
+    const SEARCH_PAGE_CACHE_DURATION: CacheDuration = CacheDuration::VeryShort;
+
+    pub fn new(cache_provider: Arc<dyn Cacher>) -> Self {
+        let mut default_headers = HeaderMap::new();
+
+        default_headers.insert(
+            USER_AGENT,
+            HeaderValue::from_static(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+            ),
+        );
+        default_headers.insert(ACCEPT, HeaderValue::from_static("*/*"));
+        default_headers.insert(ACCEPT_LANGUAGE, HeaderValue::from_static("es-ES,es;q=0.9,en;q=0.8"));
+        default_headers.insert(CACHE_CONTROL, HeaderValue::from_static("max-age=604800"));
+
+        let client = Client::builder()
+            .timeout(Duration::from_secs(30))
+            .cookie_store(true)
+            .default_headers(default_headers)
+            // Spanish ISPs (Movistar/Orange/Vodafone) block 188.114.96.0/24 & 188.114.97.0/24.
+            // Direct requests to Cloudflare anycast edge IPs bypass this block seamlessly.
+            .resolve("manga-oni.com", std::net::SocketAddr::from(([104, 21, 65, 2], 443)))
+            .resolve("oni.ntr-files.online", std::net::SocketAddr::from(([104, 21, 65, 2], 443)))
+            .build()
+            .unwrap();
+
+        Self {
+            client,
+            cache_provider,
+        }
+    }
+
+    /// Fetches the CSRF token from MangaOni homepage
+    async fn fetch_csrf_token(&self) -> Result<String, Box<dyn Error>> {
+        let response = self.client.get(MANGAONI_BASE_URL).header(REFERER, MANGAONI_BASE_URL).send().await?;
+
+        let html = response.text().await?;
+        let token_pattern = r#"<meta[^>]*name=["']csrf-token["'][^>]*content=["']([^"']+)["']"#;
+        if let Ok(re) = regex::Regex::new(token_pattern) {
+            if let Some(cap) = re.captures(&html) {
+                if let Some(token) = cap.get(1) {
+                    return Ok(token.as_str().to_string());
+                }
+            }
+        }
+        Err("Could not extract CSRF token from MangaOni".into())
+    }
+
+    /// Fetches and parses a manga's details page
+    async fn fetch_manga_details(&self, slug: &str) -> Result<MangaoniMangaDetails, Box<dyn Error>> {
+        let urls_to_try: Vec<String> = if slug.contains('/') {
+            vec![format!("{MANGAONI_BASE_URL}/{slug}/")]
+        } else {
+            vec![
+                format!("{MANGAONI_BASE_URL}/manhwa/{slug}/"),
+                format!("{MANGAONI_BASE_URL}/manga/{slug}/"),
+                format!("{MANGAONI_BASE_URL}/manhua/{slug}/"),
+                format!("{MANGAONI_BASE_URL}/novela/{slug}/"),
+            ]
+        };
+
+        for url in &urls_to_try {
+            if let Ok(Some(cached)) = self.cache_provider.get(url) {
+                if let Ok(text) = String::from_utf8(cached.data) {
+                    return Ok(parse_manga_details(&text, slug));
+                }
+            }
+        }
+
+        for url in &urls_to_try {
+            if let Ok(response) = self.client.get(url).header(REFERER, MANGAONI_BASE_URL).send().await {
+                if response.status() == StatusCode::OK {
+                    if let Ok(text) = response.text().await {
+                        self.cache_provider
+                            .cache(InsertEntry {
+                                id: url,
+                                data: text.as_bytes(),
+                                duration: Self::MANGA_PAGE_CACHE_DURATION,
+                            })
+                            .ok();
+                        return Ok(parse_manga_details(&text, slug));
+                    }
+                }
+            }
+        }
+
+        Err(format!("Could not fetch manga page: {slug}").into())
+    }
+
+    /// Fetches chapter pages
+    async fn fetch_chapter_pages(&self, slug: &str, chapter_id: &str) -> Result<Vec<ChapterPageUrl>, Box<dyn Error>> {
+        let pure_slug = slug.rsplit('/').next().unwrap_or(slug);
+        let url = format!("{MANGAONI_BASE_URL}/lector/{pure_slug}/{chapter_id}/");
+        let cache = self.cache_provider.get(&url)?;
+
+        let html = match cache {
+            Some(cached) => String::from_utf8(cached.data)?,
+            None => {
+                let referer = if slug.contains('/') {
+                    format!("{MANGAONI_BASE_URL}/{slug}/")
+                } else {
+                    format!("{MANGAONI_BASE_URL}/manga/{slug}/")
+                };
+                let response = self.client.get(&url).header(REFERER, referer).send().await?;
+
+                if response.status() != StatusCode::OK {
+                    return Err(format!("Could not fetch chapter reader: {url}").into());
+                }
+
+                let text = response.text().await?;
+                self.cache_provider
+                    .cache(InsertEntry {
+                        id: &url,
+                        data: text.as_bytes(),
+                        duration: Self::CHAPTER_PAGE_CACHE_DURATION,
+                    })
+                    .ok();
+                text
+            },
+        };
+
+        parse_unicap(&html)
+    }
+
+    /// Builds a `ChapterToRead`
+    async fn get_chapter_to_read(&self, chapter_id_compound: &str, manga_id: &str) -> Result<ChapterToRead, Box<dyn Error>> {
+        let (slug, chap_id) = chapter_id_compound.split_once('|').unwrap_or((manga_id, chapter_id_compound));
+        let resolved_slug = if !slug.is_empty() { slug } else { manga_id };
+
+        let pages = self.fetch_chapter_pages(resolved_slug, chap_id).await?;
+        let pages_url = pages.into_iter().map(|p| p.url).collect();
+
+        let raw_chapters = self.fetch_raw_chapters(resolved_slug).await.unwrap_or_default();
+        let chapter_item = raw_chapters.iter().find(|ch| {
+            ch.id == chapter_id_compound || ch.id.ends_with(&format!("|{chap_id}")) || ch.id == format!("{resolved_slug}|{chap_id}")
+        });
+
+        let (title, number) = match chapter_item {
+            Some(item) => (item.title.clone(), item.number),
+            None => (format!("Capítulo {chap_id}"), chap_id.parse::<f64>().unwrap_or(0.0)),
+        };
+
+        Ok(ChapterToRead {
+            id: chapter_id_compound.to_string(),
+            title,
+            number,
+            volume_number: None,
+            num_page_bookmarked: None,
+            language: Languages::Spanish,
+            pages_url,
+        })
+    }
+
+    async fn fetch_raw_chapters(&self, slug: &str) -> Result<Vec<MangaoniChapterItem>, Box<dyn Error>> {
+        let details = self.fetch_manga_details(slug).await?;
+        Ok(details.chapters)
+    }
+
+    async fn fetch_latest_chapters(&self, slug: &str) -> Result<Vec<MangaoniChapterItem>, Box<dyn Error>> {
+        let urls_to_try: Vec<String> = if slug.contains('/') {
+            vec![format!("{MANGAONI_BASE_URL}/{slug}/")]
+        } else {
+            vec![
+                format!("{MANGAONI_BASE_URL}/manhwa/{slug}/"),
+                format!("{MANGAONI_BASE_URL}/manga/{slug}/"),
+                format!("{MANGAONI_BASE_URL}/manhua/{slug}/"),
+                format!("{MANGAONI_BASE_URL}/novela/{slug}/"),
+            ]
+        };
+
+        for url in urls_to_try {
+            let response = self.client.get(&url).header(REFERER, MANGAONI_BASE_URL).send().await?;
+            if response.status() == StatusCode::OK {
+                let html = response.text().await?;
+                return Ok(parse_manga_details(&html, slug).chapters);
+            }
+        }
+
+        Err(format!("Could not fetch current chapter list for MangaOni manga: {slug}").into())
+    }
+
+    /// Builds a `ListOfChapters` from manga details
+    async fn get_list_of_chapters(&self, slug: &str) -> Result<ListOfChapters, Box<dyn Error>> {
+        let chapters = self.fetch_raw_chapters(slug).await?;
+        let reader_chapters: Vec<ChapterReader> = chapters.iter().map(|c| c.to_chapter_reader()).collect();
+        let sorted_chapters = SortedChapters::new(reader_chapters);
+        let volume = Volumes {
+            volume: "none".to_string(),
+            chapters: sorted_chapters,
+        };
+        Ok(ListOfChapters {
+            volumes: SortedVolumes::new(vec![volume]),
+        })
+    }
+}
+
+impl ProviderIdentity for MangaoniProvider {
+    fn name(&self) -> MangaProviders {
+        MangaProviders::Mangaoni
+    }
+}
+
+impl GetRawImage for MangaoniProvider {
+    async fn get_raw_image(&self, url: &str) -> Result<Bytes, Box<dyn Error>> {
+        let cache = self.cache_provider.get(url)?;
+
+        match cache {
+            Some(cached) => Ok(cached.data.into()),
+            None => {
+                let response = self.client.get(url).header(REFERER, MANGAONI_BASE_URL).send().await?;
+
+                if response.status() != StatusCode::OK {
+                    return Err(format!("Could not get image from MangaOni: {url}").into());
+                }
+
+                let bytes = response.bytes().await?;
+
+                self.cache_provider
+                    .cache(InsertEntry {
+                        id: url,
+                        data: &bytes,
+                        duration: CacheDuration::Long,
+                    })
+                    .ok();
+
+                Ok(bytes)
+            },
+        }
+    }
+}
+
+impl DecodeBytesToImage for MangaoniProvider {}
+
+impl SearchMangaPanel for MangaoniProvider {}
+
+impl HomePageMangaProvider for MangaoniProvider {
+    async fn get_popular_mangas(&self) -> Result<Vec<PopularManga>, Box<dyn Error>> {
+        let cache_key = "mangaoni_home_popular";
+        let cache = self.cache_provider.get(cache_key)?;
+
+        let html = match cache {
+            Some(cached) => String::from_utf8(cached.data)?,
+            None => {
+                let response = self.client.get(MANGAONI_BASE_URL).send().await?;
+                let text = response.text().await?;
+                self.cache_provider
+                    .cache(InsertEntry {
+                        id: cache_key,
+                        data: text.as_bytes(),
+                        duration: Self::HOME_PAGE_CACHE_DURATION,
+                    })
+                    .ok();
+                text
+            },
+        };
+
+        Ok(parse_home_popular(&html))
+    }
+
+    async fn get_recently_added_mangas(&self) -> Result<Vec<RecentlyAddedManga>, Box<dyn Error>> {
+        let cache_key = "mangaoni_home_recent";
+        let cache = self.cache_provider.get(cache_key)?;
+
+        let html = match cache {
+            Some(cached) => String::from_utf8(cached.data)?,
+            None => {
+                let response = self.client.get(MANGAONI_BASE_URL).send().await?;
+                let text = response.text().await?;
+                self.cache_provider
+                    .cache(InsertEntry {
+                        id: cache_key,
+                        data: text.as_bytes(),
+                        duration: Self::HOME_PAGE_CACHE_DURATION,
+                    })
+                    .ok();
+                text
+            },
+        };
+
+        Ok(parse_home_recent(&html))
+    }
+}
+
+impl SearchMangaById for MangaoniProvider {
+    async fn get_manga_by_id(&self, manga_id: &str) -> Result<Manga, Box<dyn Error>> {
+        let details = self.fetch_manga_details(manga_id).await?;
+
+        Ok(Manga {
+            id: manga_id.to_string(),
+            id_safe_for_download: manga_id.replace('/', "_"),
+            title: details.title,
+            genres: details.genres,
+            description: details.description,
+            status: details.status,
+            cover_img_url: details.cover_img_url,
+            languages: vec![Languages::Spanish],
+            rating: String::new(),
+            artist: None,
+            author: None,
+            provider: Some(MangaProviders::Mangaoni),
+        })
+    }
+}
+
+impl GetChapterPages for MangaoniProvider {
+    async fn get_chapter_pages_url_with_extension(
+        &self,
+        chapter_id: &str,
+        manga_id: &str,
+        _image_quality: ImageQuality,
+    ) -> Result<Vec<ChapterPageUrl>, Box<dyn Error>> {
+        let (slug, chap_id) = chapter_id.split_once('|').unwrap_or((manga_id, chapter_id));
+        let resolved_slug = if !slug.is_empty() { slug } else { manga_id };
+
+        self.fetch_chapter_pages(resolved_slug, chap_id).await
+    }
+}
+
+impl SearchChapterById for MangaoniProvider {
+    async fn search_chapter(&self, chapter_id: &str, manga_id: &str) -> Result<ChapterToRead, Box<dyn Error>> {
+        let (slug, _) = chapter_id.split_once('|').unwrap_or((manga_id, chapter_id));
+        let resolved_slug = if !slug.is_empty() { slug } else { manga_id };
+        self.get_chapter_to_read(chapter_id, resolved_slug).await
+    }
+}
+
+impl FetchChapterBookmarked for MangaoniProvider {
+    async fn fetch_chapter_bookmarked(
+        &self,
+        chapter: ChapterBookmarked,
+    ) -> Result<(ChapterToRead, ListOfChapters), Box<dyn Error>> {
+        self.read_chapter(&chapter.id, &chapter.manga_id).await
+    }
+}
+
+impl GoToReadChapter for MangaoniProvider {
+    async fn read_chapter(&self, chapter_id: &str, manga_id: &str) -> Result<(ChapterToRead, ListOfChapters), Box<dyn Error>> {
+        let (slug, _) = chapter_id.split_once('|').unwrap_or((manga_id, chapter_id));
+        let resolved_slug = if !slug.is_empty() { slug } else { manga_id };
+
+        let chapter_to_read = self.get_chapter_to_read(chapter_id, resolved_slug).await?;
+        let list_of_chapters = self.get_list_of_chapters(resolved_slug).await?;
+
+        Ok((chapter_to_read, list_of_chapters))
+    }
+}
+
+impl MangaPageProvider for MangaoniProvider {
+    async fn get_chapters(
+        &self,
+        manga_id: &str,
+        filters: ChapterFilters,
+        pagination: Pagination,
+    ) -> Result<GetChaptersResponse, Box<dyn Error>> {
+        let mut raw = self.fetch_raw_chapters(manga_id).await?;
+
+        match filters.order {
+            ChapterOrderBy::Ascending => {
+                raw.sort_by(|a, b| a.number.total_cmp(&b.number));
+            },
+            ChapterOrderBy::Descending => {
+                raw.sort_by(|a, b| b.number.total_cmp(&a.number));
+            },
+        }
+
+        let total_chapters = raw.len() as u32;
+        let start = (pagination.current_page.saturating_sub(1) * pagination.items_per_page) as usize;
+        let end = (start + pagination.items_per_page as usize).min(raw.len());
+
+        let chapters = if start < raw.len() { raw[start..end].iter().map(|ch| ch.to_chapter(manga_id)).collect() } else { vec![] };
+
+        Ok(GetChaptersResponse {
+            chapters,
+            total_chapters,
+        })
+    }
+
+    async fn get_all_chapters(&self, manga_id: &str, _language: Languages) -> Result<Vec<Chapter>, Box<dyn Error>> {
+        let raw = self.fetch_latest_chapters(manga_id).await?;
+        Ok(raw.iter().map(|ch| ch.to_chapter(manga_id)).collect())
+    }
+}
+
+impl SearchPageProvider for MangaoniProvider {
+    type FiltersHandler = MangaoniFiltersProvider;
+    type InnerState = MangaoniFilterState;
+    type Widget = MangaoniFilterWidget;
+
+    async fn search_mangas(
+        &self,
+        search_term: Option<SearchTerm>,
+        _filters: Self::InnerState,
+        pagination: Pagination,
+    ) -> Result<GetMangasResponse, Box<dyn Error>> {
+        let term = match search_term {
+            Some(term) => term,
+            None => {
+                return Ok(GetMangasResponse {
+                    mangas: Vec::new(),
+                    total_mangas: 0,
+                    next_page: false,
+                });
+            },
+        };
+
+        let cache_key = format!("mangaoni_search_{}", term.get());
+        let cache = self.cache_provider.get(&cache_key)?;
+
+        let search_response: MangaoniSearchResponse = match cache {
+            Some(cached) => serde_json::from_slice(&cached.data)?,
+            None => {
+                let csrf_token = self.fetch_csrf_token().await?;
+                let search_url = format!("{MANGAONI_BASE_URL}/buscar");
+
+                let response = self
+                    .client
+                    .post(&search_url)
+                    .header(REFERER, format!("{MANGAONI_BASE_URL}/"))
+                    .header("X-CSRF-TOKEN", &csrf_token)
+                    .header("X-Requested-With", "XMLHttpRequest")
+                    .header(CONTENT_TYPE, "application/x-www-form-urlencoded; charset=UTF-8")
+                    .form(&[("buscar", term.get()), ("_token", &csrf_token)])
+                    .send()
+                    .await?;
+
+                if response.status() != StatusCode::OK {
+                    return Err(format!("MangaOni search failed with status {}", response.status()).into());
+                }
+
+                let bytes = response.bytes().await?;
+                self.cache_provider
+                    .cache(InsertEntry {
+                        id: &cache_key,
+                        data: &bytes,
+                        duration: Self::SEARCH_PAGE_CACHE_DURATION,
+                    })
+                    .ok();
+
+                serde_json::from_slice(&bytes)?
+            },
+        };
+
+        let mangas: Vec<SearchManga> = search_response
+            .mangas
+            .into_iter()
+            .map(|item| {
+                let slug = if let Some(url) = &item.url {
+                    let cleaned = url
+                        .trim_start_matches("https://manga-oni.com/")
+                        .trim_start_matches("http://manga-oni.com/")
+                        .trim_matches('/');
+                    if !cleaned.is_empty() {
+                        cleaned.to_string()
+                    } else if !item.slug.is_empty() {
+                        item.slug
+                    } else {
+                        item.nombre.to_lowercase().replace(' ', "-")
+                    }
+                } else if !item.slug.is_empty() {
+                    item.slug
+                } else {
+                    item.nombre.to_lowercase().replace(' ', "-")
+                };
+
+                let cover = item.img.unwrap_or_default();
+
+                SearchManga {
+                    id: slug,
+                    title: item.nombre,
+                    genres: Vec::new(),
+                    description: None,
+                    status: Some(MangaStatus::Ongoing),
+                    cover_img_url: cover,
+                    languages: vec![Languages::Spanish],
+                    artist: None,
+                    author: item.autor.map(|name| Author {
+                        id: String::new(),
+                        name,
+                    }),
+                    provider: Some(MangaProviders::Mangaoni),
+                }
+            })
+            .collect();
+
+        let total_mangas = mangas.len() as u32;
+        let from = pagination.index_to_slice_from();
+        let to = pagination.to_index(total_mangas as usize);
+        let next_page = to < total_mangas as usize;
+        let paged_mangas = mangas.as_slice().get(from..to).unwrap_or(&[]).to_vec();
+
+        Ok(GetMangasResponse {
+            mangas: paged_mangas,
+            total_mangas,
+            next_page,
+        })
+    }
+}
+
+impl FeedPageProvider for MangaoniProvider {
+    async fn get_latest_chapters(&self, manga_id: &str) -> Result<Vec<LatestChapter>, Box<dyn Error>> {
+        let mut raw = self.fetch_latest_chapters(manga_id).await?;
+        raw.sort_by(|a, b| b.number.total_cmp(&a.number));
+        let latest: Vec<LatestChapter> = raw
+            .into_iter()
+            .take(5)
+            .map(|ch| LatestChapter {
+                id: ch.id,
+                manga_id: manga_id.to_string(),
+                title: ch.title,
+                language: Languages::Spanish,
+                chapter_number: ch.number_str,
+                volume_number: None,
+                publication_date: ch.publication_date,
+            })
+            .collect();
+        Ok(latest)
+    }
+}
+
+impl ReaderPageProvider for MangaoniProvider {}
+impl MangaProvider for MangaoniProvider {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::backend::cache::mock::EmptyCache;
+
+    #[test]
+    fn test_mangaoni_chapter_navigation_consecutive() {
+        let items = vec![
+            MangaoniChapterItem {
+                id: "one-piece|80".to_string(),
+                number: 1.0,
+                number_str: "1".to_string(),
+                title: "Capítulo 1".to_string(),
+                publication_date: None,
+            },
+            MangaoniChapterItem {
+                id: "one-piece|81".to_string(),
+                number: 2.0,
+                number_str: "2".to_string(),
+                title: "Capítulo 2".to_string(),
+                publication_date: None,
+            },
+            MangaoniChapterItem {
+                id: "one-piece|802800".to_string(),
+                number: 1192.0,
+                number_str: "1192".to_string(),
+                title: "Capítulo 1192".to_string(),
+                publication_date: None,
+            },
+            MangaoniChapterItem {
+                id: "one-piece|802904".to_string(),
+                number: 1193.0,
+                number_str: "1193".to_string(),
+                title: "Capítulo 1193".to_string(),
+                publication_date: None,
+            },
+        ];
+
+        let reader_chapters: Vec<ChapterReader> = items.iter().map(|c| c.to_chapter_reader()).collect();
+        let sorted = SortedChapters::new(reader_chapters);
+        let list = ListOfChapters {
+            volumes: SortedVolumes::new(vec![Volumes {
+                volume: "none".to_string(),
+                chapters: sorted,
+            }]),
+        };
+
+        // When reading chapter 1192 (number = 1192.0), pressing Next (W) must go to chapter 1193
+        let next = list.get_next_chapter(None, 1192.0).expect("should find next chapter");
+        assert_eq!(next.id, "one-piece|802904");
+        assert_eq!(next.number, "1193");
+
+        // When reading chapter 1193 (number = 1193.0), pressing Prev (B) must go to chapter 1192
+        let prev = list.get_previous_chapter(None, 1193.0).expect("should find previous chapter");
+        assert_eq!(prev.id, "one-piece|802800");
+        assert_eq!(prev.number, "1192");
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_mangaoni_live_search() {
+        let provider = MangaoniProvider::new(EmptyCache::new_arc());
+        let result = provider
+            .search_mangas(SearchTerm::trimmed("one piece"), MangaoniFilterState::default(), Pagination::from_first_page(30))
+            .await;
+        assert!(result.is_ok());
+        let res = result.unwrap();
+        assert!(!res.mangas.is_empty());
+        println!("MangaOni search found: {}", res.mangas.len());
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_mangaoni_live_chapters() {
+        let provider = MangaoniProvider::new(EmptyCache::new_arc());
+        let chapters = provider.get_all_chapters("one-piece", Languages::Spanish).await;
+        assert!(chapters.is_ok());
+        let list = chapters.unwrap();
+        assert!(!list.is_empty());
+        println!("MangaOni One Piece chapters: {}", list.len());
+
+        let pages = provider
+            .get_chapter_pages_url_with_extension(&list[0].id, "one-piece", ImageQuality::default())
+            .await;
+        assert!(pages.is_ok());
+        let page_urls = pages.unwrap();
+        assert!(!page_urls.is_empty());
+        println!("MangaOni chapter pages: {}", page_urls.len());
+
+        let img = provider.get_raw_image(page_urls[0].url.as_str()).await;
+        assert!(img.is_ok());
+        assert!(!img.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_mangaoni_live_manhwa() {
+        let provider = MangaoniProvider::new(EmptyCache::new_arc());
+        // Test fetching details with bare slug (fallback)
+        let manga = provider.get_manga_by_id("solo-leveling-ragnarok").await;
+        assert!(manga.is_ok(), "failed to fetch manhwa by bare slug: {:?}", manga.err());
+        let m = manga.unwrap();
+        assert_eq!(m.title, "Solo Leveling: Ragnarok");
+
+        // Test fetching chapters
+        let chapters = provider.get_all_chapters("solo-leveling-ragnarok", Languages::Spanish).await;
+        assert!(chapters.is_ok(), "failed to fetch manhwa chapters: {:?}", chapters.err());
+        let list = chapters.unwrap();
+        assert!(!list.is_empty(), "manhwa chapter list is empty");
+        println!("MangaOni Solo Leveling Ragnarok chapters: {}", list.len());
+
+        // Test chapter reading
+        let (chap, list_of_chaps) = provider.read_chapter(&list[0].id, "solo-leveling-ragnarok").await.unwrap();
+        assert!(!chap.pages_url.is_empty(), "chapter pages is empty");
+        println!("Pages in first chapter: {}", chap.pages_url.len());
+    }
+}

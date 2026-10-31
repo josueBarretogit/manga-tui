@@ -179,6 +179,8 @@ impl MangaPillProvider {
             .timeout(Duration::from_secs(30))
             .default_headers(default_headers)
             .user_agent(get_random_user_agent())
+            .resolve("mangapill.com", std::net::SocketAddr::from(([104, 21, 65, 2], 443)))
+            .resolve("cdn.readdetectiveconan.com", std::net::SocketAddr::from(([104, 21, 65, 2], 443)))
             .build()
             .unwrap();
 
@@ -484,6 +486,7 @@ impl MangaPillProvider {
                 title: ma.title,
                 status: Some(ma.status.into()),
                 languages: vec![Languages::English],
+                provider: Some(MangaProviders::Mangapill),
                 ..Default::default()
             })
             .collect();

@@ -96,6 +96,9 @@ impl WeebcentralProvider {
             .timeout(Duration::from_secs(30))
             .default_headers(default_headers)
             .user_agent(get_random_user_agent())
+            .resolve("weebcentral.com", std::net::SocketAddr::from(([104, 21, 65, 2], 443)))
+            .resolve("temp.compsci88.com", std::net::SocketAddr::from(([104, 21, 65, 2], 443)))
+            .resolve("scans.lastation.us", std::net::SocketAddr::from(([104, 21, 65, 2], 443)))
             .build()
             .unwrap();
 
