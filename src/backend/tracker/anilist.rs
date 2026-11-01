@@ -271,6 +271,10 @@ impl Anilist {
         self
     }
 
+    fn auth_header(&self) -> String {
+        if self.access_token.starts_with("Bearer ") { self.access_token.clone() } else { format!("Bearer {}", self.access_token) }
+    }
+
     async fn check_credentials_are_valid(&self) -> Result<bool, Box<dyn Error>> {
         let body = GetUserIdBody::new(self.client_id.clone());
 
@@ -280,15 +284,12 @@ impl Anilist {
             .client
             .post(self.base_url.clone())
             .body(body)
-            .header(AUTHORIZATION, self.access_token.clone())
+            .header(AUTHORIZATION, self.auth_header())
             .send()
             .await?;
 
-        if response.status() == StatusCode::UNAUTHORIZED || response.status() == StatusCode::BAD_REQUEST {
-            return Ok(false);
-        }
-
-        Ok(true)
+        let is_valid = response.status() != StatusCode::UNAUTHORIZED && response.status() != StatusCode::BAD_REQUEST;
+        Ok(is_valid)
     }
 }
 
@@ -323,7 +324,7 @@ impl MangaTracker for Anilist {
             .client
             .post(self.base_url.clone())
             .body(query.into_body())
-            .header(AUTHORIZATION, self.access_token.clone())
+            .header(AUTHORIZATION, self.auth_header())
             .send()
             .await?;
 
@@ -343,7 +344,7 @@ impl MangaTracker for Anilist {
             .client
             .post(self.base_url.clone())
             .body(query.into_body())
-            .header(AUTHORIZATION, self.access_token.clone())
+            .header(AUTHORIZATION, self.auth_header())
             .send()
             .await?;
 

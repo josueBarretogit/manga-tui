@@ -247,14 +247,14 @@ impl<'a> Widget for NewChaptersModal<'a> {
             return;
         }
 
-        let header =
-            Line::from(vec![Span::styled("Select manga to download new chapters:", Style::default().add_modifier(Modifier::BOLD))]);
+        let header = Line::from(vec![Span::styled(
+            crate::i18n::tr("Selecciona mangas para descargar nuevos capítulos:", "Select manga to download new chapters:"),
+            Style::default().add_modifier(Modifier::BOLD),
+        )]);
 
         let max_items_visible = (inner.height.saturating_sub(2)) as usize;
         let cursor = self.state.cursor;
-        let scroll = if max_items_visible == 0 || total_count <= max_items_visible {
-            0
-        } else if cursor < max_items_visible {
+        let scroll = if max_items_visible == 0 || total_count <= max_items_visible || cursor < max_items_visible {
             0
         } else {
             cursor + 1 - max_items_visible

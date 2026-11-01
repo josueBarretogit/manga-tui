@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::time::Duration;
 
-use crossterm::event::{KeyEvent, MouseEvent};
+use crossterm::event::{KeyEvent, MouseEvent, MouseEventKind};
 use futures::{FutureExt, StreamExt};
 use ratatui::Terminal;
 use ratatui::backend::Backend;
@@ -80,9 +80,13 @@ fn get_picker() -> Option<Picker> {
     use windows_sys::Win32::UI::HiDpi::GetDpiForWindow;
 
     let dpi = unsafe { GetDpiForWindow(GetConsoleWindow()) };
+    // In some terminals (ConPTY, Windows Terminal) there is no classic console window and the dpi is 0
+    let dpi = if dpi == 0 { 96 } else { dpi };
     let scale = dpi as f32 / 96.0;
-    let size: (u16, u16) =
-        ((DEFAULT_FONT_SIZE_WIDTH as f32 * scale).round() as u16, (DEFAULT_FONT_SIZE_HEIGHT as f32 * scale).round() as u16);
+    let size: (u16, u16) = (
+        ((DEFAULT_FONT_SIZE_WIDTH as f32 * scale).round() as u16).max(1),
+        ((DEFAULT_FONT_SIZE_HEIGHT as f32 * scale).round() as u16).max(1),
+    );
 
     let mut picker = Picker::new((size.0, size.1));
 
@@ -134,30 +138,37 @@ pub fn handle_events(tick_rate: Duration, event_tx: UnboundedSender<Events>) -> 
             let event = reader.next().fuse();
             tokio::select! {
                 maybe_event = event => {
-                    match maybe_event  {
+                    match maybe_event {
                         Some(Ok(evt)) => {
-                            match evt {
-                                crossterm::event::Event::Key(key)
-                                    if key.kind == crossterm::event::KeyEventKind::Press => {
-                                        event_tx.send(Events::Key(key)).ok();
-                                    },
-                                crossterm::event::Event::Mouse(mouse_event) => {
-                                    event_tx.send(Events::Mouse(mouse_event)).ok();
-                                }
-                                _ => {}
+                            let sent = match evt {
+                                crossterm::event::Event::Key(key) if key.kind == crossterm::event::KeyEventKind::Press => {
+                                    event_tx.send(Events::Key(key)).is_ok()
+                                },
+                                // Mouse movement / drag events are discarded, only clicks and scroll are relevant
+                                crossterm::event::Event::Mouse(mouse_event)
+                                    if !matches!(mouse_event.kind, MouseEventKind::Moved | MouseEventKind::Drag(_)) =>
+                                {
+                                    event_tx.send(Events::Mouse(mouse_event)).is_ok()
+                                },
+                                // Redraw immediately so images and layouts adapt to the new size
+                                crossterm::event::Event::Resize(_, _) => event_tx.send(Events::Tick).is_ok(),
+                                _ => true,
+                            };
+                            if !sent {
+                                break;
                             }
-                        }
-                        Some(Err(_)) => {
-
-                        }
-                        None => {}
-
+                        },
+                        Some(Err(_)) => {},
+                        // The event stream is finished, polling it again would return `None` immediately
+                        // causing a busy loop
+                        None => break,
                     }
-
+                },
+                _ = delay => {
+                    if event_tx.send(Events::Tick).is_err() {
+                        break;
+                    }
                 }
-                    _ = delay => {
-                        event_tx.send(Events::Tick).ok();
-                    }
             }
         }
     })

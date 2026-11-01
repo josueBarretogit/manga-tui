@@ -121,45 +121,78 @@ impl<T: MangaProvider + 'static> DownloadQueueWorker<T> {
                 let total = self.total_in_batch;
                 let remaining = self.queue.len();
 
-                let pages_result = if item.provider != self.client.name() {
-                    crate::backend::multi_provider::get_chapter_pages_for_provider(
-                        item.provider,
-                        &item.chapter.id,
-                        &item.manga_id,
-                        config.image_quality,
-                        move |percent, _| {
-                            event_tx_clone
-                                .send(Events::DownloadQueueProgress(DownloadQueueProgress {
-                                    is_downloading: true,
-                                    current_manga_title: manga_title_clone.clone(),
-                                    current_chapter_number: chapter_num_clone.clone(),
-                                    current_page_percentage: percent,
-                                    completed_in_batch: completed,
-                                    total_in_batch: total,
-                                    remaining_items: remaining + 1,
-                                }))
-                                .ok();
-                        },
-                    )
-                    .await
-                    .map_err(|e| e.to_string())
-                } else {
-                    self.client
-                        .get_chapter_pages(&item.chapter.id, &item.manga_id, config.image_quality, move |percent, _| {
-                            event_tx_clone
-                                .send(Events::DownloadQueueProgress(DownloadQueueProgress {
-                                    is_downloading: true,
-                                    current_manga_title: manga_title_clone.clone(),
-                                    current_chapter_number: chapter_num_clone.clone(),
-                                    current_page_percentage: percent,
-                                    completed_in_batch: completed,
-                                    total_in_batch: total,
-                                    remaining_items: remaining + 1,
-                                }))
-                                .ok();
-                        })
+                let download_fut = async {
+                    if item.provider != self.client.name() {
+                        crate::backend::multi_provider::get_chapter_pages_for_provider(
+                            item.provider,
+                            &item.chapter.id,
+                            &item.manga_id,
+                            config.image_quality,
+                            move |percent, _| {
+                                event_tx_clone
+                                    .send(Events::DownloadQueueProgress(DownloadQueueProgress {
+                                        is_downloading: true,
+                                        current_manga_title: manga_title_clone.clone(),
+                                        current_chapter_number: chapter_num_clone.clone(),
+                                        current_page_percentage: percent,
+                                        completed_in_batch: completed,
+                                        total_in_batch: total,
+                                        remaining_items: remaining + 1,
+                                    }))
+                                    .ok();
+                            },
+                        )
                         .await
                         .map_err(|e| e.to_string())
+                    } else {
+                        self.client
+                            .get_chapter_pages(&item.chapter.id, &item.manga_id, config.image_quality, move |percent, _| {
+                                event_tx_clone
+                                    .send(Events::DownloadQueueProgress(DownloadQueueProgress {
+                                        is_downloading: true,
+                                        current_manga_title: manga_title_clone.clone(),
+                                        current_chapter_number: chapter_num_clone.clone(),
+                                        current_page_percentage: percent,
+                                        completed_in_batch: completed,
+                                        total_in_batch: total,
+                                        remaining_items: remaining + 1,
+                                    }))
+                                    .ok();
+                            })
+                            .await
+                            .map_err(|e| e.to_string())
+                    }
+                };
+
+                let pages_result = tokio::select! {
+                    res = download_fut => res,
+                    Some(cmd) = self.command_rx.recv() => {
+                        match cmd {
+                            DownloadQueueCommand::CancelAll => {
+                                self.queue.clear();
+                                self.completed_in_batch = 0;
+                                self.total_in_batch = 0;
+                                self.send_progress(false, "", "", 0.0);
+                                continue;
+                            },
+                            DownloadQueueCommand::Enqueue(batch) => {
+                                let count = batch.chapters.len();
+                                for chapter in batch.chapters {
+                                    self.queue.push_back(EnqueueChapterItem {
+                                        manga_id: batch.manga_id.clone(),
+                                        manga_id_safe_for_download: batch.manga_id_safe_for_download.clone(),
+                                        manga_title: batch.manga_title.clone(),
+                                        manga_cover_url: batch.manga_cover_url.clone(),
+                                        lang: batch.lang,
+                                        chapter,
+                                        provider: batch.provider,
+                                    });
+                                }
+                                self.total_in_batch += count;
+                                continue;
+                            }
+                        }
+                    }
                 };
 
                 match pages_result {
@@ -180,41 +213,54 @@ impl<T: MangaProvider + 'static> DownloadQueueWorker<T> {
                             provider: Some(item.provider),
                         };
 
-                        let downloader: &dyn MangaDownloader = match config.download_type {
-                            DownloadType::Cbz => &CbzDownloader::new(),
-                            DownloadType::Raw => &RawImagesDownloader::new(),
-                            DownloadType::Epub => &EpubDownloader::new(),
-                            DownloadType::Pdf => &PdfDownloader::new(),
-                        };
-
-                        let download_res = downloader
-                            .save_chapter_in_file_system(&AppDirectories::MangaDownloads.get_full_path(), chapter_to_download);
+                        let save_base = AppDirectories::MangaDownloads.get_full_path();
+                        let download_type = config.download_type;
+                        let download_res = tokio::task::spawn_blocking(move || -> Result<(), String> {
+                            match download_type {
+                                DownloadType::Cbz => CbzDownloader::new()
+                                    .save_chapter_in_file_system(&save_base, chapter_to_download)
+                                    .map_err(|e| e.to_string()),
+                                DownloadType::Raw => RawImagesDownloader::new()
+                                    .save_chapter_in_file_system(&save_base, chapter_to_download)
+                                    .map_err(|e| e.to_string()),
+                                DownloadType::Epub => EpubDownloader::new()
+                                    .save_chapter_in_file_system(&save_base, chapter_to_download)
+                                    .map_err(|e| e.to_string()),
+                                DownloadType::Pdf => PdfDownloader::new()
+                                    .save_chapter_in_file_system(&save_base, chapter_to_download)
+                                    .map_err(|e| e.to_string()),
+                            }
+                        })
+                        .await
+                        .map_err(|e| e.to_string())
+                        .and_then(|res| res);
 
                         if let Err(e) = download_res {
                             write_to_error_log(format!("Failed to download chapter: {original_chapter_title}, error: {e}").into());
-                        } else if let Ok(conn) = Database::get_connection() {
-                            let database = Database::new(&conn);
-                            let _ = database.set_chapter_downloaded(SetChapterDownloaded {
-                                id: &chapter_id,
-                                title: &original_chapter_title,
-                                manga_id: &item.manga_id,
-                                manga_title: &item.manga_title,
-                                img_url: item.manga_cover_url.as_deref(),
-                                provider: item.provider,
-                            });
-                        }
+                        } else {
+                            if let Ok(conn) = Database::get_connection() {
+                                let database = Database::new(&conn);
+                                let _ = database.set_chapter_downloaded(SetChapterDownloaded {
+                                    id: &chapter_id,
+                                    title: &original_chapter_title,
+                                    manga_id: &item.manga_id,
+                                    manga_title: &item.manga_title,
+                                    img_url: item.manga_cover_url.as_deref(),
+                                    provider: item.provider,
+                                });
+                            }
 
-                        self.completed_in_batch += 1;
-                        self.global_event_tx
-                            .send(Events::DownloadQueueChapterFinished {
-                                manga_id: item.manga_id,
-                                chapter_id,
-                            })
-                            .ok();
+                            self.completed_in_batch += 1;
+                            self.global_event_tx
+                                .send(Events::DownloadQueueChapterFinished {
+                                    manga_id: item.manga_id,
+                                    chapter_id,
+                                })
+                                .ok();
+                        }
                     },
                     Err(e) => {
                         write_to_error_log(format!("Failed to fetch pages for chapter: {}, error: {e}", item.chapter.title).into());
-                        self.completed_in_batch += 1;
                     },
                 }
 

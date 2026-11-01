@@ -79,10 +79,11 @@ impl AppDirectories {
 
 #[cfg(not(test))]
 pub static APP_DATA_DIR: Lazy<Option<PathBuf>> = Lazy::new(|| {
-    directories::ProjectDirs::from("", "", "manga-tui").map(|dirs| match std::env::var("MANGA_TUI_DATA_DIR").ok() {
-        Some(data_dir) => PathBuf::from(data_dir),
-        None => dirs.data_dir().to_path_buf(),
-    })
+    // `MANGA_TUI_DATA_DIR` must be honored even when no home directory can be found
+    match std::env::var("MANGA_TUI_DATA_DIR").ok().filter(|dir| !dir.trim().is_empty()) {
+        Some(data_dir) => Some(PathBuf::from(data_dir)),
+        None => directories::ProjectDirs::from("", "", "manga-tui").map(|dirs| dirs.data_dir().to_path_buf()),
+    }
 });
 
 #[cfg(test)]
@@ -104,12 +105,11 @@ pub fn build_data_dir(logger: &impl ILogger) -> Result<PathBuf, Box<dyn std::err
             build_config_file()?;
 
             let config = crate::config::MangaTuiConfig::get();
-            if let Some(custom_dir) = config.get_custom_download_dir() {
-                if !exists!(&custom_dir) {
-                    if let Err(e) = create_dir_all(&custom_dir) {
-                        logger.error(format!("Could not create custom download directory {}: {e}", custom_dir.display()).into());
-                    }
-                }
+            if let Some(custom_dir) = config.get_custom_download_dir()
+                && !exists!(&custom_dir)
+                && let Err(e) = create_dir_all(&custom_dir)
+            {
+                logger.error(format!("Could not create custom download directory {}: {e}", custom_dir.display()).into());
             }
 
             Ok(dir.to_path_buf())

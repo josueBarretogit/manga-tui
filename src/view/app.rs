@@ -29,6 +29,7 @@ use crate::backend::tracker::MangaTracker;
 use crate::backend::tui::{Action, Events, NewChapterNotificationGroup};
 use crate::config::MangaTuiConfig;
 use crate::global::INSTRUCTIONS_STYLE;
+use crate::i18n::tr;
 use crate::view::pages::*;
 use crate::view::tasks::manga::{AutoDownloadItem, download_new_chapters, download_new_favorite_chapters};
 use crate::view::widgets::{DownloadQueueModal, ErrorModal, NewChapterItem, NewChaptersModal, NewChaptersModalState};
@@ -162,14 +163,19 @@ where
             },
             Events::NewChaptersDownloadFinished(result) => match result {
                 Ok(count) => {
+                    let msg = if crate::i18n::is_es() {
+                        format!("Descargado(s) {count} nuevo(s) capítulo(s). Pulsa <q> para cerrar.")
+                    } else {
+                        format!("Downloaded {count} new chapter(s). Press <q> to close.")
+                    };
                     if let Some(state) = &mut self.new_chapters_state {
-                        state.status_message = Some(format!("Downloaded {count} new chapter(s). Press <q> to close."));
+                        state.status_message = Some(msg);
                         state.items.clear();
                     } else {
                         self.new_chapters_state = Some(NewChaptersModalState {
                             items: Vec::new(),
                             cursor: 0,
-                            status_message: Some(format!("Downloaded {count} new chapter(s). Press <q> to close.")),
+                            status_message: Some(msg),
                         });
                     }
                 },
@@ -177,26 +183,37 @@ where
             },
             Events::AutoDownloadedFavorites { count, details } => {
                 let summary = if details.is_empty() {
-                    format!("{count} capítulo(s)")
+                    format!("{count} {}", tr("capítulo(s)", "chapter(s)"))
                 } else if details.len() <= 2 {
                     details.join(", ")
                 } else {
-                    format!("{}, {} (+{} más)", details[0], details[1], details.len() - 2)
+                    format!("{}, {} (+{} {})", details[0], details[1], details.len() - 2, tr("más", "more"))
                 };
-                self.favorite_status_toast = Some((format!("★ Auto-descargado: {summary}"), Instant::now()));
+                self.favorite_status_toast =
+                    Some((format!("★ {}: {summary}", tr("Auto-descargado", "Auto-downloaded")), Instant::now()));
             },
             Events::EnqueueDownloadBatch(batch) => {
                 let count = batch.chapters.len();
                 let title = batch.manga_title.clone();
                 self.download_queue_tx.send(DownloadQueueCommand::Enqueue(batch)).ok();
-                self.queue_status_toast = Some((format!("+ Queued {count} chapter(s) of {title}"), Instant::now()));
+                self.queue_status_toast = Some((
+                    format!("+ {} {count} {} {title}", tr("En cola", "Queued"), tr("capítulo(s) de", "chapter(s) of")),
+                    Instant::now(),
+                ));
             },
             Events::DownloadQueueProgress(progress) => {
                 self.download_queue_progress = Some(progress);
             },
             Events::DownloadQueueFinished(total) => {
                 self.download_queue_progress = None;
-                self.queue_status_toast = Some((format!("✓ Finished downloading {total} chapter(s)"), Instant::now()));
+                self.queue_status_toast = Some((
+                    format!(
+                        "✓ {} {total} {}",
+                        tr("Finalizada la descarga de", "Finished downloading"),
+                        tr("capítulo(s)", "chapter(s)")
+                    ),
+                    Instant::now(),
+                ));
             },
             Events::DownloadQueueChapterFinished {
                 manga_id,
@@ -499,7 +516,10 @@ where
     }
 
     pub fn render_top_tabs(&self, area: Rect, buf: &mut Buffer) {
-        let mut titles: Vec<&str> = vec!["Home <F1>/<u>", "Search <F2>/<i>", "Feed <F3>/<o>"];
+        let home_tab = tr("Inicio <F1>/<u>", "Home <F1>/<u>");
+        let search_tab = tr("Buscar <F2>/<i>", "Search <F2>/<i>");
+        let feed_tab = tr("Seguimiento <F3>/<o>", "Feed <F3>/<o>");
+        let mut titles: Vec<&str> = vec![home_tab, search_tab, feed_tab];
 
         let tabs_block = Block::default().borders(Borders::BOTTOM);
 
@@ -508,7 +528,7 @@ where
             SelectedPage::Search => 1,
             SelectedPage::Feed => 2,
             SelectedPage::MangaTab => {
-                titles.push(" 📖 Manga page");
+                titles.push(tr(" 📖 Ficha del manga", " 📖 Manga page"));
                 3
             },
             _ => 0,
@@ -566,6 +586,7 @@ where
     fn close_modal(&mut self) {
         self.error_message = None;
         self.new_chapters_state = None;
+        self.is_queue_modal_open = false;
     }
 
     fn dismiss_new_chapters_notification(&mut self) -> Result<(), String> {
@@ -590,7 +611,7 @@ where
     }
 
     fn is_displaying_modal(&self) -> bool {
-        self.error_message.is_some() || self.new_chapters_state.is_some()
+        self.error_message.is_some() || self.new_chapters_state.is_some() || self.is_queue_modal_open
     }
 
     pub fn render_pages(&mut self, area: Rect, frame: &mut Frame<'_>) {
@@ -638,6 +659,27 @@ where
     }
 
     fn key_events_modal(&mut self, key_event: KeyEvent) {
+        if key_event.code == KeyCode::Char('c') && key_event.modifiers == KeyModifiers::CONTROL {
+            self.quit();
+            return;
+        }
+
+        if self.is_queue_modal_open {
+            match key_event.code {
+                KeyCode::Char('c') => {
+                    self.download_queue_tx.send(DownloadQueueCommand::CancelAll).ok();
+                    self.download_queue_progress = None;
+                    self.is_queue_modal_open = false;
+                    self.queue_status_toast = Some((tr("Descargas canceladas", "Downloads cancelled").to_string(), Instant::now()));
+                },
+                KeyCode::Char('q') | KeyCode::Esc | KeyCode::Char('D') => {
+                    self.is_queue_modal_open = false;
+                },
+                _ => {},
+            }
+            return;
+        }
+
         if let Some(state) = &mut self.new_chapters_state {
             if state.status_message.is_none() {
                 match key_event.code {
@@ -670,7 +712,6 @@ where
                             self.display_error_message(error);
                         }
                     },
-                    KeyCode::Char('c') if key_event.modifiers == KeyModifiers::CONTROL => self.quit(),
                     _ => {},
                 }
                 return;
@@ -679,7 +720,6 @@ where
                     KeyCode::Char('q') | KeyCode::Esc => {
                         self.close_modal();
                     },
-                    KeyCode::Char('c') if key_event.modifiers == KeyModifiers::CONTROL => self.quit(),
                     _ => {},
                 }
                 return;
@@ -690,7 +730,6 @@ where
             KeyCode::Char('q') | KeyCode::Esc => {
                 self.close_modal();
             },
-            KeyCode::Char('c') if key_event.modifiers == KeyModifiers::CONTROL => self.quit(),
             _ => {},
         }
     }
@@ -738,20 +777,8 @@ where
     }
 
     fn handle_key_events(&mut self, key_event: KeyEvent) {
-        if self.is_queue_modal_open {
-            match key_event.code {
-                KeyCode::Char('c') => {
-                    self.download_queue_tx.send(DownloadQueueCommand::CancelAll).ok();
-                    self.download_queue_progress = None;
-                    self.is_queue_modal_open = false;
-                    self.queue_status_toast = Some(("Downloads cancelled".to_string(), Instant::now()));
-                },
-                KeyCode::Char('q') | KeyCode::Esc | KeyCode::Char('D') => {
-                    self.is_queue_modal_open = false;
-                },
-                KeyCode::Char('c') if key_event.modifiers == KeyModifiers::CONTROL => self.quit(),
-                _ => {},
-            }
+        if key_event.code == KeyCode::Char('c') && key_event.modifiers == KeyModifiers::CONTROL {
+            self.quit();
             return;
         }
 
@@ -759,14 +786,16 @@ where
             return;
         }
 
-        if key_event.code == KeyCode::Char('D') && self.current_tab != SelectedPage::ReaderTab {
+        let is_typing =
+            self.search_page.input_mode == InputMode::Typing || self.search_page.is_typing_filter() || self.feed_page.is_typing();
+
+        if !is_typing && key_event.code == KeyCode::Char('D') && self.current_tab != SelectedPage::ReaderTab {
             self.is_queue_modal_open = true;
             return;
         }
 
-        if self.search_page.input_mode != InputMode::Typing && !self.search_page.is_typing_filter() && !self.feed_page.is_typing() {
+        if !is_typing && !self.search_page.is_filter_open() {
             match key_event.code {
-                KeyCode::Char('c') if key_event.modifiers == KeyModifiers::CONTROL => self.quit(),
                 KeyCode::Char('u') | KeyCode::F(1) if self.current_tab != SelectedPage::ReaderTab => {
                     self.global_event_tx.send(Events::GoToHome).ok();
                 },
@@ -783,7 +812,7 @@ where
     }
 
     fn handle_mouse_events(&mut self, mouse_event: MouseEvent) {
-        if self.current_tab == SelectedPage::ReaderTab {
+        if self.current_tab == SelectedPage::ReaderTab || self.is_displaying_modal() {
             return;
         }
         if let MouseEventKind::Down(MouseButton::Left) = mouse_event.kind {
@@ -836,21 +865,22 @@ where
     }
 
     fn go_to_read_chapter(&mut self, chapter_to_read: ChapterToRead, manga_to_read: MangaToRead, manga_tracker: Option<S>) {
+        let Some(picker) = self.picker.as_ref().cloned() else {
+            self.display_error_message(
+                tr("El visor gráfico de imágenes no está disponible", "Image picker is not available").to_string(),
+            );
+            return;
+        };
         self.home_page.clean_up();
         self.feed_page.clean_up();
         self.current_tab = SelectedPage::ReaderTab;
 
-        let mut manga_reader = MangaReader::new(
-            chapter_to_read,
-            manga_to_read.manga_id,
-            self.picker.as_ref().cloned().unwrap(),
-            Arc::clone(&self.manga_provider),
-        )
-        .with_global_sender(self.global_event_tx.clone())
-        .with_list_of_chapters(manga_to_read.list)
-        .with_manga_title(manga_to_read.title)
-        .with_manga_tracker(manga_tracker)
-        .with_provider(manga_to_read.provider);
+        let mut manga_reader = MangaReader::new(chapter_to_read, manga_to_read.manga_id, picker, Arc::clone(&self.manga_provider))
+            .with_global_sender(self.global_event_tx.clone())
+            .with_list_of_chapters(manga_to_read.list)
+            .with_manga_title(manga_to_read.title)
+            .with_manga_tracker(manga_tracker)
+            .with_provider(manga_to_read.provider);
 
         let config = MangaTuiConfig::get();
 
@@ -895,12 +925,11 @@ where
                 self.global_event_tx.send(Events::CheckForNewDownloadedChapters).ok();
             }
 
-            // If the app is displaying an error message then the user can only close the app or
-            // the error message popup
-            if self.is_displaying_modal()
-                && let Events::Key(key_event) = event
-            {
-                self.key_events_modal(key_event);
+            // If the app is displaying any modal, handle key events for the modal and consume all events
+            if self.is_displaying_modal() {
+                if let Events::Key(key_event) = event {
+                    self.key_events_modal(key_event);
+                }
                 return;
             }
 
@@ -909,10 +938,14 @@ where
                     self.search_page.handle_events(event);
                 },
                 SelectedPage::MangaTab => {
-                    self.manga_page.as_mut().unwrap().handle_events(event);
+                    if let Some(manga_page) = self.manga_page.as_mut() {
+                        manga_page.handle_events(event);
+                    }
                 },
                 SelectedPage::ReaderTab => {
-                    self.manga_reader_page.as_mut().unwrap().handle_events(event);
+                    if let Some(reader_page) = self.manga_reader_page.as_mut() {
+                        reader_page.handle_events(event);
+                    }
                 },
                 SelectedPage::Home => {
                     self.home_page.handle_events(event);
@@ -925,37 +958,37 @@ where
     }
 
     pub fn update_based_on_action(&mut self) {
-        if let Ok(app_action) = self.global_action_rx.try_recv() {
+        while let Ok(app_action) = self.global_action_rx.try_recv() {
             self.update(app_action);
         }
 
         match self.current_tab {
             SelectedPage::Search => {
-                if let Ok(search_page_action) = self.search_page.local_action_rx.try_recv() {
+                while let Ok(search_page_action) = self.search_page.local_action_rx.try_recv() {
                     self.search_page.update(search_page_action);
                 }
             },
             SelectedPage::MangaTab => {
-                if let Some(manga_page) = self.manga_page.as_mut()
-                    && let Ok(action) = manga_page.local_action_rx.try_recv()
-                {
-                    manga_page.update(action);
+                if let Some(manga_page) = self.manga_page.as_mut() {
+                    while let Ok(action) = manga_page.local_action_rx.try_recv() {
+                        manga_page.update(action);
+                    }
                 }
             },
             SelectedPage::ReaderTab => {
-                if let Some(reader_page) = self.manga_reader_page.as_mut()
-                    && let Ok(reader_action) = reader_page.local_action_rx.try_recv()
-                {
-                    reader_page.update(reader_action);
+                if let Some(reader_page) = self.manga_reader_page.as_mut() {
+                    while let Ok(reader_action) = reader_page.local_action_rx.try_recv() {
+                        reader_page.update(reader_action);
+                    }
                 }
             },
             SelectedPage::Home => {
-                if let Ok(home_action) = self.home_page.local_action_rx.try_recv() {
+                while let Ok(home_action) = self.home_page.local_action_rx.try_recv() {
                     self.home_page.update(home_action);
                 }
             },
             SelectedPage::Feed => {
-                if let Ok(feed_event) = self.feed_page.local_action_rx.try_recv() {
+                while let Ok(feed_event) = self.feed_page.local_action_rx.try_recv() {
                     self.feed_page.update(feed_event);
                 }
             },

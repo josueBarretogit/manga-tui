@@ -746,7 +746,7 @@ impl ParseHtml for SearchPageMangas {
         let mut mangas: Vec<Result<SearchPageItem, <SearchPageItem as ParseHtml>::ParseError>> = vec![];
 
         for article in doc.select(&article_selector) {
-            mangas.push(SearchPageItem::parse_html(HtmlElement::new(article.html())).inspect_err(|e| println!("{e}")));
+            mangas.push(SearchPageItem::parse_html(HtmlElement::new(article.html())));
         }
 
         let more_result = doc.select(&more_mangas_button).next().is_some();

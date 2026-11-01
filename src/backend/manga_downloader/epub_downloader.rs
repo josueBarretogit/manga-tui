@@ -4,21 +4,7 @@ use epub_builder::{EpubBuilder, EpubContent, ZipLibrary};
 
 use super::MangaDownloader;
 /// xml template to build epub files
-static EPUB_FILE_TEMPLATE: &str = r#"
-                            <?xml version='1.0' encoding='utf-8'?>
-                            <!DOCTYPE html>
-                            <html xmlns="http://www.w3.org/1999/xhtml">
-                              <head>
-                                <title>Panel</title>
-                                <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
-                              </head>
-                              <body>
-                                <div class="centered_image">
-                                    <img src="REPLACE_IMAGE_SOURCE" alt="Panel" />
-                                </div>
-                              </body>
-                            </html>
-"#;
+static EPUB_FILE_TEMPLATE: &str = "<?xml version='1.0' encoding='utf-8'?>\n<!DOCTYPE html>\n<html xmlns=\"http://www.w3.org/1999/xhtml\">\n  <head>\n    <title>Panel</title>\n    <meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\"/>\n  </head>\n  <body>\n    <div class=\"centered_image\">\n        <img src=\"REPLACE_IMAGE_SOURCE\" alt=\"Panel\" />\n    </div>\n  </body>\n</html>\n";
 
 #[derive(Debug, Clone)]
 pub struct EpubDownloader {}
@@ -50,25 +36,29 @@ impl MangaDownloader for EpubDownloader {
         epub_builder.metadata("title", chapter.manga_title.to_string()).ok();
 
         for (index, chap) in chapter.pages.into_iter().enumerate() {
-            let file_name = format!("{}.{}", index + 1, chap.extension);
+            let file_name = format!("{:04}.{}", index + 1, chap.extension);
             let image_path = format!("data/{file_name}");
 
-            let mime_type = format!("image/{}", chap.extension);
+            let mime_type = match chap.extension.to_lowercase().as_str() {
+                "jpg" | "jpeg" => "image/jpeg",
+                "png" => "image/png",
+                "webp" => "image/webp",
+                "gif" => "image/gif",
+                ext => &format!("image/{ext}"),
+            };
 
             if index == 0 {
-                epub_builder.add_cover_image(&image_path, chap.bytes.as_ref(), &mime_type).ok();
+                epub_builder.add_cover_image(&image_path, chap.bytes.as_ref(), mime_type)?;
+            } else {
+                epub_builder.add_resource(&image_path, chap.bytes.as_ref(), mime_type)?;
             }
-
-            epub_builder.add_resource(&image_path, chap.bytes.as_ref(), &mime_type).ok();
 
             let xml_file_path = format!("{index}.xhtml");
 
-            epub_builder
-                .add_content(
-                    EpubContent::new(xml_file_path, EPUB_FILE_TEMPLATE.replace("REPLACE_IMAGE_SOURCE", &image_path).as_bytes())
-                        .title(&file_name),
-                )
-                .ok();
+            epub_builder.add_content(
+                EpubContent::new(xml_file_path, EPUB_FILE_TEMPLATE.replace("REPLACE_IMAGE_SOURCE", &image_path).as_bytes())
+                    .title(&file_name),
+            )?;
         }
 
         epub_builder.generate(&mut epub_file)?;

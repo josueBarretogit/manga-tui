@@ -35,6 +35,7 @@ pub mod response;
 #[derive(Clone, Debug)]
 pub struct LeercapituloProvider {
     client: Client,
+    cf_client: Client,
     cache_provider: Arc<dyn Cacher>,
 }
 
@@ -63,8 +64,15 @@ impl LeercapituloProvider {
             .build()
             .unwrap();
 
+        let cf_client = Client::builder()
+            .timeout(Duration::from_secs(20))
+            .resolve("t34798ndc.com", std::net::SocketAddr::from(([104, 21, 65, 2], 443)))
+            .build()
+            .unwrap_or_else(|_| client.clone());
+
         Self {
             client,
+            cf_client,
             cache_provider,
         }
     }
@@ -225,12 +233,7 @@ impl GetRawImage for LeercapituloProvider {
                 // route directly to unblocked Cloudflare anycast edge IP.
                 let response = if let Some(ref host) = parsed_host {
                     if host.contains("t34798ndc.com") {
-                        let cf_client = Client::builder()
-                            .timeout(Duration::from_secs(20))
-                            .resolve(host, std::net::SocketAddr::from(([104, 21, 65, 2], 443)))
-                            .build()
-                            .unwrap_or_else(|_| self.client.clone());
-                        cf_client.get(url).header(REFERER, LEERCAPITULO_BASE_URL).send().await?
+                        self.cf_client.get(url).header(REFERER, LEERCAPITULO_BASE_URL).send().await?
                     } else {
                         self.client.get(url).header(REFERER, LEERCAPITULO_BASE_URL).send().await?
                     }
@@ -354,7 +357,9 @@ impl FetchChapterBookmarked for LeercapituloProvider {
         &self,
         chapter: ChapterBookmarked,
     ) -> Result<(ChapterToRead, ListOfChapters), Box<dyn Error>> {
-        self.read_chapter(&chapter.id, &chapter.manga_id).await
+        let (mut chapter_to_read, list_of_chapters) = self.read_chapter(&chapter.id, &chapter.manga_id).await?;
+        chapter_to_read.num_page_bookmarked = chapter.number_page_bookmarked;
+        Ok((chapter_to_read, list_of_chapters))
     }
 }
 
@@ -545,7 +550,7 @@ mod tests {
 
     #[test]
     fn test_leercapitulo_chapter_navigation_consecutive() {
-        let items = vec![
+        let items = [
             LeercapituloChapterItem {
                 id: "/leer/one-piece/1.00/cascada".to_string(),
                 number: 1.0,

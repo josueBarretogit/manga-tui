@@ -38,7 +38,7 @@ impl MangaoniChapterItem {
     pub fn to_chapter(&self, manga_id: &str) -> Chapter {
         Chapter {
             id: self.id.clone(),
-            id_safe_for_download: self.id.replace('|', "_").replace('/', "_"),
+            id_safe_for_download: self.id.replace(['|', '/'], "_"),
             manga_id: manga_id.to_string(),
             title: self.title.clone(),
             language: Languages::Spanish,
@@ -183,6 +183,10 @@ pub fn parse_manga_details(html: &str, slug: &str) -> MangaoniMangaDetails {
     let entry_pattern = format!(r#"<a\s+href="(?:https://manga-oni\.com)?/lector/{pure_slug}/([^"/]+)[^"]*"[^>]*>([\s\S]*?)</a>"#);
     if let Ok(entry_re) = regex::Regex::new(&entry_pattern) {
         let mut seen = std::collections::HashSet::new();
+        let re_data_num = regex::Regex::new(r#"data-num="([^"]+)""#).unwrap();
+        let re_capitulo = regex::Regex::new(r#"(?i)cap[íi]tulo\s*([\d\.]+)"#).unwrap();
+        let re_h3 = regex::Regex::new(r#"<h3[^>]*>([\s\S]*?)</h3>"#).unwrap();
+        let re_datetime = regex::Regex::new(r#"datetime="([^"]+)""#).unwrap();
 
         for cap in entry_re.captures_iter(html) {
             let chapter_id = cap.get(1).map(|m| m.as_str()).unwrap_or("");
@@ -194,23 +198,23 @@ pub fn parse_manga_details(html: &str, slug: &str) -> MangaoniMangaDetails {
             let inner = cap.get(2).map(|m| m.as_str()).unwrap_or("");
 
             // Extract data-num="1193"
-            let num = if let Some(m) = regex::Regex::new(r#"data-num="([^"]+)""#).unwrap().captures(inner) {
+            let num = if let Some(m) = re_data_num.captures(inner) {
                 m.get(1).map(|v| v.as_str().parse::<f64>().unwrap_or(0.0)).unwrap_or(0.0)
-            } else if let Some(m) = regex::Regex::new(r#"(?i)cap[íi]tulo\s*([\d\.]+)"#).unwrap().captures(inner) {
+            } else if let Some(m) = re_capitulo.captures(inner) {
                 m.get(1).map(|v| v.as_str().parse::<f64>().unwrap_or(0.0)).unwrap_or(0.0)
             } else {
                 0.0
             };
 
             // Extract title from <h3 class="entry-title-h2">...</h3>
-            let title = if let Some(m) = regex::Regex::new(r#"<h3[^>]*>([\s\S]*?)</h3>"#).unwrap().captures(inner) {
+            let title = if let Some(m) = re_h3.captures(inner) {
                 scraper_clean_text(m.get(1).map(|v| v.as_str()).unwrap_or(""))
             } else {
                 format!("Capítulo {num}")
             };
 
             // Extract date from datetime="2026-09-10 20:28:04"
-            let publication_date = if let Some(m) = regex::Regex::new(r#"datetime="([^"]+)""#).unwrap().captures(inner) {
+            let publication_date = if let Some(m) = re_datetime.captures(inner) {
                 let raw_date = m.get(1).map(|v| v.as_str()).unwrap_or("");
                 let date_part = raw_date.split(' ').next().unwrap_or(raw_date);
                 chrono::NaiveDate::parse_from_str(date_part, "%Y-%m-%d").ok()

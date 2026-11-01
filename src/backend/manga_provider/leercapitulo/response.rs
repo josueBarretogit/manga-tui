@@ -296,6 +296,7 @@ pub fn parse_manga_details(html: &str, manga_id: &str) -> LeercapituloMangaDetai
     .unwrap();
 
     let mut seen = std::collections::HashSet::new();
+    let num_re = regex::Regex::new(r#"[\d\.]+"#).unwrap();
     for cap in row_re.captures_iter(html) {
         let chapter_path = cap.get(1).map(|m| m.as_str()).unwrap_or("");
         let chapter_name = cap.get(2).map(|m| m.as_str().trim()).unwrap_or("");
@@ -307,11 +308,7 @@ pub fn parse_manga_details(html: &str, manga_id: &str) -> LeercapituloMangaDetai
         seen.insert(chapter_path.to_string());
 
         // Extract chapter number from chapter_name (e.g. "Capitulo 1194" -> 1194.0)
-        let num = if let Some(m) = regex::Regex::new(r#"[\d\.]+"#).unwrap().find(chapter_name) {
-            m.as_str().parse::<f64>().unwrap_or(0.0)
-        } else {
-            0.0
-        };
+        let num = if let Some(m) = num_re.find(chapter_name) { m.as_str().parse::<f64>().unwrap_or(0.0) } else { 0.0 };
 
         let date_part = chapter_date.split(' ').next().unwrap_or(chapter_date);
         let publication_date = chrono::NaiveDate::parse_from_str(date_part, "%Y-%m-%d").ok();

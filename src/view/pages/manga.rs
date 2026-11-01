@@ -615,7 +615,7 @@ where
                     KeyCode::Tab => {
                         self.local_action_tx.send(MangaPageActions::GoToReadBookmarkedChapter).ok();
                     },
-                    KeyCode::Char('p') | KeyCode::Char('o') => {
+                    KeyCode::Char('p') => {
                         if let Some(tx) = &self.global_event_tx {
                             tx.send(Events::SearchAllProviders(self.manga.title.clone())).ok();
                         }
@@ -825,7 +825,7 @@ where
 
     fn get_current_selected_language(&self) -> Languages {
         match self.available_languages_state.selected() {
-            Some(index) => self.manga.languages[index],
+            Some(index) => self.manga.languages.get(index).copied().unwrap_or(self.chapter_filters.language),
             None => self.chapter_filters.language,
         }
     }
@@ -871,13 +871,16 @@ where
                 },
                 Err(e) => {
                     write_to_error_log(e.into());
+                    tx.send(MangaPageEvents::LoadChapters(None)).ok();
                 },
             }
         });
     }
 
     fn check_chapters_read(&mut self) {
-        let conn = Database::get_connection().unwrap();
+        let Ok(conn) = Database::get_connection() else {
+            return;
+        };
         let database = Database::new(&conn);
         let history = database.get_chapters_history_status(&self.manga.id);
         match history {
@@ -1033,7 +1036,9 @@ where
     }
 
     fn save_download_status(&mut self, id_chapter: String, title: String) {
-        let conn = Database::get_connection().unwrap();
+        let Ok(conn) = Database::get_connection() else {
+            return;
+        };
         let database = Database::new(&conn);
 
         let save_download_operation = database.set_chapter_downloaded(SetChapterDownloaded {

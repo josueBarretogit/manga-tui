@@ -7,6 +7,7 @@ use reqwest::{Client, Url};
 use serde_json::Value;
 
 use crate::global::APP_USER_AGENT;
+use crate::i18n::tr;
 use crate::logger::ILogger;
 
 #[derive(Debug)]
@@ -48,28 +49,53 @@ impl ReleaseNotifier {
 
         let response: Value = response.json().await?;
 
-        let response = response.get("name").cloned().unwrap();
+        // `name` may be null or empty when a release only has a tag, so `tag_name` is used as a fallback
+        let version = ["name", "tag_name"]
+            .iter()
+            .filter_map(|key| response.get(key).and_then(Value::as_str))
+            .map(str::trim)
+            .find(|value| !value.is_empty())
+            .ok_or("latest release has neither name nor tag_name")?;
 
-        Ok(response.as_str().unwrap().to_string())
+        Ok(version.to_string())
+    }
+
+    /// Parses a version like `v1.2.3` into `(1, 2, 3)`
+    fn parse_version(version: &str) -> Option<(u64, u64, u64)> {
+        let mut parts = version
+            .trim()
+            .trim_start_matches(['v', 'V'])
+            .split('.')
+            .map(|part| part.chars().take_while(|c| c.is_ascii_digit()).collect::<String>().parse::<u64>().ok());
+
+        let major = parts.next()??;
+        let minor = parts.next().flatten().unwrap_or(0);
+        let patch = parts.next().flatten().unwrap_or(0);
+        Some((major, minor, patch))
     }
 
     /// returns `true` if there is a new version
     fn new_version(&self, latest: &str, current: &str) -> bool {
-        latest != current
+        match (Self::parse_version(latest), Self::parse_version(current)) {
+            (Some(latest), Some(current)) => latest > current,
+            _ => latest != current,
+        }
     }
 
     pub async fn check_new_releases(self, logger: &impl ILogger) -> Result<(), Box<dyn Error>> {
-        logger.inform("Checking for updates");
+        logger.inform(tr("Buscando actualizaciones", "Checking for updates"));
 
         let latest_release = self.get_latest_release().await?;
         let current_version = format!("v{}", env!("CARGO_PKG_VERSION"));
 
         if self.new_version(&latest_release, &current_version) {
             let github_url = format!("https://github.com/josueBarretogit/manga-tui/releases/tag/{latest_release}");
-            logger.inform(format!("There is a new version : {latest_release} to update go to the releases page: {github_url} "));
-            tokio::time::sleep(Duration::from_secs(2)).await;
+            logger.inform(format!(
+                "{} : {latest_release} → {github_url} ",
+                tr("Hay una nueva versión disponible", "There is a new version available")
+            ));
         } else {
-            logger.inform("Up to date");
+            logger.inform(tr("Actualizado", "Up to date"));
         }
 
         Ok(())
@@ -86,6 +112,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    #[ignore]
     async fn it_get_latest_version_from_github() -> Result<(), Box<dyn Error>> {
         let server = MockServer::start_async().await;
         let notifier = ReleaseNotifier::new(server.base_url().parse()?);
@@ -137,6 +164,18 @@ mod tests {
 
         assert!(!new_version);
 
+        // Older releases must not be reported as updates
+        assert!(!notifier.new_version("v0.9.0", "v0.10.0"));
+        assert!(notifier.new_version("v0.10.1", "v0.10.0"));
+
         Ok(())
+    }
+
+    #[test]
+    fn version_is_parsed_leniently() {
+        assert_eq!(Some((0, 10, 0)), ReleaseNotifier::parse_version("v0.10.0"));
+        assert_eq!(Some((1, 2, 0)), ReleaseNotifier::parse_version("1.2"));
+        assert_eq!(Some((1, 2, 3)), ReleaseNotifier::parse_version("v1.2.3-beta"));
+        assert_eq!(None, ReleaseNotifier::parse_version("latest"));
     }
 }

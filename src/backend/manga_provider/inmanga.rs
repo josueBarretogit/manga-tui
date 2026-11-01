@@ -366,7 +366,9 @@ impl FetchChapterBookmarked for InmangaProvider {
         &self,
         chapter: ChapterBookmarked,
     ) -> Result<(ChapterToRead, ListOfChapters), Box<dyn Error>> {
-        self.read_chapter(&chapter.id, &chapter.manga_id).await
+        let (mut chapter_to_read, list_of_chapters) = self.read_chapter(&chapter.id, &chapter.manga_id).await?;
+        chapter_to_read.num_page_bookmarked = chapter.number_page_bookmarked;
+        Ok((chapter_to_read, list_of_chapters))
     }
 }
 
@@ -520,6 +522,7 @@ mod tests {
     use crate::backend::cache::in_memory::InMemoryCache;
 
     #[tokio::test]
+    #[ignore]
     async fn test_inmanga_live_popular() {
         let cache = InMemoryCache::init(8);
         let provider = InmangaProvider::new(cache);
@@ -528,6 +531,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore]
     async fn test_inmanga_live_search_and_chapters() {
         let cache = InMemoryCache::init(8);
         let provider = InmangaProvider::new(cache);

@@ -39,12 +39,9 @@ impl MangaDownloader for RawImagesDownloader {
         self.create_manga_base_directory(&base_directory)?;
 
         for (index, chap) in chapter.pages.into_iter().enumerate() {
-            let file_name = base_directory.join(format!("{}.{}", index + 1, chap.extension));
-            let mut maybe_file = File::create(file_name);
-
-            if let Ok(file) = maybe_file.as_mut() {
-                file.write_all(&chap.bytes).ok();
-            }
+            let file_name = base_directory.join(format!("{:04}.{}", index + 1, chap.extension));
+            let mut file = File::create(file_name)?;
+            file.write_all(&chap.bytes)?;
         }
         Ok(())
     }

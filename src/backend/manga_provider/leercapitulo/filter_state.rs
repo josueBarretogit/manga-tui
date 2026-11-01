@@ -27,6 +27,7 @@ impl EventHandler for LeercapituloFiltersProvider {
         match events {
             Events::Key(key) => match key.code {
                 KeyCode::Char('f') => self.toggle(),
+                KeyCode::Esc if self.is_open => self.toggle(),
                 _ => {},
             },
             _ => {},

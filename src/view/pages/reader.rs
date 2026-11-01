@@ -444,18 +444,22 @@ where
     }
 
     fn get_pages_to_fetch(&self) -> Vec<usize> {
+        if self.pages.is_empty() {
+            return vec![];
+        }
+
         let pages = MangaTuiConfig::get().amount_pages as usize;
 
         if self.pages.len() == 1 {
-            return vec![0];
+            return if self.pages[0].is_loaded() { vec![] } else { vec![0] };
         }
 
         // Collect `pages` pages before and after index that are not yet loaded
-        let curr = self.current_page_index();
+        let curr = self.current_page_index().min(self.pages.len().saturating_sub(1));
         let start_index = curr.saturating_sub(pages);
         let end_index = curr.saturating_add(pages).min(self.pages.len().saturating_sub(1));
 
-        if end_index > 0 {
+        if start_index <= end_index {
             self.pages[start_index..=end_index]
                 .iter()
                 .enumerate()
@@ -779,19 +783,20 @@ where
         let connection = Database::get_connection();
         if let Ok(conn) = connection {
             let database = Database::new(&conn);
-            database
-                .save_history(MangaReadingHistorySave {
-                    id: &self.manga_id,
-                    title: &self.manga_title,
-                    img_url: None,
-                    chapter: ChapterToSaveHistory {
-                        id: &self.current_chapter.id,
-                        title: &self.current_chapter.title,
-                        translated_language: "en",
-                    },
-                    provider: self.provider.unwrap_or_else(|| self.api_client.name()),
-                })
-                .unwrap();
+            let lang = self.current_chapter.language.as_iso_code();
+            if let Err(e) = database.save_history(MangaReadingHistorySave {
+                id: &self.manga_id,
+                title: &self.manga_title,
+                img_url: None,
+                chapter: ChapterToSaveHistory {
+                    id: &self.current_chapter.id,
+                    title: &self.current_chapter.title,
+                    translated_language: lang,
+                },
+                provider: self.provider.unwrap_or_else(|| self.api_client.name()),
+            }) {
+                crate::backend::error_log::write_to_error_log(e.to_string().into());
+            }
             return self.current_chapter.id.clone();
         }
         "".to_string()

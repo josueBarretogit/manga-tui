@@ -2,6 +2,8 @@
 #![allow(dead_code)]
 #![allow(deprecated)]
 #![allow(clippy::single_match)]
+#![allow(clippy::collapsible_if)]
+#![allow(clippy::too_many_arguments)]
 
 use std::io::stdout;
 use std::process::exit;
@@ -46,6 +48,7 @@ use self::backend::migration::update_database_with_migrations;
 use self::backend::tui::run_app;
 use self::cli::CliArgs;
 use self::config::MangaTuiConfig;
+use self::i18n::tr;
 use crate::backend::manga_provider::mangadex::get_cached_filters;
 use crate::backend::manga_provider::mangapill::MangaPillProvider;
 use crate::backend::manga_provider::mangapill::filter_state::MangaPillFiltersProvider;
@@ -56,9 +59,29 @@ mod cli;
 mod common;
 mod config;
 mod global;
+mod i18n;
 mod logger;
 mod utils;
 mod view;
+
+/// Restores the terminal (raw mode, alternate screen and mouse capture) when dropped, so the user's
+/// terminal is left in a usable state even if the app returns early with an error
+struct TerminalGuard;
+
+impl TerminalGuard {
+    fn init() -> Result<(ratatui::DefaultTerminal, Self), Box<dyn std::error::Error>> {
+        let terminal = ratatui::init();
+        stdout().execute(EnableMouseCapture)?;
+        Ok((terminal, Self))
+    }
+}
+
+impl Drop for TerminalGuard {
+    fn drop(&mut self) {
+        let _ = stdout().execute(DisableMouseCapture);
+        ratatui::restore();
+    }
+}
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 7)]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -92,8 +115,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let config = MangaTuiConfig::get();
 
-    if config.check_new_updates {
-        let notifier = ReleaseNotifier::new(GITHUB_URL.parse().unwrap());
+    if config.check_new_updates
+        && let Ok(github_url) = GITHUB_URL.parse()
+    {
+        let notifier = ReleaseNotifier::new(github_url);
 
         if let Err(e) = notifier.check_new_releases(&logger).await {
             logger.error(e);
@@ -123,8 +148,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .filter(|_| config.track_reading_history);
 
     if anilist_client.is_some() {
-        logger.inform("Anilist is setup, tracking reading history");
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        logger.inform(tr(
+            "Anilist configurado, se sincronizará el historial de lectura",
+            "Anilist is setup, tracking reading history",
+        ));
     }
 
     let mut connection = Database::get_connection()?;
@@ -136,11 +163,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     drop(connection);
 
     color_eyre::install()?;
-    stdout().execute(EnableMouseCapture)?;
 
     let cache_provider: Arc<dyn Cacher> = InMemoryCache::init(8);
 
     let provider = if let Some(pro) = manga_provider_cli { pro } else { config.default_manga_provider };
+
+    logger.inform(format!("{}: {provider}", tr("Proveedor de manga", "Manga provider")));
 
     match provider {
         MangaProviders::Mangadex => {
@@ -148,25 +176,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 MangadexClient::new(API_URL_BASE.parse().unwrap(), COVER_IMG_URL_BASE.parse().unwrap(), cache_provider)
                     .with_image_quality(config.image_quality);
 
-            logger.inform("Checking mangadex status...");
+            logger.inform(tr("Comprobando el estado de MangaDex...", "Checking mangadex status..."));
 
-            let mangadex_status = mangadex_client.check_status().await;
-
-            match mangadex_status {
-                Ok(response) => {
-                    if response.status() != StatusCode::OK {
-                        logger.warn("Mangadex appears to be in maintenance, please come back later");
-                        exit(0)
-                    }
-                },
-                Err(e) => {
-                    logger.error(format!("Some error ocurred, more details : {e}").into());
-                    exit(1)
-                },
+            // If mangadex is down the app still starts so the library, downloads and other providers
+            // (via multi-provider search) can still be used
+            match mangadex_client.check_status().await {
+                Ok(response) if response.status() == StatusCode::OK => {},
+                Ok(_) => logger.warn(tr(
+                    "MangaDex parece estar en mantenimiento, prueba otro proveedor con: manga-tui -p weebcentral",
+                    "Mangadex appears to be in maintenance, try another provider with: manga-tui -p weebcentral",
+                )),
+                Err(e) => logger.warn(format!(
+                    "{} : {e}",
+                    tr(
+                        "No se pudo contactar con MangaDex, prueba otro proveedor con -p",
+                        "Could not reach mangadex, try another provider with -p"
+                    )
+                )),
             }
 
+            let (terminal, _guard) = TerminalGuard::init()?;
             run_app(
-                ratatui::init(),
+                terminal,
                 mangadex_client,
                 anilist_client,
                 MangadexFilterProvider::from(get_cached_filters()),
@@ -175,10 +206,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .await?;
         },
         MangaProviders::Weebcentral => {
-            logger.inform("Using Weeb central as manga provider");
-            tokio::time::sleep(Duration::from_secs(1)).await;
+            let (terminal, _guard) = TerminalGuard::init()?;
             run_app(
-                ratatui::init(),
+                terminal,
                 WeebcentralProvider::new(WEEBCENTRAL_BASE_URL.parse().unwrap(), cache_provider),
                 anilist_client,
                 WeebcentralFiltersProvider::new(WeebcentralFilterState::default()),
@@ -187,10 +217,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .await?;
         },
         MangaProviders::Mangapill => {
-            logger.inform("Using MangaPill as manga provider");
-            tokio::time::sleep(Duration::from_secs(1)).await;
+            let (terminal, _guard) = TerminalGuard::init()?;
             run_app(
-                ratatui::init(),
+                terminal,
                 MangaPillProvider::init(cache_provider),
                 anilist_client,
                 MangaPillFiltersProvider::new(backend::manga_provider::mangapill::filter_state::MangaPillFilterState::default()),
@@ -199,10 +228,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .await?;
         },
         MangaProviders::Inmanga => {
-            logger.inform("Using InManga as manga provider");
-            tokio::time::sleep(Duration::from_secs(1)).await;
+            let (terminal, _guard) = TerminalGuard::init()?;
             run_app(
-                ratatui::init(),
+                terminal,
                 InmangaProvider::new(cache_provider),
                 anilist_client,
                 InmangaFiltersProvider::new(InmangaFilterState::default()),
@@ -211,10 +239,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .await?;
         },
         MangaProviders::Mangaoni => {
-            logger.inform("Using MangaOni as manga provider");
-            tokio::time::sleep(Duration::from_secs(1)).await;
+            let (terminal, _guard) = TerminalGuard::init()?;
             run_app(
-                ratatui::init(),
+                terminal,
                 MangaoniProvider::new(cache_provider),
                 anilist_client,
                 MangaoniFiltersProvider::new(MangaoniFilterState::default()),
@@ -223,10 +250,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .await?;
         },
         MangaProviders::Leercapitulo => {
-            logger.inform("Using LeerCapitulo as manga provider");
-            tokio::time::sleep(Duration::from_secs(1)).await;
+            let (terminal, _guard) = TerminalGuard::init()?;
             run_app(
-                ratatui::init(),
+                terminal,
                 LeercapituloProvider::new(cache_provider),
                 anilist_client,
                 LeercapituloFiltersProvider::new(LeercapituloFilterState::default()),
@@ -235,10 +261,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .await?;
         },
         MangaProviders::Comizy => {
-            logger.inform("Using Comizy as manga provider");
-            tokio::time::sleep(Duration::from_secs(1)).await;
+            let (terminal, _guard) = TerminalGuard::init()?;
             run_app(
-                ratatui::init(),
+                terminal,
                 ComizyProvider::new(cache_provider),
                 anilist_client,
                 ComizyFiltersProvider::new(ComizyFilterState::default()),
@@ -247,8 +272,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .await?;
         },
     }
-    ratatui::restore();
-    stdout().execute(DisableMouseCapture)?;
 
     Ok(())
 }

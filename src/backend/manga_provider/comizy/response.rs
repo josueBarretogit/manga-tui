@@ -67,6 +67,7 @@ pub struct ComizyTitleItem {
     pub latest_chapters: Vec<ComizyChapterSummary>,
 }
 
+#[allow(clippy::wrong_self_convention)]
 impl ComizyTitleItem {
     pub fn to_popular_manga(self) -> PopularManga {
         let status = self.status.as_deref().map(parse_status);
@@ -157,6 +158,7 @@ pub struct ComizyTitleDetails {
     pub chapters: Vec<ComizyChapterItem>,
 }
 
+#[allow(clippy::wrong_self_convention)]
 impl ComizyTitleDetails {
     pub fn to_manga(self) -> Manga {
         let status = parse_status(self.status.as_deref().unwrap_or("ongoing"));
@@ -258,10 +260,16 @@ pub fn parse_status(status_str: &str) -> MangaStatus {
     }
 }
 
+static RE_CHAPTER: std::sync::LazyLock<regex::Regex> =
+    std::sync::LazyLock::new(|| regex::Regex::new(r#"(?i)chapter\s*([\d\.]+)"#).unwrap());
+static RE_SLUG: std::sync::LazyLock<regex::Regex> =
+    std::sync::LazyLock::new(|| regex::Regex::new(r#"(?i)chapter-([\d]+(?:\.[\d]+)?)"#).unwrap());
+static RE_SLUG_SUB: std::sync::LazyLock<regex::Regex> =
+    std::sync::LazyLock::new(|| regex::Regex::new(r#"(?i)chapter-([\d]+)-([\d]+)"#).unwrap());
+
 /// Extracts chapter number as `(f64, String)`
 pub fn parse_chapter_number(name: &str, slug: Option<&str>, number_val: Option<&serde_json::Value>) -> (f64, String) {
-    let re_chapter = regex::Regex::new(r#"(?i)chapter\s*([\d\.]+)"#).unwrap();
-    if let Some(caps) = re_chapter.captures(name) {
+    if let Some(caps) = RE_CHAPTER.captures(name) {
         if let Some(m) = caps.get(1) {
             if let Ok(num) = m.as_str().parse::<f64>() {
                 let num_str = if num.fract() == 0.0 { format!("{:.0}", num) } else { format!("{num}") };
@@ -271,8 +279,7 @@ pub fn parse_chapter_number(name: &str, slug: Option<&str>, number_val: Option<&
     }
 
     if let Some(slug_str) = slug {
-        let re_slug = regex::Regex::new(r#"(?i)chapter-([\d]+(?:\.[\d]+)?)"#).unwrap();
-        if let Some(caps) = re_slug.captures(slug_str) {
+        if let Some(caps) = RE_SLUG.captures(slug_str) {
             if let Some(m) = caps.get(1) {
                 if let Ok(num) = m.as_str().parse::<f64>() {
                     let num_str = if num.fract() == 0.0 { format!("{:.0}", num) } else { format!("{num}") };
@@ -281,8 +288,7 @@ pub fn parse_chapter_number(name: &str, slug: Option<&str>, number_val: Option<&
             }
         }
 
-        let re_slug_sub = regex::Regex::new(r#"(?i)chapter-([\d]+)-([\d]+)"#).unwrap();
-        if let Some(caps) = re_slug_sub.captures(slug_str) {
+        if let Some(caps) = RE_SLUG_SUB.captures(slug_str) {
             if let (Some(m1), Some(m2)) = (caps.get(1), caps.get(2)) {
                 let combined = format!("{}.{}", m1.as_str(), m2.as_str());
                 if let Ok(num) = combined.parse::<f64>() {

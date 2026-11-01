@@ -375,6 +375,17 @@ impl<'a> Database<'a> {
                 .execute("INSERT INTO history_types(name) VALUES (?1) ", [MangaHistoryType::PlanToRead.to_string()])?;
         }
 
+        self.connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_chapters_manga_lookup ON chapters(manga_id, is_read, is_downloaded, is_bookmarked)",
+            (),
+        )?;
+
+        self.connection
+            .execute("CREATE INDEX IF NOT EXISTS idx_mangas_provider_last_read ON mangas(manga_provider, last_read)", ())?;
+
+        self.connection
+            .execute("CREATE INDEX IF NOT EXISTS idx_favorite_mangas_provider ON favorite_mangas(provider, manga_id)", ())?;
+
         Ok(())
     }
 
@@ -386,7 +397,22 @@ impl<'a> Database<'a> {
     /// - In production: Returns a file-based connection to the app's history database
     #[inline]
     pub fn get_connection() -> rusqlite::Result<Connection> {
-        if cfg!(test) { Connection::open_in_memory() } else { Connection::open(AppDirectories::History.get_full_path()) }
+        if cfg!(test) {
+            let conn = Connection::open_in_memory()?;
+            conn.execute_batch("PRAGMA foreign_keys = ON;")?;
+            Ok(conn)
+        } else {
+            let conn = Connection::open(AppDirectories::History.get_full_path())?;
+            conn.execute_batch(
+                "
+                PRAGMA journal_mode = WAL;
+                PRAGMA busy_timeout = 5000;
+                PRAGMA foreign_keys = ON;
+                PRAGMA synchronous = NORMAL;
+            ",
+            )?;
+            Ok(conn)
+        }
     }
 
     /// Checks if a chapter has already been marked as read.

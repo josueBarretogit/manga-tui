@@ -246,7 +246,7 @@ where
     pub fn tick(&mut self) {
         self.carrousel_popular_mangas.tick();
         self.carrousel_recently_added.tick();
-        if let Ok(local_event) = self.local_event_rx.try_recv() {
+        while let Ok(local_event) = self.local_event_rx.try_recv() {
             match local_event {
                 HomeEvents::SearchPopularMangasCover => self.search_popular_mangas_cover(),
                 HomeEvents::SearchPopularNewMangas => self.search_popular_mangas(),
@@ -316,7 +316,6 @@ where
     }
 
     fn search_popular_mangas_cover(&mut self) {
-        std::thread::sleep(Duration::from_millis(250));
         let mangas = self.carrousel_popular_mangas.items.clone();
 
         let tx = self.local_event_tx.clone();
@@ -362,8 +361,6 @@ where
     }
 
     fn search_recently_added_mangas_cover(&mut self) {
-        std::thread::sleep(Duration::from_millis(250));
-
         let mangas = self.carrousel_recently_added.items.clone();
         let tx = self.local_event_tx.clone();
         let client = Arc::clone(&self.manga_provider);

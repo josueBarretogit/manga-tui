@@ -435,6 +435,11 @@ where
 
     /// Removes all manga from the current provider and history type.
     fn remove_all_mangas(&mut self) {
+        if self.tabs == FeedTabs::Timeline {
+            self.state = FeedState::DisplayingHistory;
+            return;
+        }
+
         let connection = match Database::get_connection() {
             Ok(c) => c,
             Err(e) => {
@@ -447,7 +452,8 @@ where
         let database = Database::new(&connection);
         let hist_type = match self.tabs {
             FeedTabs::Library => MangaHistoryType::PlanToRead,
-            _ => MangaHistoryType::ReadingHistory,
+            FeedTabs::ContinueReading => MangaHistoryType::ReadingHistory,
+            FeedTabs::Timeline => return,
         };
         let provider = self.manga_provider.as_ref().map(|p| p.name()).unwrap_or_default();
 
@@ -521,7 +527,7 @@ where
                 KeyCode::Char('d') => {
                     self.remove_currently_selected_manga();
                 },
-                KeyCode::Char('D') => {
+                KeyCode::Char('X') if self.tabs != FeedTabs::Timeline => {
                     self.state = FeedState::AskingDeleteAllConfirmation;
                 },
                 _ => {},
@@ -567,12 +573,12 @@ where
                 let sender = self.local_event_tx.clone();
                 let client_clone = client.clone();
                 self.tasks.spawn(async move {
-                    let response = if let Some(c) = &client_clone
-                        && c.name() == provider
-                    {
-                        c.get_latest_chapters(&manga_id).await
-                    } else if client_clone.is_some() && cfg!(test) {
-                        client_clone.unwrap().get_latest_chapters(&manga_id).await
+                    let response = if let Some(c) = &client_clone {
+                        if c.name() == provider || cfg!(test) {
+                            c.get_latest_chapters(&manga_id).await
+                        } else {
+                            crate::backend::multi_provider::get_latest_chapters_for_provider(provider, &manga_id).await
+                        }
                     } else {
                         crate::backend::multi_provider::get_latest_chapters_for_provider(provider, &manga_id).await
                     };
@@ -611,7 +617,7 @@ where
             let mut seen = std::collections::HashSet::new();
             let mut mangas_to_check = Vec::new();
 
-            for m in favorites.into_iter().chain(recent.into_iter()) {
+            for m in favorites.into_iter().chain(recent) {
                 if seen.insert((m.provider, m.manga_id.clone())) {
                     mangas_to_check.push(m);
                 }
@@ -815,12 +821,14 @@ where
             let client = self.manga_provider.as_ref().cloned();
 
             self.tasks.spawn(async move {
-                let response = if let Some(c) = &client
-                    && c.name() == provider
-                {
-                    c.get_manga_by_id(&manga_id).await
-                } else if client.is_some() && cfg!(test) {
-                    client.unwrap().get_manga_by_id(&manga_id).await
+                let response = if let Some(c) = &client {
+                    if c.name() == provider || cfg!(test) {
+                        c.get_manga_by_id(&manga_id).await
+                    } else {
+                        crate::backend::multi_provider::get_manga_by_id_for_provider(provider, &manga_id)
+                            .await
+                            .map_err(|e| e as Box<dyn std::error::Error>)
+                    }
                 } else {
                     crate::backend::multi_provider::get_manga_by_id_for_provider(provider, &manga_id)
                         .await
@@ -910,15 +918,15 @@ where
             FeedActions::PreviousPage => self.search_previous_page(),
             FeedActions::GoToMangaPage => self.go_to_manga_page(),
             FeedActions::ScrollHistoryUp => {
-                if self.tabs == FeedTabs::Timeline && self.timeline.is_some() {
-                    self.timeline.as_mut().unwrap().select_previous();
+                if self.tabs == FeedTabs::Timeline && let Some(timeline) = &mut self.timeline {
+                    timeline.select_previous();
                 } else {
                     self.select_previous_manga();
                 }
             },
             FeedActions::ScrollHistoryDown => {
-                if self.tabs == FeedTabs::Timeline && self.timeline.is_some() {
-                    self.timeline.as_mut().unwrap().select_next();
+                if self.tabs == FeedTabs::Timeline && let Some(timeline) = &mut self.timeline {
+                    timeline.select_next();
                 } else {
                     self.select_next_manga();
                 }
@@ -1258,6 +1266,7 @@ mod tests {
     #[tokio::test]
     async fn scrolls_history_up_and_down() {
         let mut feed_page: Feed<MockMangaPageProvider> = Feed::new();
+        feed_page.tabs = FeedTabs::ContinueReading;
 
         let manga_history = MangaHistoryResponse {
             mangas: vec![MangaHistory::default(), MangaHistory::default(), MangaHistory::default()],
@@ -1380,10 +1389,11 @@ mod tests {
     }
 
     #[test]
-    fn when_pressed_d_it_ask_for_confirmation() {
+    fn when_pressed_shift_x_it_ask_for_confirmation() {
         let mut feed_page: Feed<MockMangaPageProvider> = Feed::new().with_api_client(MockMangaPageProvider::new().into());
+        feed_page.tabs = FeedTabs::Library;
 
-        press_key(&mut feed_page, KeyCode::Char('D'));
+        press_key(&mut feed_page, KeyCode::Char('X'));
 
         assert_eq!(FeedState::AskingDeleteAllConfirmation, feed_page.state)
     }

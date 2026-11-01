@@ -6,7 +6,7 @@ use crossterm::event::{self, KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEv
 use image::DynamicImage;
 use manga_tui::SearchTerm;
 use ratatui::Frame;
-use ratatui::layout::{Constraint, Direction, Layout, Margin, Rect};
+use ratatui::layout::{Constraint, Direction, Layout, Margin, Position, Rect};
 use ratatui::style::{Color, Style, Stylize};
 use ratatui::text::{Line, Span, ToSpan};
 use ratatui::widgets::{Block, Clear, Paragraph, StatefulWidget, StatefulWidgetRef, Widget, Wrap};
@@ -89,7 +89,7 @@ impl SearchLanguageFilter {
         }
     }
 
-    pub fn to_multi_search_language(&self) -> crate::backend::multi_provider::MultiSearchLanguage {
+    pub fn to_multi_search_language(self) -> crate::backend::multi_provider::MultiSearchLanguage {
         match self {
             Self::All => crate::backend::multi_provider::MultiSearchLanguage::All,
             Self::Spanish => crate::backend::multi_provider::MultiSearchLanguage::Spanish,
@@ -163,6 +163,7 @@ where
     manga_tracker: Option<S>,
     all_providers_results: Vec<SearchManga>,
     all_providers_unfiltered_results: Vec<SearchManga>,
+    manga_area: Rect,
 }
 
 /// This contains the data the application gets when doing a search
@@ -198,6 +199,7 @@ where
             .constraints([Constraint::Max(4), Constraint::Fill(1)]);
 
         let [input_area, manga_area] = search_page_layout.areas(area);
+        self.manga_area = manga_area;
 
         self.render_input_area(input_area, frame);
 
@@ -298,6 +300,7 @@ where
             manga_tracker,
             all_providers_results: Vec::new(),
             all_providers_unfiltered_results: Vec::new(),
+            manga_area: Rect::default(),
         }
     }
 
@@ -714,6 +717,10 @@ where
     }
 
     fn handle_mouse_events(&mut self, mouse_event: MouseEvent) {
+        if self.input_mode == InputMode::Typing || self.filter_state.is_open() {
+            return;
+        }
+
         match mouse_event.kind {
             MouseEventKind::ScrollDown => {
                 self.local_action_tx.send(SearchPageActions::ScrollDown).ok();
@@ -722,7 +729,10 @@ where
                 self.local_action_tx.send(SearchPageActions::ScrollUp).ok();
             },
             MouseEventKind::Down(MouseButton::Left) => {
-                self.local_action_tx.send(SearchPageActions::SearchMangaPage).ok();
+                let pos = Position::new(mouse_event.column, mouse_event.row);
+                if self.manga_area.contains(pos) {
+                    self.local_action_tx.send(SearchPageActions::SearchMangaPage).ok();
+                }
             },
             _ => {},
         }
@@ -730,6 +740,10 @@ where
 
     pub fn is_typing_filter(&mut self) -> bool {
         self.filter_state.is_typing()
+    }
+
+    pub fn is_filter_open(&self) -> bool {
+        self.filter_state.is_open()
     }
 
     fn toggle_scope(&mut self) {
@@ -949,13 +963,11 @@ where
 
     pub fn tick(&mut self) {
         self.loader_state.calc_next();
-        if let Ok(event) = self.local_event_rx.try_recv() {
+        while let Ok(event) = self.local_event_rx.try_recv() {
             match event {
                 SearchPageEvents::LoadMangasFound(response) => self.load_mangas_found(response),
                 SearchPageEvents::SearchCovers => {
                     if self.picker.is_some() {
-                        // wait a bit so that `img_area` is set to the area for covers
-                        sleep(Duration::from_millis(500));
                         self.search_covers();
                     }
                 },

@@ -1,5 +1,5 @@
 edition = "2024"
-version = "Two"
+style_edition = "2024"
 
 # Enable features
 format_code_in_doc_comments = true

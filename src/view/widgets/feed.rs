@@ -430,7 +430,7 @@ impl HistoryWidget {
             "| Quitar: ".into(),
             "<d> ".bold().fg(Color::Red),
             "| Borrar todo: ".into(),
-            "<D> ".bold().fg(Color::Red),
+            "<X> ".bold().fg(Color::Red),
         ]))
         .render(area, buf);
     }
@@ -473,13 +473,14 @@ impl WidgetRef for AskConfirmationDeleteAllModalBody {
 
         Paragraph::new(warning).wrap(Wrap { trim: true }).render(warning_area, buf);
 
-        let as_list = List::new(Line::from(vec![
-            "Tu historial de lectura y descargas se mantendrán pero no se mostrarán en esta página.".into(),
-            "Sí, eliminar: <w>".bold().fg(Color::Red),
-            "No, cancelar: <q>".bold().fg(Color::Green),
-        ]));
+        let lines = vec![
+            Line::from("Tu historial de lectura y descargas se mantendrán pero no se mostrarán en esta página."),
+            Line::from(""),
+            Line::from(vec!["  Sí, eliminar: ".into(), "<w>".bold().fg(Color::Red)]),
+            Line::from(vec!["  No, cancelar: ".into(), "<q>".bold().fg(Color::Green)]),
+        ];
 
-        Widget::render(as_list, options_area, buf);
+        Paragraph::new(lines).wrap(Wrap { trim: true }).render(options_area, buf);
     }
 }
 

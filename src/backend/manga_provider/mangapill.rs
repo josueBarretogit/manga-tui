@@ -904,7 +904,9 @@ impl FetchChapterBookmarked for MangaPillProvider {
         &self,
         chapter: crate::backend::database::ChapterBookmarked,
     ) -> Result<(ChapterToRead, ListOfChapters), Box<dyn Error>> {
-        self.read_chapter(&chapter.id, &chapter.manga_id).await
+        let (mut chapter_to_read, list_of_chapters) = self.read_chapter(&chapter.id, &chapter.manga_id).await?;
+        chapter_to_read.num_page_bookmarked = chapter.number_page_bookmarked;
+        Ok((chapter_to_read, list_of_chapters))
     }
 }
 

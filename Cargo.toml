@@ -4,7 +4,6 @@ version = "0.10.0"
 edition = "2024"
 authors = ["Josue <josuebarretogit@gmail.com>"]
 readme = "README.md"
-homepage = "https://github.com/josueBarretogit/manga-tui"
 repository = "https://github.com/josueBarretogit/manga-tui"
 description = "Terminal-based manga reader and downloader with image rendering support"
 keywords = ["cli", "command-line", "terminal", "tui" ]

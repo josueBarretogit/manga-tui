@@ -373,7 +373,9 @@ impl FetchChapterBookmarked for MangaoniProvider {
         &self,
         chapter: ChapterBookmarked,
     ) -> Result<(ChapterToRead, ListOfChapters), Box<dyn Error>> {
-        self.read_chapter(&chapter.id, &chapter.manga_id).await
+        let (mut chapter_to_read, list_of_chapters) = self.read_chapter(&chapter.id, &chapter.manga_id).await?;
+        chapter_to_read.num_page_bookmarked = chapter.number_page_bookmarked;
+        Ok((chapter_to_read, list_of_chapters))
     }
 }
 
@@ -571,7 +573,7 @@ mod tests {
 
     #[test]
     fn test_mangaoni_chapter_navigation_consecutive() {
-        let items = vec![
+        let items = [
             MangaoniChapterItem {
                 id: "one-piece|80".to_string(),
                 number: 1.0,

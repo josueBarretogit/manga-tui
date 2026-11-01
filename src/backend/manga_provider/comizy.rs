@@ -601,7 +601,7 @@ mod tests {
 
     #[test]
     fn test_comizy_chapter_navigation_consecutive() {
-        let items = vec![
+        let items = [
             ComizyChapterItem {
                 id: "c1".to_string(),
                 name: "Chapter 1".to_string(),

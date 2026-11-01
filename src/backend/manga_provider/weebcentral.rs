@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use filter_state::{WeebcentralFilterState, WeebcentralFiltersProvider};
 use filter_widget::WeebcentralFilterWidget;
-use http::header::{ACCEPT, ACCEPT_ENCODING, ACCEPT_LANGUAGE, CACHE_CONTROL, CONNECTION, HOST, REFERER};
+use http::header::{ACCEPT, ACCEPT_ENCODING, ACCEPT_LANGUAGE, CACHE_CONTROL, CONNECTION, REFERER};
 use http::{HeaderMap, HeaderValue, StatusCode};
 use manga_tui::SearchTerm;
 use reqwest::{Client, Url};
@@ -62,7 +62,6 @@ impl WeebcentralProvider {
         let mut default_headers = HeaderMap::new();
 
         default_headers.insert(REFERER, HeaderValue::from_static("https://google.com"));
-        default_headers.insert(HOST, HeaderValue::from_static("weebcentral.com"));
         default_headers.insert(ACCEPT, HeaderValue::from_static("*/*"));
 
         default_headers.insert(ACCEPT_ENCODING, HeaderValue::from_static("gzip, deflate"));
@@ -505,7 +504,9 @@ impl FetchChapterBookmarked for WeebcentralProvider {
         &self,
         chapter: crate::backend::database::ChapterBookmarked,
     ) -> Result<(ChapterToRead, ListOfChapters), Box<dyn Error>> {
-        self.read_chapter(&chapter.id, &chapter.manga_id).await
+        let (mut chapter_to_read, list_of_chapters) = self.read_chapter(&chapter.id, &chapter.manga_id).await?;
+        chapter_to_read.num_page_bookmarked = chapter.number_page_bookmarked;
+        Ok((chapter_to_read, list_of_chapters))
     }
 }
 
@@ -611,7 +612,7 @@ impl SearchPageProvider for WeebcentralProvider {
         pagination: super::Pagination,
     ) -> Result<GetMangasResponse, Box<dyn Error>> {
         let limit = 24;
-        let offset = if pagination.current_page == 1 { 0 } else { limit * pagination.current_page };
+        let offset = limit * (pagination.current_page.saturating_sub(1));
 
         let search = match search_term {
             Some(text) => format!("text={text}"),

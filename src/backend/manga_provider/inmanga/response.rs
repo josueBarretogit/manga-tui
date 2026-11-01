@@ -122,13 +122,7 @@ impl InmangaMangaItem {
                 .unwrap_or_else(|| format!("{INMANGA_CDN_URL}/i/m/{id}/t/o/{id}.jpg"));
 
             let raw_text = element.text().collect::<String>();
-            let status = if raw_text.contains("Finalizado") {
-                Some(MangaStatus::Completed)
-            } else if raw_text.contains("En emisión") {
-                Some(MangaStatus::Ongoing)
-            } else {
-                Some(MangaStatus::Ongoing)
-            };
+            let status = if raw_text.contains("Finalizado") { Some(MangaStatus::Completed) } else { Some(MangaStatus::Ongoing) };
 
             results.push(Self {
                 id,

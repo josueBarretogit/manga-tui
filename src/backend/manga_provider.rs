@@ -218,7 +218,7 @@ impl Languages {
             Self::Ukrainian => "🇺🇦",
             Self::BrazilianPortuguese => "🇧🇷",
             Self::Portuguese => "🇵🇹",
-            Self::Unkown => unreachable!(),
+            Self::Unkown => "",
         }
     }
 
@@ -243,7 +243,7 @@ impl Languages {
             Self::Romanian => "ro",
             Self::Hungarian => "hu",
             Self::Hebrew => "he",
-            Self::Filipino => "fi",
+            Self::Filipino => "tl",
             Self::Catalan => "ca",
             Self::Hindi => "hi",
             Self::Indonesian => "id",
@@ -819,16 +819,34 @@ pub trait GetChapterPages: GetRawImage + Send + Sync {
             let pages_url = self.get_chapter_pages_url_with_extension(chapter_id, manga_id, image_quality).await?;
             let mut pages: Vec<ChapterPage> = vec![];
             let total_pages = pages_url.len();
+            if total_pages == 0 {
+                return Ok(pages);
+            }
 
             for (index, page) in pages_url.into_iter().enumerate() {
-                let maybe_bytes = self.get_raw_image(page.url.as_str()).await;
-                if let Ok(bytes) = maybe_bytes {
+                let mut fetched_bytes = None;
+                for attempt in 0..3 {
+                    if attempt > 0 {
+                        tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+                    }
+                    if let Ok(bytes) = self.get_raw_image(page.url.as_str()).await {
+                        fetched_bytes = Some(bytes);
+                        break;
+                    }
+                }
+
+                if let Some(bytes) = fetched_bytes {
                     pages.push(ChapterPage {
                         bytes,
                         extension: page.extension,
                     });
                 }
-                on_progress(index as f64 / total_pages as f64, chapter_id);
+                let percent = ((index + 1) as f64 / total_pages as f64) * 100.0;
+                on_progress(percent, chapter_id);
+            }
+
+            if pages.is_empty() && total_pages > 0 {
+                return Err("Failed to download any pages for this chapter".into());
             }
 
             Ok(pages)
@@ -1068,16 +1086,6 @@ pub mod mock {
             _manga_id: &str,
             _image_quality: ImageQuality,
         ) -> Result<Vec<ChapterPageUrl>, Box<dyn Error>> {
-            Ok(vec![])
-        }
-
-        async fn get_chapter_pages<F: Fn(f64, &str) + 'static + Send>(
-            &self,
-            _chapter_id: &str,
-            _manga_id: &str,
-            _image_quality: ImageQuality,
-            _on_progress: F,
-        ) -> Result<Vec<ChapterPage>, Box<dyn Error>> {
             Ok(vec![])
         }
     }
