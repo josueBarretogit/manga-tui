@@ -38,11 +38,11 @@ impl MangaDownloader for CbzDownloader {
             .unix_permissions(0o755);
 
         for (index, chap) in chapter.pages.into_iter().enumerate() {
-            let file_name = format!("{}.{}", index + 1, chap.extension);
+            let file_name = format!("{:04}.{}", index + 1, chap.extension);
 
-            zip.start_file(file_name, options).ok();
+            zip.start_file(file_name, options)?;
 
-            zip.write_all(&chap.bytes).ok();
+            zip.write_all(&chap.bytes)?;
         }
         zip.finish()?;
 
@@ -91,6 +91,7 @@ mod tests {
                     extension: "jpg".to_string(),
                 },
             ],
+            ..Default::default()
         };
 
         let downloader = CbzDownloader::new();

@@ -43,6 +43,7 @@ pub enum Query<'a> {
         table_name: &'a str,
         command: AlterTableCommand<'a>,
     },
+    Raw(&'a str),
 }
 
 impl<'a> Display for Query<'a> {
@@ -57,6 +58,7 @@ impl<'a> Display for Query<'a> {
                     data_type,
                 } => write!(f, "ALTER TABLE {table_name} ADD {column_to_add} {data_type}"),
             },
+            Self::Raw(sql) => write!(f, "{sql}"),
         }
     }
 }
@@ -163,9 +165,26 @@ impl<'a, T> Migration<'a, T> {
             } => match command {
                 AlterTableCommand::Add { column, .. } => !self.column_exists(table_name, column, transaction)?,
             },
+            Query::Raw(sql) => {
+                if sql.contains("favorite_mangas") {
+                    self.table_exists("favorite_mangas", transaction)?
+                } else if sql.contains("chapters") {
+                    self.table_exists("chapters", transaction)?
+                } else if sql.contains("mangas") {
+                    self.table_exists("mangas", transaction)?
+                } else {
+                    true
+                }
+            },
         };
 
         Ok(can_run_query)
+    }
+
+    fn table_exists(&self, table_name: &str, transaction: &Transaction) -> rusqlite::Result<bool> {
+        let query = "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1)";
+        let exists: bool = transaction.query_row(query, [table_name], |row| row.get(0))?;
+        Ok(exists)
     }
 
     fn column_exists(&self, table_name: &str, column_name: &str, transaction: &Transaction) -> rusqlite::Result<bool> {
@@ -229,8 +248,11 @@ pub fn update_database_with_migrations(
     connection: &mut Connection,
     logger: &impl ILogger,
 ) -> rusqlite::Result<Vec<Option<MigrationTable>>> {
-    let migrations: Vec<Option<MigrationTable>> =
-        vec![migrate_version_0_4_0(connection, logger)?, migrate_version_0_6_0(connection, logger)?];
+    let migrations: Vec<Option<MigrationTable>> = vec![
+        migrate_version_0_4_0(connection, logger)?,
+        migrate_version_0_6_0(connection, logger)?,
+        migrate_version_0_10_1(connection, logger)?,
+    ];
 
     Ok(migrations)
 }
@@ -291,6 +313,34 @@ fn migrate_version_0_6_0(connection: &mut Connection, logger: &impl ILogger) -> 
     let migration = Migration::new(&queries)
         .with_name("Add column manga_provider to table mangas")
         .with_version("0.6.0")
+        .up(connection)?;
+
+    let migration_result = match migration {
+        Some(available_migration) => {
+            logger.inform("Updating database");
+            let migration_result = available_migration.update(connection)?;
+            logger.inform("Database updated");
+            Some(migration_result)
+        },
+        None => None,
+    };
+
+    Ok(migration_result)
+}
+
+/// Add performance indexes on chapters, mangas, and favorite_mangas tables
+fn migrate_version_0_10_1(connection: &mut Connection, logger: &impl ILogger) -> rusqlite::Result<Option<MigrationTable>> {
+    let queries = [
+        Query::Raw(
+            "CREATE INDEX IF NOT EXISTS idx_chapters_manga_lookup ON chapters(manga_id, is_read, is_downloaded, is_bookmarked)",
+        ),
+        Query::Raw("CREATE INDEX IF NOT EXISTS idx_mangas_provider_last_read ON mangas(manga_provider, last_read)"),
+        Query::Raw("CREATE INDEX IF NOT EXISTS idx_favorite_mangas_provider ON favorite_mangas(provider, manga_id)"),
+    ];
+
+    let migration = Migration::new(&queries)
+        .with_name("Add performance indexes on chapters, mangas, and favorite_mangas")
+        .with_version("0.10.1")
         .up(connection)?;
 
     let migration_result = match migration {
@@ -855,10 +905,11 @@ mod tests {
 
         let migrations = update_database_with_migrations(&mut conn, &DefaultLogger)?;
 
-        assert_eq!(2, migrations.len());
+        assert_eq!(3, migrations.len());
 
         assert!(migrations.iter().flatten().any(|migration| migration.version == "0.4.0"));
         assert!(migrations.iter().flatten().any(|migration| migration.version == "0.6.0"));
+        assert!(migrations.iter().flatten().any(|migration| migration.version == "0.10.1"));
 
         Ok(())
     }

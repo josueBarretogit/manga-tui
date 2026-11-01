@@ -1411,25 +1411,16 @@ mod tests {
         let num_publication_status_expected = filters_provider
             .publication_status
             .iter()
-            .filter_map(|item| {
-                if item.is_selected
+            .filter(|item| {
+                item.is_selected
                     && (item.name == PublicationStatus::Ongoing.to_string()
                         || item.name == PublicationStatus::Completed.to_string())
-                {
-                    Some(item)
-                } else {
-                    None
-                }
             })
             .count();
 
         assert_eq!(num_publication_status_expected, 2);
 
-        let num_languages_expected = filters_provider
-            .lang_state
-            .iter()
-            .filter_map(|lan| lan.is_selected.then_some(lan))
-            .count();
+        let num_languages_expected = filters_provider.lang_state.iter().filter(|lan| lan.is_selected).count();
 
         assert_eq!(num_languages_expected, 2);
 
@@ -1442,7 +1433,7 @@ mod tests {
         let num_magazine_demographic_expected = filters_provider
             .magazine_demographic
             .iter()
-            .filter_map(|magazine| magazine.is_selected.then_some(magazine))
+            .filter(|magazine| magazine.is_selected)
             .count();
 
         assert_eq!(num_magazine_demographic_expected, 2);

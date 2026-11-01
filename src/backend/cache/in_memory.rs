@@ -98,6 +98,13 @@ impl InMemoryCache {
         let mut entries = self.entries.lock().unwrap();
         if entries.len() > self.capacity {
             entries.retain(|_, entry| !entry.is_expired());
+            while entries.len() > self.capacity {
+                if let Some(oldest_key) = entries.iter().min_by_key(|(_, v)| v.time_since_creation).map(|(k, _)| k.clone()) {
+                    entries.remove(&oldest_key);
+                } else {
+                    break;
+                }
+            }
         }
     }
 
@@ -129,6 +136,17 @@ impl Cacher for InMemoryCache {
 
     fn cache(&self, entry: InsertEntry) -> Result<(), Box<dyn std::error::Error>> {
         let mut entries = self.entries.lock().unwrap();
+
+        if entries.len() >= self.capacity {
+            entries.retain(|_, entry| !entry.is_expired());
+            while entries.len() >= self.capacity {
+                if let Some(oldest_key) = entries.iter().min_by_key(|(_, v)| v.time_since_creation).map(|(k, _)| k.clone()) {
+                    entries.remove(&oldest_key);
+                } else {
+                    break;
+                }
+            }
+        }
 
         entries.insert(entry.id.to_string(), MemoryEntry::new(entry.data.to_vec(), entry.duration.into()));
 
@@ -318,6 +336,36 @@ mod tests {
 
             assert_eq!(entries.get("exists").unwrap().time_since_creation.elapsed().as_secs(), Instant::now().elapsed().as_secs());
         }
+
+        Ok(())
+    }
+
+    #[test]
+    fn capacity_eviction_removes_oldest_when_full() -> Result<(), Box<dyn Error>> {
+        let in_memory = InMemoryCache::new().with_capacity(2);
+
+        in_memory.cache(InsertEntry {
+            id: "entry1",
+            data: b"data 1",
+            duration: CacheDuration::Long,
+        })?;
+        std::thread::sleep(Duration::from_millis(10));
+        in_memory.cache(InsertEntry {
+            id: "entry2",
+            data: b"data 2",
+            duration: CacheDuration::Long,
+        })?;
+        std::thread::sleep(Duration::from_millis(10));
+        // Inserting 3rd entry should evict the oldest (entry1)
+        in_memory.cache(InsertEntry {
+            id: "entry3",
+            data: b"data 3",
+            duration: CacheDuration::Long,
+        })?;
+
+        assert!(in_memory.get("entry1")?.is_none());
+        assert!(in_memory.get("entry2")?.is_some());
+        assert!(in_memory.get("entry3")?.is_some());
 
         Ok(())
     }

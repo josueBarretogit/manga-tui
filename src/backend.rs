@@ -12,17 +12,19 @@ use crate::logger::ILogger;
 
 pub mod cache;
 pub mod database;
+pub mod download_queue;
 pub mod error_log;
 pub mod html_parser;
 pub mod manga_downloader;
 pub mod manga_provider;
 pub mod migration;
+pub mod multi_provider;
 pub mod release_notifier;
 pub mod secrets;
 pub mod tracker;
 pub mod tui;
 
-#[derive(Display, EnumIter)]
+#[derive(Display, EnumIter, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum AppDirectories {
     #[strum(to_string = "mangaDownloads")]
     MangaDownloads,
@@ -38,6 +40,12 @@ static DATABASE_FILE: &str = "manga-tui-history.db";
 
 impl AppDirectories {
     pub fn get_full_path(self) -> PathBuf {
+        if matches!(self, Self::MangaDownloads) {
+            let config = crate::config::MangaTuiConfig::get();
+            if let Some(custom_dir) = config.get_custom_download_dir() {
+                return custom_dir;
+            }
+        }
         Self::get_app_directory().join(self.get_path())
     }
 
@@ -71,10 +79,11 @@ impl AppDirectories {
 
 #[cfg(not(test))]
 pub static APP_DATA_DIR: Lazy<Option<PathBuf>> = Lazy::new(|| {
-    directories::ProjectDirs::from("", "", "manga-tui").map(|dirs| match std::env::var("MANGA_TUI_DATA_DIR").ok() {
-        Some(data_dir) => PathBuf::from(data_dir),
-        None => dirs.data_dir().to_path_buf(),
-    })
+    // `MANGA_TUI_DATA_DIR` must be honored even when no home directory can be found
+    match std::env::var("MANGA_TUI_DATA_DIR").ok().filter(|dir| !dir.trim().is_empty()) {
+        Some(data_dir) => Some(PathBuf::from(data_dir)),
+        None => directories::ProjectDirs::from("", "", "manga-tui").map(|dirs| dirs.data_dir().to_path_buf()),
+    }
 });
 
 #[cfg(test)]
@@ -94,6 +103,14 @@ pub fn build_data_dir(logger: &impl ILogger) -> Result<PathBuf, Box<dyn std::err
             create_error_logs_files(dir)?;
 
             build_config_file()?;
+
+            let config = crate::config::MangaTuiConfig::get();
+            if let Some(custom_dir) = config.get_custom_download_dir()
+                && !exists!(&custom_dir)
+                && let Err(e) = create_dir_all(&custom_dir)
+            {
+                logger.error(format!("Could not create custom download directory {}: {e}", custom_dir.display()).into());
+            }
 
             Ok(dir.to_path_buf())
         },

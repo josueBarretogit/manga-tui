@@ -9,8 +9,8 @@ use scraper::{ElementRef, html};
 use crate::backend::html_parser::scraper::AsSelector;
 use crate::backend::html_parser::{HtmlElement, ParseHtml};
 use crate::backend::manga_provider::{
-    Author, ChapterPageUrl, ChapterReader, Genres, GetMangasResponse, Languages, ListOfChapters, Manga, MangaStatus, PopularManga,
-    Rating, RecentlyAddedManga, SearchManga, SortedChapters, SortedVolumes, Volumes,
+    Author, ChapterPageUrl, ChapterReader, Genres, GetMangasResponse, Languages, ListOfChapters, Manga, MangaProviders,
+    MangaStatus, PopularManga, Rating, RecentlyAddedManga, SearchManga, SortedChapters, SortedVolumes, Volumes,
 };
 
 #[derive(Debug)]
@@ -300,6 +300,7 @@ impl From<MangaPageData> for Manga {
             rating: "".to_string(),
             artist: None,
             author,
+            provider: Some(MangaProviders::Weebcentral),
         }
     }
 }
@@ -745,7 +746,7 @@ impl ParseHtml for SearchPageMangas {
         let mut mangas: Vec<Result<SearchPageItem, <SearchPageItem as ParseHtml>::ParseError>> = vec![];
 
         for article in doc.select(&article_selector) {
-            mangas.push(SearchPageItem::parse_html(HtmlElement::new(article.html())).inspect_err(|e| println!("{e}")));
+            mangas.push(SearchPageItem::parse_html(HtmlElement::new(article.html())));
         }
 
         let more_result = doc.select(&more_mangas_button).next().is_some();
@@ -770,6 +771,7 @@ impl From<SearchPageItem> for SearchManga {
             languages: vec![Languages::English],
             artist: None,
             author: None,
+            provider: Some(MangaProviders::Weebcentral),
         }
     }
 }

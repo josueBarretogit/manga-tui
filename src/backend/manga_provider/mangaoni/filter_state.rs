@@ -3,17 +3,17 @@ use crossterm::event::KeyCode;
 use crate::backend::manga_provider::{EventHandler, FiltersHandler};
 use crate::backend::tui::Events;
 
-#[derive(Debug, Clone)]
-pub struct ManganatoFilterState {}
+#[derive(Debug, Clone, Default)]
+pub struct MangaoniFilterState {}
 
 #[derive(Debug, Clone)]
-pub struct ManganatoFiltersProvider {
+pub struct MangaoniFiltersProvider {
     is_open: bool,
-    filter: ManganatoFilterState,
+    filter: MangaoniFilterState,
 }
 
-impl ManganatoFiltersProvider {
-    pub fn new(filter: ManganatoFilterState) -> Self {
+impl MangaoniFiltersProvider {
+    pub fn new(filter: MangaoniFilterState) -> Self {
         Self {
             is_open: false,
             filter,
@@ -21,12 +21,13 @@ impl ManganatoFiltersProvider {
     }
 }
 
-impl EventHandler for ManganatoFiltersProvider {
+impl EventHandler for MangaoniFiltersProvider {
     fn handle_events(&mut self, events: crate::backend::tui::Events) {
         #![allow(clippy::single_match)]
         match events {
             Events::Key(key) => match key.code {
                 KeyCode::Char('f') => self.toggle(),
+                KeyCode::Esc if self.is_open => self.toggle(),
                 _ => {},
             },
             _ => {},
@@ -34,8 +35,8 @@ impl EventHandler for ManganatoFiltersProvider {
     }
 }
 
-impl FiltersHandler for ManganatoFiltersProvider {
-    type InnerState = ManganatoFilterState;
+impl FiltersHandler for MangaoniFiltersProvider {
+    type InnerState = MangaoniFilterState;
 
     fn toggle(&mut self) {
         self.is_open = !self.is_open;

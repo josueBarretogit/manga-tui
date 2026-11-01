@@ -179,6 +179,8 @@ impl MangaPillProvider {
             .timeout(Duration::from_secs(30))
             .default_headers(default_headers)
             .user_agent(get_random_user_agent())
+            .resolve("mangapill.com", std::net::SocketAddr::from(([104, 21, 65, 2], 443)))
+            .resolve("cdn.readdetectiveconan.com", std::net::SocketAddr::from(([104, 21, 65, 2], 443)))
             .build()
             .unwrap();
 
@@ -484,6 +486,7 @@ impl MangaPillProvider {
                 title: ma.title,
                 status: Some(ma.status.into()),
                 languages: vec![Languages::English],
+                provider: Some(MangaProviders::Mangapill),
                 ..Default::default()
             })
             .collect();
@@ -901,7 +904,9 @@ impl FetchChapterBookmarked for MangaPillProvider {
         &self,
         chapter: crate::backend::database::ChapterBookmarked,
     ) -> Result<(ChapterToRead, ListOfChapters), Box<dyn Error>> {
-        self.read_chapter(&chapter.id, &chapter.manga_id).await
+        let (mut chapter_to_read, list_of_chapters) = self.read_chapter(&chapter.id, &chapter.manga_id).await?;
+        chapter_to_read.num_page_bookmarked = chapter.number_page_bookmarked;
+        Ok((chapter_to_read, list_of_chapters))
     }
 }
 

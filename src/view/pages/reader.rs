@@ -1,10 +1,13 @@
+use std::fs::File;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crossterm::event::{KeyCode, KeyEvent};
+use image::{DynamicImage, GenericImageView};
 use ratatui::Frame;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Margin, Rect};
-use ratatui::text::{Line, ToSpan};
+use ratatui::text::{Line, Span, ToSpan};
 use ratatui::widgets::{Block, List, Paragraph, StatefulWidget, Widget, Wrap};
 use ratatui_image::picker::Picker;
 use ratatui_image::protocol::StatefulProtocol;
@@ -12,15 +15,20 @@ use ratatui_image::{Resize, StatefulImage};
 use throbber_widgets_tui::{Throbber, ThrobberState};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
+use zip::ZipArchive;
 
+use crate::backend::AppDirectories;
 use crate::backend::database::{Bookmark, ChapterToBookmark, ChapterToSaveHistory, Database, MangaReadingHistorySave};
 use crate::backend::error_log::{ErrorType, write_to_error_log};
-use crate::backend::manga_provider::{ChapterReader, ChapterToRead, ListOfChapters, MangaPanel, ReaderPageProvider};
+use crate::backend::manga_provider::{
+    ChapterReader, ChapterToRead, ListOfChapters, MangaPanel, MangaProviders, ReaderPageProvider,
+};
 use crate::backend::tracker::{MangaTracker, track_manga};
 use crate::backend::tui::Events;
 use crate::common::format_error_message_tracking_reading_history;
 use crate::config::MangaTuiConfig;
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
+use crate::i18n::tr;
 use crate::view::widgets::Component;
 use crate::view::widgets::reader::{PageItemState, PagesItem, PagesList, PagesListState};
 
@@ -40,6 +48,160 @@ pub enum MangaReaderActions {
     PreviousPage,
     ReloadPage,
     ExitReaderPage,
+    GoToFirstPage,
+    GoToLastPage,
+}
+
+#[derive(Clone, Debug)]
+pub enum LocalChapterSource {
+    Cbz(PathBuf),
+    Directory(PathBuf),
+}
+
+impl LocalChapterSource {
+    pub fn find(_manga_title: &str, chapter_id: &str) -> Option<Self> {
+        let base_dir = AppDirectories::MangaDownloads.get_full_path();
+        if !base_dir.exists() {
+            return None;
+        }
+
+        let id_clean = chapter_id.replace(['/', ':', '\\', '?', '*', '"', '<', '>', '|'], "_");
+
+        fn check_path(path: &Path, id: &str, id_clean: &str) -> Option<LocalChapterSource> {
+            let name = path.file_name()?.to_string_lossy();
+            if path.is_file() && name.ends_with(".cbz") {
+                if name.contains(id) || name.contains(id_clean) {
+                    return Some(LocalChapterSource::Cbz(path.to_path_buf()));
+                }
+            } else if path.is_dir() && (name.contains(id) || name.contains(id_clean)) {
+                return Some(LocalChapterSource::Directory(path.to_path_buf()));
+            }
+            None
+        }
+
+        fn search_dir(dir: &Path, id: &str, id_clean: &str, depth: usize) -> Option<LocalChapterSource> {
+            if depth == 0 {
+                return None;
+            }
+            let entries = std::fs::read_dir(dir).ok()?;
+            let mut subdirs = Vec::new();
+            for entry in entries.flatten() {
+                let p = entry.path();
+                if let Some(src) = check_path(&p, id, id_clean) {
+                    return Some(src);
+                }
+                if p.is_dir() {
+                    subdirs.push(p);
+                }
+            }
+            for subdir in subdirs {
+                if let Some(src) = search_dir(&subdir, id, id_clean, depth - 1) {
+                    return Some(src);
+                }
+            }
+            None
+        }
+
+        search_dir(&base_dir, chapter_id, &id_clean, 3)
+    }
+
+    pub fn page_count(&self) -> usize {
+        match self {
+            LocalChapterSource::Cbz(path) => {
+                let Ok(file) = File::open(path) else { return 0 };
+                let Ok(mut archive) = ZipArchive::new(file) else { return 0 };
+                let mut count = 0;
+                for i in 0..archive.len() {
+                    if let Ok(file) = archive.by_index(i) {
+                        let name = file.name().to_lowercase();
+                        if name.ends_with(".jpg")
+                            || name.ends_with(".jpeg")
+                            || name.ends_with(".png")
+                            || name.ends_with(".webp")
+                            || name.ends_with(".avif")
+                        {
+                            count += 1;
+                        }
+                    }
+                }
+                count
+            },
+            LocalChapterSource::Directory(dir) => {
+                let Ok(entries) = std::fs::read_dir(dir) else { return 0 };
+                entries
+                    .flatten()
+                    .filter(|e| {
+                        let name = e.file_name().to_string_lossy().to_lowercase();
+                        name.ends_with(".jpg")
+                            || name.ends_with(".jpeg")
+                            || name.ends_with(".png")
+                            || name.ends_with(".webp")
+                            || name.ends_with(".avif")
+                    })
+                    .count()
+            },
+        }
+    }
+
+    pub fn load_page(&self, index: usize) -> Result<MangaPanel, Box<dyn std::error::Error + Send + Sync>> {
+        use std::io::Read;
+        match self {
+            LocalChapterSource::Cbz(path) => {
+                let file = File::open(path)?;
+                let mut archive = ZipArchive::new(file)?;
+                let mut image_names = Vec::new();
+                for i in 0..archive.len() {
+                    let entry = archive.by_index(i)?;
+                    let name = entry.name().to_lowercase();
+                    if name.ends_with(".jpg")
+                        || name.ends_with(".jpeg")
+                        || name.ends_with(".png")
+                        || name.ends_with(".webp")
+                        || name.ends_with(".avif")
+                    {
+                        image_names.push(entry.name().to_string());
+                    }
+                }
+                image_names.sort();
+                let entry_name = image_names.get(index).ok_or_else(|| format!("Page index {index} out of bounds"))?;
+                let mut entry_file = archive.by_name(entry_name)?;
+                let mut bytes = Vec::new();
+                entry_file.read_to_end(&mut bytes)?;
+
+                let image_decoded = image::load_from_memory(&bytes)?;
+                let dimensions = image_decoded.dimensions();
+                Ok(MangaPanel {
+                    image_decoded,
+                    dimensions,
+                })
+            },
+            LocalChapterSource::Directory(dir) => {
+                let entries = std::fs::read_dir(dir)?;
+                let mut image_paths = Vec::new();
+                for entry in entries.flatten() {
+                    let p = entry.path();
+                    let name = p.file_name().unwrap_or_default().to_string_lossy().to_lowercase();
+                    if name.ends_with(".jpg")
+                        || name.ends_with(".jpeg")
+                        || name.ends_with(".png")
+                        || name.ends_with(".webp")
+                        || name.ends_with(".avif")
+                    {
+                        image_paths.push(p);
+                    }
+                }
+                image_paths.sort();
+                let page_path = image_paths.get(index).ok_or_else(|| format!("Page index {index} out of bounds"))?;
+                let bytes = std::fs::read(page_path)?;
+                let image_decoded = image::load_from_memory(&bytes)?;
+                let dimensions = image_decoded.dimensions();
+                Ok(MangaPanel {
+                    image_decoded,
+                    dimensions,
+                })
+            },
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Default)]
@@ -73,16 +235,64 @@ pub enum MangaReaderEvents {
 }
 
 pub struct Page {
-    pub image_state: Option<Box<dyn StatefulProtocol>>,
+    pub raw_image: Option<Arc<DynamicImage>>,
+    pub cached_protocol: Option<Box<dyn StatefulProtocol>>,
+    pub cached_y: u32,
+    pub scroll_y: u32,
     pub dimensions: Option<(u32, u32)>,
 }
 
 impl Page {
     pub fn new() -> Self {
         Self {
-            image_state: None,
+            raw_image: None,
+            cached_protocol: None,
+            cached_y: u32::MAX,
+            scroll_y: 0,
             dimensions: None,
         }
+    }
+
+    pub fn is_loaded(&self) -> bool {
+        self.cached_protocol.is_some() || self.raw_image.is_some()
+    }
+
+    pub fn is_tall_strip(&self) -> bool {
+        if let Some((w, h)) = self.dimensions { w > 0 && (h as f64) > (w as f64) * 1.6 } else { false }
+    }
+
+    pub fn viewport_height(&self) -> u32 {
+        if let Some((w, h)) = self.dimensions { if self.is_tall_strip() { ((w as f64) * 1.35) as u32 } else { h } } else { 0 }
+    }
+
+    pub fn max_scroll_y(&self) -> u32 {
+        if let Some((_, h)) = self.dimensions {
+            let v_h = self.viewport_height();
+            h.saturating_sub(v_h)
+        } else {
+            0
+        }
+    }
+
+    pub fn scroll_step(&self) -> u32 {
+        let v_h = self.viewport_height();
+        (v_h / 4).max(150)
+    }
+
+    pub fn get_or_create_protocol(&mut self, picker: &mut Picker) -> Option<&mut Box<dyn StatefulProtocol>> {
+        if self.is_tall_strip() {
+            if let Some(ref raw) = self.raw_image {
+                if self.cached_protocol.is_none() || self.cached_y != self.scroll_y {
+                    let (width, height) = self.dimensions.unwrap_or((raw.width(), raw.height()));
+                    let v_h = self.viewport_height();
+                    let curr_h = v_h.min(height.saturating_sub(self.scroll_y));
+                    let cropped = raw.crop_imm(0, self.scroll_y, width, curr_h);
+                    self.cached_protocol = Some(picker.new_resize_protocol(cropped));
+                    self.cached_y = self.scroll_y;
+                }
+            }
+        }
+        self.cached_protocol.as_mut()
     }
 }
 
@@ -104,6 +314,7 @@ where
     picker: Picker,
     search_next_chapter_loader: ThrobberState,
     api_client: Arc<T>,
+    pub provider: Option<MangaProviders>,
     pub manga_tracker: Option<S>,
     pub auto_bookmark: bool,
     pub global_event_tx: Option<UnboundedSender<Events>>,
@@ -111,6 +322,7 @@ where
     pub local_action_rx: UnboundedReceiver<MangaReaderActions>,
     pub local_event_tx: UnboundedSender<MangaReaderEvents>,
     pub local_event_rx: UnboundedReceiver<MangaReaderEvents>,
+    pub local_source: Option<LocalChapterSource>,
 }
 
 impl<T, S> Component for MangaReader<T, S>
@@ -124,8 +336,8 @@ where
         let buf = frame.buffer_mut();
 
         let layout = match self.current_page_size {
-            PageSize::Normal => [Constraint::Percentage(30), Constraint::Percentage(40), Constraint::Percentage(30)],
-            PageSize::Wide => [Constraint::Percentage(20), Constraint::Percentage(60), Constraint::Percentage(20)],
+            PageSize::Normal => [Constraint::Percentage(25), Constraint::Percentage(50), Constraint::Percentage(25)],
+            PageSize::Wide => [Constraint::Percentage(15), Constraint::Percentage(70), Constraint::Percentage(15)],
         };
 
         let [left, center, right] = Layout::horizontal(layout).areas(area);
@@ -133,10 +345,17 @@ where
         Block::bordered().render(left, buf);
 
         let index = self.current_page_index();
-        let show_reload = if let Some(page) = self.pages.get_mut(index).filter(|page| page.image_state.is_some()) {
-            let image = StatefulImage::new(None).resize(Resize::Fit(None));
-            StatefulWidget::render(image, center, buf, page.image_state.as_mut().unwrap());
-            let (width, height) = page.dimensions.unwrap();
+        let page_loaded = self.pages.get(index).map(|page| page.is_loaded()).unwrap_or(false);
+        let show_reload = if page_loaded {
+            let (width, height) = {
+                let page = &mut self.pages[index];
+                let filter = MangaTuiConfig::get().image_resize_filter.to_filter_type();
+                let image = StatefulImage::new(None).resize(Resize::Fit(Some(filter)));
+                if let Some(protocol) = page.get_or_create_protocol(&mut self.picker) {
+                    StatefulWidget::render(image, center, buf, protocol);
+                }
+                page.dimensions.unwrap()
+            };
             self.resize_based_on_image_size(width, height);
 
             false
@@ -149,9 +368,11 @@ where
                 .unwrap_or(false);
 
             if show_failed {
-                Block::bordered().title("Failed to load page").render(center, buf);
+                Block::bordered()
+                    .title(tr("Error al cargar la página", "Failed to load page"))
+                    .render(center, buf);
             } else {
-                Block::bordered().title("Loading page").render(center, buf);
+                Block::bordered().title(tr("Cargando página", "Loading page")).render(center, buf);
             }
 
             show_failed
@@ -170,6 +391,8 @@ where
             MangaReaderActions::NextPage => self.next_page(),
             MangaReaderActions::PreviousPage => self.previous_page(),
             MangaReaderActions::ReloadPage => self.reload_page(),
+            MangaReaderActions::GoToFirstPage => self.go_to_first_page(),
+            MangaReaderActions::GoToLastPage => self.go_to_last_page(),
         }
     }
 
@@ -231,6 +454,8 @@ where
             search_next_chapter_loader: ThrobberState::default(),
             picker,
             api_client,
+            provider: None,
+            local_source: None,
         }
     }
 
@@ -249,6 +474,7 @@ where
     }
 
     pub fn with_manga_title(mut self, title: String) -> Self {
+        self.local_source = LocalChapterSource::find(&title, &self.current_chapter.id);
         self.manga_title = title;
         self
     }
@@ -258,18 +484,85 @@ where
         self
     }
 
+    pub fn with_provider(mut self, provider: Option<MangaProviders>) -> Self {
+        self.provider = provider;
+        self
+    }
+
     fn next_page(&mut self) {
+        let curr_index = self.current_page_index();
+        if let Some(page) = self.pages.get_mut(curr_index) {
+            if page.is_tall_strip() {
+                let max_scroll = page.max_scroll_y();
+                if page.scroll_y < max_scroll {
+                    let step = page.scroll_step();
+                    page.scroll_y = (page.scroll_y + step).min(max_scroll);
+                    return;
+                }
+            }
+        }
         self.page_list_state.list_state.next();
+        let new_index = self.current_page_index();
+        if new_index != curr_index {
+            if let Some(page) = self.pages.get_mut(new_index) {
+                page.scroll_y = 0;
+            }
+        }
         self.fetch_pages();
     }
 
     fn previous_page(&mut self) {
-        self.page_list_state.list_state.previous();
-        self.fetch_pages();
+        let curr_index = self.current_page_index();
+        if let Some(page) = self.pages.get_mut(curr_index) {
+            if page.is_tall_strip() && page.scroll_y > 0 {
+                let step = page.scroll_step();
+                page.scroll_y = page.scroll_y.saturating_sub(step);
+                return;
+            }
+        }
+        if curr_index > 0 {
+            self.page_list_state.list_state.previous();
+            let new_index = self.current_page_index();
+            if new_index != curr_index {
+                if let Some(page) = self.pages.get_mut(new_index) {
+                    if page.is_tall_strip() {
+                        page.scroll_y = page.max_scroll_y();
+                    }
+                }
+            }
+            self.fetch_pages();
+        }
     }
 
     fn reload_page(&mut self) {
         self.fetch_page(self.current_page_index());
+    }
+
+    fn go_to_first_page(&mut self) {
+        let total = self.pages.len().max(self.pages_list.pages.len());
+        if total > 0 {
+            self.page_list_state.list_state.select(Some(0));
+            if let Some(page) = self.pages.get_mut(0) {
+                page.scroll_y = 0;
+            }
+            self.fetch_pages();
+        }
+    }
+
+    fn go_to_last_page(&mut self) {
+        let total = self.pages.len().max(self.pages_list.pages.len());
+        if total > 0 {
+            let last = total.saturating_sub(1);
+            self.page_list_state.list_state.select(Some(last));
+            if let Some(page) = self.pages.get_mut(last) {
+                if page.is_tall_strip() {
+                    page.scroll_y = page.max_scroll_y();
+                } else {
+                    page.scroll_y = 0;
+                }
+            }
+            self.fetch_pages();
+        }
     }
 
     fn render_page_list(&mut self, area: Rect, buf: &mut Buffer) {
@@ -283,9 +576,17 @@ where
     fn load_page(&mut self, data: PageData) {
         match self.pages.get_mut(data.index) {
             Some(page) => {
-                let protocol = self.picker.new_resize_protocol(data.panel.image_decoded);
-                page.image_state = Some(protocol);
-                page.dimensions = Some(data.panel.dimensions);
+                let (width, height) = data.panel.dimensions;
+                page.dimensions = Some((width, height));
+                page.scroll_y = 0;
+                page.cached_y = u32::MAX;
+                if width > 0 && (height as f64) > (width as f64) * 1.6 {
+                    page.raw_image = Some(Arc::new(data.panel.image_decoded));
+                    page.cached_protocol = None;
+                } else {
+                    page.raw_image = None;
+                    page.cached_protocol = Some(self.picker.new_resize_protocol(data.panel.image_decoded));
+                }
             },
             None => {
                 // Todo! indicate that the page couldnot be loaded
@@ -300,7 +601,7 @@ where
     }
 
     fn resize_based_on_image_size(&mut self, width: u32, height: u32) {
-        if width > height && width > 300 {
+        if width > 300 && (width > height || height as f64 > (width as f64) * 1.6) {
             self.current_page_size = PageSize::Wide;
         } else {
             self.current_page_size = PageSize::Normal;
@@ -311,6 +612,7 @@ where
         self.clean_up();
 
         self.current_chapter = chapter;
+        self.local_source = LocalChapterSource::find(&self.manga_title, &self.current_chapter.id);
         self.state = State::SearchingPages;
 
         self.init_fetching_pages();
@@ -336,25 +638,26 @@ where
     }
 
     fn get_pages_to_fetch(&self) -> Vec<usize> {
+        if self.pages.is_empty() {
+            return vec![];
+        }
+
         let pages = MangaTuiConfig::get().amount_pages as usize;
 
         if self.pages.len() == 1 {
-            return vec![0];
+            return if self.pages[0].is_loaded() { vec![] } else { vec![0] };
         }
 
         // Collect `pages` pages before and after index that are not yet loaded
-        let curr = self.current_page_index();
+        let curr = self.current_page_index().min(self.pages.len().saturating_sub(1));
         let start_index = curr.saturating_sub(pages);
         let end_index = curr.saturating_add(pages).min(self.pages.len().saturating_sub(1));
 
-        if end_index > 0 {
+        if start_index <= end_index {
             self.pages[start_index..=end_index]
                 .iter()
                 .enumerate()
-                .filter_map(|(base_index, page)| match page.image_state {
-                    Some(_) => None,
-                    None => Some(base_index + start_index),
-                })
+                .filter_map(|(base_index, page)| if page.is_loaded() { None } else { Some(base_index + start_index) })
                 .collect()
         } else {
             vec![]
@@ -371,11 +674,38 @@ where
             //NOTE:  This will need to become async atomic if this becomes an async function
             if item.state != PageItemState::Loading && item.state != PageItemState::FinishedLoad {
                 let tx = self.local_event_tx.clone();
+
+                if let Some(source) = self.local_source.clone() {
+                    self.image_tasks.spawn(async move {
+                        let res = tokio::task::spawn_blocking(move || source.load_page(index)).await;
+                        match res {
+                            Ok(Ok(panel)) => {
+                                let page = PageData { panel, index };
+                                tx.send(MangaReaderEvents::LoadPage(page)).ok();
+                            },
+                            Ok(Err(e)) => {
+                                tx.send(MangaReaderEvents::FailedPage(index)).ok();
+                                write_to_error_log(ErrorType::String(&format!("Local read error: {e}")));
+                            },
+                            Err(e) => {
+                                tx.send(MangaReaderEvents::FailedPage(index)).ok();
+                                write_to_error_log(ErrorType::String(&format!("Task join error: {e}")));
+                            },
+                        }
+                    });
+                    item.state = PageItemState::Loading;
+                    return;
+                }
+
                 let api_client = Arc::clone(&self.api_client);
+                let provider = self.provider;
                 let url = url.clone();
 
                 self.image_tasks.spawn(async move {
-                    let response = api_client.search_manga_panel(url).await;
+                    let response = match provider {
+                        Some(p) => crate::backend::multi_provider::search_manga_panel_for_provider(p, url).await,
+                        None => api_client.search_manga_panel(url).await,
+                    };
 
                     match response {
                         Ok(panel) => {
@@ -417,7 +747,7 @@ where
             manga_cover_url: None,
             translated_language: self.current_chapter.language,
             page_number: num_page,
-            provider: self.api_client.name(),
+            provider: self.provider.unwrap_or_else(|| self.api_client.name()),
         };
 
         match database.bookmark(chapter_to_bookmark) {
@@ -465,56 +795,83 @@ where
 
     fn render_right_panel(&mut self, buf: &mut Buffer, area: Rect, show_reload: bool) {
         let [instructions_area, information_era, status_area] =
-            Layout::vertical([Constraint::Percentage(20), Constraint::Percentage(20), Constraint::Percentage(20)])
+            Layout::vertical([Constraint::Percentage(26), Constraint::Percentage(20), Constraint::Percentage(20)])
                 .margin(2)
                 .areas(area);
 
+        let (prev_label, next_label) = if self.pages.get(self.current_page_index()).map(|p| p.is_tall_strip()).unwrap_or(false) {
+            (tr("Desplazar / Ant: ", "Scroll up / Prev: "), tr("Desplazar / Sig: ", "Scroll down / Next: "))
+        } else {
+            (tr("Página anterior: ", "Previous page: "), tr("Página siguiente: ", "Next page: "))
+        };
+
         let mut instructions = vec![
-            Line::from(vec!["Go back: ".into(), "<Backspace>".to_span().style(*INSTRUCTIONS_STYLE)]),
-            Line::from(vec!["Next chapter: ".into(), "<w>".to_span().style(*INSTRUCTIONS_STYLE)]),
-            Line::from(vec!["Previous chapter: ".into(), "<b>".to_span().style(*INSTRUCTIONS_STYLE)]),
+            Line::from(vec![tr("Volver: ", "Go back: ").into(), "<Esc>, <q>, <Backspace>".to_span().style(*INSTRUCTIONS_STYLE)]),
+            Line::from(vec![prev_label.into(), "<k>, <Up>, Scroll".to_span().style(*INSTRUCTIONS_STYLE)]),
+            Line::from(vec![next_label.into(), "<j>, <Down>, Scroll".to_span().style(*INSTRUCTIONS_STYLE)]),
+            Line::from(vec![tr("Primera pág.: ", "First page: ").into(), "<g>, <Home>".to_span().style(*INSTRUCTIONS_STYLE)]),
+            Line::from(vec![tr("Última pág.: ", "Last page: ").into(), "<G>, <End>".to_span().style(*INSTRUCTIONS_STYLE)]),
+            Line::from(vec![tr("Capítulo sig.: ", "Next chapter: ").into(), "<w>".to_span().style(*INSTRUCTIONS_STYLE)]),
+            Line::from(vec![tr("Capítulo ant.: ", "Previous chapter: ").into(), "<b>".to_span().style(*INSTRUCTIONS_STYLE)]),
         ];
 
         if show_reload {
-            instructions.push(Line::from(vec!["Reload: ".into(), "<r>".to_span().style(*INSTRUCTIONS_STYLE)]));
+            instructions.push(Line::from(vec![tr("Recargar: ", "Reload: ").into(), "<r>".to_span().style(*INSTRUCTIONS_STYLE)]));
         }
 
         if !self.auto_bookmark {
-            instructions.push(Line::from(vec!["Bookmark: ".into(), "<m>".to_span().style(*INSTRUCTIONS_STYLE)]));
+            instructions
+                .push(Line::from(vec![tr("Marcar página: ", "Bookmark: ").into(), "<m>".to_span().style(*INSTRUCTIONS_STYLE)]));
         }
 
         Widget::render(List::new(instructions).block(Block::bordered()), instructions_area, buf);
 
-        let current_chapter_title = format!(
-            "Reading : Vol {} Ch. {} {}",
+        let mut current_chapter_title = format!(
+            "{} : Vol {} {} {} {}",
+            tr("Leyendo", "Reading"),
             self.current_chapter.volume_number.as_ref().cloned().unwrap_or("none".to_string()),
+            tr("Cap.", "Ch."),
             self.current_chapter.number,
             self.current_chapter.title
         );
+
+        if let Some(page) = self.pages.get(self.current_page_index()) {
+            if page.is_tall_strip() {
+                let max_scroll = page.max_scroll_y();
+                let percent = if max_scroll > 0 { (page.scroll_y as f64 / max_scroll as f64 * 100.0).round() as u32 } else { 100 };
+                current_chapter_title.push_str(&format!("\nScroll : {}%", percent));
+            }
+        }
 
         Paragraph::new(current_chapter_title)
             .wrap(Wrap { trim: true })
             .render(information_era, buf);
 
         match self.state {
-            State::DisplayingChapterNotFound => Paragraph::new("There is no more chapters")
+            State::DisplayingChapterNotFound => Paragraph::new(tr("No hay más capítulos", "There is no more chapters"))
                 .wrap(Wrap { trim: true })
                 .render(status_area, buf),
-            State::ErrorSearchingChapter => {
-                Paragraph::new("error searching chapter, please try again".to_span().style(*ERROR_STYLE))
-                    .wrap(Wrap { trim: true })
-                    .render(status_area, buf)
-            },
+            State::ErrorSearchingChapter => Paragraph::new(
+                tr("Error al buscar el capítulo, inténtelo de nuevo", "error searching chapter, please try again")
+                    .to_span()
+                    .style(*ERROR_STYLE),
+            )
+            .wrap(Wrap { trim: true })
+            .render(status_area, buf),
             State::SearchingChapter => {
                 let loader = Throbber::default()
-                    .label("Searching chapter".to_span().style(*INSTRUCTIONS_STYLE))
+                    .label(Span::styled(tr("Buscando capítulo", "Searching chapter"), *INSTRUCTIONS_STYLE))
                     .throbber_set(throbber_widgets_tui::BRAILLE_SIX)
                     .use_type(throbber_widgets_tui::WhichUse::Spin);
 
                 StatefulWidget::render(loader, status_area, buf, &mut self.search_next_chapter_loader)
             },
             State::ManualBookmark => {
-                let message = format!("Bookmarked at page: {}", self.page_list_state.page_bookmarked.unwrap_or(0));
+                let message = format!(
+                    "{}: {}",
+                    tr("Marcado en página", "Bookmarked at page"),
+                    self.page_list_state.page_bookmarked.unwrap_or(0)
+                );
 
                 Paragraph::new(message.to_span().style(*INSTRUCTIONS_STYLE))
                     .wrap(Wrap { trim: true })
@@ -557,11 +914,17 @@ where
 
     fn handle_key_events(&mut self, key_event: KeyEvent) {
         match key_event.code {
-            KeyCode::Down | KeyCode::Char('j') => {
+            KeyCode::Down | KeyCode::Char('j') | KeyCode::Right | KeyCode::Char('l') | KeyCode::PageDown => {
                 self.local_action_tx.send(MangaReaderActions::NextPage).ok();
             },
-            KeyCode::Up | KeyCode::Char('k') => {
+            KeyCode::Up | KeyCode::Char('k') | KeyCode::Left | KeyCode::Char('h') | KeyCode::PageUp => {
                 self.local_action_tx.send(MangaReaderActions::PreviousPage).ok();
+            },
+            KeyCode::Char('g') | KeyCode::Home => {
+                self.local_action_tx.send(MangaReaderActions::GoToFirstPage).ok();
+            },
+            KeyCode::Char('G') | KeyCode::End => {
+                self.local_action_tx.send(MangaReaderActions::GoToLastPage).ok();
             },
             KeyCode::Char('w') => {
                 self.local_action_tx.send(MangaReaderActions::SearchNextChapter).ok();
@@ -575,7 +938,7 @@ where
             KeyCode::Char('m') if !self.auto_bookmark => {
                 self.local_action_tx.send(MangaReaderActions::BookMarkCurrentChapter).ok();
             },
-            KeyCode::Backspace => {
+            KeyCode::Backspace | KeyCode::Esc | KeyCode::Char('q') => {
                 self.local_action_tx.send(MangaReaderActions::ExitReaderPage).ok();
             },
             _ => {},
@@ -583,6 +946,17 @@ where
     }
 
     pub fn init_fetching_pages(&mut self) {
+        if self.local_source.is_none() {
+            self.local_source = LocalChapterSource::find(&self.manga_title, &self.current_chapter.id);
+        }
+        if self.current_chapter.pages_url.is_empty() {
+            if let Some(ref source) = self.local_source {
+                let count = source.page_count();
+                self.current_chapter.pages_url = (0..count)
+                    .filter_map(|i| reqwest::Url::parse(&format!("http://localhost/local/{}", i)).ok())
+                    .collect();
+            }
+        }
         let page_count = self.current_chapter.pages_url.len();
         for index in 0..page_count {
             self.pages.push(Page::new());
@@ -630,10 +1004,14 @@ where
 
     fn search_chapter(&mut self, chapter_id: String) {
         let api_client = self.api_client.clone();
+        let provider = self.provider;
         let sender = self.local_event_tx.clone();
         let manga_id = self.manga_id.clone();
         self.image_tasks.spawn(async move {
-            let response = api_client.search_chapter(&chapter_id, &manga_id).await;
+            let response = match provider {
+                Some(p) => crate::backend::multi_provider::search_chapter_for_provider(p, &chapter_id, &manga_id).await,
+                None => api_client.search_chapter(&chapter_id, &manga_id).await,
+            };
             match response {
                 Ok(res) => {
                     sender.send(MangaReaderEvents::LoadChapter(res)).ok();
@@ -650,19 +1028,20 @@ where
         let connection = Database::get_connection();
         if let Ok(conn) = connection {
             let database = Database::new(&conn);
-            database
-                .save_history(MangaReadingHistorySave {
-                    id: &self.manga_id,
-                    title: &self.manga_title,
-                    img_url: None,
-                    chapter: ChapterToSaveHistory {
-                        id: &self.current_chapter.id,
-                        title: &self.current_chapter.title,
-                        translated_language: "en",
-                    },
-                    provider: self.api_client.name(),
-                })
-                .unwrap();
+            let lang = self.current_chapter.language.as_iso_code();
+            if let Err(e) = database.save_history(MangaReadingHistorySave {
+                id: &self.manga_id,
+                title: &self.manga_title,
+                img_url: None,
+                chapter: ChapterToSaveHistory {
+                    id: &self.current_chapter.id,
+                    title: &self.current_chapter.title,
+                    translated_language: lang,
+                },
+                provider: self.provider.unwrap_or_else(|| self.api_client.name()),
+            }) {
+                crate::backend::error_log::write_to_error_log(e.to_string().into());
+            }
             return self.current_chapter.id.clone();
         }
         "".to_string()
@@ -723,6 +1102,18 @@ mod test {
         let action = reader_page.local_action_rx.recv().await.unwrap();
 
         assert_eq!(MangaReaderActions::PreviousPage, action);
+
+        press_key(&mut reader_page, KeyCode::Char('g'));
+        let action = reader_page.local_action_rx.recv().await.unwrap();
+        assert_eq!(MangaReaderActions::GoToFirstPage, action);
+
+        press_key(&mut reader_page, KeyCode::Char('G'));
+        let action = reader_page.local_action_rx.recv().await.unwrap();
+        assert_eq!(MangaReaderActions::GoToLastPage, action);
+
+        press_key(&mut reader_page, KeyCode::Esc);
+        let action = reader_page.local_action_rx.recv().await.unwrap();
+        assert_eq!(MangaReaderActions::ExitReaderPage, action);
     }
 
     #[tokio::test]
@@ -731,6 +1122,7 @@ mod test {
             initialize_reader_page(ReaderPageProvierMock::new().into());
 
         reader_page.pages_list = PagesList::new(vec![PagesItem::new(0), PagesItem::new(1), PagesItem::new(2)]);
+        reader_page.pages = vec![Page::new(), Page::new(), Page::new()];
 
         let area = Rect::new(0, 0, 20, 20);
         let mut buf = Buffer::empty(area);
@@ -750,6 +1142,14 @@ mod test {
         let action = MangaReaderActions::PreviousPage;
         reader_page.update(action);
 
+        assert_eq!(0, reader_page.page_list_state.list_state.selected.expect("no page is selected"));
+
+        let action = MangaReaderActions::GoToLastPage;
+        reader_page.update(action);
+        assert_eq!(2, reader_page.page_list_state.list_state.selected.expect("no page is selected"));
+
+        let action = MangaReaderActions::GoToFirstPage;
+        reader_page.update(action);
         assert_eq!(0, reader_page.page_list_state.list_state.selected.expect("no page is selected"));
     }
 
@@ -1245,5 +1645,66 @@ mod test {
         assert_eq!(expected, result);
 
         Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_manhwa_strip_scrolling_and_navigation() {
+        use image::DynamicImage;
+
+        use crate::backend::manga_provider::MangaPanel;
+
+        let chapter: ChapterToRead = ChapterToRead {
+            pages_url: vec!["http://localhost".parse().unwrap(), "http://localhost/2".parse().unwrap()],
+            ..Default::default()
+        };
+
+        let mut manga_reader: MangaReader<ReaderPageProvierMock, TrackerTest> =
+            MangaReader::new(chapter, "some_id".to_string(), Picker::new((8, 8)), ReaderPageProvierMock::new().into());
+
+        manga_reader.init_fetching_pages();
+        let area = Rect::new(0, 0, 20, 20);
+        let mut buf = Buffer::empty(area);
+        manga_reader.render_page_list(area, &mut buf);
+        manga_reader.page_list_state.list_state.select(Some(0));
+        assert_eq!(2, manga_reader.pages.len());
+
+        // Create a tall image (800x4000) representing a manhwa strip
+        let tall_image = DynamicImage::new_rgb8(800, 4000);
+        let panel = MangaPanel {
+            image_decoded: tall_image,
+            dimensions: (800, 4000),
+        };
+
+        manga_reader.load_page(PageData { panel, index: 0 });
+
+        let page0 = &manga_reader.pages[0];
+        assert!(page0.is_loaded());
+        assert!(page0.is_tall_strip(), "Expected is_tall_strip to be true");
+        assert_eq!(0, manga_reader.pages[0].scroll_y);
+
+        // Next page action advances scroll_y by step first
+        let step = manga_reader.pages[0].scroll_step();
+        assert!(step > 0);
+        manga_reader.next_page();
+        assert_eq!(step, manga_reader.pages[0].scroll_y);
+        assert_eq!(0, manga_reader.current_page_index());
+
+        // Previous page decreases scroll_y
+        manga_reader.previous_page();
+        assert_eq!(0, manga_reader.pages[0].scroll_y);
+        assert_eq!(0, manga_reader.current_page_index());
+
+        // Scroll to the end of the page
+        let max_scroll = manga_reader.pages[0].max_scroll_y();
+        manga_reader.pages[0].scroll_y = max_scroll;
+
+        // Next page when at max_scroll transitions to page 1
+        manga_reader.next_page();
+        assert_eq!(1, manga_reader.current_page_index());
+
+        // Previous page transitions back to page 0 positioned at bottom
+        manga_reader.previous_page();
+        assert_eq!(0, manga_reader.current_page_index());
+        assert_eq!(max_scroll, manga_reader.pages[0].scroll_y);
     }
 }

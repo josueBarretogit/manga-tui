@@ -303,7 +303,13 @@ where
 impl IntoParam for Vec<Languages> {
     fn into_param(self) -> String {
         if self.is_empty() {
-            return format!("&availableTranslatedLanguage[]={}", Languages::get_preferred_lang().as_iso_code());
+            let pref = *Languages::get_preferred_lang();
+            if pref == Languages::Spanish {
+                return "&availableTranslatedLanguage[]=es&availableTranslatedLanguage[]=es-la".to_string();
+            } else if pref == Languages::SpanishLa {
+                return "&availableTranslatedLanguage[]=es-la&availableTranslatedLanguage[]=es".to_string();
+            }
+            return format!("&availableTranslatedLanguage[]={}", pref.as_iso_code());
         }
         self.into_iter()
             .filter(|lang| *lang != Languages::Unkown)
@@ -375,6 +381,12 @@ impl IntoParam for Filters {
 
 impl Default for Filters {
     fn default() -> Self {
+        let languages = match *Languages::get_preferred_lang() {
+            Languages::Spanish => vec![Languages::Spanish, Languages::SpanishLa],
+            Languages::SpanishLa => vec![Languages::SpanishLa, Languages::Spanish],
+            other => vec![other],
+        };
+
         Self {
             content_rating: vec![ContentRating::Safe],
             publication_status: vec![],
@@ -383,7 +395,7 @@ impl Default for Filters {
             magazine_demographic: vec![],
             authors: User::<AuthorFilterState>::default(),
             artists: User::<ArtistFilterState>::default(),
-            languages: vec![*Languages::get_preferred_lang()],
+            languages,
         }
     }
 }

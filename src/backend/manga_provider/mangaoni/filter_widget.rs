@@ -1,24 +1,29 @@
 use ratatui::layout::Margin;
 use ratatui::widgets::Widget;
 
-use super::filter_state::ManganatoFiltersProvider;
+use super::filter_state::MangaoniFiltersProvider;
 use crate::backend::manga_provider::FiltersWidget;
 use crate::view::widgets::StatefulWidgetFrame;
 
-/// TODO: implement manganato filters in future release
-#[derive(Debug, Clone)]
-pub struct ManganatoFilterWidget {}
+#[derive(Debug, Clone, Default)]
+pub struct MangaoniFilterWidget {}
 
-impl FiltersWidget for ManganatoFilterWidget {
-    type FilterState = ManganatoFiltersProvider;
+impl MangaoniFilterWidget {
+    pub fn new() -> Self {
+        Self {}
+    }
 }
 
-impl StatefulWidgetFrame for ManganatoFilterWidget {
-    type State = ManganatoFiltersProvider;
+impl FiltersWidget for MangaoniFilterWidget {
+    type FilterState = MangaoniFiltersProvider;
+}
+
+impl StatefulWidgetFrame for MangaoniFilterWidget {
+    type State = MangaoniFiltersProvider;
 
     fn render(&mut self, area: ratatui::prelude::Rect, frame: &mut ratatui::Frame<'_>, _state: &mut Self::State) {
         let buf = frame.buffer_mut();
-        "no filters available on manganato".render(
+        "No filters available for MangaOni".render(
             area.inner(Margin {
                 horizontal: 2,
                 vertical: 2,

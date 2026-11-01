@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::fs::{File, OpenOptions, create_dir_all};
 use std::io::Write;
-use std::panic::PanicInfo;
+use std::panic::PanicHookInfo;
 use std::path::{Path, PathBuf};
 
 use chrono::offset;
@@ -10,7 +10,7 @@ use manga_tui::exists;
 use super::AppDirectories;
 
 pub enum ErrorType<'a> {
-    Panic(&'a PanicInfo<'a>),
+    Panic(&'a PanicHookInfo<'a>),
     Error(Box<dyn Error>),
     String(&'a str),
 }
@@ -24,6 +24,12 @@ impl<'a> From<Box<dyn Error>> for ErrorType<'a> {
 impl<'a> From<String> for ErrorType<'a> {
     fn from(value: String) -> Self {
         Self::Error(value.into())
+    }
+}
+
+impl<'a> From<&'a str> for ErrorType<'a> {
+    fn from(value: &'a str) -> Self {
+        Self::String(value)
     }
 }
 
@@ -43,21 +49,18 @@ pub fn write_to_error_log(e: ErrorType<'_>) {
     let now = offset::Local::now();
 
     let error_format = match e {
-        ErrorType::Panic(panic_info) => format!("{} | {} | {} \n \n", now, panic_info, panic_info.location().unwrap()),
+        ErrorType::Panic(panic_info) => match panic_info.location() {
+            Some(location) => format!("{now} | {panic_info} | {location} \n \n"),
+            None => format!("{now} | {panic_info} \n \n"),
+        },
         ErrorType::Error(boxed_err) => format!("{now} | {boxed_err} \n \n"),
         ErrorType::String(str) => format!("{now} | {str} \n \n"),
     };
 
-    let error_format_bytes = error_format.as_bytes();
-
-    if !exists!(&error_file_name) {
-        let mut error_logs = File::create_new(error_file_name).unwrap();
-
-        error_logs.write_all(error_format_bytes).unwrap();
-    } else {
-        let mut error_logs = OpenOptions::new().append(true).open(error_file_name).unwrap();
-
-        error_logs.write_all(error_format_bytes).unwrap();
+    // `create(true)` + `append(true)` avoids a race when two tasks try to create the file at the
+    // same time, writing the error log must never panic
+    if let Ok(mut error_logs) = OpenOptions::new().create(true).append(true).open(error_file_name) {
+        let _ = error_logs.write_all(error_format.as_bytes());
     }
 }
 

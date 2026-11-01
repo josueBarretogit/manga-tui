@@ -1,10 +1,10 @@
 use std::fs::File;
-use std::io::{BufWriter, Cursor, Write};
+use std::io::{BufWriter, Write};
 use std::path::Path;
 
 use flate2::Compression;
 use flate2::write::ZlibEncoder;
-use image::{GenericImageView, ImageFormat};
+use image::GenericImageView;
 use lopdf::{Document, Stream, dictionary};
 
 use super::MangaDownloader;
@@ -30,32 +30,27 @@ impl MangaDownloader for PdfDownloader {
 
         let file = File::create(pdf_path)?;
         let mut doc = Document::with_version("1.7");
+        let pages_id = doc.new_object_id();
         let mut pages = Vec::new();
         let page_width = 595.0;
 
         for page in chapter.pages.iter() {
             let img = image::load_from_memory(&page.bytes)?;
             let (img_width, img_height) = img.dimensions();
-            let mut img_data = Vec::with_capacity(page.bytes.len());
-            let filter;
             let color_space = if img.color().has_color() { "DeviceRGB" } else { "DeviceGray" };
 
-            match page.extension.as_str() {
-                "jpg" | "jpeg" => {
-                    let mut cursor = Cursor::new(Vec::new());
-                    img.write_to(&mut cursor, ImageFormat::Jpeg)?;
-                    img_data = cursor.into_inner();
-                    filter = "DCTDecode";
-                },
-                "png" | "webp" => {
-                    let raw_img = if img.color().has_color() { img.to_rgb8().into_raw() } else { img.to_luma8().into_raw() };
-                    let mut encoder = ZlibEncoder::new(Vec::new(), Compression::fast());
-                    encoder.write_all(&raw_img)?;
-                    img_data = encoder.finish()?;
-                    filter = "FlateDecode";
-                },
-                _ => return Err(format!("Unsupported image format: {}", page.extension).into()),
-            }
+            let is_jpeg = page.bytes.starts_with(&[0xFF, 0xD8, 0xFF])
+                || page.extension.eq_ignore_ascii_case("jpg")
+                || page.extension.eq_ignore_ascii_case("jpeg");
+
+            let (img_data, filter) = if is_jpeg {
+                (page.bytes.clone().to_vec(), "DCTDecode")
+            } else {
+                let raw_img = if img.color().has_color() { img.to_rgb8().into_raw() } else { img.to_luma8().into_raw() };
+                let mut encoder = ZlibEncoder::new(Vec::new(), Compression::fast());
+                encoder.write_all(&raw_img)?;
+                (encoder.finish()?, "FlateDecode")
+            };
 
             let img_obj = Stream::new(
                 dictionary! {
@@ -82,6 +77,7 @@ impl MangaDownloader for PdfDownloader {
 
             let page_dict = dictionary! {
                 "Type" => "Page",
+                "Parent" => pages_id,
                 "MediaBox" => vec![0.into(), 0.into(), scaled_w.into(), scaled_h.into()],
                 "Resources" => dictionary! {
                     "XObject" => dictionary! { "Im" => img_id }
@@ -93,7 +89,7 @@ impl MangaDownloader for PdfDownloader {
             pages.push(page_id);
         }
 
-        let pages_id = doc.add_object(dictionary! {
+        doc.set_object(pages_id, dictionary! {
             "Type" => "Pages",
             "Kids" => pages.iter().map(|&p| p.into()).collect::<Vec<_>>(),
             "Count" => pages.len() as i32,
@@ -153,6 +149,7 @@ mod tests {
                     extension: "jpg".to_string(),
                 },
             ],
+            ..Default::default()
         };
 
         let downloader = PdfDownloader::new();

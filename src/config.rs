@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumIter};
 use toml::Table;
 
-use crate::backend::manga_provider::MangaProviders;
+use crate::backend::manga_provider::{Languages, MangaProviders};
 use crate::cli::Credentials;
 
 static CONFIG_FILE_NAME: &str = "config.toml";
@@ -107,6 +107,27 @@ impl ConfigParam for DownloadTypeParam {
 
     fn defaults(&self) -> &'static str {
         r#""cbz""#
+    }
+}
+
+#[derive(Debug, Default)]
+struct DownloadDirParam;
+
+impl ConfigParam for DownloadDirParam {
+    fn name(&self) -> &'static str {
+        "download_dir"
+    }
+
+    fn comments(&self) -> &'static str {
+        "Custom directory for downloaded mangas, leave empty \"\" to use the default directory"
+    }
+
+    fn values(&self) -> &'static str {
+        "path string (e.g. \"G:/some_directory/Mangas\" or 'G:\\some_directory\\Mangas' or '~/some-directory/mangas')"
+    }
+
+    fn defaults(&self) -> &'static str {
+        r#""""#
     }
 }
 
@@ -245,15 +266,78 @@ impl ConfigParam for DefaultMangaProvider {
     }
 
     fn comments(&self) -> &'static str {
-        "Sets which manga provider will be used when running manga-tui, \n# you can override it by running manga-tui with the -p flag like this: manga-tui -p weebcentral"
+        "Sets which manga provider will be used when running manga-tui, \n# you can override it by running manga-tui with the -p flag like this: manga-tui -p inmanga"
     }
 
     fn values(&self) -> &'static str {
-        "mangadex, weebcentral, mangapill"
+        "mangadex, weebcentral, mangapill, inmanga, mangaoni, leercapitulo, comizy"
     }
 
     fn defaults(&self) -> &'static str {
         r#""mangadex""#
+    }
+}
+
+#[derive(Debug, Default)]
+struct DefaultLanguageParam;
+
+impl ConfigParam for DefaultLanguageParam {
+    fn name(&self) -> &'static str {
+        "default_language"
+    }
+
+    fn comments(&self) -> &'static str {
+        "Sets the default language for manga chapters\n# values can be ISO codes (e.g. \"es\", \"es-la\", \"en\") or language names (e.g. \"spanish\", \"english\")"
+    }
+
+    fn values(&self) -> &'static str {
+        "english, spanish, spanish (latam), french, german, etc. (run `manga-tui lang --print` for ISO codes)"
+    }
+
+    fn defaults(&self) -> &'static str {
+        r#""english""#
+    }
+}
+
+#[derive(Debug, Default)]
+struct UiLanguageParam;
+
+impl ConfigParam for UiLanguageParam {
+    fn name(&self) -> &'static str {
+        "ui_language"
+    }
+
+    fn comments(&self) -> &'static str {
+        "Language of the user interface (menus, help and messages)"
+    }
+
+    fn values(&self) -> &'static str {
+        "es, en"
+    }
+
+    fn defaults(&self) -> &'static str {
+        r#""es""#
+    }
+}
+
+#[derive(Debug, Default)]
+struct ImageResizeFilterParam;
+
+impl ConfigParam for ImageResizeFilterParam {
+    fn name(&self) -> &'static str {
+        "image_resize_filter"
+    }
+
+    fn comments(&self) -> &'static str {
+        "Filter used to resize manga pages in the reader.\n# lanczos3 gives the best quality for text and fine lines (recommended for manga).\n# nearest is the fastest but lowest quality (pixel-art style)."
+    }
+
+    fn values(&self) -> &'static str {
+        "lanczos3, catmull_rom, triangle, nearest"
+    }
+
+    fn defaults(&self) -> &'static str {
+        r#""lanczos3""#
     }
 }
 
@@ -328,13 +412,17 @@ struct ConfigBuilder<'a> {
 /// The params the config file has which look like: param_name = "value"
 fn config_params() -> Vec<Box<dyn ConfigParam>> {
     vec![
+        Box::new(UiLanguageParam),
         Box::new(DownloadTypeParam),
+        Box::new(DownloadDirParam),
         Box::new(ImageQualityParam),
+        Box::new(ImageResizeFilterParam),
         Box::new(AmountPagesParam),
         Box::new(AutoBookmarkParam),
         Box::new(TrackReadingWhenDownload),
         Box::new(CheckNewUpdates),
         Box::new(DefaultMangaProvider),
+        Box::new(DefaultLanguageParam),
         Box::new(TrackReadingHistory),
     ]
 }
@@ -409,13 +497,27 @@ impl<'a> ConfigBuilder<'a> {
         let file = if !exists!(&config_path) {
             let mut file = File::create_new(&config_path)?;
             self.write_config(&mut file)?;
+            drop(file);
             open_options.open(config_path)?
         } else {
-            let mut file = open_options.open(&config_path)?;
+            let mut contents = String::new();
+            {
+                // The handle is dropped before the file may be rewritten, on Windows deleting or
+                // replacing a file which still has an open handle fails
+                let mut file = open_options.open(&config_path)?;
+                file.read_to_string(&mut contents)?;
+            }
 
-            self.update_existing_config(&mut file).map_err(|e| {
+            let updated = self.add_missing_params(&contents).map_err(|e| {
                 std::io::Error::other(format!("Could not update existing config: more details about the error: \n\n {e}"))
-            })?
+            })?;
+
+            if updated != contents {
+                self.commit_changes(&updated)
+                    .map_err(|e| std::io::Error::other(format!("Could not write updated config: {e}")))?;
+            }
+
+            open_options.open(&config_path)?
         };
 
         Ok(file)
@@ -478,45 +580,32 @@ impl<'a> ConfigBuilder<'a> {
         Ok(updated_config)
     }
 
-    /// Updates the config file with any missing parameters or tables by copying the original
-    /// config file and then making a new one with the missing params added
-    fn update_existing_config(&self, mut config: impl Write + Read) -> Result<File, Box<dyn Error>> {
-        let mut contents = String::new();
-
-        config.read_to_string(&mut contents)?;
-
-        let updated = self.prepend_missing_config_param(&contents)?;
-
-        let updated = self.append_missing_table_params(&updated)?;
-
-        let new_config_file = self.commit_changes(&updated)?;
-
-        Ok(new_config_file)
+    /// Returns the config contents with any missing parameters or tables added
+    fn add_missing_params(&self, contents: &str) -> Result<String, Box<dyn Error>> {
+        let updated = self.prepend_missing_config_param(contents)?;
+        self.append_missing_table_params(&updated)
     }
 
     /// Commits changes to the config file, creating a backup and writing the new config.
-    fn commit_changes(&self, updated_config: &str) -> Result<File, Box<dyn Error>> {
+    /// The new contents are written to a temporary file first which then replaces the original one
+    fn commit_changes(&self, updated_config: &str) -> Result<(), Box<dyn Error>> {
         let original_config_path = self.get_config_file_path();
         let config_file_backup_path = self.get_config_backup_file_path();
 
         std::fs::copy(&original_config_path, &config_file_backup_path)?;
 
-        std::fs::remove_file(&original_config_path)?;
+        let tmp_path = self.base_directory.join(format!("{CONFIG_FILE_NAME}.tmp"));
+        {
+            let mut tmp = File::create(&tmp_path)?;
+            tmp.write_all(updated_config.as_bytes())?;
+            tmp.flush()?;
+        }
 
-        let mut open_options = OpenOptions::new();
-        open_options.append(true).read(true).create(true);
-
-        let mut new_config = open_options.open(&original_config_path)?;
-
-        new_config.write_all(updated_config.as_bytes())?;
-
-        new_config.flush()?;
-
-        let new_config = open_options.open(original_config_path)?;
+        std::fs::rename(&tmp_path, &original_config_path)?;
 
         std::fs::remove_file(config_file_backup_path)?;
 
-        Ok(new_config)
+        Ok(())
     }
 }
 
@@ -534,10 +623,20 @@ pub struct AnilistConfig {
 /// user-configurable options.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MangaTuiConfig {
+    /// Language of the user interface, spanish by default
+    #[serde(default)]
+    pub ui_language: UiLanguage,
     /// The format to download manga in.
     pub download_type: DownloadType,
+    /// Custom directory for downloaded mangas. If empty, the default mangaDownloads directory is used.
+    #[serde(default)]
+    pub download_dir: String,
     /// The image quality for downloads.
     pub image_quality: ImageQuality,
+    /// The filter used to resize manga pages in the reader.
+    /// Lanczos3 is the default and gives the best quality for text and fine lines.
+    #[serde(default)]
+    pub image_resize_filter: ImageResizeFilter,
     /// Whether to automatically bookmark chapters.
     pub auto_bookmark: bool,
     /// Number of pages to prefetch around the current page.
@@ -548,10 +647,24 @@ pub struct MangaTuiConfig {
     pub check_new_updates: bool,
     /// The default manga provider.
     pub default_manga_provider: MangaProviders,
+    /// The default language for manga chapters.
+    #[serde(default)]
+    pub default_language: Languages,
     /// Wether or not to use services like anilist to track reading history
     pub track_reading_history: bool,
     /// Anilist configuration.
     pub anilist: AnilistConfig,
+}
+
+/// Language used by the user interface.
+#[derive(Default, Debug, Serialize, Deserialize, Display, EnumIter, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum UiLanguage {
+    #[default]
+    #[serde(alias = "spanish", alias = "español")]
+    Es,
+    #[serde(alias = "english")]
+    En,
 }
 
 /// Download format options.
@@ -574,17 +687,51 @@ pub enum ImageQuality {
     High,
 }
 
+/// Filter used when resizing manga page images in the reader.
+///
+/// Lanczos3 produces the sharpest result for manga text and fine lines.
+/// Nearest is the fastest but lowest quality (pixel-art style).
+#[derive(Debug, Serialize, Deserialize, Display, EnumIter, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ImageResizeFilter {
+    /// Best quality for manga – preserves text and fine lines (default)
+    #[default]
+    Lanczos3,
+    /// Good quality, smooth results
+    CatmullRom,
+    /// Decent quality, bilinear interpolation
+    Triangle,
+    /// Worst quality but fastest (original default)
+    Nearest,
+}
+
+impl ImageResizeFilter {
+    /// Converts to the `image::imageops::FilterType` used by `ratatui-image`.
+    pub fn to_filter_type(self) -> ratatui_image::FilterType {
+        match self {
+            Self::Lanczos3 => ratatui_image::FilterType::Lanczos3,
+            Self::CatmullRom => ratatui_image::FilterType::CatmullRom,
+            Self::Triangle => ratatui_image::FilterType::Triangle,
+            Self::Nearest => ratatui_image::FilterType::Nearest,
+        }
+    }
+}
+
 impl Default for MangaTuiConfig {
     fn default() -> Self {
         Self {
+            ui_language: UiLanguage::default(),
             amount_pages: 5,
             auto_bookmark: true,
             check_new_updates: true,
             download_type: DownloadType::default(),
+            download_dir: String::default(),
             image_quality: ImageQuality::default(),
+            image_resize_filter: ImageResizeFilter::default(),
             track_reading_when_download: false,
             track_reading_history: true,
             default_manga_provider: MangaProviders::default(),
+            default_language: Languages::default(),
             anilist: AnilistConfig::default(),
         }
     }
@@ -621,6 +768,23 @@ impl MangaTuiConfig {
             client_id: self.anilist.credentials.client_id.clone(),
         })
     }
+
+    /// Returns the custom download directory path if configured, or None.
+    pub fn get_custom_download_dir(&self) -> Option<PathBuf> {
+        let trimmed = self.download_dir.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+
+        if trimmed.starts_with('~')
+            && let Some(home) = directories::BaseDirs::new().map(|b| b.home_dir().to_path_buf())
+        {
+            let without_tilde = trimmed.trim_start_matches('~').trim_start_matches(['/', '\\']);
+            return Some(home.join(without_tilde));
+        }
+
+        Some(PathBuf::from(trimmed))
+    }
 }
 
 /// Builds the config file, creating or updating as needed, and sets the global config.
@@ -633,7 +797,15 @@ pub fn build_config_file() -> Result<(), Box<dyn Error>> {
 
     let mut config = config_builder.create_file_if_not_exists()?;
 
-    let config = MangaTuiConfig::read_config_file(&mut config).unwrap_or_default();
+    let config = match MangaTuiConfig::read_config_file(&mut config) {
+        Ok(config) => config,
+        Err(e) => {
+            eprintln!(
+                "[manga-tui] config.toml contains invalid values, default configuration will be used. Details: {e}\n[manga-tui] config.toml contiene valores no válidos, se usará la configuración por defecto."
+            );
+            MangaTuiConfig::default()
+        },
+    };
 
     CONFIG.get_or_init(|| config);
 
@@ -792,7 +964,7 @@ mod tests {
 
         "#;
 
-        let updated_config = config.prepend_missing_config_param(&existing_file_content)?;
+        let updated_config = config.prepend_missing_config_param(existing_file_content)?;
 
         let expected = toml::Table::from_str(&updated_config)?;
 
@@ -830,7 +1002,7 @@ mod tests {
         assert!(expected.is_table());
 
         assert_eq!("epub", new_config.get("download_type").unwrap().as_str().unwrap());
-        assert_eq!(true, new_config.get("check_new_updates").unwrap().as_bool().unwrap());
+        assert!(new_config.get("check_new_updates").unwrap().as_bool().unwrap());
 
         Ok(())
     }
@@ -922,4 +1094,16 @@ param2 = ""
     //
     //    Ok(())
     //}
+
+    #[test]
+    fn custom_download_dir_is_parsed_correctly() {
+        let mut config = MangaTuiConfig::default();
+        assert_eq!(config.get_custom_download_dir(), None);
+
+        config.download_dir = "G:/Mi unidad/Mangas".to_string();
+        assert_eq!(config.get_custom_download_dir(), Some(PathBuf::from("G:/Mi unidad/Mangas")));
+
+        config.download_dir = "   ".to_string();
+        assert_eq!(config.get_custom_download_dir(), None);
+    }
 }

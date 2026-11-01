@@ -72,7 +72,45 @@ fn remove_conflicting_characteres<T: AsRef<str>>(title: T) -> PathBuf {
 
     let title: &str = title.as_ref().trim();
 
-    let sanitized_title: String = title.chars().map(|c| if invalid_chars.contains(&c) { '_' } else { c }).collect();
+    let mut sanitized_title: String = title
+        .chars()
+        .map(|c| if invalid_chars.contains(&c) || c.is_control() { '_' } else { c })
+        .collect();
+
+    // On Windows, filenames cannot end in a period or space:
+    sanitized_title = sanitized_title.trim_end_matches(['.', ' ']).to_string();
+
+    // Windows reserved filenames (CON, PRN, AUX, NUL, COM1..9, LPT1..9):
+    let upper = sanitized_title.to_ascii_uppercase();
+    let is_reserved = matches!(
+        upper.as_str(),
+        "CON"
+            | "PRN"
+            | "AUX"
+            | "NUL"
+            | "COM1"
+            | "COM2"
+            | "COM3"
+            | "COM4"
+            | "COM5"
+            | "COM6"
+            | "COM7"
+            | "COM8"
+            | "COM9"
+            | "LPT1"
+            | "LPT2"
+            | "LPT3"
+            | "LPT4"
+            | "LPT5"
+            | "LPT6"
+            | "LPT7"
+            | "LPT8"
+            | "LPT9"
+    );
+
+    if is_reserved || sanitized_title.is_empty() {
+        sanitized_title = format!("_{sanitized_title}");
+    }
 
     sanitized_title.into()
 }
