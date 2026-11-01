@@ -75,6 +75,7 @@ where
     pub global_event_rx: UnboundedReceiver<Events>,
     pub state: AppState,
     pub current_tab: SelectedPage,
+    pub previous_tab: SelectedPage,
     pub manga_page: Option<MangaPage<T, S>>,
     pub manga_reader_page: Option<MangaReader<T, S>>,
     pub search_page: SearchPage<T, S>,
@@ -231,7 +232,26 @@ where
                     && let Some(manga_reader) = &mut self.manga_reader_page
                 {
                     manga_reader.clean_up();
-                    self.current_tab = SelectedPage::MangaTab;
+                    if self.manga_page.is_some() {
+                        self.current_tab = SelectedPage::MangaTab;
+                    } else {
+                        match self.previous_tab {
+                            SelectedPage::Home => self.go_to_home(),
+                            SelectedPage::Feed => self.go_feed_page(),
+                            SelectedPage::Search => self.go_search_page(),
+                            _ => self.go_search_page(),
+                        }
+                    }
+                } else if self.current_tab == SelectedPage::MangaTab {
+                    if let Some(manga_page) = self.manga_page.as_mut() {
+                        manga_page.clean_up();
+                    }
+                    match self.previous_tab {
+                        SelectedPage::Home => self.go_to_home(),
+                        SelectedPage::Feed => self.go_feed_page(),
+                        SelectedPage::Search => self.go_search_page(),
+                        _ => self.go_search_page(),
+                    }
                 }
             },
             Events::SearchAllProviders(query) => {
@@ -286,6 +306,7 @@ where
         App {
             picker,
             current_tab: SelectedPage::default(),
+            previous_tab: SelectedPage::default(),
             search_page: SearchPage::new(
                 picker,
                 Arc::clone(&provider),
@@ -845,6 +866,10 @@ where
     }
 
     fn go_to_manga_page(&mut self, manga: Manga) {
+        if self.current_tab != SelectedPage::MangaTab && self.current_tab != SelectedPage::ReaderTab {
+            self.previous_tab = self.current_tab;
+        }
+
         if self.manga_reader_page.is_some() {
             self.manga_reader_page.as_mut().unwrap().clean_up();
             self.manga_reader_page = None;

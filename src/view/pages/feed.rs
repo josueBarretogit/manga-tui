@@ -64,10 +64,11 @@ use tui_input::backend::crossterm::EventHandler;
 
 use crate::backend::database::{Database, GetHistoryArgs, MangaHistoryResponse, MangaHistoryType};
 use crate::backend::error_log::{ErrorType, write_to_error_log};
-use crate::backend::manga_provider::{FeedPageProvider, LatestChapter, MangaProviders};
+use crate::backend::manga_provider::{Chapter, FeedPageProvider, LatestChapter, MangaProviders};
 use crate::backend::tui::Events;
 use crate::global::{ERROR_STYLE, INSTRUCTIONS_STYLE};
 use crate::utils::render_search_bar;
+use crate::view::app::MangaToRead;
 use crate::view::widgets::Component;
 use crate::view::widgets::feed::{
     AskConfirmationDeleteAllModal, FeedTabs, HistoryWidget, MangasRead, TimelineChapterItem, TimelineWidget,
@@ -512,7 +513,14 @@ where
                 KeyCode::Char('b') => {
                     self.local_action_tx.send(FeedActions::PreviousPage).ok();
                 },
-                KeyCode::Enter | KeyCode::Char('r') => {
+                KeyCode::Enter => {
+                    if self.tabs == FeedTabs::Timeline {
+                        self.read_timeline_chapter();
+                    } else {
+                        self.local_action_tx.send(FeedActions::GoToMangaPage).ok();
+                    }
+                },
+                KeyCode::Char('r') | KeyCode::Char('m') => {
                     self.local_action_tx.send(FeedActions::GoToMangaPage).ok();
                 },
                 KeyCode::Char('s') => {
@@ -525,7 +533,11 @@ where
                     self.local_action_tx.send(FeedActions::ToggleFavorite).ok();
                 },
                 KeyCode::Char('d') => {
-                    self.remove_currently_selected_manga();
+                    if self.tabs == FeedTabs::Timeline {
+                        self.download_timeline_chapter();
+                    } else {
+                        self.remove_currently_selected_manga();
+                    }
                 },
                 KeyCode::Char('X') if self.tabs != FeedTabs::Timeline => {
                     self.state = FeedState::AskingDeleteAllConfirmation;
@@ -717,7 +729,14 @@ where
         };
 
         self.tasks.spawn(async move {
-            let connection = Database::get_connection().unwrap();
+            let connection = match Database::get_connection() {
+                Ok(conn) => conn,
+                Err(e) => {
+                    write_to_error_log(ErrorType::Error(Box::new(e)));
+                    tx.send(FeedEvents::LoadHistory(None)).ok();
+                    return;
+                },
+            };
             let database = Database::new(&connection);
 
             let maybe_reading_history = if tab == FeedTabs::Library {
@@ -729,7 +748,7 @@ where
                     provider,
                 })
             } else {
-                database.get_history(GetHistoryArgs {
+                database.get_continue_reading(GetHistoryArgs {
                     hist_type: history_type,
                     page,
                     search: SearchTerm::trimmed_lowercased(&search_term),
@@ -849,6 +868,78 @@ where
         }
     }
 
+    /// Opens the chapter directly in the reader from the timeline.
+    fn read_timeline_chapter(&mut self) {
+        if let Some(timeline) = &self.timeline {
+            if let Some(item) = timeline.get_current_selected() {
+                let manga_id = item.manga_id.clone();
+                let chapter_id = item.chapter_id.clone();
+                let manga_title = item.manga_title.clone();
+                let provider = item.provider;
+
+                let tx = match self.global_event_tx.as_ref().cloned() {
+                    Some(tx) => tx,
+                    None => return,
+                };
+                let local_tx = self.local_event_tx.clone();
+                self.loading_state = Some(ThrobberState::default());
+
+                self.tasks.spawn(async move {
+                    let response =
+                        crate::backend::multi_provider::read_chapter_for_provider(provider, &chapter_id, &manga_id).await;
+                    match response {
+                        Ok((chapter_to_read, list)) => {
+                            tx.send(Events::ReadChapter(chapter_to_read, MangaToRead {
+                                title: manga_title,
+                                manga_id,
+                                list,
+                                provider: Some(provider),
+                            }))
+                            .ok();
+                        },
+                        Err(e) => {
+                            write_to_error_log(format!("{e}").into());
+                            local_tx.send(FeedEvents::ErrorSearchingMangaData).ok();
+                        },
+                    }
+                });
+            }
+        }
+    }
+
+    /// Enqueues the selected timeline chapter for download.
+    fn download_timeline_chapter(&mut self) {
+        if let Some(timeline) = &self.timeline {
+            if let Some(item) = timeline.get_current_selected() {
+                let tx = match self.global_event_tx.as_ref().cloned() {
+                    Some(tx) => tx,
+                    None => return,
+                };
+                let chapter = Chapter {
+                    id: item.chapter_id.clone(),
+                    id_safe_for_download: item.chapter_id.replace(['/', ':', '\\', '?', '*', '"', '<', '>', '|'], "_"),
+                    manga_id: item.manga_id.clone(),
+                    title: item.chapter_title.clone(),
+                    language: item.language,
+                    chapter_number: item.chapter_number.clone(),
+                    volume_number: None,
+                    scanlator: None,
+                    publication_date: item.publication_date,
+                };
+                let batch = crate::backend::download_queue::EnqueueDownloadBatch {
+                    manga_id: item.manga_id.clone(),
+                    manga_id_safe_for_download: item.manga_id.replace(['/', ':', '\\', '?', '*', '"', '<', '>', '|'], "_"),
+                    manga_title: item.manga_title.clone(),
+                    manga_cover_url: None,
+                    lang: item.language,
+                    chapters: vec![chapter],
+                    provider: item.provider,
+                };
+                tx.send(Events::EnqueueDownloadBatch(batch)).ok();
+            }
+        }
+    }
+
     fn toggle_focus_search_bar(&mut self) {
         self.is_typing = !self.is_typing;
     }
@@ -918,14 +1009,18 @@ where
             FeedActions::PreviousPage => self.search_previous_page(),
             FeedActions::GoToMangaPage => self.go_to_manga_page(),
             FeedActions::ScrollHistoryUp => {
-                if self.tabs == FeedTabs::Timeline && let Some(timeline) = &mut self.timeline {
+                if self.tabs == FeedTabs::Timeline
+                    && let Some(timeline) = &mut self.timeline
+                {
                     timeline.select_previous();
                 } else {
                     self.select_previous_manga();
                 }
             },
             FeedActions::ScrollHistoryDown => {
-                if self.tabs == FeedTabs::Timeline && let Some(timeline) = &mut self.timeline {
+                if self.tabs == FeedTabs::Timeline
+                    && let Some(timeline) = &mut self.timeline
+                {
                     timeline.select_next();
                 } else {
                     self.select_next_manga();

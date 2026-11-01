@@ -1208,6 +1208,80 @@ impl<'a> Database<'a> {
         })
     }
 
+    /// Retrieves reading history across ALL providers, ordered by last_read timestamp.
+    pub fn get_continue_reading(&self, args: GetHistoryArgs) -> rusqlite::Result<MangaHistoryResponse> {
+        let items_per_page = args.items_per_page;
+        let offset = (args.page - 1) * items_per_page;
+        let search_filter = args.search.map(|s| s.get().to_lowercase());
+
+        let count_query = "
+            SELECT COUNT(*) 
+            FROM mangas 
+            INNER JOIN manga_history_union ON mangas.id = manga_history_union.manga_id 
+            INNER JOIN history_types ON manga_history_union.type_id = history_types.id 
+            WHERE history_types.name = 'ReadingHistory' 
+              AND (?1 IS NULL OR LOWER(mangas.title) LIKE '%' || ?1 || '%')
+        ";
+        let total_items: u32 = self.connection.query_row(count_query, params![search_filter], |row| row.get(0))?;
+
+        let select_query = "
+            SELECT mangas.id, mangas.title, mangas.manga_provider, mangas.last_read,
+                   (SELECT title FROM chapters WHERE chapters.manga_id = mangas.id AND chapters.is_read = 1 ORDER BY chapters.rowid DESC LIMIT 1) AS last_chapter,
+                   (SELECT COUNT(*) FROM chapters WHERE chapters.manga_id = mangas.id AND chapters.is_read = 1) AS read_count,
+                   (SELECT title FROM chapters WHERE chapters.manga_id = mangas.id AND chapters.is_bookmarked = 1 LIMIT 1) AS bookmark_title,
+                   (SELECT number_page_bookmarked FROM chapters WHERE chapters.manga_id = mangas.id AND chapters.is_bookmarked = 1 LIMIT 1) AS bookmark_page,
+                   (SELECT COUNT(*) FROM favorite_mangas WHERE favorite_mangas.manga_id = mangas.id AND favorite_mangas.provider = mangas.manga_provider) AS is_fav,
+                   (SELECT COUNT(*) FROM chapters WHERE chapters.manga_id = mangas.id AND chapters.is_downloaded = 1) AS dl_count
+            FROM mangas 
+            INNER JOIN manga_history_union ON mangas.id = manga_history_union.manga_id 
+            INNER JOIN history_types ON manga_history_union.type_id = history_types.id 
+            WHERE history_types.name = 'ReadingHistory' 
+              AND (?1 IS NULL OR LOWER(mangas.title) LIKE '%' || ?1 || '%')
+            ORDER BY mangas.last_read DESC
+            LIMIT ?2 OFFSET ?3
+        ";
+
+        let mut stmt = self.connection.prepare(select_query)?;
+        let rows = stmt.query_map(params![search_filter, items_per_page, offset], |row| {
+            let id: String = row.get(0)?;
+            let title: String = row.get(1)?;
+            let provider_str: String = row.get(2).unwrap_or_default();
+            let provider = provider_str.parse::<MangaProviders>().unwrap_or_default();
+            let last_read: Option<String> = row.get(3).ok();
+            let last_read_chapter: Option<String> = row.get(4).ok();
+            let total_read_count: u32 = row.get(5).unwrap_or(0);
+            let bookmark_chapter: Option<String> = row.get(6).ok();
+            let bookmark_page: Option<u32> = row.get(7).ok();
+            let is_fav_count: i32 = row.get(8).unwrap_or(0);
+            let dl_count: u32 = row.get(9).unwrap_or(0);
+
+            Ok(MangaHistory {
+                id,
+                title,
+                provider,
+                last_read,
+                last_read_chapter,
+                total_read_count,
+                bookmark_chapter,
+                bookmark_page,
+                is_favorite: is_fav_count > 0,
+                is_plan_to_read: false,
+                downloaded_count: dl_count,
+            })
+        })?;
+
+        let mut manga_history = Vec::new();
+        for manga in rows {
+            manga_history.push(manga?);
+        }
+
+        Ok(MangaHistoryResponse {
+            mangas: manga_history,
+            total_items,
+            page: args.page,
+        })
+    }
+
     pub fn get_library(&self, args: GetHistoryArgs) -> rusqlite::Result<MangaHistoryResponse> {
         let items_per_page = args.items_per_page;
         let offset = (args.page - 1) * items_per_page;

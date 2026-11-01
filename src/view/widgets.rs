@@ -10,6 +10,7 @@ use ratatui::widgets::{Block, Clear, Paragraph, Widget, WidgetRef, Wrap};
 use crate::backend::manga_provider::LatestChapter;
 use crate::backend::tui::Events;
 use crate::global::INSTRUCTIONS_STYLE;
+use crate::i18n::tr;
 use crate::utils::centered_rect;
 
 pub mod feed;
@@ -322,11 +323,11 @@ impl<'a> Widget for DownloadQueueModal<'a> {
 
         let block = Block::bordered()
             .title(Line::from(vec![Span::styled(
-                " ⬇ Download Queue ",
+                tr(" ⬇ Cola de Descargas ", " ⬇ Download Queue "),
                 Style::default().add_modifier(Modifier::BOLD).fg(Color::Cyan),
             )]))
             .title_bottom(Line::from(vec![Span::styled(
-                " <c> Cancel All | <q> or <Esc> or <D> Close ",
+                tr(" <c> Cancelar todo | <q>, <Esc> o <D> Cerrar ", " <c> Cancel All | <q> or <Esc> or <D> Close "),
                 Style::default().fg(Color::Yellow),
             )]));
 
@@ -341,19 +342,36 @@ impl<'a> Widget for DownloadQueueModal<'a> {
         match self.progress {
             Some(p) if p.is_downloading => {
                 lines.push(Line::from(vec![
-                    Span::styled("Currently downloading: ", Style::default().add_modifier(Modifier::BOLD)),
+                    Span::styled(
+                        tr("Descargando actualmente: ", "Currently downloading: "),
+                        Style::default().add_modifier(Modifier::BOLD),
+                    ),
                     Span::styled(&p.current_manga_title, Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
                 ]));
                 lines.push(Line::from(vec![Span::raw(format!(
-                    "Chapter: {}  |  Page progress: {:.0}%",
-                    p.current_chapter_number, p.current_page_percentage
+                    "{} {}  |  {} {:.0}%",
+                    tr("Capítulo:", "Chapter:"),
+                    p.current_chapter_number,
+                    tr("Progreso pág.:", "Page progress:"),
+                    p.current_page_percentage
                 ))]));
+
+                let mut batch_text = format!(
+                    "{} {} {} {} {} ({} {})",
+                    tr("Lote:", "Batch:"),
+                    p.completed_in_batch,
+                    tr("de", "of"),
+                    p.total_in_batch,
+                    tr("completados", "completed"),
+                    p.remaining_items,
+                    tr("restantes en cola", "remaining in queue")
+                );
+                if p.failed_in_batch > 0 {
+                    batch_text.push_str(&format!(" | {}: {}", tr("Fallidos", "Failed"), p.failed_in_batch));
+                }
                 lines.push(Line::from(vec![Span::styled(
-                    format!(
-                        "Batch: {} of {} completed ({} remaining in queue)",
-                        p.completed_in_batch, p.total_in_batch, p.remaining_items
-                    ),
-                    Style::default().fg(Color::Cyan),
+                    batch_text,
+                    Style::default().fg(if p.failed_in_batch > 0 { Color::LightRed } else { Color::Cyan }),
                 )]));
                 lines.push(Line::raw(""));
 
@@ -367,16 +385,24 @@ impl<'a> Widget for DownloadQueueModal<'a> {
             },
             Some(p) if p.remaining_items > 0 => {
                 lines.push(Line::from(vec![Span::styled(
-                    format!("Queue waiting ({} items remaining)", p.remaining_items),
+                    format!(
+                        "{} ({} {})",
+                        tr("Cola en espera", "Queue waiting"),
+                        p.remaining_items,
+                        tr("elementos restantes", "items remaining")
+                    ),
                     Style::default().fg(Color::Yellow),
                 )]));
             },
             _ => {
-                lines.push(Line::raw("No active downloads in queue."));
+                lines.push(Line::raw(tr("No hay descargas activas en la cola.", "No active downloads in queue.")));
                 lines.push(Line::raw(""));
                 lines.push(Line::from(vec![
-                    Span::styled("Tip: ", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::raw("Select chapters with <Space> and press <d> to add them to the queue!"),
+                    Span::styled(tr("Consejo: ", "Tip: "), Style::default().add_modifier(Modifier::BOLD)),
+                    Span::raw(tr(
+                        "¡Selecciona capítulos con <Espacio> y pulsa <d> para añadirlos a la cola!",
+                        "Select chapters with <Space> and press <d> to add them to the queue!",
+                    )),
                 ]));
             },
         }

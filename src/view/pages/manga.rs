@@ -418,6 +418,8 @@ where
                 }
                 bottom_instructions.push(" Multi-search ".into());
                 bottom_instructions.push("<p>".to_span().style(*INSTRUCTIONS_STYLE));
+                bottom_instructions.push(crate::i18n::tr(" Volver ", " Back ").into());
+                bottom_instructions.push("<Esc>".to_span().style(*INSTRUCTIONS_STYLE));
 
                 Block::bordered()
                     .title_top(Line::from(chapter_instructions))
@@ -620,6 +622,11 @@ where
                             tx.send(Events::SearchAllProviders(self.manga.title.clone())).ok();
                         }
                     },
+                    KeyCode::Esc | KeyCode::Backspace => {
+                        if let Some(tx) = &self.global_event_tx {
+                            tx.send(Events::GoBackMangaPage).ok();
+                        }
+                    },
 
                     _ => {},
                 }
@@ -790,11 +797,18 @@ where
             return;
         }
         self.state = PageState::SearchingChapterData;
-        match self.get_current_selected_chapter_mut() {
-            Some(chapter_selected) => {
-                chapter_selected.set_normal_state();
-                let id_chapter = chapter_selected.chapter.id.clone();
+        let chapter_opt = if let Some(chapter_selected) = self.get_current_selected_chapter_mut() {
+            chapter_selected.set_normal_state();
+            Some(chapter_selected.chapter.clone())
+        } else {
+            None
+        };
+
+        match chapter_opt {
+            Some(chapter_clone) => {
+                let id_chapter = chapter_clone.id.clone();
                 let manga_id = self.manga.id.clone();
+                let manga_title = self.manga.title.clone();
                 let local_tx = self.local_event_tx.clone();
                 let client = Arc::clone(&self.manga_provider);
                 let provider = self.manga.provider;
@@ -810,6 +824,26 @@ where
                             local_tx.send(MangaPageEvents::ReadSuccesful(chapter, manga_to_read)).ok();
                         },
                         Err(e) => {
+                            if let Some(source) = crate::view::pages::reader::LocalChapterSource::find(&manga_title, &id_chapter) {
+                                let page_count = source.page_count();
+                                if page_count > 0 {
+                                    let num = chapter_clone.chapter_number.parse::<f64>().unwrap_or(0.0);
+                                    let dummy_urls = (0..page_count)
+                                        .filter_map(|i| reqwest::Url::parse(&format!("http://localhost/local/{}", i)).ok())
+                                        .collect();
+                                    let chapter_to_read = ChapterToRead {
+                                        id: id_chapter.clone(),
+                                        title: chapter_clone.title.clone(),
+                                        number: num,
+                                        volume_number: chapter_clone.volume_number.clone(),
+                                        language: chapter_clone.language,
+                                        pages_url: dummy_urls,
+                                        num_page_bookmarked: None,
+                                    };
+                                    local_tx.send(MangaPageEvents::ReadSuccesful(chapter_to_read, Default::default())).ok();
+                                    return;
+                                }
+                            }
                             write_to_error_log(error_log::ErrorType::Error(
                                 format!("cannot read chapter with id {id_chapter} of manga with id {manga_id}, more details : {e}")
                                     .into(),

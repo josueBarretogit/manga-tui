@@ -45,6 +45,7 @@ pub struct DownloadQueueProgress {
     pub current_chapter_number: String,
     pub current_page_percentage: f64,
     pub completed_in_batch: usize,
+    pub failed_in_batch: usize,
     pub total_in_batch: usize,
     pub remaining_items: usize,
 }
@@ -61,6 +62,7 @@ pub struct DownloadQueueWorker<T: MangaProvider> {
     command_rx: UnboundedReceiver<DownloadQueueCommand>,
     queue: VecDeque<EnqueueChapterItem>,
     completed_in_batch: usize,
+    failed_in_batch: usize,
     total_in_batch: usize,
 }
 
@@ -76,6 +78,7 @@ impl<T: MangaProvider + 'static> DownloadQueueWorker<T> {
             command_rx,
             queue: VecDeque::new(),
             completed_in_batch: 0,
+            failed_in_batch: 0,
             total_in_batch: 0,
         }
     }
@@ -104,6 +107,7 @@ impl<T: MangaProvider + 'static> DownloadQueueWorker<T> {
                     DownloadQueueCommand::CancelAll => {
                         self.queue.clear();
                         self.completed_in_batch = 0;
+                        self.failed_in_batch = 0;
                         self.total_in_batch = 0;
                         self.send_progress(false, "", "", 0.0);
                     },
@@ -118,6 +122,7 @@ impl<T: MangaProvider + 'static> DownloadQueueWorker<T> {
                 let manga_title_clone = item.manga_title.clone();
                 let chapter_num_clone = item.chapter.chapter_number.clone();
                 let completed = self.completed_in_batch;
+                let failed = self.failed_in_batch;
                 let total = self.total_in_batch;
                 let remaining = self.queue.len();
 
@@ -136,6 +141,7 @@ impl<T: MangaProvider + 'static> DownloadQueueWorker<T> {
                                         current_chapter_number: chapter_num_clone.clone(),
                                         current_page_percentage: percent,
                                         completed_in_batch: completed,
+                                        failed_in_batch: failed,
                                         total_in_batch: total,
                                         remaining_items: remaining + 1,
                                     }))
@@ -154,6 +160,7 @@ impl<T: MangaProvider + 'static> DownloadQueueWorker<T> {
                                         current_chapter_number: chapter_num_clone.clone(),
                                         current_page_percentage: percent,
                                         completed_in_batch: completed,
+                                        failed_in_batch: failed,
                                         total_in_batch: total,
                                         remaining_items: remaining + 1,
                                     }))
@@ -171,6 +178,7 @@ impl<T: MangaProvider + 'static> DownloadQueueWorker<T> {
                             DownloadQueueCommand::CancelAll => {
                                 self.queue.clear();
                                 self.completed_in_batch = 0;
+                                self.failed_in_batch = 0;
                                 self.total_in_batch = 0;
                                 self.send_progress(false, "", "", 0.0);
                                 continue;
@@ -236,6 +244,7 @@ impl<T: MangaProvider + 'static> DownloadQueueWorker<T> {
                         .and_then(|res| res);
 
                         if let Err(e) = download_res {
+                            self.failed_in_batch += 1;
                             write_to_error_log(format!("Failed to download chapter: {original_chapter_title}, error: {e}").into());
                         } else {
                             if let Ok(conn) = Database::get_connection() {
@@ -260,6 +269,7 @@ impl<T: MangaProvider + 'static> DownloadQueueWorker<T> {
                         }
                     },
                     Err(e) => {
+                        self.failed_in_batch += 1;
                         write_to_error_log(format!("Failed to fetch pages for chapter: {}, error: {e}", item.chapter.title).into());
                     },
                 }
@@ -270,6 +280,7 @@ impl<T: MangaProvider + 'static> DownloadQueueWorker<T> {
                 if self.queue.is_empty() {
                     let total = self.completed_in_batch;
                     self.completed_in_batch = 0;
+                    self.failed_in_batch = 0;
                     self.total_in_batch = 0;
                     self.send_progress(false, "", "", 0.0);
                     self.global_event_tx.send(Events::DownloadQueueFinished(total)).ok();
@@ -298,6 +309,7 @@ impl<T: MangaProvider + 'static> DownloadQueueWorker<T> {
                     Some(DownloadQueueCommand::CancelAll) => {
                         self.queue.clear();
                         self.completed_in_batch = 0;
+                        self.failed_in_batch = 0;
                         self.total_in_batch = 0;
                         self.send_progress(false, "", "", 0.0);
                     },
@@ -318,6 +330,7 @@ impl<T: MangaProvider + 'static> DownloadQueueWorker<T> {
                 current_chapter_number: ch_num.to_string(),
                 current_page_percentage: percent,
                 completed_in_batch: self.completed_in_batch,
+                failed_in_batch: self.failed_in_batch,
                 total_in_batch: self.total_in_batch,
                 remaining_items: self.queue.len(),
             }))

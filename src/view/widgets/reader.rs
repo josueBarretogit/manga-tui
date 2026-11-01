@@ -38,12 +38,12 @@ impl Widget for PagesItem {
 
         Block::default().style(block_style).render(area, buf);
 
-        let page = Paragraph::new(format!("Page {}", self.number)).wrap(Wrap { trim: true });
+        let page = Paragraph::new(format!("{} {}", crate::i18n::tr("Pág.", "Page"), self.number + 1)).wrap(Wrap { trim: true });
 
         match self.state {
             PageItemState::Loading => {
                 let loader = Throbber::default()
-                    .label("Loading")
+                    .label(crate::i18n::tr("Cargando", "Loading"))
                     .style(Style::default().fg(Color::Yellow))
                     .throbber_set(throbber_widgets_tui::BRAILLE_SIX)
                     .use_type(throbber_widgets_tui::WhichUse::Spin);

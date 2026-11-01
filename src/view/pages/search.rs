@@ -1229,9 +1229,9 @@ mod test {
         assert_eq!(1, search_page.mangas_found_list.pagination.current_page);
         assert_eq!(2, search_page.mangas_found_list.pagination.get_total_pages());
         assert_eq!(20, search_page.mangas_found_list.widget.mangas.len());
-        assert_eq!(true, search_page.mangas_found_list.next_page);
-        assert_eq!(true, search_page.mangas_found_list.pagination.can_go_next_page());
-        assert_eq!(false, search_page.mangas_found_list.pagination.can_go_previous_page());
+        assert!(search_page.mangas_found_list.next_page);
+        assert!(search_page.mangas_found_list.pagination.can_go_next_page());
+        assert!(!search_page.mangas_found_list.pagination.can_go_previous_page());
 
         // Press 'w' (NextPage)
         press_key(&mut search_page, KeyCode::Char('w'));
@@ -1244,9 +1244,9 @@ mod test {
 
         assert_eq!(2, search_page.mangas_found_list.pagination.current_page);
         assert_eq!(5, search_page.mangas_found_list.widget.mangas.len());
-        assert_eq!(false, search_page.mangas_found_list.next_page);
-        assert_eq!(false, search_page.mangas_found_list.pagination.can_go_next_page());
-        assert_eq!(true, search_page.mangas_found_list.pagination.can_go_previous_page());
+        assert!(!search_page.mangas_found_list.next_page);
+        assert!(!search_page.mangas_found_list.pagination.can_go_next_page());
+        assert!(search_page.mangas_found_list.pagination.can_go_previous_page());
 
         // Press 'b' (PreviousPage)
         press_key(&mut search_page, KeyCode::Char('b'));
@@ -1259,8 +1259,8 @@ mod test {
 
         assert_eq!(1, search_page.mangas_found_list.pagination.current_page);
         assert_eq!(20, search_page.mangas_found_list.widget.mangas.len());
-        assert_eq!(true, search_page.mangas_found_list.next_page);
-        assert_eq!(true, search_page.mangas_found_list.pagination.can_go_next_page());
+        assert!(search_page.mangas_found_list.next_page);
+        assert!(search_page.mangas_found_list.pagination.can_go_next_page());
     }
 
     #[tokio::test]

@@ -153,13 +153,15 @@ impl StatefulWidget for TimelineWidget {
 
         let count_unread = self.items.iter().filter(|i| !i.is_read).count();
         let header_line = Line::from(vec![
-            " Novedades recientes: ".into(),
-            format!("{} capítulos ", self.items.len()).bold(),
-            format!("({count_unread} sin leer) ").fg(Color::Green).bold(),
-            "| Seleccionar: ".into(),
-            "<j/k>".bold().fg(Color::Yellow),
-            " | Abrir manga: ".into(),
-            "<Enter / r>".bold().fg(Color::Yellow),
+            " Novedades: ".into(),
+            format!("{} caps ", self.items.len()).bold(),
+            format!("({count_unread} nuevos) ").fg(Color::Green).bold(),
+            "| Leer: ".into(),
+            "<Enter>".bold().fg(Color::Yellow),
+            " | Ficha: ".into(),
+            "<m/r>".bold().fg(Color::Yellow),
+            " | Descargar: ".into(),
+            "<d>".bold().fg(Color::Yellow),
             " | Actualizar: ".into(),
             "<u>".bold().fg(Color::Yellow),
         ]);

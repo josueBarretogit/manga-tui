@@ -418,11 +418,7 @@ mod tests {
     }
     impl AnilistTokenChecker for AnilistCheckerTest {
         async fn verify_token(&self, _token: String) -> Result<bool, Box<dyn Error>> {
-            if self.invalid_token {
-                return Ok(false);
-            }
-
-            Ok(true)
+            Ok(!self.invalid_token)
         }
     }
 
