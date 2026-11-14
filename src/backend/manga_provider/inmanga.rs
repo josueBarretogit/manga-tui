@@ -63,6 +63,8 @@ impl InmangaProvider {
             // Spanish ISPs (Movistar/Orange/Vodafone) block 188.114.96.0/24 & 188.114.97.0/24.
             // Direct requests to Cloudflare anycast edge IPs bypass this block seamlessly.
             .resolve("inmanga.com", std::net::SocketAddr::from(([104, 21, 65, 2], 443)))
+            .resolve("cdn1.intomanga.com", std::net::SocketAddr::from(([104, 21, 65, 2], 443)))
+            .resolve("pack-yak.intomanga.com", std::net::SocketAddr::from(([104, 21, 65, 2], 443)))
             .build()
             .unwrap();
 

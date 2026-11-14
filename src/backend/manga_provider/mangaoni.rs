@@ -482,7 +482,8 @@ impl SearchPageProvider for MangaoniProvider {
                     item.nombre.to_lowercase().replace(' ', "-")
                 };
 
-                let cover = item.img.unwrap_or_default();
+                let raw_cover = item.img.unwrap_or_default();
+                let cover = if raw_cover.starts_with('/') { format!("{MANGAONI_BASE_URL}{raw_cover}") } else { raw_cover };
 
                 SearchManga {
                     id: slug,
