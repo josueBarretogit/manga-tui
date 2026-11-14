@@ -449,7 +449,7 @@ impl Widget for HelpModal {
             )]))
             .title_bottom(
                 Line::from(vec![Span::styled(
-                    tr(" Pulsa <?>, <q> o <Esc> para cerrar ", " Press <?>, <q> or <Esc> to close "),
+                    tr(" Pulsa <n>, <q> o <Esc> para cerrar ", " Press <n>, <q> or <Esc> to close "),
                     Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
                 )])
                 .alignment(Alignment::Center),
@@ -476,7 +476,7 @@ impl Widget for HelpModal {
             Self::key_line("i / F2", tr("Ir a Buscar", "Go to Search")),
             Self::key_line("o / F3", tr("Ir a Seguimiento (Biblioteca)", "Go to Feed (Library)")),
             Self::key_line("D", tr("Abrir cola de descargas", "Open download queue")),
-            Self::key_line("?", tr("Mostrar/ocultar esta ayuda", "Toggle this help modal")),
+            Self::key_line("n / F4", tr("Mostrar/ocultar esta ayuda", "Toggle this help modal")),
             Self::key_line("Ctrl+C", tr("Salir de manga-tui", "Quit manga-tui")),
             Line::raw(""),
             Self::section_title(tr("Buscador (Search)", "Search Page")),

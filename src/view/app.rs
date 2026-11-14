@@ -829,7 +829,7 @@ where
         let right_spans: Vec<Span<'static>> = vec![
             Span::styled(" D ", Style::default().fg(Color::Cyan).bg(chip_bg).bold()),
             Span::styled(format!(" {}  ", tr("Cola", "Queue")), Style::default().fg(Color::Gray).bg(bar_bg)),
-            Span::styled(" ? ", Style::default().fg(Color::Yellow).bg(chip_bg).bold()),
+            Span::styled(" n ", Style::default().fg(Color::Yellow).bg(chip_bg).bold()),
             Span::styled(format!(" {}  ", tr("Ayuda", "Help")), Style::default().fg(Color::Gray).bg(bar_bg)),
             Span::styled(" ^C ", Style::default().fg(Color::LightRed).bg(chip_bg).bold()),
             Span::styled(format!(" {} ", tr("Salir", "Quit")), Style::default().fg(Color::Gray).bg(bar_bg)),
@@ -929,7 +929,16 @@ where
         }
 
         if self.is_help_modal_open {
-            if matches!(key_event.code, KeyCode::Char('?') | KeyCode::Char('q') | KeyCode::Esc) {
+            if matches!(
+                key_event.code,
+                KeyCode::Char('n')
+                    | KeyCode::Char('N')
+                    | KeyCode::Char('?')
+                    | KeyCode::Char('¿')
+                    | KeyCode::F(4)
+                    | KeyCode::Char('q')
+                    | KeyCode::Esc
+            ) {
                 self.is_help_modal_open = false;
             }
             return;
@@ -1065,7 +1074,13 @@ where
             return;
         }
 
-        if !is_typing && key_event.code == KeyCode::Char('?') && self.current_tab != SelectedPage::ReaderTab {
+        if !is_typing
+            && matches!(
+                key_event.code,
+                KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Char('?') | KeyCode::Char('¿') | KeyCode::F(4)
+            )
+            && self.current_tab != SelectedPage::ReaderTab
+        {
             self.is_help_modal_open = true;
             return;
         }
@@ -1216,17 +1231,22 @@ where
 
     pub async fn listen_to_event(&mut self) {
         if let Some(event) = self.global_event_rx.recv().await {
+            let was_displaying_modal = self.is_displaying_modal();
+
             self.handle_events(event.clone());
 
             if event == Events::Tick && self.last_new_chapter_check.elapsed() >= NEW_CHAPTER_CHECK_INTERVAL {
                 self.global_event_tx.send(Events::CheckForNewDownloadedChapters).ok();
             }
 
-            // If the app is displaying any modal, handle key events for the modal and consume all events
-            if self.is_displaying_modal() {
+            // If a modal was already open, route key events to the modal handler;
+            // if handle_events just opened a modal on this event, consume the event without closing it immediately.
+            if was_displaying_modal {
                 if let Events::Key(key_event) = event {
                     self.key_events_modal(key_event);
                 }
+                return;
+            } else if self.is_displaying_modal() {
                 return;
             }
 
@@ -1530,16 +1550,21 @@ mod tests {
         assert!(reader_page.manga_tracker.is_some());
     }
 
-    #[test]
-    fn test_powerline_header_status_bar_and_help_modal() {
+    #[tokio::test]
+    async fn test_powerline_header_status_bar_and_help_modal() {
         use ratatui::Terminal;
         use ratatui::backend::TestBackend;
 
         let mut app: App<MockMangaPageProvider, TrackerTest> =
             App::new(MockMangaPageProvider::new(), None, None, MockFiltersHandler::new(MockFilterState {}), MockWidgetFilter {});
 
+        // Drain initial GoToHome event
+        app.listen_to_event().await;
         assert!(!app.is_help_modal_open);
-        press_key(&mut app, KeyCode::Char('?'));
+
+        // Send 'n' through global_event_tx and ensure listen_to_event opens the modal without immediately closing it
+        app.global_event_tx.send(Events::Key(KeyCode::Char('n').into())).unwrap();
+        app.listen_to_event().await;
         assert!(app.is_help_modal_open);
 
         let backend = TestBackend::new(100, 30);
@@ -1553,8 +1578,9 @@ mod tests {
 
         assert_eq!(app.tab_hit_boxes.len(), 3);
 
-        // Close help modal with '?'
-        app.key_events_modal(KeyCode::Char('?').into());
+        // Sending 'n' again while modal is open closes it
+        app.global_event_tx.send(Events::Key(KeyCode::Char('n').into())).unwrap();
+        app.listen_to_event().await;
         assert!(!app.is_help_modal_open);
     }
 }
