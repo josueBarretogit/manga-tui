@@ -3,11 +3,12 @@ use ratatui::layout::{Constraint, Layout, Margin, Rect};
 use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Paragraph, StatefulWidget, Widget, Wrap};
-use ratatui_image::Image;
+use ratatui_image::{Resize, StatefulImage};
 use throbber_widgets_tui::{Throbber, ThrobberState};
 
 use crate::backend::manga_provider::{PopularManga, RecentlyAddedManga};
 use crate::common::ImageState;
+use crate::config::MangaTuiConfig;
 
 #[derive(Clone, Default, PartialEq, Eq)]
 pub enum CarrouselState {
@@ -34,8 +35,9 @@ impl CarrouselItemPopularManga {
     fn render_cover(&mut self, area: Rect, buf: &mut Buffer, state: &mut ImageState) {
         match state.get_image_state(&self.manga.id) {
             Some(image_state) => {
-                let cover = Image::new(image_state.as_ref());
-                Widget::render(cover, area, buf);
+                let filter = MangaTuiConfig::get().image_resize_filter.to_filter_type();
+                let cover = StatefulImage::new(None).resize(Resize::Fit(Some(filter)));
+                StatefulWidget::render(cover, area, buf, image_state);
             },
             None => {
                 let loader = Throbber::default()
@@ -175,8 +177,9 @@ impl CarrouselItemRecentlyAddedManga {
     fn render_cover(&mut self, area: Rect, buf: &mut Buffer, state: &mut ImageState) {
         match state.get_image_state(&self.manga.id) {
             Some(image_state) => {
-                let cover = Image::new(image_state.as_ref());
-                Widget::render(cover, area, buf);
+                let filter = MangaTuiConfig::get().image_resize_filter.to_filter_type();
+                let cover = StatefulImage::new(None).resize(Resize::Fit(Some(filter)));
+                StatefulWidget::render(cover, area, buf, image_state);
             },
             None => {
                 let loader = Throbber::default()

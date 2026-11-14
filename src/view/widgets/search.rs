@@ -3,12 +3,13 @@ use ratatui::layout::{Constraint, Layout, Margin, Rect};
 use ratatui::style::{Color, Style, Stylize};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Paragraph, StatefulWidget, StatefulWidgetRef, Widget, Wrap};
-use ratatui_image::Image;
+use ratatui_image::{Resize, StatefulImage};
 use throbber_widgets_tui::{Throbber, ThrobberState};
 use tui_widget_list::PreRender;
 
 use crate::backend::manga_provider::{Genres, MangaProviders, MangaStatus, SearchManga};
 use crate::common::ImageState;
+use crate::config::MangaTuiConfig;
 use crate::global::CURRENT_LIST_ITEM_STYLE;
 
 pub struct MangaPreview<'a> {
@@ -53,14 +54,15 @@ impl<'a> MangaPreview<'a> {
 
         if self.can_display_images {
             self.render_details(details_area, buf);
+            state.set_area(cover_area);
 
             match state.get_image_state(self.id) {
                 Some(image_state) => {
-                    let cover = Image::new(image_state.as_ref());
-                    Widget::render(cover, cover_area, buf);
+                    let filter = MangaTuiConfig::get().image_resize_filter.to_filter_type();
+                    let cover = StatefulImage::new(None).resize(Resize::Fit(Some(filter)));
+                    StatefulWidget::render(cover, cover_area, buf, image_state);
                 },
                 None => {
-                    state.set_area(cover_area);
                     Block::bordered().render(cover_area, buf);
                     let loader = Throbber::default()
                         .label("Loading cover")

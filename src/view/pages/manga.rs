@@ -10,8 +10,8 @@ use ratatui::style::{Style, Stylize};
 use ratatui::text::{Line, Span, ToSpan};
 use ratatui::widgets::{Block, Clear, List, ListState, Paragraph, StatefulWidget, Widget, Wrap};
 use ratatui_image::picker::Picker;
-use ratatui_image::protocol::Protocol;
-use ratatui_image::{Image, Resize};
+use ratatui_image::protocol::StatefulProtocol;
+use ratatui_image::{Resize, StatefulImage};
 use strum_macros::EnumIs;
 use throbber_widgets_tui::{Throbber, ThrobberState};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
@@ -136,7 +136,7 @@ where
     S: MangaTracker,
 {
     pub manga: Manga,
-    image_state: Option<Box<dyn Protocol>>,
+    image_state: Option<Box<dyn StatefulProtocol>>,
     cover_area: Rect,
     global_event_tx: Option<UnboundedSender<Events>>,
     local_action_tx: UnboundedSender<MangaPageActions>,
@@ -282,13 +282,14 @@ where
             },
         };
 
-        match self.image_state.as_ref() {
+        self.cover_area = cover_area;
+        match self.image_state.as_mut() {
             Some(state) => {
-                let image = Image::new(state.as_ref());
-                Widget::render(image, cover_area, buf);
+                let filter = MangaTuiConfig::get().image_resize_filter.to_filter_type();
+                let image = StatefulImage::new(None).resize(Resize::Fit(Some(filter)));
+                StatefulWidget::render(image, cover_area, buf, state);
             },
             None => {
-                self.cover_area = cover_area;
                 Block::bordered().render(area, buf);
             },
         }
@@ -1514,9 +1515,8 @@ where
     }
 
     fn load_cover(&mut self, img: DynamicImage) {
-        let fixed_protocol = self.picker.as_mut().unwrap().new_protocol(img, self.cover_area, Resize::Fit(None));
-        if let Ok(protocol) = fixed_protocol {
-            self.image_state = Some(protocol);
+        if let Some(picker) = self.picker.as_mut() {
+            self.image_state = Some(picker.new_resize_protocol(img));
         }
     }
 

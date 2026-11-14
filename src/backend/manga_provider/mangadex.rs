@@ -265,7 +265,7 @@ impl MangadexClient {
                 match rel.type_field.as_str() {
                     "cover_art" => {
                         let file_name = attributes.file_name.as_ref().unwrap().to_string();
-                        cover_img_url = self.make_cover_img_url_lower_quality(&id, &file_name);
+                        cover_img_url = self.make_cover_img_url(&id, &file_name);
                     },
                     "author" => {
                         let name = rel.attributes.as_ref().unwrap().name.as_ref().cloned().unwrap_or_default();
@@ -1025,7 +1025,7 @@ impl SearchPageProvider for MangadexClient {
                         match rel.type_field.as_str() {
                             "cover_art" => {
                                 let file_name = attributes.file_name.as_ref().unwrap().to_string();
-                                cover_img_url = self.make_cover_img_url_lower_quality(&id, &file_name);
+                                cover_img_url = self.make_cover_img_url(&id, &file_name);
                             },
                             "author" => {
                                 let name = rel.attributes.as_ref().unwrap().name.as_ref().cloned().unwrap_or_default();

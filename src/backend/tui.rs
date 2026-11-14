@@ -77,11 +77,17 @@ const DEFAULT_FONT_SIZE_HEIGHT: u16 = 22;
 #[cfg(target_os = "windows")]
 fn get_picker() -> Option<Picker> {
     use windows_sys::Win32::System::Console::GetConsoleWindow;
-    use windows_sys::Win32::UI::HiDpi::GetDpiForWindow;
+    use windows_sys::Win32::UI::HiDpi::{GetDpiForSystem, GetDpiForWindow};
 
-    let dpi = unsafe { GetDpiForWindow(GetConsoleWindow()) };
-    // In some terminals (ConPTY, Windows Terminal) there is no classic console window and the dpi is 0
-    let dpi = if dpi == 0 { 96 } else { dpi };
+    let window_dpi = unsafe { GetDpiForWindow(GetConsoleWindow()) };
+    // In some terminals (ConPTY, Windows Terminal) there is no classic console window and GetDpiForWindow returns 0;
+    // fall back to system DPI so HiDPI displays get sharp cell pixel dimensions.
+    let dpi = if window_dpi == 0 {
+        let sys_dpi = unsafe { GetDpiForSystem() };
+        if sys_dpi == 0 { 96 } else { sys_dpi }
+    } else {
+        window_dpi
+    };
     let scale = dpi as f32 / 96.0;
     let size: (u16, u16) = (
         ((DEFAULT_FONT_SIZE_WIDTH as f32 * scale).round() as u16).max(1),
@@ -90,11 +96,28 @@ fn get_picker() -> Option<Picker> {
 
     let mut picker = Picker::new((size.0, size.1));
 
+    if let Ok(override_proto) = std::env::var("MANGA_TUI_PROTOCOL") {
+        match override_proto.trim().to_ascii_lowercase().as_str() {
+            "sixel" => picker.protocol_type = ProtocolType::Sixel,
+            "iterm2" | "iterm" => picker.protocol_type = ProtocolType::Iterm2,
+            "kitty" => picker.protocol_type = ProtocolType::Kitty,
+            "halfblocks" => picker.protocol_type = ProtocolType::Halfblocks,
+            "none" | "off" => return None,
+            _ => {
+                picker.guess_protocol();
+            },
+        }
+        return Some(picker);
+    }
+
     let protocol = picker.guess_protocol();
 
-    if protocol == ProtocolType::Halfblocks {
-        return None;
+    let is_vscode_conpty = std::env::var("TERM_PROGRAM").map(|v| v.eq_ignore_ascii_case("vscode")).unwrap_or(false);
+
+    if protocol == ProtocolType::Halfblocks || is_vscode_conpty {
+        picker.protocol_type = ProtocolType::Sixel;
     }
+
     Some(picker)
 }
 
