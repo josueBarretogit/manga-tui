@@ -1,11 +1,11 @@
 #[cfg(test)]
 use crossterm::event::KeyCode;
 use ratatui::Frame;
-use ratatui::layout::{Margin, Rect};
+use ratatui::layout::{Alignment, Constraint, Direction, Layout, Margin, Rect};
 use ratatui::style::{Color, Modifier, Style, Styled};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::block::Title;
-use ratatui::widgets::{Block, Clear, Paragraph, Widget, WidgetRef, Wrap};
+use ratatui::widgets::{Block, BorderType, Clear, Paragraph, Widget, WidgetRef, Wrap};
 
 use crate::backend::manga_provider::LatestChapter;
 use crate::backend::tui::Events;
@@ -124,10 +124,12 @@ impl<'a> Widget for ErrorModalBody<'a> {
 impl<'a> WidgetRef for ErrorModalBody<'a> {
     fn render_ref(&self, area: Rect, buf: &mut ratatui::prelude::Buffer) {
         Block::bordered()
+            .border_type(BorderType::Rounded)
+            .border_style(Style::default().fg(Color::Red))
             .title(Title::from(Line::from(vec![
-                "Some error ocurred, press ".into(),
+                " ⚠ Error — press ".into(),
                 "<q>".set_style(*INSTRUCTIONS_STYLE),
-                " to close this popup".into(),
+                " to close ".into(),
             ])))
             .render(area, buf);
 
@@ -322,6 +324,8 @@ impl<'a> Widget for DownloadQueueModal<'a> {
         Clear.render(area, buf);
 
         let block = Block::bordered()
+            .border_type(BorderType::Rounded)
+            .border_style(Style::default().fg(Color::Cyan))
             .title(Line::from(vec![Span::styled(
                 tr(" ⬇ Cola de Descargas ", " ⬇ Download Queue "),
                 Style::default().add_modifier(Modifier::BOLD).fg(Color::Cyan),
@@ -408,6 +412,105 @@ impl<'a> Widget for DownloadQueueModal<'a> {
         }
 
         Paragraph::new(lines).render(inner, buf);
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct HelpModal;
+
+impl HelpModal {
+    pub fn new() -> Self {
+        Self
+    }
+
+    fn key_line<'a>(key: &'a str, desc: &'a str) -> Line<'a> {
+        Line::from(vec![
+            Span::styled(format!(" {:<10} ", key), Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(desc, Style::default().fg(Color::White)),
+        ])
+    }
+
+    fn section_title<'a>(title: &'a str) -> Line<'a> {
+        Line::from(vec![Span::styled(format!(" ▸ {title}"), Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))])
+    }
+}
+
+impl Widget for HelpModal {
+    fn render(self, area: Rect, buf: &mut ratatui::prelude::Buffer) {
+        let modal_area = centered_rect(area, 78, 76);
+        Clear.render(modal_area, buf);
+
+        let block = Block::bordered()
+            .border_type(BorderType::Rounded)
+            .border_style(Style::default().fg(Color::Cyan))
+            .title(Line::from(vec![Span::styled(
+                tr(" ⌨ Atajos de Teclado y Ayuda Rápida ", " ⌨ Keyboard Shortcuts & Quick Help "),
+                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+            )]))
+            .title_bottom(
+                Line::from(vec![Span::styled(
+                    tr(" Pulsa <?>, <q> o <Esc> para cerrar ", " Press <?>, <q> or <Esc> to close "),
+                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+                )])
+                .alignment(Alignment::Center),
+            );
+
+        let inner = block.inner(modal_area).inner(Margin {
+            horizontal: 1,
+            vertical: 1,
+        });
+        block.render(modal_area, buf);
+
+        if inner.height < 4 || inner.width < 20 {
+            return;
+        }
+
+        let [left_col, right_col] = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+            .areas(inner);
+
+        let left_lines = vec![
+            Self::section_title(tr("Navegación Global", "Global Navigation")),
+            Self::key_line("u / F1", tr("Ir a Inicio", "Go to Home")),
+            Self::key_line("i / F2", tr("Ir a Buscar", "Go to Search")),
+            Self::key_line("o / F3", tr("Ir a Seguimiento (Biblioteca)", "Go to Feed (Library)")),
+            Self::key_line("D", tr("Abrir cola de descargas", "Open download queue")),
+            Self::key_line("?", tr("Mostrar/ocultar esta ayuda", "Toggle this help modal")),
+            Self::key_line("Ctrl+C", tr("Salir de manga-tui", "Quit manga-tui")),
+            Line::raw(""),
+            Self::section_title(tr("Buscador (Search)", "Search Page")),
+            Self::key_line("s", tr("Escribir en barra de búsqueda", "Focus search input")),
+            Self::key_line("Enter", tr("Ejecutar búsqueda / Abrir", "Run search / Open")),
+            Self::key_line("j/k/h/l", tr("Moverse por resultados", "Navigate results")),
+            Self::key_line("w / b", tr("Página siguiente / anterior", "Next / previous page")),
+            Self::key_line("p", tr("Alternar Todos / Proveedor actual", "Toggle All / Current provider")),
+            Self::key_line("L", tr("Filtrar idioma (Todos/ES/EN)", "Filter language (All/ES/EN)")),
+            Self::key_line("f", tr("Abrir filtros avanzados", "Open advanced filters")),
+            Self::key_line("r", tr("Abrir ficha del manga", "Open manga page")),
+        ];
+
+        let right_lines = vec![
+            Self::section_title(tr("Ficha del Manga", "Manga Page")),
+            Self::key_line("j / k", tr("Subir / bajar en capítulos", "Scroll chapters up / down")),
+            Self::key_line("r", tr("Leer capítulo seleccionado", "Read selected chapter")),
+            Self::key_line("Space", tr("Seleccionar capítulo para lote", "Toggle select chapter")),
+            Self::key_line("v / c", tr("Seleccionar página / Limpiar", "Select page / Clear selection")),
+            Self::key_line("d / a", tr("Descargar selección / todos", "Download selected / all")),
+            Self::key_line("f", tr("Marcar/desmarcar Favorito ★", "Toggle Favorite ★")),
+            Self::key_line("P", tr("Migrar a otro proveedor", "Switch manga provider")),
+            Self::key_line("l / o", tr("Cambiar idioma / orden", "Change language / order")),
+            Self::key_line("Tab / m", tr("Ir a marcador / Guardar marcador", "Read / Save bookmark")),
+            Line::raw(""),
+            Self::section_title(tr("Biblioteca y Lector", "Library & Reader")),
+            Self::key_line("Tab / 1-3", tr("Cambiar pestaña en Seguimiento", "Switch tab in Feed")),
+            Self::key_line("j / k", tr("Pasar página en el lector", "Next / prev page in reader")),
+            Self::key_line("w / b", tr("Siguiente / anterior capítulo", "Next / prev chapter in reader")),
+            Self::key_line("Backspace", tr("Volver atrás", "Go back")),
+        ];
+
+        Paragraph::new(left_lines).wrap(Wrap { trim: false }).render(left_col, buf);
+        Paragraph::new(right_lines).wrap(Wrap { trim: false }).render(right_col, buf);
     }
 }
 

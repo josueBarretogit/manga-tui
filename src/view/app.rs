@@ -30,9 +30,10 @@ use crate::backend::tui::{Action, Events, NewChapterNotificationGroup};
 use crate::config::MangaTuiConfig;
 use crate::global::INSTRUCTIONS_STYLE;
 use crate::i18n::tr;
+use crate::view::pages::search::SearchScope;
 use crate::view::pages::*;
 use crate::view::tasks::manga::{AutoDownloadItem, download_new_chapters, download_new_favorite_chapters};
-use crate::view::widgets::{DownloadQueueModal, ErrorModal, NewChapterItem, NewChaptersModal, NewChaptersModalState};
+use crate::view::widgets::{DownloadQueueModal, ErrorModal, HelpModal, NewChapterItem, NewChaptersModal, NewChaptersModalState};
 
 const NEW_CHAPTER_CHECK_INTERVAL: Duration = Duration::from_secs(10 * 60);
 
@@ -90,12 +91,14 @@ where
     pub download_queue_progress: Option<DownloadQueueProgress>,
     pub queue_status_toast: Option<(String, Instant)>,
     pub is_queue_modal_open: bool,
+    pub is_help_modal_open: bool,
     last_new_chapter_check: Instant,
     // The picker is what decides how big a image needs to be rendered depending on the user's
     // terminal font size and the graphics it supports
     // if the terminal doesn't support any graphics protocol the picker is `None`
     picker: Option<Picker>,
     top_tabs_area: Rect,
+    tab_hit_boxes: Vec<(u16, u16, SelectedPage)>,
 }
 
 impl<T, S> Component for App<T, S>
@@ -111,14 +114,16 @@ where
         {
             manga_reader.render(area, frame);
         } else {
-            let main_layout = Layout::vertical([Constraint::Percentage(6), Constraint::Percentage(94)]);
+            let main_layout = Layout::vertical([Constraint::Length(2), Constraint::Min(1), Constraint::Length(1)]);
 
-            let [top_tabs_area, page_area] = main_layout.areas(area);
+            let [top_tabs_area, page_area, status_bar_area] = main_layout.areas(area);
 
             self.top_tabs_area = top_tabs_area;
             self.render_top_tabs(top_tabs_area, frame.buffer_mut());
 
             self.render_pages(page_area, frame);
+
+            self.render_status_bar(status_bar_area, frame.buffer_mut());
         }
 
         if let Some(message) = self.error_message.as_ref().cloned() {
@@ -127,6 +132,8 @@ where
             NewChaptersModal::new(state).render(area, frame.buffer_mut());
         } else if self.is_queue_modal_open {
             DownloadQueueModal::new(self.download_queue_progress.as_ref()).render(area, frame.buffer_mut());
+        } else if self.is_help_modal_open {
+            HelpModal::new().render(area, frame.buffer_mut());
         }
     }
 
@@ -350,9 +357,11 @@ where
             download_queue_progress: None,
             queue_status_toast: None,
             is_queue_modal_open: false,
+            is_help_modal_open: false,
             last_new_chapter_check: Instant::now(),
             manga_provider: Arc::clone(&provider),
             top_tabs_area: Rect::default(),
+            tab_hit_boxes: Vec::new(),
         }
     }
 
@@ -536,64 +545,297 @@ where
         });
     }
 
-    pub fn render_top_tabs(&self, area: Rect, buf: &mut Buffer) {
-        let home_tab = tr("Inicio <F1>/<u>", "Home <F1>/<u>");
-        let search_tab = tr("Buscar <F2>/<i>", "Search <F2>/<i>");
-        let feed_tab = tr("Seguimiento <F3>/<o>", "Feed <F3>/<o>");
-        let mut titles: Vec<&str> = vec![home_tab, search_tab, feed_tab];
+    pub fn render_top_tabs(&mut self, area: Rect, buf: &mut Buffer) {
+        if area.height == 0 || area.width == 0 {
+            return;
+        }
 
-        let tabs_block = Block::default().borders(Borders::BOTTOM);
+        let bar_bg = Color::Rgb(24, 27, 36);
+        let inactive_pill_bg = Color::Rgb(42, 47, 62);
+        let active_pill_bg = Color::Cyan;
+        let brand_bg = Color::Magenta;
 
-        let index_current_tab = match self.current_tab {
-            SelectedPage::Home => 0,
-            SelectedPage::Search => 1,
-            SelectedPage::Feed => 2,
-            SelectedPage::MangaTab => {
-                titles.push(tr(" 📖 Ficha del manga", " 📖 Manga page"));
-                3
-            },
-            _ => 0,
+        let top_row = Rect {
+            x: area.x,
+            y: area.y,
+            width: area.width,
+            height: 1,
         };
 
-        Tabs::new(titles)
-            .block(tabs_block)
-            .highlight_style(*INSTRUCTIONS_STYLE)
-            .select(index_current_tab)
-            .padding("", "")
-            .divider(" | ")
-            .render(area, buf);
+        // Fill top row background
+        for x in top_row.left()..top_row.right() {
+            buf[(x, top_row.y)].set_bg(bar_bg).set_symbol(" ");
+        }
+
+        self.tab_hit_boxes.clear();
+
+        let mut spans: Vec<Span<'static>> = Vec::new();
+        let mut cursor_x = top_row.x;
+
+        let brand_text = " ⛩ MANGA-TUI ";
+        spans.push(Span::styled(brand_text, Style::default().fg(Color::Black).bg(brand_bg).bold()));
+        cursor_x = cursor_x.saturating_add(brand_text.chars().count() as u16);
+
+        spans.push(Span::styled(" ", Style::default().fg(brand_bg).bg(bar_bg)));
+        cursor_x = cursor_x.saturating_add(2);
+
+        let mut tab_defs: Vec<(SelectedPage, String)> = vec![
+            (SelectedPage::Home, tr(" 🏠 Inicio <u/F1> ", " 🏠 Home <u/F1> ").to_string()),
+            (SelectedPage::Search, tr(" 🔍 Buscar <i/F2> ", " 🔍 Search <i/F2> ").to_string()),
+            (SelectedPage::Feed, tr(" 📚 Seguimiento <o/F3> ", " 📚 Feed <o/F3> ").to_string()),
+        ];
+
+        if self.current_tab == SelectedPage::MangaTab {
+            let manga_label = self
+                .manga_page
+                .as_ref()
+                .map(|p| {
+                    let short: String = p.manga.title.chars().take(18).collect();
+                    if p.manga.title.chars().count() > 18 { format!(" 📖 {short}… ") } else { format!(" 📖 {short} ") }
+                })
+                .unwrap_or_else(|| tr(" 📖 Ficha ", " 📖 Manga ").to_string());
+            tab_defs.push((SelectedPage::MangaTab, manga_label));
+        }
+
+        let mut active_tab_range: Option<(u16, u16)> = None;
+
+        for (page, label) in tab_defs {
+            let is_active = self.current_tab == page;
+            let pill_bg = if is_active { active_pill_bg } else { inactive_pill_bg };
+            let pill_fg = if is_active { Color::Black } else { Color::White };
+
+            let start_x = cursor_x;
+            spans.push(Span::styled("", Style::default().fg(pill_bg).bg(bar_bg)));
+            cursor_x = cursor_x.saturating_add(1);
+
+            let label_width = label.chars().count() as u16;
+            let mut text_style = Style::default().fg(pill_fg).bg(pill_bg);
+            if is_active {
+                text_style = text_style.bold();
+            }
+            spans.push(Span::styled(label, text_style));
+            cursor_x = cursor_x.saturating_add(label_width);
+
+            spans.push(Span::styled("", Style::default().fg(pill_bg).bg(bar_bg)));
+            cursor_x = cursor_x.saturating_add(1);
+
+            let end_x = cursor_x;
+            self.tab_hit_boxes.push((start_x, end_x, page));
+            if is_active {
+                active_tab_range = Some((start_x, end_x));
+            }
+
+            spans.push(Span::styled(" ", Style::default().bg(bar_bg)));
+            cursor_x = cursor_x.saturating_add(1);
+        }
+
+        Paragraph::new(Line::from(spans)).render(top_row, buf);
+
+        // Right-aligned status / provider / download badges on top row
+        let mut right_spans: Vec<Span<'static>> = Vec::new();
 
         if let Some(progress) = &self.download_queue_progress {
             if progress.is_downloading {
-                let short_title: String = progress.current_manga_title.chars().take(16).collect();
-                let text = format!(
-                    " ⬇ [{}/{}] {} Ch.{} ({:.0}%) [<D>] ",
+                let short_title: String = progress.current_manga_title.chars().take(14).collect();
+                let dl_text = format!(
+                    " ⬇ [{}/{}] {} Ch.{} ({:.0}%) <D> ",
                     progress.completed_in_batch + 1,
                     progress.total_in_batch,
                     short_title,
                     progress.current_chapter_number,
                     progress.current_page_percentage
                 );
-                let badge = Line::from(vec![Span::styled(text, Style::default().fg(Color::Cyan).bold())]);
-                Paragraph::new(badge).alignment(Alignment::Right).render(area, buf);
-                return;
+                right_spans.push(Span::styled("", Style::default().fg(Color::Cyan).bg(bar_bg)));
+                right_spans.push(Span::styled(dl_text, Style::default().fg(Color::Black).bg(Color::Cyan).bold()));
+                right_spans.push(Span::styled(" ", Style::default().bg(bar_bg)));
             }
+        } else if let Some((msg, time)) = &self.queue_status_toast
+            && time.elapsed().as_secs() < 8
+        {
+            right_spans.push(Span::styled("", Style::default().fg(Color::Green).bg(bar_bg)));
+            right_spans.push(Span::styled(format!(" {msg} "), Style::default().fg(Color::Black).bg(Color::Green).bold()));
+            right_spans.push(Span::styled(" ", Style::default().bg(bar_bg)));
+        } else if let Some((msg, time)) = &self.favorite_status_toast
+            && time.elapsed().as_secs() < 15
+        {
+            right_spans.push(Span::styled("", Style::default().fg(Color::Yellow).bg(bar_bg)));
+            right_spans.push(Span::styled(format!(" {msg} "), Style::default().fg(Color::Black).bg(Color::Yellow).bold()));
+            right_spans.push(Span::styled(" ", Style::default().bg(bar_bg)));
         }
 
-        if let Some((msg, time)) = &self.queue_status_toast {
-            if time.elapsed().as_secs() < 8 {
-                let toast = Line::from(vec![Span::styled(format!(" {msg} "), Style::default().fg(Color::Green).bold())]);
-                Paragraph::new(toast).alignment(Alignment::Right).render(area, buf);
-                return;
-            }
+        // Active Provider / Scope badge
+        let active_provider = if self.current_tab == SelectedPage::MangaTab {
+            self.manga_page
+                .as_ref()
+                .and_then(|p| p.manga.provider)
+                .unwrap_or_else(|| self.manga_provider.name())
+        } else {
+            self.manga_provider.name()
+        };
+
+        if self.current_tab == SelectedPage::Search && self.search_page.search_scope == SearchScope::AllProviders {
+            let lang_tag = match self.search_page.language_filter {
+                crate::view::pages::search::SearchLanguageFilter::All => "ALL",
+                crate::view::pages::search::SearchLanguageFilter::Spanish => "ES",
+                crate::view::pages::search::SearchLanguageFilter::English => "EN",
+            };
+            let pill_color = Color::Rgb(58, 66, 88);
+            right_spans.push(Span::styled("", Style::default().fg(pill_color).bg(bar_bg)));
+            right_spans.push(Span::styled(" 🌐 ", Style::default().fg(Color::Cyan).bg(pill_color).bold()));
+            right_spans.push(Span::styled(
+                format!("{} ({lang_tag}) ", tr("Todos", "All")),
+                Style::default().fg(Color::White).bg(pill_color).bold(),
+            ));
+        } else {
+            let health = crate::backend::multi_provider::get_provider_health_status(active_provider);
+            let dot_color = match health {
+                crate::backend::multi_provider::ProviderHealthStatus::Healthy => Color::Green,
+                crate::backend::multi_provider::ProviderHealthStatus::Degraded => Color::Yellow,
+                crate::backend::multi_provider::ProviderHealthStatus::CircuitOpen => Color::Red,
+            };
+            let pill_color = Color::Rgb(58, 66, 88);
+            right_spans.push(Span::styled("", Style::default().fg(pill_color).bg(bar_bg)));
+            right_spans
+                .push(Span::styled(format!(" {} ", health.indicator()), Style::default().fg(dot_color).bg(pill_color).bold()));
+            right_spans.push(Span::styled(format!("{active_provider} "), Style::default().fg(Color::White).bg(pill_color).bold()));
         }
 
-        if let Some((msg, time)) = &self.favorite_status_toast {
-            if time.elapsed().as_secs() < 15 {
-                let toast = Line::from(vec![Span::styled(format!(" {msg} "), Style::default().fg(Color::Yellow).bold())]);
-                Paragraph::new(toast).alignment(Alignment::Right).render(area, buf);
+        Paragraph::new(Line::from(right_spans)).alignment(Alignment::Right).render(top_row, buf);
+
+        // Second row: subtle horizontal rule with active tab highlight bar
+        if area.height >= 2 {
+            let divider_y = area.y + 1;
+            let rule_style = Style::default().fg(Color::DarkGray);
+            let active_rule_style = Style::default().fg(active_pill_bg).bold();
+            for x in area.left()..area.right() {
+                if let Some((start_x, end_x)) = active_tab_range
+                    && x >= start_x
+                    && x < end_x
+                {
+                    buf[(x, divider_y)].set_symbol("━").set_style(active_rule_style);
+                } else {
+                    buf[(x, divider_y)].set_symbol("─").set_style(rule_style);
+                }
             }
         }
+    }
+
+    pub fn render_status_bar(&mut self, area: Rect, buf: &mut Buffer) {
+        if area.height == 0 || area.width == 0 {
+            return;
+        }
+
+        let bar_bg = Color::Rgb(24, 27, 36);
+        let chip_bg = Color::Rgb(45, 51, 68);
+
+        for x in area.left()..area.right() {
+            buf[(x, area.y)].set_bg(bar_bg).set_symbol(" ");
+        }
+
+        let is_typing =
+            self.search_page.input_mode == InputMode::Typing || self.search_page.is_typing_filter() || self.feed_page.is_typing();
+
+        let (mode_label, mode_color) = if self.is_help_modal_open {
+            (tr(" ❓ AYUDA ", " ❓ HELP "), Color::Cyan)
+        } else if self.is_queue_modal_open {
+            (tr(" ⬇ COLA ", " ⬇ QUEUE "), Color::Cyan)
+        } else if is_typing {
+            (tr(" ⌨ ESCRIBIENDO ", " ⌨ TYPING "), Color::Yellow)
+        } else if self.search_page.is_filter_open() {
+            (tr(" ⚙ FILTROS ", " ⚙ FILTERS "), Color::Magenta)
+        } else {
+            match self.current_tab {
+                SelectedPage::Home => (tr(" 🏠 INICIO ", " 🏠 HOME "), Color::Cyan),
+                SelectedPage::Search => (tr(" 🔍 EXPLORAR ", " 🔍 SEARCH "), Color::LightBlue),
+                SelectedPage::Feed => (tr(" 📚 BIBLIOTECA ", " 📚 LIBRARY "), Color::Green),
+                SelectedPage::MangaTab => (tr(" 📖 FICHA ", " 📖 MANGA "), Color::Magenta),
+                SelectedPage::ReaderTab => (tr(" 👁 LECTOR ", " 👁 READER "), Color::Yellow),
+            }
+        };
+
+        let shortcuts: Vec<(&str, &str)> = if is_typing {
+            vec![
+                ("Enter", tr("Confirmar", "Confirm")),
+                ("↑/↓", tr("Historial", "History")),
+                ("Esc", tr("Salir texto", "Exit input")),
+            ]
+        } else {
+            match self.current_tab {
+                SelectedPage::Home => vec![
+                    ("w/b", tr("Popular", "Popular")),
+                    ("j/k", tr("Recientes", "Recent")),
+                    ("r", tr("Abrir", "Open")),
+                    ("i", tr("Buscar", "Search")),
+                    ("o", tr("Biblioteca", "Library")),
+                ],
+                SelectedPage::Search => vec![
+                    ("s", tr("Buscar", "Search")),
+                    ("j/k/h/l", tr("Mover", "Move")),
+                    ("r", tr("Abrir", "Open")),
+                    ("w/b", tr("Pág.", "Page")),
+                    ("p", tr("Proveedor", "Provider")),
+                    ("L", tr("Idioma", "Lang")),
+                    ("f", tr("Filtros", "Filters")),
+                ],
+                SelectedPage::Feed => vec![
+                    ("Tab", tr("Pestaña", "Tab")),
+                    ("j/k", tr("Mover", "Move")),
+                    ("r", tr("Abrir", "Open")),
+                    ("s", tr("Filtrar", "Filter")),
+                    ("w/b", tr("Estado", "State")),
+                    ("Del", tr("Borrar", "Delete")),
+                ],
+                SelectedPage::MangaTab => {
+                    if let Some(page) = &self.manga_page {
+                        if page.is_provider_switcher_open {
+                            vec![
+                                ("j/k", tr("Elegir", "Select")),
+                                ("Enter", tr("Migrar", "Switch")),
+                                ("Esc/P", tr("Cerrar", "Close")),
+                            ]
+                        } else {
+                            vec![
+                                ("j/k", tr("Capítulos", "Chapters")),
+                                ("r", tr("Leer", "Read")),
+                                ("Space", tr("Selec.", "Select")),
+                                ("d", tr("Descargar", "Download")),
+                                ("f", tr("Favorito", "Favorite")),
+                                ("P", tr("Proveedor", "Provider")),
+                                ("l", tr("Idioma", "Lang")),
+                            ]
+                        }
+                    } else {
+                        vec![]
+                    }
+                },
+                SelectedPage::ReaderTab => {
+                    vec![("j/k", tr("Pág.", "Page")), ("w/b", tr("Cap.", "Chap.")), ("Backspace", tr("Volver", "Back"))]
+                },
+            }
+        };
+
+        let mut left_spans: Vec<Span<'static>> = vec![
+            Span::styled(mode_label.to_string(), Style::default().fg(Color::Black).bg(mode_color).bold()),
+            Span::styled(" ", Style::default().fg(mode_color).bg(bar_bg)),
+        ];
+
+        for (key, action) in shortcuts {
+            left_spans.push(Span::styled(format!(" {key} "), Style::default().fg(Color::Cyan).bg(chip_bg).bold()));
+            left_spans.push(Span::styled(format!(" {action}  "), Style::default().fg(Color::Gray).bg(bar_bg)));
+        }
+
+        Paragraph::new(Line::from(left_spans)).render(area, buf);
+
+        let right_spans: Vec<Span<'static>> = vec![
+            Span::styled(" D ", Style::default().fg(Color::Cyan).bg(chip_bg).bold()),
+            Span::styled(format!(" {}  ", tr("Cola", "Queue")), Style::default().fg(Color::Gray).bg(bar_bg)),
+            Span::styled(" ? ", Style::default().fg(Color::Yellow).bg(chip_bg).bold()),
+            Span::styled(format!(" {}  ", tr("Ayuda", "Help")), Style::default().fg(Color::Gray).bg(bar_bg)),
+            Span::styled(" ^C ", Style::default().fg(Color::LightRed).bg(chip_bg).bold()),
+            Span::styled(format!(" {} ", tr("Salir", "Quit")), Style::default().fg(Color::Gray).bg(bar_bg)),
+        ];
+
+        Paragraph::new(Line::from(right_spans)).alignment(Alignment::Right).render(area, buf);
     }
 
     fn render_modal_error_message(&self, area: Rect, buf: &mut Buffer, message: &str) {
@@ -608,6 +850,7 @@ where
         self.error_message = None;
         self.new_chapters_state = None;
         self.is_queue_modal_open = false;
+        self.is_help_modal_open = false;
     }
 
     fn dismiss_new_chapters_notification(&mut self) -> Result<(), String> {
@@ -632,7 +875,7 @@ where
     }
 
     fn is_displaying_modal(&self) -> bool {
-        self.error_message.is_some() || self.new_chapters_state.is_some() || self.is_queue_modal_open
+        self.error_message.is_some() || self.new_chapters_state.is_some() || self.is_queue_modal_open || self.is_help_modal_open
     }
 
     pub fn render_pages(&mut self, area: Rect, frame: &mut Frame<'_>) {
@@ -682,6 +925,13 @@ where
     fn key_events_modal(&mut self, key_event: KeyEvent) {
         if key_event.code == KeyCode::Char('c') && key_event.modifiers == KeyModifiers::CONTROL {
             self.quit();
+            return;
+        }
+
+        if self.is_help_modal_open {
+            if matches!(key_event.code, KeyCode::Char('?') | KeyCode::Char('q') | KeyCode::Esc) {
+                self.is_help_modal_open = false;
+            }
             return;
         }
 
@@ -815,6 +1065,11 @@ where
             return;
         }
 
+        if !is_typing && key_event.code == KeyCode::Char('?') && self.current_tab != SelectedPage::ReaderTab {
+            self.is_help_modal_open = true;
+            return;
+        }
+
         if !is_typing && !self.search_page.is_filter_open() {
             match key_event.code {
                 KeyCode::Char('u') | KeyCode::F(1) if self.current_tab != SelectedPage::ReaderTab => {
@@ -840,6 +1095,23 @@ where
             let pos = Position::new(mouse_event.column, mouse_event.row);
             if !self.top_tabs_area.contains(pos) {
                 return;
+            }
+            for &(start_x, end_x, page) in &self.tab_hit_boxes {
+                if mouse_event.column >= start_x && mouse_event.column < end_x {
+                    match page {
+                        SelectedPage::Home => {
+                            self.global_event_tx.send(Events::GoToHome).ok();
+                        },
+                        SelectedPage::Search => {
+                            self.global_event_tx.send(Events::GoSearchPage).ok();
+                        },
+                        SelectedPage::Feed => {
+                            self.global_event_tx.send(Events::GoFeedPage).ok();
+                        },
+                        _ => {},
+                    }
+                    return;
+                }
             }
             let num_tabs: u16 = if self.current_tab == SelectedPage::MangaTab { 4 } else { 3 };
             let tab_width = self.top_tabs_area.width / num_tabs;
@@ -1256,5 +1528,33 @@ mod tests {
         assert_eq!(reader_page.list_of_chapters, list_of_chapter);
         assert_eq!(SelectedPage::ReaderTab, app.current_tab);
         assert!(reader_page.manga_tracker.is_some());
+    }
+
+    #[test]
+    fn test_powerline_header_status_bar_and_help_modal() {
+        use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
+
+        let mut app: App<MockMangaPageProvider, TrackerTest> =
+            App::new(MockMangaPageProvider::new(), None, None, MockFiltersHandler::new(MockFilterState {}), MockWidgetFilter {});
+
+        assert!(!app.is_help_modal_open);
+        press_key(&mut app, KeyCode::Char('?'));
+        assert!(app.is_help_modal_open);
+
+        let backend = TestBackend::new(100, 30);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let area = Rect::new(0, 0, 100, 30);
+        terminal
+            .draw(|f| {
+                app.render(area, f);
+            })
+            .unwrap();
+
+        assert_eq!(app.tab_hit_boxes.len(), 3);
+
+        // Close help modal with '?'
+        app.key_events_modal(KeyCode::Char('?').into());
+        assert!(!app.is_help_modal_open);
     }
 }
