@@ -580,7 +580,7 @@ mod tests {
         let request = server
             .mock_async(|when, then| {
                 when.method(POST)
-                    .header("Authorization", token)
+                    .header("Authorization", format!("Bearer {token}"))
                     .json_body_obj(&expected_body_sent.clone().into_json());
                 then.status(200);
             })
@@ -610,7 +610,9 @@ mod tests {
 
         let request = server
             .mock_async(|when, then| {
-                when.method(POST).header("Authorization", access_token).json_body_obj(&expected_body_sent);
+                when.method(POST)
+                    .header("Authorization", format!("Bearer {access_token}"))
+                    .json_body_obj(&expected_body_sent);
                 then.status(200);
             })
             .await;
@@ -640,7 +642,9 @@ mod tests {
 
         let request = server
             .mock_async(|when, then| {
-                when.method(POST).header("Authorization", access_token).json_body_obj(&expected_body_sent);
+                when.method(POST)
+                    .header("Authorization", format!("Bearer {access_token}"))
+                    .json_body_obj(&expected_body_sent);
                 then.status(200);
             })
             .await;

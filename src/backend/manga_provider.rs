@@ -354,6 +354,26 @@ pub struct SearchManga {
     pub provider: Option<MangaProviders>,
 }
 
+impl From<SearchManga> for Manga {
+    fn from(value: SearchManga) -> Self {
+        let id_safe = manga_tui::SanitizedFilename::new(&value.id).to_string();
+        Self {
+            id: value.id,
+            id_safe_for_download: id_safe,
+            title: value.title,
+            genres: value.genres,
+            description: value.description.unwrap_or_default(),
+            status: value.status.unwrap_or_default(),
+            cover_img_url: value.cover_img_url,
+            languages: value.languages,
+            rating: String::new(),
+            artist: value.artist,
+            author: value.author,
+            provider: value.provider,
+        }
+    }
+}
+
 #[derive(Debug, Default, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Chapter {
     pub id: String,
@@ -738,7 +758,161 @@ impl MangaProviders {
             Self::Comizy => "Comizy 🇬🇧",
         }
     }
+
+    pub fn health_indicator(&self) -> &'static str {
+        crate::backend::multi_provider::get_provider_health_status(*self).indicator()
+    }
+
+    pub fn badge_with_health(&self) -> String {
+        format!("{} {}", self.badge_label(), self.health_indicator())
+    }
 }
+
+/// Structured, thread-safe error type for manga provider network and scraping operations.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProviderError {
+    /// HTTP 429 Too Many Requests
+    RateLimited {
+        provider: Option<MangaProviders>,
+        retry_after_secs: Option<u64>,
+    },
+    /// HTTP 403 Forbidden / Cloudflare anti-bot challenge
+    CloudflareBlocked { provider: Option<MangaProviders> },
+    /// Request timed out
+    NetworkTimeout { provider: Option<MangaProviders> },
+    /// HTTP 404 or missing manga/chapter resource
+    NotFound { resource: String },
+    /// HTML / JSON deserialization or selector scraping failure
+    ParseError { message: String },
+    /// Generic network or transport failure
+    NetworkError { message: String },
+}
+
+impl ProviderError {
+    pub fn from_http_status(provider: Option<MangaProviders>, status: reqwest::StatusCode) -> Self {
+        match status.as_u16() {
+            429 => Self::RateLimited {
+                provider,
+                retry_after_secs: Some(30),
+            },
+            403 | 503 => Self::CloudflareBlocked { provider },
+            404 => Self::NotFound {
+                resource: format!("HTTP {status}"),
+            },
+            408 | 504 => Self::NetworkTimeout { provider },
+            _ => Self::NetworkError {
+                message: format!("HTTP status {status}"),
+            },
+        }
+    }
+
+    pub fn from_error_str(provider: Option<MangaProviders>, msg: &str) -> Self {
+        let lower = msg.to_lowercase();
+        if lower.contains("429") || lower.contains("too many requests") || lower.contains("rate limit") {
+            Self::RateLimited {
+                provider,
+                retry_after_secs: Some(30),
+            }
+        } else if lower.contains("403")
+            || lower.contains("cloudflare")
+            || lower.contains("just a moment")
+            || lower.contains("forbidden")
+        {
+            Self::CloudflareBlocked { provider }
+        } else if lower.contains("timed out") || lower.contains("timeout") || lower.contains("deadline has elapsed") {
+            Self::NetworkTimeout { provider }
+        } else if lower.contains("404") || lower.contains("not found") {
+            Self::NotFound {
+                resource: msg.to_string(),
+            }
+        } else if lower.contains("parse") || lower.contains("json") || lower.contains("selector") || lower.contains("missing field")
+        {
+            Self::ParseError {
+                message: msg.to_string(),
+            }
+        } else {
+            Self::NetworkError {
+                message: msg.to_string(),
+            }
+        }
+    }
+
+    pub fn from_error(provider: Option<MangaProviders>, err: &(dyn Error + 'static)) -> Self {
+        Self::from_error_str(provider, &err.to_string())
+    }
+
+    pub fn is_transient(&self) -> bool {
+        matches!(self, Self::RateLimited { .. } | Self::NetworkTimeout { .. } | Self::NetworkError { .. })
+    }
+
+    pub fn is_rate_limited(&self) -> bool {
+        matches!(self, Self::RateLimited { .. })
+    }
+
+    /// Whether this error indicates provider unavailability and should increment the circuit breaker failure count.
+    pub fn should_trip_circuit(&self) -> bool {
+        !matches!(self, Self::NotFound { .. })
+    }
+
+    pub fn user_friendly_message(&self) -> String {
+        let is_es = crate::i18n::is_es();
+        match self {
+            Self::RateLimited {
+                provider,
+                retry_after_secs,
+            } => {
+                let p = provider.map(|p| p.badge_label()).unwrap_or("Provider");
+                let wait = retry_after_secs.unwrap_or(30);
+                if is_es {
+                    format!("{p}: Límite de peticiones alcanzado (HTTP 429). Reintenta en {wait}s.")
+                } else {
+                    format!("{p}: Rate limit reached (HTTP 429). Retry in {wait}s.")
+                }
+            },
+            Self::CloudflareBlocked { provider } => {
+                let p = provider.map(|p| p.badge_label()).unwrap_or("Provider");
+                if is_es {
+                    format!("{p}: Bloqueado por Cloudflare/Firewall (HTTP 403). Prueba cambiar de proveedor con <P>.")
+                } else {
+                    format!("{p}: Blocked by Cloudflare/Firewall (HTTP 403). Try switching provider with <P>.")
+                }
+            },
+            Self::NetworkTimeout { provider } => {
+                let p = provider.map(|p| p.badge_label()).unwrap_or("Provider");
+                if is_es { format!("{p}: Tiempo de espera agotado.") } else { format!("{p}: Network request timed out.") }
+            },
+            Self::NotFound { resource } => {
+                if is_es {
+                    format!("Recurso no encontrado: {resource}")
+                } else {
+                    format!("Resource not found: {resource}")
+                }
+            },
+            Self::ParseError { message } => {
+                if is_es {
+                    format!("Error procesando respuesta del proveedor: {message}")
+                } else {
+                    format!("Failed to parse provider response: {message}")
+                }
+            },
+            Self::NetworkError { message } => {
+                if is_es {
+                    format!("Error de red: {message}")
+                } else {
+                    format!("Network error: {message}")
+                }
+            },
+        }
+    }
+}
+
+impl Display for ProviderError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.user_friendly_message())
+    }
+}
+
+impl Error for ProviderError {}
 
 pub trait GetRawImage {
     fn get_raw_image(&self, url: &str) -> impl Future<Output = Result<Bytes, Box<dyn Error>>> + Send;
@@ -807,7 +981,8 @@ pub trait GetChapterPages: GetRawImage + Send + Sync {
     ) -> impl Future<Output = Result<Vec<ChapterPageUrl>, Box<dyn Error>>> + Send;
 
     /// Used this method to get the pages with `bytes` and `extension`
-    /// `on_progress` is used to indicate how many pages have been fetched
+    /// `on_progress` is used to indicate how many pages have been fetched.
+    /// Pages are fetched concurrently (up to 4 in flight) while strictly preserving page order.
     fn get_chapter_pages<F: Fn(f64, &str) + 'static + Send>(
         &self,
         chapter_id: &str,
@@ -816,32 +991,43 @@ pub trait GetChapterPages: GetRawImage + Send + Sync {
         on_progress: F,
     ) -> impl Future<Output = Result<Vec<ChapterPage>, Box<dyn Error>>> + Send {
         Box::pin(async move {
+            use futures::stream::{self, StreamExt};
+
+            const CONCURRENT_PAGE_DOWNLOADS: usize = 4;
+
             let pages_url = self.get_chapter_pages_url_with_extension(chapter_id, manga_id, image_quality).await?;
-            let mut pages: Vec<ChapterPage> = vec![];
             let total_pages = pages_url.len();
             if total_pages == 0 {
-                return Ok(pages);
+                return Ok(Vec::new());
             }
 
-            for (index, page) in pages_url.into_iter().enumerate() {
+            let mut pages: Vec<ChapterPage> = Vec::with_capacity(total_pages);
+            let mut page_stream = stream::iter(pages_url.into_iter().map(|page| async move {
                 let mut fetched_bytes = None;
-                for attempt in 0..3 {
+                for attempt in 0..3u32 {
                     if attempt > 0 {
-                        tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+                        let backoff_ms = 200 * (1u64 << (attempt - 1));
+                        tokio::time::sleep(tokio::time::Duration::from_millis(backoff_ms)).await;
                     }
                     if let Ok(bytes) = self.get_raw_image(page.url.as_str()).await {
                         fetched_bytes = Some(bytes);
                         break;
                     }
                 }
+                fetched_bytes.map(|bytes| ChapterPage {
+                    bytes,
+                    extension: page.extension,
+                })
+            }))
+            .buffered(CONCURRENT_PAGE_DOWNLOADS);
 
-                if let Some(bytes) = fetched_bytes {
-                    pages.push(ChapterPage {
-                        bytes,
-                        extension: page.extension,
-                    });
+            let mut index = 0usize;
+            while let Some(maybe_page) = page_stream.next().await {
+                if let Some(chapter_page) = maybe_page {
+                    pages.push(chapter_page);
                 }
-                let percent = ((index + 1) as f64 / total_pages as f64) * 100.0;
+                index += 1;
+                let percent = (index as f64 / total_pages as f64) * 100.0;
                 on_progress(percent, chapter_id);
             }
 

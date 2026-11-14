@@ -216,6 +216,50 @@ pub struct SetChapterDownloaded<'a> {
     pub provider: MangaProviders,
 }
 
+/// Normalizes a chapter number string (e.g. `"01"`, `"1.0"` -> `"1"`, `"10.50"` -> `"10.5"`).
+pub fn normalize_chapter_number(raw: &str) -> String {
+    let trimmed = raw.trim();
+    if let Ok(val) = trimmed.parse::<f64>()
+        && val.is_finite()
+    {
+        if (val.fract()).abs() < 1e-6 {
+            return format!("{}", val as i64);
+        }
+        return format!("{val}");
+    }
+    trimmed.to_string()
+}
+
+/// Extracts a normalized chapter number from a chapter title or identifier
+/// (e.g. `"Capítulo 12.5"`, `"Chapter 05 - Start"`, `"Ch. 1"`, or `"12"`).
+pub fn extract_normalized_chapter_number(text: &str) -> Option<String> {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if trimmed.parse::<f64>().is_ok() {
+        return Some(normalize_chapter_number(trimmed));
+    }
+
+    let lower = trimmed.to_lowercase();
+    for marker in ["capítulo", "capitulo", "chapter", "cap.", "cap ", "ch.", "ch ", "episodio", "ep."] {
+        if let Some(pos) = lower.find(marker) {
+            let after = &lower[pos + marker.len()..];
+            let num_str: String = after
+                .chars()
+                .skip_while(|c| c.is_whitespace() || *c == ':' || *c == '-' || *c == '#')
+                .take_while(|c| c.is_ascii_digit() || *c == '.')
+                .collect();
+            let num_str = num_str.trim_end_matches('.');
+            if !num_str.is_empty() && num_str.parse::<f64>().is_ok() {
+                return Some(normalize_chapter_number(num_str));
+            }
+        }
+    }
+
+    None
+}
+
 /// Database wrapper providing high-level operations for manga data management.
 ///
 /// The `Database` struct encapsulates a SQLite connection and provides methods for:
@@ -819,6 +863,36 @@ impl<'a> Database<'a> {
         }
 
         Ok(chapter_ids)
+    }
+
+    /// Retrieves normalized chapter numbers marked as read across any provider for mangas sharing the same title.
+    /// Useful when migrating or switching providers for the same manga so reading progress is preserved.
+    pub fn get_read_chapter_numbers_by_manga_title(
+        &self,
+        manga_title: &str,
+    ) -> rusqlite::Result<std::collections::HashSet<String>> {
+        let trimmed = manga_title.trim();
+        if trimmed.is_empty() {
+            return Ok(std::collections::HashSet::new());
+        }
+
+        let mut stmt = self.connection.prepare(
+            "SELECT chapters.title, chapters.id
+             FROM chapters
+             INNER JOIN mangas ON mangas.id = chapters.manga_id
+             WHERE LOWER(TRIM(mangas.title)) = LOWER(TRIM(?1)) AND chapters.is_read = 1",
+        )?;
+
+        let rows = stmt.query_map(params![trimmed], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))?;
+
+        let mut numbers = std::collections::HashSet::new();
+        for (title, id) in rows.flatten() {
+            if let Some(num) = extract_normalized_chapter_number(&title).or_else(|| extract_normalized_chapter_number(&id)) {
+                numbers.insert(num);
+            }
+        }
+
+        Ok(numbers)
     }
 
     pub fn get_downloaded_mangas(&self, provider: MangaProviders) -> rusqlite::Result<Vec<DownloadedManga>> {
@@ -3022,6 +3096,56 @@ mod test {
         database.clear_search_history()?;
         let recent_empty = database.get_recent_searches(10)?;
         assert_eq!(recent_empty.len(), 0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_normalize_and_extract_chapter_numbers() {
+        assert_eq!(normalize_chapter_number("01"), "1");
+        assert_eq!(normalize_chapter_number("1.0"), "1");
+        assert_eq!(normalize_chapter_number("12.50"), "12.5");
+
+        assert_eq!(extract_normalized_chapter_number("Capítulo 05: El inicio").as_deref(), Some("5"));
+        assert_eq!(extract_normalized_chapter_number("Chapter 12.5 - Bonus").as_deref(), Some("12.5"));
+        assert_eq!(extract_normalized_chapter_number("Ch. 100").as_deref(), Some("100"));
+        assert_eq!(extract_normalized_chapter_number("42").as_deref(), Some("42"));
+    }
+
+    #[test]
+    fn test_get_read_chapter_numbers_by_manga_title() -> Result<()> {
+        let conn = Connection::open_in_memory()?;
+        let database = Database::new(&conn);
+        database.setup()?;
+
+        database.save_history(MangaReadingHistorySave {
+            id: "inmanga_op",
+            title: "One Piece",
+            img_url: None,
+            chapter: ChapterToSaveHistory {
+                id: "inmanga_ch_1",
+                title: "Capítulo 01: Romance Dawn",
+                translated_language: "es",
+            },
+            provider: MangaProviders::Inmanga,
+        })?;
+
+        database.save_history(MangaReadingHistorySave {
+            id: "inmanga_op",
+            title: "One Piece",
+            img_url: None,
+            chapter: ChapterToSaveHistory {
+                id: "inmanga_ch_2",
+                title: "Chapter 2.5",
+                translated_language: "es",
+            },
+            provider: MangaProviders::Inmanga,
+        })?;
+
+        let read_nums = database.get_read_chapter_numbers_by_manga_title("one piece")?;
+        assert!(read_nums.contains("1"));
+        assert!(read_nums.contains("2.5"));
+        assert!(!read_nums.contains("3"));
 
         Ok(())
     }

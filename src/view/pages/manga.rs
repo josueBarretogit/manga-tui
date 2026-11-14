@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent, MouseEventKind};
@@ -20,12 +20,12 @@ use tokio::task::JoinSet;
 use crate::backend::AppDirectories;
 use crate::backend::database::{
     Bookmark, ChapterBookmarked, ChapterToBookmark, ChapterToSaveHistory, Database, MangaReadingHistorySave, RetrieveBookmark,
-    SetChapterDownloaded,
+    SetChapterDownloaded, normalize_chapter_number,
 };
 use crate::backend::error_log::{self, ErrorType, write_to_error_log};
 use crate::backend::manga_provider::{
     Chapter, ChapterFilters, ChapterOrderBy, ChapterToRead, GetChaptersResponse, Languages, ListOfChapters, Manga,
-    MangaPageProvider, Pagination,
+    MangaPageProvider, Pagination, SearchManga,
 };
 use crate::backend::tracker::{MangaTracker, track_manga};
 use crate::backend::tui::Events;
@@ -95,6 +95,10 @@ pub enum MangaPageActions {
     SearchPreviousChapterPage,
     BookMarkChapterSelected,
     ToggleFavorite,
+    ToggleProviderSwitcher,
+    ScrollProviderSwitcherDown,
+    ScrollProviderSwitcherUp,
+    ConfirmSwitchProvider,
 }
 
 #[derive(Debug, PartialEq, EnumIs)]
@@ -122,6 +126,8 @@ pub enum MangaPageEvents {
     ReadSuccesful(ChapterToRead, ListOfChapters),
     LoadChapters(Option<GetChaptersResponse>),
     TrackingFailed(String),
+    LoadAlternativeProviders(Vec<SearchManga>),
+    SwitchToProviderManga(Manga),
 }
 
 pub struct MangaPage<T, S>
@@ -145,6 +151,11 @@ where
     picker: Option<Picker>,
     available_languages_state: ListState,
     is_list_languages_open: bool,
+    pub is_provider_switcher_open: bool,
+    pub is_searching_alternatives: bool,
+    pub alternative_providers: Vec<SearchManga>,
+    pub alternative_providers_state: ListState,
+    pub migrated_read_chapter_numbers: HashSet<String>,
     download_all_chapters_state: DownloadAllChaptersState,
     pub selected_chapters: HashMap<String, Chapter>,
     pub is_favorite: bool,
@@ -211,6 +222,11 @@ where
             tasks: JoinSet::new(),
             available_languages_state: ListState::default(),
             is_list_languages_open: false,
+            is_provider_switcher_open: false,
+            is_searching_alternatives: false,
+            alternative_providers: Vec::new(),
+            alternative_providers_state: ListState::default(),
+            migrated_read_chapter_numbers: HashSet::new(),
             download_all_chapters_state: DownloadAllChaptersState::new(local_event_tx),
             selected_chapters: HashMap::new(),
             is_favorite,
@@ -310,7 +326,7 @@ where
                 crate::backend::manga_provider::MangaProviders::Mangapill => ratatui::style::Color::Blue,
                 crate::backend::manga_provider::MangaProviders::Comizy => ratatui::style::Color::LightYellow,
             };
-            title_spans_vec.push(Span::styled(format!("[{}] ", provider.badge_label()), Style::default().fg(color).bold()));
+            title_spans_vec.push(Span::styled(format!("[{}] ", provider.badge_with_health()), Style::default().fg(color).bold()));
         }
         title_spans_vec.push(Span::raw(self.manga.title.clone()));
         let title_spans = Line::from(title_spans_vec);
@@ -418,6 +434,8 @@ where
                 }
                 bottom_instructions.push(" Multi-search ".into());
                 bottom_instructions.push("<p>".to_span().style(*INSTRUCTIONS_STYLE));
+                bottom_instructions.push(crate::i18n::tr(" Cambiar fuente ", " Switch source ").into());
+                bottom_instructions.push("<P>".to_span().style(*INSTRUCTIONS_STYLE));
                 bottom_instructions.push(crate::i18n::tr(" Volver ", " Back ").into());
                 bottom_instructions.push("<Esc>".to_span().style(*INSTRUCTIONS_STYLE));
 
@@ -434,8 +452,7 @@ where
                         Line::from("Many licensed manga (Comikey, MangaPlus, Viz) only have external links on MangaDex,")
                             .dark_gray(),
                         Line::from("which cannot be read in a terminal reader.").dark_gray(),
-                        Line::from("Try changing language with <l> or use InManga (-p inmanga) / Weebcentral (-p weebcentral).")
-                            .dark_gray(),
+                        Line::from("Try changing language with <l>, or press <P> to switch provider directly.").dark_gray(),
                     ];
                     Paragraph::new(text)
                         .alignment(ratatui::layout::Alignment::Center)
@@ -457,6 +474,60 @@ where
 
                 Block::bordered().title(title).render(area, buf);
             },
+        }
+
+        if self.is_provider_switcher_open {
+            self.render_provider_switcher_modal(area, buf);
+        }
+    }
+
+    fn render_provider_switcher_modal(&mut self, area: Rect, buf: &mut Buffer) {
+        let modal_width = area.width.clamp(30, 68);
+        let modal_height = area.height.clamp(6, 14);
+        let modal_x = area.x + area.width.saturating_sub(modal_width) / 2;
+        let modal_y = area.y + area.height.saturating_sub(modal_height) / 2;
+        let modal_area = Rect::new(modal_x, modal_y, modal_width, modal_height).intersection(buf.area);
+
+        Clear.render(modal_area, buf);
+
+        let title = Line::from(vec![
+            crate::i18n::tr(" Migrar / Cambiar Proveedor ", " Migrate / Switch Provider ")
+                .bold()
+                .yellow(),
+            " | ".into(),
+            "Select ".into(),
+            Span::raw("<Enter>").style(*INSTRUCTIONS_STYLE),
+            " Close ".into(),
+            Span::raw("<Esc>").style(*INSTRUCTIONS_STYLE),
+        ]);
+
+        if self.is_searching_alternatives {
+            let msg =
+                crate::i18n::tr("Buscando proveedores alternativos disponibles...", "Searching available alternative providers...");
+            Paragraph::new(msg)
+                .block(Block::bordered().title(title))
+                .alignment(ratatui::layout::Alignment::Center)
+                .render(modal_area, buf);
+        } else if self.alternative_providers.is_empty() {
+            let msg = crate::i18n::tr(
+                "No se encontraron otros proveedores para este manga.",
+                "No alternative providers found for this manga.",
+            );
+            Paragraph::new(msg)
+                .block(Block::bordered().title(title))
+                .alignment(ratatui::layout::Alignment::Center)
+                .render(modal_area, buf);
+        } else {
+            let list_items = self.alternative_providers.iter().map(|m| {
+                let badge = m.provider.map(|p| p.badge_with_health()).unwrap_or_else(|| "Unknown".to_string());
+                format!("[{badge}] {}", m.title)
+            });
+
+            let list = List::new(list_items)
+                .block(Block::bordered().title(title))
+                .highlight_style(Style::default().on_blue().bold());
+
+            StatefulWidget::render(list, modal_area, buf, &mut self.alternative_providers_state);
         }
     }
 
@@ -527,7 +598,23 @@ where
     }
 
     fn handle_key_events(&mut self, key_event: KeyEvent) {
-        if self.is_list_languages_open {
+        if self.is_provider_switcher_open {
+            match key_event.code {
+                KeyCode::Char('j') | KeyCode::Down => {
+                    self.local_action_tx.send(MangaPageActions::ScrollProviderSwitcherDown).ok();
+                },
+                KeyCode::Char('k') | KeyCode::Up => {
+                    self.local_action_tx.send(MangaPageActions::ScrollProviderSwitcherUp).ok();
+                },
+                KeyCode::Enter => {
+                    self.local_action_tx.send(MangaPageActions::ConfirmSwitchProvider).ok();
+                },
+                KeyCode::Char('P') | KeyCode::Esc => {
+                    self.local_action_tx.send(MangaPageActions::ToggleProviderSwitcher).ok();
+                },
+                _ => {},
+            }
+        } else if self.is_list_languages_open {
             match key_event.code {
                 KeyCode::Char('j') | KeyCode::Down => {
                     self.local_action_tx.send(MangaPageActions::ScrollDownAvailbleLanguages).ok();
@@ -621,6 +708,9 @@ where
                         if let Some(tx) = &self.global_event_tx {
                             tx.send(Events::SearchAllProviders(self.manga.title.clone())).ok();
                         }
+                    },
+                    KeyCode::Char('P') => {
+                        self.local_action_tx.send(MangaPageActions::ToggleProviderSwitcher).ok();
                     },
                     KeyCode::Esc | KeyCode::Backspace => {
                         if let Some(tx) = &self.global_event_tx {
@@ -916,7 +1006,10 @@ where
             return;
         };
         let database = Database::new(&conn);
+        let cross_provider_read_nums = database.get_read_chapter_numbers_by_manga_title(&self.manga.title).unwrap_or_default();
         let history = database.get_chapters_history_status(&self.manga.id);
+        let provider = self.manga.provider.unwrap_or_else(|| self.manga_provider.name());
+
         match history {
             Ok(his) => {
                 if let Some(chapters) = self.chapters.as_mut() {
@@ -924,7 +1017,26 @@ where
                         let chapter_found = his.iter().find(|chap| chap.id == item.chapter.id);
                         if let Some(chapt) = chapter_found {
                             item.is_read = chapt.is_read;
-                            item.is_downloaded = chapt.is_downloaded
+                            item.is_downloaded = chapt.is_downloaded;
+                        }
+                        if !item.is_read && !item.chapter.chapter_number.is_empty() {
+                            let norm_num = normalize_chapter_number(&item.chapter.chapter_number);
+                            if self.migrated_read_chapter_numbers.contains(&norm_num)
+                                || cross_provider_read_nums.contains(&norm_num)
+                            {
+                                item.is_read = true;
+                                let _ = database.save_history(MangaReadingHistorySave {
+                                    id: &self.manga.id,
+                                    title: &self.manga.title,
+                                    img_url: Some(&self.manga.cover_img_url),
+                                    chapter: ChapterToSaveHistory {
+                                        id: &item.chapter.id,
+                                        title: &item.chapter.title,
+                                        translated_language: item.chapter.language.as_iso_code(),
+                                    },
+                                    provider,
+                                });
+                            }
                         }
                     }
                 }
@@ -933,6 +1045,125 @@ where
                 write_to_error_log(error_log::ErrorType::Error(Box::new(e)));
             },
         }
+    }
+
+    fn toggle_provider_switcher(&mut self) {
+        self.is_provider_switcher_open = !self.is_provider_switcher_open;
+        if self.is_provider_switcher_open {
+            self.is_searching_alternatives = true;
+            self.alternative_providers.clear();
+            self.alternative_providers_state = ListState::default();
+            let title = self.manga.title.clone();
+            let current_provider = self.manga.provider.or_else(|| Some(self.manga_provider.name()));
+            let tx = self.local_event_tx.clone();
+            self.tasks.spawn(async move {
+                let alternatives = crate::backend::multi_provider::find_alternative_providers(&title, current_provider).await;
+                tx.send(MangaPageEvents::LoadAlternativeProviders(alternatives)).ok();
+            });
+        }
+    }
+
+    fn load_alternative_providers(&mut self, alternatives: Vec<SearchManga>) {
+        self.is_searching_alternatives = false;
+        self.alternative_providers = alternatives;
+        if !self.alternative_providers.is_empty() {
+            self.alternative_providers_state.select(Some(0));
+        }
+    }
+
+    fn scroll_provider_switcher_down(&mut self) {
+        if !self.alternative_providers.is_empty() {
+            self.alternative_providers_state.select_next();
+        }
+    }
+
+    fn scroll_provider_switcher_up(&mut self) {
+        if !self.alternative_providers.is_empty() {
+            self.alternative_providers_state.select_previous();
+        }
+    }
+
+    fn confirm_switch_provider(&mut self) {
+        let Some(selected_idx) = self.alternative_providers_state.selected() else {
+            return;
+        };
+        let Some(target) = self.alternative_providers.get(selected_idx).cloned() else {
+            return;
+        };
+        let Some(target_provider) = target.provider else {
+            return;
+        };
+
+        // Snapshot all read chapter numbers from the current provider before switching
+        if let Some(chapters) = &self.chapters {
+            for item in &chapters.widget.chapters {
+                if item.is_read && !item.chapter.chapter_number.is_empty() {
+                    self.migrated_read_chapter_numbers
+                        .insert(normalize_chapter_number(&item.chapter.chapter_number));
+                }
+            }
+        }
+
+        self.is_provider_switcher_open = false;
+        self.state = PageState::SearchingChapters;
+        let tx = self.local_event_tx.clone();
+        let target_id = target.id.clone();
+
+        self.tasks.spawn(async move {
+            let new_manga = match crate::backend::multi_provider::get_manga_by_id_for_provider(target_provider, &target_id).await {
+                Ok(m) => m,
+                Err(_) => {
+                    let mut fallback = Manga::from(target);
+                    fallback.provider = Some(target_provider);
+                    fallback
+                },
+            };
+            tx.send(MangaPageEvents::SwitchToProviderManga(new_manga)).ok();
+        });
+    }
+
+    pub fn switch_to_provider_manga(&mut self, new_manga: Manga) {
+        if let Some(chapters) = &self.chapters {
+            for item in &chapters.widget.chapters {
+                if item.is_read && !item.chapter.chapter_number.is_empty() {
+                    self.migrated_read_chapter_numbers
+                        .insert(normalize_chapter_number(&item.chapter.chapter_number));
+                }
+            }
+        }
+
+        let provider_name = new_manga.provider.unwrap_or_else(|| self.manga_provider.name());
+        self.is_favorite = Database::get_connection()
+            .and_then(|conn| Database::new(&conn).is_favorite(&new_manga.id, provider_name))
+            .unwrap_or(false);
+
+        let preferred = *Languages::get_preferred_lang();
+        let chapter_language = new_manga
+            .languages
+            .iter()
+            .find(|lang| **lang == preferred)
+            .cloned()
+            .or_else(|| {
+                if preferred == Languages::Spanish {
+                    new_manga.languages.iter().find(|lang| **lang == Languages::SpanishLa).cloned()
+                } else if preferred == Languages::SpanishLa {
+                    new_manga.languages.iter().find(|lang| **lang == Languages::Spanish).cloned()
+                } else {
+                    None
+                }
+            })
+            .or_else(|| new_manga.languages.iter().find(|lang| **lang == Languages::English).cloned())
+            .or_else(|| new_manga.languages.first().cloned())
+            .unwrap_or_default();
+
+        self.manga = new_manga;
+        self.image_state = None;
+        self.chapters = None;
+        self.selected_chapters.clear();
+        self.chapter_filters.language = chapter_language;
+        self.state = PageState::SearchingChapters;
+        self.local_event_tx.send(MangaPageEvents::SearchChapters).ok();
+        self.local_event_tx.send(MangaPageEvents::SearchCover).ok();
     }
 
     fn clear_chapters_as_bookmarked(&mut self) {
@@ -1402,6 +1633,12 @@ where
                 MangaPageEvents::CheckChapterStatus => {
                     self.check_chapters_read();
                 },
+                MangaPageEvents::LoadAlternativeProviders(alternatives) => {
+                    self.load_alternative_providers(alternatives);
+                },
+                MangaPageEvents::SwitchToProviderManga(new_manga) => {
+                    self.switch_to_provider_manga(new_manga);
+                },
 
                 MangaPageEvents::ReadSuccesful(chapter_to_read, list) => {
                     self.state = PageState::DisplayingChapters;
@@ -1513,6 +1750,10 @@ where
                 }
             },
             MangaPageActions::ToggleFavorite => self.toggle_favorite(),
+            MangaPageActions::ToggleProviderSwitcher => self.toggle_provider_switcher(),
+            MangaPageActions::ScrollProviderSwitcherDown => self.scroll_provider_switcher_down(),
+            MangaPageActions::ScrollProviderSwitcherUp => self.scroll_provider_switcher_up(),
+            MangaPageActions::ConfirmSwitchProvider => self.confirm_switch_provider(),
 
             MangaPageActions::DownloadChapter => self.download_chapter_selected(),
         }
@@ -2261,5 +2502,60 @@ mod test {
         assert_eq!(DownloadPhase::ProccessNotStarted, manga_page.download_all_chapters_state.phase);
         assert!(!manga_page.download_process_started());
         assert_eq!(0, manga_page.selected_chapters.len());
+    }
+
+    #[tokio::test]
+    async fn test_provider_switcher_and_chapter_migration() {
+        let mut manga = Manga::default();
+        manga.id = "inmanga_1".to_string();
+        manga.title = "Berserk".to_string();
+        manga.provider = Some(crate::backend::manga_provider::MangaProviders::Inmanga);
+
+        let mut manga_page: MangaPage<MockMangaPageProvider, TrackerTest> =
+            MangaPage::new(manga, None, MockMangaPageProvider::new().into());
+
+        let ch1 = Chapter {
+            id: "inm_ch1".to_string(),
+            chapter_number: "01".to_string(),
+            title: "Capítulo 1".to_string(),
+            ..Default::default()
+        };
+        let ch2 = Chapter {
+            id: "inm_ch2".to_string(),
+            chapter_number: "2".to_string(),
+            title: "Capítulo 2".to_string(),
+            ..Default::default()
+        };
+
+        manga_page.load_chapters(Some(GetChaptersResponse {
+            chapters: vec![ch1, ch2],
+            total_chapters: 2,
+        }));
+        manga_page.chapters.as_mut().unwrap().widget.chapters[0].is_read = true;
+
+        // Press Shift+P -> ToggleProviderSwitcher
+        press_key(&mut manga_page, KeyCode::Char('P'));
+        let action = manga_page.local_action_rx.recv().await.unwrap();
+        assert_eq!(MangaPageActions::ToggleProviderSwitcher, action);
+
+        manga_page.load_alternative_providers(vec![SearchManga {
+            id: "mangaoni_berserk".to_string(),
+            title: "Berserk".to_string(),
+            provider: Some(crate::backend::manga_provider::MangaProviders::Mangaoni),
+            ..Default::default()
+        }]);
+        assert_eq!(manga_page.alternative_providers.len(), 1);
+        assert_eq!(manga_page.alternative_providers_state.selected(), Some(0));
+
+        // Switch to new provider manga
+        let mut new_manga = Manga::default();
+        new_manga.id = "mangaoni_berserk".to_string();
+        new_manga.title = "Berserk".to_string();
+        new_manga.provider = Some(crate::backend::manga_provider::MangaProviders::Mangaoni);
+
+        manga_page.switch_to_provider_manga(new_manga);
+        assert_eq!(manga_page.manga.id, "mangaoni_berserk");
+        assert!(manga_page.migrated_read_chapter_numbers.contains("1"));
+        assert!(!manga_page.migrated_read_chapter_numbers.contains("2"));
     }
 }
