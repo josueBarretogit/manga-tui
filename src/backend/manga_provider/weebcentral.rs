@@ -186,7 +186,7 @@ impl WeebcentralProvider {
         let from = pagination.index_to_slice_from();
         let to = pagination.to_index(total_chapters);
 
-        let chapters = chapters.as_slice().get(from..to).unwrap_or(&[]);
+        let chapters = chapters.get(from..to).unwrap_or(&[]);
 
         GetChaptersResponse {
             total_chapters: total_chapters as u32,
