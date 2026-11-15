@@ -682,6 +682,7 @@ impl MangaPageProvider for MangadexClient {
             super::ChapterOrderBy::Ascending => "asc",
             super::ChapterOrderBy::Descending => "desc",
         };
+
         let language_code = filters.language.as_iso_code();
         let id_cache = format!("{endpoint}{offset}{order}{language_code}get-chapters-cache");
 

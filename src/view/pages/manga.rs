@@ -162,7 +162,24 @@ where
 
         let cover_area = Rect::default();
 
-        let chapter_language = manga.languages.iter().find(|lang| *lang == Languages::get_preferred_lang()).cloned();
+        let preferred = *Languages::get_preferred_lang();
+        let chapter_language = manga
+            .languages
+            .iter()
+            .find(|lang| **lang == preferred)
+            .cloned()
+            .or_else(|| {
+                if preferred == Languages::Spanish {
+                    manga.languages.iter().find(|lang| **lang == Languages::SpanishLa).cloned()
+                } else if preferred == Languages::SpanishLa {
+                    manga.languages.iter().find(|lang| **lang == Languages::Spanish).cloned()
+                } else {
+                    None
+                }
+            })
+            .or_else(|| manga.languages.iter().find(|lang| **lang == Languages::English).cloned())
+            .or_else(|| manga.languages.first().cloned())
+            .unwrap_or_default();
 
         Self {
             manga,
@@ -185,7 +202,7 @@ where
             manga_provider: provider,
             chapter_filters: ChapterFilters {
                 order: ChapterOrderBy::default(),
-                language: chapter_language.unwrap_or_default(),
+                language: chapter_language,
             },
         }
     }
@@ -344,7 +361,24 @@ where
                     .title_bottom(Line::from(bottom_instructions))
                     .render(area, buf);
 
-                StatefulWidget::render(chapters.widget.clone(), chapters_area, buf, &mut chapters.state);
+                if chapters.widget.chapters.is_empty() {
+                    let text = vec![
+                        Line::from(""),
+                        Line::from("No chapters found in this language on this provider.".yellow()),
+                        Line::from(""),
+                        Line::from("Many licensed manga (Comikey, MangaPlus, Viz) only have external links on MangaDex,")
+                            .dark_gray(),
+                        Line::from("which cannot be read in a terminal reader.").dark_gray(),
+                        Line::from("Try changing language with <l> or use InManga (-p inmanga) / Weebcentral (-p weebcentral).")
+                            .dark_gray(),
+                    ];
+                    Paragraph::new(text)
+                        .alignment(ratatui::layout::Alignment::Center)
+                        .wrap(Wrap { trim: true })
+                        .render(chapters_area, buf);
+                } else {
+                    StatefulWidget::render(chapters.widget.clone(), chapters_area, buf, &mut chapters.state);
+                }
 
                 self.render_sorting_buttons(sorting_buttons_area, buf);
             },
@@ -381,7 +415,8 @@ where
         ]))
         .render(sorting_area, buf);
 
-        let languages_list_area = Rect::new(language_area.x, language_area.y, language_area.width, language_area.height + 10);
+        let languages_list_area =
+            Rect::new(language_area.x, language_area.y, language_area.width, language_area.height + 10).intersection(buf.area);
 
         if self.is_list_languages_open {
             Clear.render(languages_list_area, buf);
@@ -1769,5 +1804,28 @@ mod test {
         assert_eq!(expected, result);
 
         Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_render_80x24() {
+        use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
+        let backend = TestBackend::new(80, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut manga_page: MangaPage<MockMangaPageProvider, TrackerTest> =
+            MangaPage::new(Manga::default(), None, MockMangaPageProvider::new().into());
+        manga_page.load_chapters(Some(GetChaptersResponse {
+            chapters: vec![],
+            total_chapters: 0,
+        }));
+        manga_page.is_list_languages_open = true;
+
+        // Render with page_area (as App does: y=1, height=23)
+        let page_area = Rect::new(0, 1, 80, 23);
+        terminal
+            .draw(|f| {
+                manga_page.render(page_area, f);
+            })
+            .unwrap();
     }
 }

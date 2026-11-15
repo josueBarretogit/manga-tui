@@ -73,16 +73,26 @@ pub enum MangaReaderEvents {
 }
 
 pub struct Page {
-    pub image_state: Option<Box<dyn StatefulProtocol>>,
+    pub slices: Vec<Box<dyn StatefulProtocol>>,
+    pub current_slice: usize,
     pub dimensions: Option<(u32, u32)>,
 }
 
 impl Page {
     pub fn new() -> Self {
         Self {
-            image_state: None,
+            slices: Vec::new(),
+            current_slice: 0,
             dimensions: None,
         }
+    }
+
+    pub fn is_loaded(&self) -> bool {
+        !self.slices.is_empty()
+    }
+
+    pub fn current_image_state_mut(&mut self) -> Option<&mut Box<dyn StatefulProtocol>> {
+        self.slices.get_mut(self.current_slice)
     }
 }
 
@@ -124,8 +134,8 @@ where
         let buf = frame.buffer_mut();
 
         let layout = match self.current_page_size {
-            PageSize::Normal => [Constraint::Percentage(30), Constraint::Percentage(40), Constraint::Percentage(30)],
-            PageSize::Wide => [Constraint::Percentage(20), Constraint::Percentage(60), Constraint::Percentage(20)],
+            PageSize::Normal => [Constraint::Percentage(25), Constraint::Percentage(50), Constraint::Percentage(25)],
+            PageSize::Wide => [Constraint::Percentage(15), Constraint::Percentage(70), Constraint::Percentage(15)],
         };
 
         let [left, center, right] = Layout::horizontal(layout).areas(area);
@@ -133,9 +143,12 @@ where
         Block::bordered().render(left, buf);
 
         let index = self.current_page_index();
-        let show_reload = if let Some(page) = self.pages.get_mut(index).filter(|page| page.image_state.is_some()) {
+
+        let show_reload = if let Some(page) = self.pages.get_mut(index).filter(|page| page.is_loaded()) {
             let image = StatefulImage::new(None).resize(Resize::Fit(None));
-            StatefulWidget::render(image, center, buf, page.image_state.as_mut().unwrap());
+            if let Some(slice_protocol) = page.current_image_state_mut() {
+                StatefulWidget::render(image, center, buf, slice_protocol);
+            }
             let (width, height) = page.dimensions.unwrap();
             self.resize_based_on_image_size(width, height);
 
@@ -259,13 +272,39 @@ where
     }
 
     fn next_page(&mut self) {
+        let curr_index = self.current_page_index();
+        if let Some(page) = self.pages.get_mut(curr_index)
+            && page.current_slice + 1 < page.slices.len()
+        {
+            page.current_slice += 1;
+            return;
+        }
         self.page_list_state.list_state.next();
+        let new_index = self.current_page_index();
+        if let Some(page) = self.pages.get_mut(new_index) {
+            page.current_slice = 0;
+        }
         self.fetch_pages();
     }
 
     fn previous_page(&mut self) {
-        self.page_list_state.list_state.previous();
-        self.fetch_pages();
+        let curr_index = self.current_page_index();
+        if let Some(page) = self.pages.get_mut(curr_index)
+            && page.current_slice > 0
+        {
+            page.current_slice -= 1;
+            return;
+        }
+        if curr_index > 0 {
+            self.page_list_state.list_state.previous();
+            let new_index = self.current_page_index();
+            if let Some(page) = self.pages.get_mut(new_index)
+                && !page.slices.is_empty()
+            {
+                page.current_slice = page.slices.len().saturating_sub(1);
+            }
+            self.fetch_pages();
+        }
     }
 
     fn reload_page(&mut self) {
@@ -283,9 +322,33 @@ where
     fn load_page(&mut self, data: PageData) {
         match self.pages.get_mut(data.index) {
             Some(page) => {
-                let protocol = self.picker.new_resize_protocol(data.panel.image_decoded);
-                page.image_state = Some(protocol);
-                page.dimensions = Some(data.panel.dimensions);
+                let (width, height) = data.panel.dimensions;
+                // If it's a webtoon / vertical strip (height > width * 1.8), slice it into page-sized sub-viewports
+                if width > 0 && height as f64 > (width as f64) * 1.8 {
+                    let target_aspect = 1.4; // standard manga page ratio (height / width)
+                    let slice_height = ((width as f64) * target_aspect) as u32;
+                    let overlap = ((slice_height as f64) * 0.08) as u32; // 8% overlap to prevent cutting across words
+
+                    let mut y = 0;
+                    let mut protocols = Vec::new();
+                    while y < height {
+                        let curr_h = slice_height.min(height - y);
+                        let cropped = data.panel.image_decoded.crop_imm(0, y, width, curr_h);
+                        protocols.push(self.picker.new_resize_protocol(cropped));
+                        if y + curr_h >= height {
+                            break;
+                        }
+                        y += curr_h.saturating_sub(overlap).max(1);
+                    }
+                    page.slices = protocols;
+                    page.current_slice = 0;
+                    page.dimensions = Some((width, height));
+                } else {
+                    let protocol = self.picker.new_resize_protocol(data.panel.image_decoded);
+                    page.slices = vec![protocol];
+                    page.current_slice = 0;
+                    page.dimensions = Some((width, height));
+                }
             },
             None => {
                 // Todo! indicate that the page couldnot be loaded
@@ -300,7 +363,7 @@ where
     }
 
     fn resize_based_on_image_size(&mut self, width: u32, height: u32) {
-        if width > height && width > 300 {
+        if width > 300 && (width > height || height as f64 > (width as f64) * 1.8) {
             self.current_page_size = PageSize::Wide;
         } else {
             self.current_page_size = PageSize::Normal;
@@ -351,10 +414,7 @@ where
             self.pages[start_index..=end_index]
                 .iter()
                 .enumerate()
-                .filter_map(|(base_index, page)| match page.image_state {
-                    Some(_) => None,
-                    None => Some(base_index + start_index),
-                })
+                .filter_map(|(base_index, page)| if page.is_loaded() { None } else { Some(base_index + start_index) })
                 .collect()
         } else {
             vec![]
@@ -485,12 +545,18 @@ where
 
         Widget::render(List::new(instructions).block(Block::bordered()), instructions_area, buf);
 
-        let current_chapter_title = format!(
+        let mut current_chapter_title = format!(
             "Reading : Vol {} Ch. {} {}",
             self.current_chapter.volume_number.as_ref().cloned().unwrap_or("none".to_string()),
             self.current_chapter.number,
             self.current_chapter.title
         );
+
+        if let Some(page) = self.pages.get(self.current_page_index())
+            && page.slices.len() > 1
+        {
+            current_chapter_title.push_str(&format!("\nPart : {} / {}", page.current_slice + 1, page.slices.len()));
+        }
 
         Paragraph::new(current_chapter_title)
             .wrap(Wrap { trim: true })
@@ -1245,5 +1311,48 @@ mod test {
         assert_eq!(expected, result);
 
         Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_manhwa_strip_slicing_and_navigation() {
+        use image::DynamicImage;
+
+        use crate::backend::manga_provider::MangaPanel;
+
+        let chapter: ChapterToRead = ChapterToRead {
+            pages_url: vec!["http://localhost".parse().unwrap(), "http://localhost/2".parse().unwrap()],
+            ..Default::default()
+        };
+
+        let mut manga_reader: MangaReader<ReaderPageProvierMock, TrackerTest> =
+            MangaReader::new(chapter, "some_id".to_string(), Picker::new((8, 8)), ReaderPageProvierMock::new().into());
+
+        manga_reader.init_fetching_pages();
+        assert_eq!(2, manga_reader.pages.len());
+
+        // Create a tall image (800x4000) representing a manhwa strip
+        let tall_image = DynamicImage::new_rgb8(800, 4000);
+        let panel = MangaPanel {
+            image_decoded: tall_image,
+            dimensions: (800, 4000),
+        };
+
+        manga_reader.load_page(PageData { panel, index: 0 });
+
+        let page0 = &manga_reader.pages[0];
+        assert!(page0.is_loaded());
+        assert!(page0.slices.len() > 1, "Expected multiple slices for tall manhwa image");
+
+        assert_eq!(0, manga_reader.pages[0].current_slice);
+
+        // Next page action advances through slices first
+        manga_reader.next_page();
+        assert_eq!(1, manga_reader.pages[0].current_slice);
+        assert_eq!(0, manga_reader.current_page_index());
+
+        // Previous page goes back in slices
+        manga_reader.previous_page();
+        assert_eq!(0, manga_reader.pages[0].current_slice);
+        assert_eq!(0, manga_reader.current_page_index());
     }
 }
