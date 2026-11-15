@@ -80,12 +80,11 @@ impl MangaoniProvider {
 
         let html = response.text().await?;
         let token_pattern = r#"<meta[^>]*name=["']csrf-token["'][^>]*content=["']([^"']+)["']"#;
-        if let Ok(re) = regex::Regex::new(token_pattern) {
-            if let Some(cap) = re.captures(&html) {
-                if let Some(token) = cap.get(1) {
-                    return Ok(token.as_str().to_string());
-                }
-            }
+        if let Ok(re) = regex::Regex::new(token_pattern)
+            && let Some(cap) = re.captures(&html)
+            && let Some(token) = cap.get(1)
+        {
+            return Ok(token.as_str().to_string());
         }
         Err("Could not extract CSRF token from MangaOni".into())
     }
@@ -104,27 +103,26 @@ impl MangaoniProvider {
         };
 
         for url in &urls_to_try {
-            if let Ok(Some(cached)) = self.cache_provider.get(url) {
-                if let Ok(text) = String::from_utf8(cached.data) {
-                    return Ok(parse_manga_details(&text, slug));
-                }
+            if let Ok(Some(cached)) = self.cache_provider.get(url)
+                && let Ok(text) = String::from_utf8(cached.data)
+            {
+                return Ok(parse_manga_details(&text, slug));
             }
         }
 
         for url in &urls_to_try {
-            if let Ok(response) = self.client.get(url).header(REFERER, MANGAONI_BASE_URL).send().await {
-                if response.status() == StatusCode::OK {
-                    if let Ok(text) = response.text().await {
-                        self.cache_provider
-                            .cache(InsertEntry {
-                                id: url,
-                                data: text.as_bytes(),
-                                duration: Self::MANGA_PAGE_CACHE_DURATION,
-                            })
-                            .ok();
-                        return Ok(parse_manga_details(&text, slug));
-                    }
-                }
+            if let Ok(response) = self.client.get(url).header(REFERER, MANGAONI_BASE_URL).send().await
+                && response.status() == StatusCode::OK
+                && let Ok(text) = response.text().await
+            {
+                self.cache_provider
+                    .cache(InsertEntry {
+                        id: url,
+                        data: text.as_bytes(),
+                        duration: Self::MANGA_PAGE_CACHE_DURATION,
+                    })
+                    .ok();
+                return Ok(parse_manga_details(&text, slug));
             }
         }
 

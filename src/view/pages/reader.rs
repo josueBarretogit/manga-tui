@@ -273,11 +273,11 @@ where
 
     fn next_page(&mut self) {
         let curr_index = self.current_page_index();
-        if let Some(page) = self.pages.get_mut(curr_index) {
-            if page.current_slice + 1 < page.slices.len() {
-                page.current_slice += 1;
-                return;
-            }
+        if let Some(page) = self.pages.get_mut(curr_index)
+            && page.current_slice + 1 < page.slices.len()
+        {
+            page.current_slice += 1;
+            return;
         }
         self.page_list_state.list_state.next();
         let new_index = self.current_page_index();
@@ -289,19 +289,19 @@ where
 
     fn previous_page(&mut self) {
         let curr_index = self.current_page_index();
-        if let Some(page) = self.pages.get_mut(curr_index) {
-            if page.current_slice > 0 {
-                page.current_slice -= 1;
-                return;
-            }
+        if let Some(page) = self.pages.get_mut(curr_index)
+            && page.current_slice > 0
+        {
+            page.current_slice -= 1;
+            return;
         }
         if curr_index > 0 {
             self.page_list_state.list_state.previous();
             let new_index = self.current_page_index();
-            if let Some(page) = self.pages.get_mut(new_index) {
-                if !page.slices.is_empty() {
-                    page.current_slice = page.slices.len().saturating_sub(1);
-                }
+            if let Some(page) = self.pages.get_mut(new_index)
+                && !page.slices.is_empty()
+            {
+                page.current_slice = page.slices.len().saturating_sub(1);
             }
             self.fetch_pages();
         }
@@ -552,10 +552,10 @@ where
             self.current_chapter.title
         );
 
-        if let Some(page) = self.pages.get(self.current_page_index()) {
-            if page.slices.len() > 1 {
-                current_chapter_title.push_str(&format!("\nPart : {} / {}", page.current_slice + 1, page.slices.len()));
-            }
+        if let Some(page) = self.pages.get(self.current_page_index())
+            && page.slices.len() > 1
+        {
+            current_chapter_title.push_str(&format!("\nPart : {} / {}", page.current_slice + 1, page.slices.len()));
         }
 
         Paragraph::new(current_chapter_title)

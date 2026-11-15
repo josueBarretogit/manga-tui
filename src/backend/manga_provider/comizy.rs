@@ -84,10 +84,10 @@ impl ComizyProvider {
 
         // Check cache for slug -> id mapping
         let cache_key = format!("comizy_slug_to_id_{slug}");
-        if let Ok(Some(cached)) = self.cache_provider.get(&cache_key) {
-            if let Ok(id_str) = String::from_utf8(cached.data) {
-                return Ok(id_str);
-            }
+        if let Ok(Some(cached)) = self.cache_provider.get(&cache_key)
+            && let Ok(id_str) = String::from_utf8(cached.data)
+        {
+            return Ok(id_str);
         }
 
         // Fallback: fetch HTML from comizy.io/{slug} to extract ID from __NEXT_DATA__

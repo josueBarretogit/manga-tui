@@ -490,16 +490,16 @@ pub fn parse_home_recent(html: &str) -> Vec<RecentlyAddedManga> {
 
 fn extract_meta_tag(html: &str, tag_name: &str) -> Option<String> {
     let p1 = format!(r#"<meta[^>]+(?:name|property)="[^"]*{tag_name}[^"]*"[^>]+content="([^"]+)""#);
-    if let Ok(re) = regex::Regex::new(&p1) {
-        if let Some(c) = re.captures(html) {
-            return c.get(1).map(|m| m.as_str().to_string());
-        }
+    if let Ok(re) = regex::Regex::new(&p1)
+        && let Some(c) = re.captures(html)
+    {
+        return c.get(1).map(|m| m.as_str().to_string());
     }
     let p2 = format!(r#"<meta[^>]+content="([^"]+)"[^>]+(?:name|property)="[^"]*{tag_name}[^"]*""#);
-    if let Ok(re) = regex::Regex::new(&p2) {
-        if let Some(c) = re.captures(html) {
-            return c.get(1).map(|m| m.as_str().to_string());
-        }
+    if let Ok(re) = regex::Regex::new(&p2)
+        && let Some(c) = re.captures(html)
+    {
+        return c.get(1).map(|m| m.as_str().to_string());
     }
     None
 }
