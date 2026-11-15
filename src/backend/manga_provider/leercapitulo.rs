@@ -591,6 +591,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg(feature = "local_only")]
     #[ignore]
     async fn test_leercapitulo_live_search() {
         let cache = InMemoryCache::init(10);
@@ -605,6 +606,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg(feature = "local_only")]
     #[ignore]
     async fn test_leercapitulo_live_chapters() {
         let cache = InMemoryCache::init(10);
@@ -629,6 +631,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg(feature = "local_only")]
     #[ignore]
     async fn test_leercapitulo_live_manga_details() {
         let cache = InMemoryCache::init(10);

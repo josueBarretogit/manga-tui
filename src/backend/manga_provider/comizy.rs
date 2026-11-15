@@ -661,6 +661,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg(feature = "local_only")]
     #[ignore]
     async fn test_comizy_live_search() {
         let cache = InMemoryCache::init(10);
@@ -675,6 +676,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg(feature = "local_only")]
     #[ignore]
     async fn test_comizy_live_chapters() {
         let cache = InMemoryCache::init(10);

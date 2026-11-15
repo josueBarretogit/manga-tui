@@ -517,6 +517,7 @@ impl FeedPageProvider for InmangaProvider {
 impl MangaProvider for InmangaProvider {}
 
 #[cfg(test)]
+#[cfg(feature = "local_only")]
 mod tests {
     use super::*;
     use crate::backend::cache::in_memory::InMemoryCache;

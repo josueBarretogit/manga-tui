@@ -596,6 +596,7 @@ mod tests {
 
     #[tokio::test]
     #[ignore]
+    #[cfg(feature = "local_only")]
     async fn test_mangaoni_live_search() {
         let provider = MangaoniProvider::new(EmptyCache::new_arc());
         let result = provider
@@ -609,6 +610,7 @@ mod tests {
 
     #[tokio::test]
     #[ignore]
+    #[cfg(feature = "local_only")]
     async fn test_mangaoni_live_chapters() {
         let provider = MangaoniProvider::new(EmptyCache::new_arc());
         let chapters = provider.get_all_chapters("one-piece", Languages::Spanish).await;
@@ -631,6 +633,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg(feature = "local_only")]
     #[ignore]
     async fn test_mangaoni_live_manhwa() {
         let provider = MangaoniProvider::new(EmptyCache::new_arc());
