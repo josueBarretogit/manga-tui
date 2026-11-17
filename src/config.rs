@@ -869,7 +869,7 @@ mod tests {
 
         "#;
 
-        let updated_config = config.prepend_missing_config_param(&existing_file_content)?;
+        let updated_config = config.prepend_missing_config_param(existing_file_content)?;
 
         let expected = toml::Table::from_str(&updated_config)?;
 

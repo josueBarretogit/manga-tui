@@ -362,12 +362,7 @@ where
     }
 
     fn fetch_page(&mut self, index: usize) {
-        if let Some((url, item)) = self
-            .current_chapter
-            .pages_url
-            .get(index)
-            .and_then(|page| self.pages_list.pages.get_mut(index).map(|item| (page, item)))
-        {
+        if let Some((url, item)) = self.current_chapter.pages_url.get(index).zip(self.pages_list.pages.get_mut(index)) {
             //NOTE:  This will need to become async atomic if this becomes an async function
             if item.state != PageItemState::Loading && item.state != PageItemState::FinishedLoad {
                 let tx = self.local_event_tx.clone();

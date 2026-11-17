@@ -284,11 +284,7 @@ impl Anilist {
             .send()
             .await?;
 
-        if response.status() == StatusCode::UNAUTHORIZED || response.status() == StatusCode::BAD_REQUEST {
-            return Ok(false);
-        }
-
-        Ok(true)
+        Ok(!matches!(response.status(), StatusCode::UNAUTHORIZED | StatusCode::BAD_REQUEST))
     }
 }
 
