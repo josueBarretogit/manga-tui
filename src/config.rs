@@ -411,7 +411,9 @@ impl<'a> ConfigBuilder<'a> {
             self.write_config(&mut file)?;
             open_options.open(config_path)?
         } else {
-            let mut file = open_options.open(&config_path)?;
+            // Opened read-only so that a read-only config file (for example one managed by Home Manager) can still be
+            // used, it is only rewritten when parameters are missing
+            let mut file = File::open(&config_path)?;
 
             self.update_existing_config(&mut file).map_err(|e| {
                 std::io::Error::other(format!("Could not update existing config: more details about the error: \n\n {e}"))
@@ -479,8 +481,9 @@ impl<'a> ConfigBuilder<'a> {
     }
 
     /// Updates the config file with any missing parameters or tables by copying the original
-    /// config file and then making a new one with the missing params added
-    fn update_existing_config(&self, mut config: impl Write + Read) -> Result<File, Box<dyn Error>> {
+    /// config file and then making a new one with the missing params added, if no parameter is
+    /// missing the config file is left untouched
+    fn update_existing_config(&self, mut config: impl Read) -> Result<File, Box<dyn Error>> {
         let mut contents = String::new();
 
         config.read_to_string(&mut contents)?;
@@ -488,6 +491,10 @@ impl<'a> ConfigBuilder<'a> {
         let updated = self.prepend_missing_config_param(&contents)?;
 
         let updated = self.append_missing_table_params(&updated)?;
+
+        if updated == contents {
+            return Ok(File::open(self.get_config_file_path())?);
+        }
 
         let new_config_file = self.commit_changes(&updated)?;
 
@@ -771,6 +778,76 @@ mod tests {
         let file_contents = String::from_utf8(test_file.into_inner())?;
 
         assert_eq!(expected, MangaTuiConfig::from_str(&file_contents)?);
+
+        Ok(())
+    }
+
+    /// Creates an empty directory under `test_results` for tests that need a config file on disk
+    fn clean_test_directory(name: &str) -> Result<PathBuf, Box<dyn Error>> {
+        let directory = PathBuf::from("./test_results").join(name);
+
+        if directory.exists() {
+            fs::remove_dir_all(&directory)?;
+        }
+
+        fs::create_dir_all(&directory)?;
+
+        Ok(directory)
+    }
+
+    /// A config file managed by Home Manager is a read-only symlink to the nix store, manga-tui
+    /// should be able to read it as long as no parameter is missing
+    #[test]
+    #[cfg(unix)]
+    fn config_builder_reads_complete_read_only_config_without_rewriting_it() -> Result<(), Box<dyn Error>> {
+        let directory = clean_test_directory("config_read_only_test_dir")?;
+        let config_path = directory.join(CONFIG_FILE_NAME);
+
+        let config = ConfigBuilder::new().dir_path(&directory);
+
+        let mut default_config = Vec::new();
+        config.write_config(&mut Cursor::new(&mut default_config))?;
+        fs::write(&config_path, &default_config)?;
+
+        let mut permissions = fs::metadata(&config_path)?.permissions();
+        permissions.set_readonly(true);
+        fs::set_permissions(&config_path, permissions)?;
+
+        let mut file = config.create_file_if_not_exists()?;
+
+        let mut contents = String::new();
+        file.read_to_string(&mut contents)?;
+
+        assert_eq!(MangaTuiConfig::default(), MangaTuiConfig::from_str(&contents)?);
+        assert_eq!(default_config, fs::read(&config_path)?);
+        assert!(fs::metadata(&config_path)?.permissions().readonly());
+        assert!(!directory.join(CONFIG_FILE_NAME_BACKUP).exists());
+
+        Ok(())
+    }
+
+    #[test]
+    fn config_builder_adds_missing_params_to_existing_config_file() -> Result<(), Box<dyn Error>> {
+        let directory = clean_test_directory("config_missing_params_test_dir")?;
+        let config_path = directory.join(CONFIG_FILE_NAME);
+
+        fs::write(&config_path, "download_type = \"epub\"\n")?;
+
+        let config = ConfigBuilder::new().dir_path(&directory);
+
+        let mut file = config.create_file_if_not_exists()?;
+
+        let mut contents = String::new();
+        file.read_to_string(&mut contents)?;
+
+        let expected = MangaTuiConfig {
+            download_type: DownloadType::Epub,
+            ..Default::default()
+        };
+
+        assert_eq!(expected, MangaTuiConfig::from_str(&contents)?);
+        assert_eq!(contents, fs::read_to_string(&config_path)?);
+        assert!(!directory.join(CONFIG_FILE_NAME_BACKUP).exists());
 
         Ok(())
     }
