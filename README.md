@@ -121,6 +121,34 @@ Or, to install persistently:
 nix profile install 'github:josueBarretogit/manga-tui'
 ```
 
+#### Home Manager
+
+The flake also provides a [Home Manager](https://github.com/nix-community/home-manager) module which installs `manga-tui` and generates its [config file](#configuration):
+
+```nix
+{
+  inputs.manga-tui.url = "github:josueBarretogit/manga-tui";
+
+  # in your Home Manager configuration
+  imports = [ inputs.manga-tui.homeManagerModules.default ];
+
+  programs.manga-tui = {
+    enable = true;
+    settings = {
+      download_type = "epub";
+      image_quality = "high";
+      default_manga_provider = "weebcentral";
+      check_new_updates = false;
+    };
+  };
+}
+```
+
+Every key of the [configuration](#configuration) is available under `programs.manga-tui.settings` with the same values and defaults, invalid values are rejected when building your configuration.
+
+> [!WARNING]
+> Anything set in `settings.anilist.access_token` ends up world-readable in the Nix store, leave it empty and run `manga-tui anilist init` to store your anilist credentials in the system keyring instead.
+
 ## Binary release
 
 Download a binary from the [releases page](https://github.com/josueBarretogit/manga-tui/releases/latest)
