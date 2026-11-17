@@ -92,3 +92,6 @@ jobs:
 
       - name: Build default package
         run: nix build --print-build-logs --verbose
+
+      - name: Run flake checks (Home Manager module tests)
+        run: nix flake check --print-build-logs

@@ -9,6 +9,11 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     crane.url = "github:ipetkov/crane";
+    # only used by the checks testing the Home Manager module
+    home-manager = {
+      url = "github:nix-community/home-manager";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
@@ -18,8 +23,15 @@
       flake-utils,
       rust-overlay,
       crane,
+      home-manager,
     }:
-    flake-utils.lib.eachDefaultSystem (
+    {
+      homeManagerModules = rec {
+        manga-tui = import ./nix/home-manager.nix self;
+        default = manga-tui;
+      };
+    }
+    // flake-utils.lib.eachDefaultSystem (
       system:
       let
         overlays = [ rust-overlay.overlays.default ];
@@ -39,14 +51,14 @@
           strictDeps = true;
           nativeBuildInputs = with pkgs; [
             pkg-config
-            perl #added due to failing workflow: https://github.com/josueBarretogit/manga-tui/actions/runs/13379018167/job/37364084916?pr=114
-            openssl.dev  #added due to failing workflow: https://github.com/josueBarretogit/manga-tui/actions/runs/13379018167/job/37364084916?pr=114
+            perl # added due to failing workflow: https://github.com/josueBarretogit/manga-tui/actions/runs/13379018167/job/37364084916?pr=114
+            openssl.dev # added due to failing workflow: https://github.com/josueBarretogit/manga-tui/actions/runs/13379018167/job/37364084916?pr=114
           ];
           buildInputs = with pkgs; [
             dbus
-            openssl  #added due to failing workflow: https://github.com/josueBarretogit/manga-tui/actions/runs/13379018167/job/37364084916?pr=114
+            openssl # added due to failing workflow: https://github.com/josueBarretogit/manga-tui/actions/runs/13379018167/job/37364084916?pr=114
             perl
-            cacert  #added due to failing workflow: https://github.com/josueBarretogit/manga-tui/actions/runs/13379018167/job/37364084916?pr=114
+            cacert # added due to failing workflow: https://github.com/josueBarretogit/manga-tui/actions/runs/13379018167/job/37364084916?pr=114
           ];
         };
 
@@ -64,15 +76,21 @@
           default = manga-tui;
         };
 
+        checks = import ./nix/tests.nix {
+          inherit pkgs home-manager;
+          module = self.homeManagerModules.default;
+          package = self.packages.${system}.manga-tui;
+        };
+
         devShells.default = craneLib.devShell {
           packages = with pkgs; [
             git
             openssl
-            openssl.dev  #added due to failing workflow: https://github.com/josueBarretogit/manga-tui/actions/runs/13379018167/job/37364084916?pr=114
+            openssl.dev # added due to failing workflow: https://github.com/josueBarretogit/manga-tui/actions/runs/13379018167/job/37364084916?pr=114
             dbus
             pkg-config
             perl
-            cacert  #added due to failing workflow: https://github.com/josueBarretogit/manga-tui/actions/runs/13379018167/job/37364084916?pr=114
+            cacert # added due to failing workflow: https://github.com/josueBarretogit/manga-tui/actions/runs/13379018167/job/37364084916?pr=114
           ];
         };
 
